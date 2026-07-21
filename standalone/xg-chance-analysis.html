@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>xG Chance Analysis</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/xg-chance-analysis.css?v=7" />
+</head>
+<body>
+  <div class="xca-app">
+    <header class="xca-toolbar">
+      <div class="xca-toolbar__left">
+        <p class="xca-toolbar__eyebrow">Analysis · <a href="/">← All apps</a></p>
+        <h1 class="xca-toolbar__title">xG Chance Analysis</h1>
+        <p class="xca-toolbar__subtitle" id="pageSubtitle">Shot quality, game state &amp; player breakdown</p>
+      </div>
+      <div class="xca-toolbar__right">
+        <button type="button" class="xca-btn xca-btn--ghost" id="exportPdfBtn">Export PDF</button>
+        <button type="button" class="xca-btn xca-btn--ghost" id="refreshBtn">Refresh</button>
+      </div>
+    </header>
+
+    <section class="xca-controls card">
+      <div class="xca-controls__group">
+        <span class="xca-controls__label">Season</span>
+        <div id="seasonToggle" class="xca-season-toggle" role="group" aria-label="Season"></div>
+      </div>
+      <div class="xca-controls__group">
+        <span class="xca-controls__label">Scope</span>
+        <div class="xca-scope-toggle" role="group" aria-label="Analysis scope">
+          <button type="button" class="xca-scope-btn xca-scope-btn--active" data-scope="match">Latest match</button>
+          <button type="button" class="xca-scope-btn" data-scope="last6">Last 6 avg</button>
+          <button type="button" class="xca-scope-btn" data-scope="season">Full season</button>
+        </div>
+      </div>
+      <div class="xca-controls__group xca-controls__group--grow" id="matchSelectGroup">
+        <span class="xca-controls__label">Match</span>
+        <select id="matchSelect" class="xca-select" aria-label="Select match">
+          <option value="">All completed matches</option>
+        </select>
+      </div>
+      <div class="xca-controls__group">
+        <span class="xca-controls__label">View</span>
+        <div class="xca-view-toggle" role="group" aria-label="View mode">
+          <button type="button" class="xca-view-btn xca-view-btn--active" data-view="summary">Summary</button>
+          <button type="button" class="xca-view-btn" data-view="shots">Shot log</button>
+          <button type="button" class="xca-view-btn" data-view="players">Players</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="statusBanner" class="xca-status hidden" role="status"></div>
+
+    <section id="matchHeader" class="xca-match-header card hidden" aria-live="polite"></section>
+    <section id="trendsPanel" class="card xca-trends-panel hidden" aria-live="polite"></section>
+
+    <main id="summaryView" class="xca-main" aria-live="polite">
+      <div class="xca-summary-grid">
+        <section class="card xca-bucket-panel" id="xgCreatedPanel"></section>
+        <section class="card xca-bucket-panel" id="xgAgainstPanel"></section>
+      </div>
+      <div class="xca-secondary-grid">
+        <section class="card" id="gameStatePanel"></section>
+        <section class="card" id="periodPanel"></section>
+      </div>
+    </main>
+
+    <main id="shotsView" class="xca-main hidden" aria-live="polite">
+      <section class="card xca-shot-log-wrap">
+        <div class="xca-shot-log-scroll">
+          <table class="xca-shot-table" id="shotTable">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <main id="playersView" class="xca-main hidden" aria-live="polite">
+      <div class="xca-players-grid">
+        <section class="card" id="valePlayersPanel"></section>
+        <section class="card" id="oppPlayersPanel"></section>
+      </div>
+    </main>
+
+    <footer id="statusBar" class="xca-footer">Loading…</footer>
+  </div>
+
+  <script defer src="/static/xg-chance-analysis.js?v=13"></script>
+</body>
+</html>

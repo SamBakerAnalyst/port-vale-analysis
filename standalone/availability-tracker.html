@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Squad Availability</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/availability-tracker.css?v=22" />
+</head>
+<body>
+  <div class="av-app">
+    <header class="av-toolbar">
+      <div class="av-toolbar__left">
+        <p class="av-toolbar__eyebrow">Strategy · <a href="/">← All apps</a></p>
+        <h1 class="av-toolbar__title">Squad Availability</h1>
+        <p class="av-toolbar__subtitle" id="pageSubtitle">Match availability, injuries, and playing-time metrics from Impect</p>
+      </div>
+      <div class="av-toolbar__right">
+        <div class="av-season-toggle" id="seasonToggle" role="group" aria-label="Season"></div>
+        <button type="button" class="av-btn av-btn--ghost" id="refreshBtn">Refresh</button>
+      </div>
+    </header>
+
+    <nav class="av-tabs" aria-label="Views">
+      <button type="button" class="av-tab av-tab--active" data-view="log">Log Session</button>
+      <button type="button" class="av-tab" data-view="roster">Roster</button>
+      <button type="button" class="av-tab" data-view="injuries">Injury History</button>
+      <button type="button" class="av-tab" data-view="matrix">Matrix</button>
+    </nav>
+
+    <div id="statusBanner" class="av-status hidden" role="status"></div>
+
+    <section id="logView" class="av-view">
+      <div id="logLanding" class="av-log-landing card">
+        <div class="av-log-landing__intro">
+          <h2>Log availability</h2>
+          <p id="logLandingIntro">Submit match availability ahead of a fixture, or log a longer-term injury. Saved sessions feed the Matrix and Roster.</p>
+        </div>
+        <button type="button" class="av-btn av-btn--primary av-log-landing__sync hidden" id="syncRosterLandingBtn">Sync squad from Impect</button>
+        <div class="av-log-landing__actions">
+          <button type="button" class="av-log-landing__btn av-log-landing__btn--match" id="submitMatchBtn">
+            <span class="av-log-landing__btn-kicker">Match</span>
+            <span class="av-log-landing__btn-title">Submit match availability</span>
+            <span class="av-log-landing__btn-desc">Log squad status ahead of a league fixture, friendly, or cup tie.</span>
+          </button>
+          <button type="button" class="av-log-landing__btn av-log-landing__btn--injury" id="submitInjuryBtn">
+            <span class="av-log-landing__btn-kicker">Injury</span>
+            <span class="av-log-landing__btn-title">Log an injury</span>
+            <span class="av-log-landing__btn-desc">Record a longer-term injury — they’ll show as out in match logs until cleared.</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="logInjuryPanel" class="av-log card hidden">
+        <div class="av-log__header">
+          <div>
+            <h2>Log an injury</h2>
+            <p>Pick a player to record injury start date, expected return, and notes.</p>
+          </div>
+        </div>
+        <div id="logInjuryPlayers" class="av-log__players"></div>
+        <div class="av-log__actions">
+          <button type="button" class="av-btn av-btn--ghost" id="cancelInjuryLogBtn">Cancel</button>
+        </div>
+      </div>
+
+      <div id="logSessionPanel" class="av-log card hidden">
+        <div class="av-log__header">
+          <div>
+            <h2 id="logTitle">Match availability</h2>
+            <p id="logDescription">Pick the fixture, then mark each player.</p>
+          </div>
+          <div class="av-log__meta">
+            <label>
+              Date
+              <select id="logDate" class="av-input av-select"></select>
+            </label>
+            <label id="logMatchSessionWrap">
+              Fixture
+              <select id="logSession" class="av-input av-select"></select>
+            </label>
+            <label id="logOpponentWrap" class="hidden">
+              Opponent
+              <input type="text" id="logOpponent" class="av-input" placeholder="e.g. Stoke City" />
+            </label>
+            <label id="logVenueWrap" class="hidden">
+              Home / Away
+              <select id="logVenue" class="av-input">
+                <option value="H">Home</option>
+                <option value="A">Away</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div id="logPlayers" class="av-log__players"></div>
+        <div class="av-log__actions">
+          <button type="button" class="av-btn av-btn--ghost" id="cancelSessionBtn">Cancel</button>
+          <button type="button" class="av-btn av-btn--primary" id="saveSessionBtn">Submit match availability</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="rosterView" class="av-view hidden">
+      <div class="av-roster card">
+        <div class="av-roster__header">
+          <div>
+            <h2>Squad roster</h2>
+            <p>Minutes, points, and availability across league fixtures.</p>
+          </div>
+          <button type="button" class="av-btn av-btn--ghost" id="addPlayerBtn">Add player</button>
+          <button type="button" class="av-btn av-btn--ghost" id="importRosterBtn">Sync squad</button>
+        </div>
+        <div id="rosterList" class="av-roster__list"></div>
+      </div>
+    </section>
+
+    <section id="injuriesView" class="av-view hidden">
+      <div id="injuriesListWrap" class="av-injuries card">
+        <div class="av-injuries__header">
+          <div>
+            <h2>Injury history</h2>
+            <p>Click a player to see every injury, days out, and what they missed.</p>
+          </div>
+        </div>
+        <div id="injuriesList" class="av-injuries__list"></div>
+      </div>
+
+      <div id="injuryDetailPanel" class="av-injury-detail card hidden">
+        <div class="av-injury-detail__header">
+          <button type="button" class="av-btn av-btn--ghost" id="injuryDetailBackBtn">← All players</button>
+          <div id="injuryDetailHead"></div>
+        </div>
+        <div id="injuryDetailBody"></div>
+      </div>
+    </section>
+
+    <section id="matrixView" class="av-view hidden">
+      <div class="av-controls card">
+        <label class="av-controls__checkbox">
+          <input type="checkbox" id="showMatchesToggle" checked />
+          Show matches
+        </label>
+      </div>
+      <div class="av-matrix-wrap card" id="matrixRoot" aria-live="polite"></div>
+    </section>
+
+    <footer class="av-footer" id="statusBar">Loading…</footer>
+  </div>
+
+  <dialog id="injuryDialog" class="av-dialog">
+    <form method="dialog" class="av-dialog__body" id="injuryForm">
+      <h3 id="injuryDialogTitle">Record injury</h3>
+      <p class="av-dialog__intro" id="injuryDialogIntro">Track expected return and comments for the medical record.</p>
+      <input type="hidden" id="injuryPlayerId" />
+      <label id="injuryStatusWrap">
+        Status
+        <select id="injuryStatus" class="av-input av-select"></select>
+      </label>
+      <label>
+        Injury started
+        <select id="injurySince" class="av-input av-select"></select>
+      </label>
+      <label>
+        Expected return
+        <select id="injuryReturnDate" class="av-input av-select"></select>
+      </label>
+      <div class="av-injury-quick">
+        <span class="av-injury-quick__label">Quick length</span>
+        <div class="av-injury-quick__buttons">
+          <button type="button" class="av-btn av-btn--ghost av-injury-week-btn" data-weeks="1">1 week</button>
+          <button type="button" class="av-btn av-btn--ghost av-injury-week-btn" data-weeks="2">2 weeks</button>
+          <button type="button" class="av-btn av-btn--ghost av-injury-week-btn" data-weeks="4">4 weeks</button>
+          <button type="button" class="av-btn av-btn--ghost av-injury-week-btn" data-weeks="8">8 weeks</button>
+        </div>
+      </div>
+      <label>
+        Comments
+        <textarea id="injuryNotes" class="av-input av-textarea" rows="4" placeholder="e.g. hamstring strain — scan pending, rehab with physio"></textarea>
+      </label>
+      <div class="av-dialog__actions">
+        <button type="button" class="av-btn av-btn--ghost" id="clearInjuryBtn">Clear injury</button>
+        <button type="button" class="av-btn av-btn--ghost" id="cancelInjuryBtn">Cancel</button>
+        <button type="submit" class="av-btn av-btn--primary">Save injury</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="playerDialog" class="av-dialog">
+    <form method="dialog" class="av-dialog__body" id="playerForm">
+      <h3 id="playerDialogTitle">Add player</h3>
+      <input type="hidden" id="playerEditId" />
+      <label>
+        Name
+        <input type="text" id="playerName" class="av-input" required />
+      </label>
+      <label>
+        Position group
+        <select id="playerPosition" class="av-input"></select>
+      </label>
+      <label>
+        Highlight
+        <select id="playerHighlight" class="av-input">
+          <option value="">None</option>
+          <option value="youth">Youth</option>
+          <option value="loan_in">Loan in</option>
+        </select>
+      </label>
+      <div class="av-dialog__actions">
+        <button type="button" class="av-btn av-btn--ghost" id="deletePlayerBtn" class="hidden">Remove</button>
+        <button type="submit" class="av-btn av-btn--primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script defer src="/static/availability-tracker.js?v=22"></script>
+</body>
+</html>

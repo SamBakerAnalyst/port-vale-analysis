@@ -1,0 +1,23 @@
+node_modules
+dist
+.DS_Store
+*.local
+.env
+.env.*
+!.env.example
+
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+
+# Runtime data — keep structure, ignore contents
+data/cache/*
+!data/cache/.gitkeep
+data/uploads/*
+!data/uploads/.gitkeep
+
+strategy-reports/.cache_*
+
+deploy/Caddyfile.active
+.env.auth

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Squad Planner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/squad-planner.css?v=22" />
+</head>
+<body>
+  <div class="app">
+    <header class="toolbar card">
+      <div class="toolbar__main">
+        <div class="toolbar__brand">
+          <p class="toolbar__eyebrow">Recruitment · <a href="/">← All apps</a></p>
+          <h1 class="toolbar__title">Squad Planner</h1>
+        </div>
+        <div class="tab-bar" role="tablist" aria-label="Squad type">
+          <button type="button" class="tab-bar__tab tab-bar__tab--active" id="tabCurrent" role="tab" aria-selected="true" data-tab="current">Current</button>
+          <button type="button" class="tab-bar__tab" id="tabShadow" role="tab" aria-selected="false" data-tab="shadow">Shadow</button>
+        </div>
+        <div class="formation-picker">
+          <label for="formationSelect">Formation</label>
+          <select id="formationSelect"></select>
+        </div>
+        <div class="toolbar__actions">
+          <button type="button" class="btn btn--ghost" id="clearBtn">Clear</button>
+          <button type="button" class="btn btn--primary" id="saveBtn">Save</button>
+        </div>
+      </div>
+      <p class="toolbar__subtitle" id="pageSubtitle">Build your squad · profile gap analysis on the right</p>
+    </header>
+
+    <section class="search-bar card">
+      <div class="search-bar__field">
+        <label for="playerSearch">Search players</label>
+        <div class="search-bar__input-wrap">
+          <input id="playerSearch" type="search" placeholder="Type at least 3 letters — e.g. Jed Ward" autocomplete="off" />
+          <div id="searchResults" class="search-results hidden" role="listbox"></div>
+        </div>
+      </div>
+      <div class="search-bar__position">
+        <label for="targetPosition">Add to position</label>
+        <select id="targetPosition"></select>
+      </div>
+      <div class="search-bar__action">
+        <button type="button" class="btn btn--primary" id="addPlayerBtn" disabled>Add player</button>
+      </div>
+    </section>
+
+    <div id="statusBanner" class="status-banner hidden" role="status"></div>
+
+    <div class="planner-layout">
+      <main class="pitch-panel card">
+        <div class="pitch-panel__head">
+          <h2 class="pitch-panel__title" id="pitchTitle">4-3-3 Formation</h2>
+          <p class="pitch-panel__hint">Click name to cycle label · hover row for remove · paste headshot on icon</p>
+        </div>
+        <div id="pitch" class="pitch" aria-label="Squad formation"></div>
+      </main>
+
+      <aside class="gap-panel card">
+        <div class="gap-panel__head">
+          <h2 class="gap-panel__title">Gap Analysis</h2>
+          <p class="gap-panel__subtitle" id="gapSubtitle">Profile averages across your squad</p>
+        </div>
+        <div id="gapAnalysis" class="gap-analysis" aria-live="polite"></div>
+        <p class="gap-panel__legend">
+          <span class="gap-legend gap-legend--low">0%</span>
+          <span class="gap-legend gap-legend--mid">50%</span>
+          <span class="gap-legend gap-legend--high">100%</span>
+        </p>
+      </aside>
+    </div>
+  </div>
+
+  <script defer src="/static/squad-planner.js?v=21"></script>
+</body>
+</html>

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Club Strategy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/club-strategy.css?v=4" />
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="header__brand">
+        <img class="header__badge" src="/standalone/port-vale-badge.png?v=2" width="56" height="68" alt="Port Vale FC crest" />
+        <div>
+          <p class="header__eyebrow" id="pageEyebrow">League Two strategy · <a href="/">← All apps</a></p>
+          <h1 class="header__title">Club Strategy</h1>
+          <p class="header__subtitle" id="pageSubtitle">Live league benchmarks from Impect — standings, xG, and first-goal analysis.</p>
+        </div>
+      </div>
+      <div class="header__meta">
+        <div class="season-toggle-wrap">
+          <span class="season-toggle__label">League</span>
+          <div id="competitionToggle" class="season-toggle" role="group" aria-label="Competition"></div>
+        </div>
+        <div class="season-toggle-wrap">
+          <span class="season-toggle__label">Season</span>
+          <div id="seasonToggle" class="season-toggle" role="group" aria-label="Season"></div>
+        </div>
+        <div class="header__updated" id="lastUpdated" aria-live="polite">Loading…</div>
+        <div class="header__actions">
+          <button type="button" class="btn btn--ghost" id="refreshBtn">Refresh data</button>
+          <button type="button" class="btn btn--gold" id="exportBtn">Export PDF</button>
+        </div>
+      </div>
+    </header>
+
+    <nav id="tabNav" class="tab-nav" aria-label="Report sections"></nav>
+
+    <div id="statusBanner" class="status-banner hidden" role="status"></div>
+
+    <section id="tablePanel" class="table-panel card" aria-live="polite">
+      <div class="table-panel__head">
+        <div class="table-panel__head-left">
+          <h2 id="panelTitle" class="table-panel__title">League + Shooting</h2>
+          <div id="timingViewToggle" class="timing-view-toggle hidden" role="group" aria-label="Timing detail level"></div>
+        </div>
+        <p id="panelHint" class="table-panel__hint">Green = better in column context · Red = worse · Port Vale highlighted</p>
+      </div>
+      <div class="table-wrap">
+        <table id="dataTable" class="data-table">
+          <thead id="tableHead"></thead>
+          <tbody id="tableBody"></tbody>
+          <tfoot id="tableFoot"></tfoot>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script defer src="/static/club-strategy.js?v=7"></script>
+</body>
+</html>

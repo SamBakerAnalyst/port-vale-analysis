@@ -1,0 +1,546 @@
+/* Studio two-page shell — Squad Balance inspired build + compare views */
+
+.studio-app {
+  width: min(1480px, 94vw);
+  margin: 0 auto;
+  padding: 1.25rem max(1rem, 2vw) 2.5rem;
+}
+
+.studio-page.hidden {
+  display: none !important;
+}
+
+.studio-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.studio-header__eyebrow {
+  margin: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.studio-header__title {
+  margin: 0.2rem 0 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.studio-header__lede {
+  margin: 0.35rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  max-width: 40rem;
+}
+
+.studio-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.studio-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.15rem;
+  margin-bottom: 1rem;
+}
+
+.studio-panel__label {
+  display: block;
+  margin: 0 0 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+}
+
+.studio-search-grid {
+  display: grid;
+  grid-template-columns: 1fr 200px auto;
+  gap: 1rem 1.25rem;
+  align-items: end;
+}
+
+@media (max-width: 900px) {
+  .studio-search-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.studio-position-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.studio-position-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.studio-position-pill--active {
+  border-color: rgba(245, 197, 24, 0.5);
+  color: var(--gold);
+  background: var(--gold-dim);
+}
+
+.studio-roster-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.studio-roster-strip__meta {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.studio-roster-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.studio-roster-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.studio-roster-chip button {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0;
+}
+
+.studio-roster-chip button:hover {
+  color: var(--gold);
+}
+
+.studio-build-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.studio-season-note {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  max-width: 36rem;
+  line-height: 1.45;
+}
+
+.studio-compare-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.studio-compare-toolbar__left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.studio-compare-meta {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.studio-compare-front {
+  margin-bottom: 1.25rem;
+}
+
+.studio-compare-front .comparison-frame--keynote {
+  width: 100%;
+  max-width: 100%;
+}
+
+.studio-comparison-export-card {
+  overflow: hidden;
+}
+
+.studio-export-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 0 0 0.85rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.85rem;
+}
+
+.studio-export-toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.export-comparison-slide {
+  width: 1920px;
+  height: 1080px;
+  padding: 0;
+  background: #0d0d0d;
+  box-sizing: border-box;
+}
+
+.export-comparison-slide .comparison-frame--keynote {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  margin: 0;
+  box-sizing: border-box;
+  aspect-ratio: unset;
+  padding: 1.35rem 1.75rem 1.1rem;
+  border-radius: 0;
+}
+
+.export-comparison-slide .comparison-frame--dense {
+  aspect-ratio: unset;
+}
+
+.export-comparison-slide .comparison-frame--export {
+  --photo-max: 112px;
+  --photo-name-size: 0.84rem;
+}
+
+.export-comparison-slide .comparison-frame__head {
+  margin-bottom: 0.65rem;
+}
+
+.export-comparison-slide .comparison-frame__title {
+  font-size: 1.55rem;
+}
+
+.export-comparison-slide .comparison-frame__season {
+  font-size: 0.8rem;
+}
+
+.export-comparison-slide .comparison-frame__badge {
+  min-width: 2.75rem;
+  height: 2.75rem;
+  font-size: 0.88rem;
+}
+
+.export-comparison-slide .comparison-frame__body {
+  flex: 1;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.export-comparison-slide .comparison-table {
+  width: 100%;
+  margin: 0;
+  grid-template-columns:
+    minmax(150px, 1.1fr)
+    repeat(var(--player-cols, 4), minmax(0, 1fr))
+    minmax(0, 1fr);
+  column-gap: 0.5rem;
+  row-gap: 0.18rem;
+}
+
+.export-comparison-slide .comparison-row__label-main {
+  font-size: 0.78rem;
+  line-height: 1.1;
+}
+
+.export-comparison-slide .comparison-row__label-sub {
+  font-size: 0.66rem;
+  line-height: 1.05;
+}
+
+.export-comparison-slide .comparison-cell {
+  min-height: 0;
+  height: 1rem;
+  max-height: 1.05rem;
+  font-size: 0.74rem;
+  border-radius: 4px;
+}
+
+.export-comparison-slide .comparison-cell--bar::before {
+  opacity: 0.32;
+  border-radius: 4px;
+}
+
+.export-comparison-slide .comparison-cell--average::before {
+  opacity: 0.45;
+}
+
+.export-comparison-slide .comparison-cell__value {
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+.export-comparison-slide .player-photo__image {
+  object-position: center 16%;
+  transform: scale(1.14);
+  transform-origin: center 20%;
+}
+
+.export-comparison-slide .player-photo__image-wrap::after {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.02) 45%, rgba(0, 0, 0, 0.38) 100%);
+}
+
+.export-comparison-slide .legend-item__photo {
+  object-position: center 20%;
+}
+
+.export-comparison-slide .player-photo__name {
+  font-size: var(--photo-name-size, 0.84rem) !important;
+  line-height: 1.1;
+}
+
+.export-comparison-slide .player-photo__minutes {
+  font-size: 0.64rem;
+  line-height: 1.05;
+}
+
+.export-comparison-slide .player-photo__minutes--hint {
+  display: none;
+}
+
+.export-comparison-slide .comparison-legend {
+  width: 100%;
+  margin: 0;
+  padding-top: 0.4rem;
+  gap: 0.22rem 0.45rem;
+  grid-template-columns:
+    repeat(var(--player-cols, 4), minmax(0, 1fr))
+    minmax(0, 1fr);
+}
+
+.export-comparison-slide .legend-item__photo {
+  width: 1.85rem;
+  height: 1.85rem;
+}
+
+.export-comparison-slide .legend-item__name {
+  font-size: 0.72rem;
+}
+
+.export-comparison-slide .legend-item__meta {
+  font-size: 0.6rem;
+  line-height: 1.15;
+}
+
+.export-comparison-slide .comparison-note {
+  margin: 0;
+  font-size: 0.64rem;
+  text-align: center;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+
+.studio-compare-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.studio-compare-panel .charts-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.studio-compare-panel .chart-card {
+  margin: 0;
+}
+
+.studio-page--build .compare-player-list {
+  display: none;
+}
+
+.studio-player-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 0.75rem;
+}
+
+@media (max-width: 1100px) {
+  .studio-player-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .studio-player-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.studio-player-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.studio-player-card-mount .compare-player-row--compact {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.65rem 0.7rem;
+  min-height: 118px;
+}
+
+.studio-player-card-mount .compare-player-row--compact.primary-row {
+  border-color: rgba(245, 197, 24, 0.4);
+}
+
+.studio-player-card-mount .compare-player-header {
+  align-items: flex-start;
+  gap: 4px;
+  margin-bottom: 0.45rem;
+}
+
+.studio-player-card-mount .compare-player-name {
+  font-size: 0.78rem;
+  line-height: 1.3;
+  font-weight: 600;
+}
+
+.studio-player-remove {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.studio-player-remove:hover {
+  color: var(--gold);
+}
+
+.studio-player-card-mount .compare-player-controls {
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.studio-player-card-mount .compare-player-field > span {
+  font-size: 0.65rem;
+}
+
+.studio-player-card-mount .compare-player-row select {
+  font-size: 0.78rem;
+  padding: 0.35rem 0.45rem;
+}
+
+.studio-player-card-mount .compare-player-season-note {
+  font-size: 0.72rem;
+  padding: 0.2rem 0;
+}
+
+.studio-player-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 118px;
+  padding: 0.75rem;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  text-align: center;
+}
+
+.studio-player-empty__slot {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.studio-player-empty__hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.studio-player-photo-mount .photo-studio-dropzone {
+  min-height: 108px;
+  border-radius: 10px;
+}
+
+.studio-player-photo-mount .photo-studio-preview {
+  max-height: 100px;
+  border-radius: 8px;
+}
+
+.studio-player-column--empty .studio-player-photo-mount .photo-studio-dropzone {
+  opacity: 0.4;
+}
+
+.studio-page--build .compare-player-list {
+  margin-top: 0;
+}
+
+.studio-page--build .compare-player-row {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.studio-page--build .compare-player-season-note {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  padding: 0.45rem 0;
+}
+
+.studio-page--build #profilePicker {
+  margin-top: 0.25rem;
+}
+
+.studio-page--build .pick-list {
+  max-height: 220px;
+}

@@ -1,0 +1,274 @@
+.player-chart-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.player-chart-modal.hidden {
+  display: none;
+}
+
+.player-chart-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 8, 14, 0.78);
+  backdrop-filter: blur(4px);
+}
+
+.player-chart-modal__panel {
+  position: relative;
+  z-index: 1;
+  width: min(1180px, 96vw);
+  max-height: 92vh;
+  overflow: auto;
+  background: #141a22;
+  border: 1px solid #2a3544;
+  border-radius: 14px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+}
+
+.player-chart-modal__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #2a3544;
+  position: sticky;
+  top: 0;
+  background: #141a22;
+  z-index: 2;
+}
+
+.player-chart-modal__head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.player-chart-modal__meta {
+  margin: 0.25rem 0 0;
+  color: #8b9bb0;
+  font-size: 0.8125rem;
+}
+
+.player-chart-modal__close {
+  border: 1px solid #2a3544;
+  background: transparent;
+  color: #e8edf4;
+  border-radius: 8px;
+  padding: 0.45rem 0.75rem;
+  cursor: pointer;
+  font: inherit;
+}
+
+.player-chart-modal__status {
+  padding: 0.85rem 1.25rem;
+  color: #3d8bfd;
+  font-size: 0.875rem;
+}
+
+.player-chart-modal__status--error {
+  color: #fca5a5;
+}
+
+.player-chart-modal__body {
+  padding: 0 1.25rem 1.25rem;
+}
+
+.player-chart-main {
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 1px solid #2a3544;
+  border-radius: 12px;
+  background: #10151d;
+}
+
+.player-chart-main__title {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.player-chart-main__subtitle {
+  margin: 0 0 0.75rem;
+  color: #8b9bb0;
+  font-size: 0.8125rem;
+}
+
+.player-chart-main .chart {
+  min-height: 420px;
+}
+
+.player-chart-note {
+  margin: 0 0 1rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  background: rgba(251, 191, 36, 0.08);
+  color: #fbbf24;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.scouting-charts .profile-drilldown-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.scouting-charts .profile-drilldown-card {
+  border: 1px solid #2a3544;
+  border-radius: 12px;
+  background: #10151d;
+  overflow: hidden;
+}
+
+.scouting-charts .profile-drilldown-card h3 {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+}
+
+.scouting-charts .drilldown-card-meta {
+  margin: 0;
+  color: #8b9bb0;
+  font-size: 0.75rem;
+}
+
+.scouting-charts .profile-drilldown-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 1rem 1rem;
+  align-items: stretch;
+}
+
+.scouting-charts .profile-drilldown-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 18px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.scouting-charts .profile-drilldown-radar {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  min-height: 460px;
+}
+
+.scouting-charts .drilldown-chart {
+  min-height: 460px;
+  height: 460px;
+}
+
+.scouting-charts .factor-bar-list.factor-bar-list-slide-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  gap: 10px 14px;
+}
+
+.scouting-charts .factor-bar-factor-name {
+  padding: 6px 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.scouting-charts .factor-bar-row,
+.scouting-charts .factor-bar-row-compare {
+  display: grid;
+  grid-template-columns: minmax(64px, 38%) minmax(0, 1fr);
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.scouting-charts .factor-bar-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #cbd5e1;
+  font-size: 10px;
+}
+
+.scouting-charts .factor-bar-track-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px;
+  gap: 5px;
+  align-items: center;
+}
+
+.scouting-charts .factor-bar-track {
+  position: relative;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(226, 232, 240, 0.18);
+}
+
+.scouting-charts .factor-bar-fill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 100%;
+  border-radius: 999px;
+}
+
+.scouting-charts .factor-bar-value {
+  font-size: 9px;
+  color: #f8fafc;
+  font-family: "JetBrains Mono", monospace;
+}
+
+.scouting-charts .factor-bar-badge {
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.col-name-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font: inherit;
+  font-weight: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: rgba(61, 139, 253, 0.35);
+  text-underline-offset: 2px;
+}
+
+.col-name-btn:hover,
+.col-name-btn:focus-visible {
+  color: #3d8bfd;
+  text-decoration-color: currentColor;
+  outline: none;
+}
+
+.row-veteran .col-name-btn {
+  color: var(--amber);
+}
+
+.row-veteran .col-name-btn:hover,
+.row-veteran .col-name-btn:focus-visible {
+  color: #fde68a;
+}

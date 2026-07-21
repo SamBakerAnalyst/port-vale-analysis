@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fixture Planner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/fixture-planner.css?v=13" />
+</head>
+<body>
+  <div class="fp-app">
+    <header class="fp-toolbar">
+      <div class="fp-toolbar__left">
+        <p class="fp-toolbar__eyebrow">Recruitment · <a href="/">← All apps</a></p>
+        <h1 class="fp-toolbar__title">Fixture Planner</h1>
+        <p class="fp-toolbar__subtitle" id="pageSubtitle">26/27 &amp; 25/26 fixtures · assign scouts as Live or Video</p>
+      </div>
+      <div class="fp-toolbar__right">
+        <nav class="fp-toolbar__nav" aria-label="Related pages">
+          <a href="/scout-summary" class="fp-btn fp-btn--ghost">Scout summary</a>
+          <a href="/scout-summary-report" class="fp-btn fp-btn--ghost">Generate report</a>
+          <a href="/scouts-calendar" class="fp-btn fp-btn--ghost">Scouts calendar</a>
+          <a href="/scouting-address" class="fp-btn fp-btn--ghost">Scouting address</a>
+        </nav>
+        <button type="button" class="fp-btn fp-btn--ghost" id="refreshBtn">Refresh</button>
+      </div>
+    </header>
+
+    <section class="fp-controls card">
+      <div class="fp-controls__group">
+        <span class="fp-controls__label">Season</span>
+        <div id="seasonToggle" class="fp-season-toggle" role="group" aria-label="Season"></div>
+      </div>
+      <div class="fp-controls__group fp-controls__group--grow">
+        <span class="fp-controls__label">Leagues</span>
+        <div id="leagueToggle" class="fp-league-toggle" role="group" aria-label="Leagues"></div>
+      </div>
+      <div class="fp-controls__group">
+        <span class="fp-controls__label">Month</span>
+        <select id="monthFilter" class="fp-staff-filter fp-month-filter" aria-label="Filter by month">
+          <option value="">All months</option>
+        </select>
+      </div>
+      <div class="fp-controls__group">
+        <span class="fp-controls__label">Staff filter</span>
+        <select id="staffFilter" class="fp-staff-filter" aria-label="Filter by staff">
+          <option value="">All staff</option>
+        </select>
+      </div>
+      <div class="fp-controls__group">
+        <span class="fp-controls__label">View</span>
+        <div class="fp-view-toggle" role="group" aria-label="Calendar view">
+          <button type="button" class="fp-view-btn" data-view="month">Month</button>
+          <button type="button" class="fp-view-btn fp-view-btn--active" data-view="list">List</button>
+        </div>
+      </div>
+      <div class="fp-controls__group">
+        <label class="fp-controls__checkbox">
+          <input type="checkbox" id="hidePastToggle" checked />
+          Upcoming only
+        </label>
+      </div>
+    </section>
+
+    <section class="fp-coverage card hidden" id="coveragePanel" aria-live="polite"></section>
+
+    <section class="fp-summary card" id="summaryPanel" aria-live="polite"></section>
+
+    <div id="statusBanner" class="fp-status hidden" role="status"></div>
+
+    <main id="calendarRoot" class="fp-calendar-root hidden" aria-live="polite"></main>
+    <main id="listRoot" class="fp-list-root" aria-live="polite"></main>
+
+    <footer id="statusBar" class="fp-footer">Loading fixtures…</footer>
+  </div>
+
+  <div id="assignModal" class="fp-assign-modal fp-assign-modal--hidden" aria-hidden="true">
+    <div class="fp-assign-modal__backdrop" data-assign-close></div>
+    <div class="fp-assign-modal__panel" role="dialog" aria-modal="true" aria-labelledby="assignModalTitle">
+      <header class="fp-assign-modal__header">
+        <div>
+          <p class="fp-assign-modal__eyebrow">Assign staff</p>
+          <h2 class="fp-assign-modal__title" id="assignModalTitle">Select players to watch</h2>
+          <p class="fp-assign-modal__meta" id="assignModalMeta"></p>
+        </div>
+        <button type="button" class="fp-assign-modal__close" data-assign-close aria-label="Close">×</button>
+      </header>
+      <div class="fp-assign-modal__toolbar">
+        <div class="fp-assign-modal__staff" id="assignModalStaff"></div>
+        <div class="fp-watch-toggle" id="assignModalWatch"></div>
+      </div>
+      <div class="fp-assign-modal__body" id="assignModalBody">
+        <p class="fp-assign-modal__loading">Loading squad lists…</p>
+      </div>
+      <footer class="fp-assign-modal__footer">
+        <button type="button" class="fp-btn fp-btn--ghost" data-assign-close>Cancel</button>
+        <button type="button" class="fp-btn fp-btn--primary" id="assignConfirmBtn">Assign &amp; email</button>
+      </footer>
+    </div>
+  </div>
+
+  <script defer src="/static/fixture-planner.js?v=17"></script>
+</body>
+</html>

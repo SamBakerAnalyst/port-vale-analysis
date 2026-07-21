@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Player Charts</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css?v=41" />
+    <style>
+      .scouting-player-shell { max-width: 1200px; margin: 0 auto; padding: 1.25rem 1.5rem 2rem; }
+      .scouting-player-head { margin-bottom: 1rem; }
+      .scouting-player-head .eyebrow { margin: 0 0 .25rem; color: #94a3b8; font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; }
+      .scouting-player-head h1 { margin: 0; font-size: 1.5rem; }
+      .scouting-player-head .lede { margin: .35rem 0 0; color: #94a3b8; font-size: .875rem; }
+      .scouting-player-shell .dashboard-grid { display: block; }
+      .scouting-player-shell .control-panel { display: none; }
+      .scouting-player-shell .charts-panel { display: flex; flex-direction: column; gap: 16px; }
+      .scouting-player-shell .status-bar { position: sticky; bottom: 0; }
+      .scouting-player-loading { padding: .85rem 1rem; border-radius: 10px; border: 1px solid rgba(61,139,253,.35); color: #56d4ff; background: rgba(17,24,39,.85); margin-bottom: 1rem; font-size: .875rem; }
+      .scouting-player-loading.hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell scouting-player-shell">
+      <header class="scouting-player-head">
+        <p class="eyebrow">Impect scouting · same charts as player comparison</p>
+        <h1 id="scoutingPlayerTitle">Player charts</h1>
+        <p class="lede" id="scoutingPlayerMeta"></p>
+      </header>
+
+      <div id="scoutingPlayerLoading" class="scouting-player-loading">Loading charts from Impect… this may take 10–20 seconds.</div>
+      <div id="alertBox" class="alert hidden"></div>
+
+      <main class="dashboard-grid">
+        <aside class="control-panel">
+          <select id="competitionFilter"><option value="">All five leagues</option></select>
+          <section id="seasonCard" class="card hidden">
+            <div id="seasonChips" class="chips"></div>
+            <div id="seasonList" class="pick-list"></div>
+          </section>
+          <input id="playerSearch" type="search" value="" />
+          <select id="playerSelect"><option value="">—</option></select>
+          <button id="addComparePlayerBtn" type="button" disabled>Add to comparison</button>
+          <div id="comparePlayerChips" class="chips"></div>
+          <div id="comparePlayerList" class="compare-player-list hidden"></div>
+          <input id="independentSeasons" type="checkbox" checked />
+          <button id="combineLast3SeasonsBtn" type="button" disabled>Combine</button>
+          <select id="chartSource"><option value="profiles" selected>Profile scores</option></select>
+          <div id="profilePicker">
+            <div id="profileChips" class="chips"></div>
+            <div id="profileList" class="pick-list"></div>
+          </div>
+          <input id="combineSeasons" type="checkbox" />
+          <button id="loadChartsBtn" type="button" disabled>Generate charts</button>
+        </aside>
+
+        <section class="charts-panel">
+          <div class="card chart-card">
+            <div class="chart-card-head">
+              <div>
+                <h2>Profile radar</h2>
+                <p class="chart-caption">Cross-league percentile scale (comparison tool benchmark)</p>
+              </div>
+              <button id="exportRadarImageBtn" class="btn btn-ghost chart-export-btn" type="button" disabled>Save chart</button>
+            </div>
+            <div id="radarChartMeta" class="chart-meta hidden">
+              <p class="chart-player-name" id="radarChartPlayer"></p>
+              <p class="chart-player-sub" id="radarChartSubtitle"></p>
+            </div>
+            <div id="radarChart" class="chart empty-chart">Loading…</div>
+          </div>
+          <div id="profileDrilldownSection" class="profile-drilldown-section hidden"></div>
+          <div class="card chart-card">
+            <div class="chart-card-head">
+              <div>
+                <h2>Squad percentile pizza</h2>
+                <p class="chart-caption">Percentile vs benchmark cohort (600+ min)</p>
+              </div>
+              <button id="exportPizzaImageBtn" class="btn btn-ghost chart-export-btn" type="button" disabled>Save chart</button>
+            </div>
+            <div id="pizzaChartMeta" class="chart-meta hidden">
+              <p class="chart-player-name" id="pizzaChartPlayer"></p>
+              <p class="chart-player-sub" id="pizzaChartSubtitle"></p>
+            </div>
+            <div id="pizzaChart" class="chart empty-chart">Loading…</div>
+          </div>
+        </section>
+      </main>
+
+      <footer id="statusBar" class="status-bar">Loading player charts…</footer>
+      <div id="connectionBadge" class="badge badge-loading hidden" aria-hidden="true">Connecting…</div>
+    </div>
+
+    <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script defer src="/static/app.js?v=82"></script>
+    <script defer src="/static/scouting-player.js?v=2"></script>
+  </body>
+</html>

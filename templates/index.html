@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Player Comparison Tool</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css?v=63" />
+    <link rel="stylesheet" href="/static/studio-shell.css?v=8" />
+    <link rel="stylesheet" href="/static/squad-balance.css?v=3" />
+    <link rel="stylesheet" href="/static/studio-export.css?v=10" />
+  </head>
+  <body>
+    <div class="studio-app">
+      <header class="studio-header">
+        <div>
+          <p class="studio-header__eyebrow">Port Vale · Impect · <a href="/">← All apps</a></p>
+          <h1 class="studio-header__title" id="studioPageTitle">Player comparison</h1>
+          <p class="studio-header__lede" id="studioPageLede">
+            Search players, set position &amp; season, pick profiles — then open the comparison view.
+          </p>
+        </div>
+        <div class="studio-header__actions">
+          <div id="connectionBadge" class="badge badge-loading">Connecting…</div>
+        </div>
+      </header>
+
+      <div id="alertBox" class="alert hidden"></div>
+
+      <!-- PAGE 1 — BUILD -->
+      <main id="studioPageBuild" class="studio-page studio-page--build">
+        <section class="studio-panel">
+          <span class="studio-panel__label">Search players</span>
+          <div class="studio-search-grid">
+            <label class="field">
+              <span class="studio-hidden-legacy">Search</span>
+              <input id="playerSearch" type="search" placeholder="Type at least 3 letters — e.g. Jed Ward" autofocus />
+            </label>
+            <label class="field">
+              <span class="studio-hidden-legacy">League</span>
+              <select id="competitionFilter">
+                <option value="">All five leagues</option>
+              </select>
+            </label>
+            <button id="addComparePlayerBtn" class="btn btn-primary" type="button" disabled>Add player</button>
+          </div>
+          <label class="field" style="margin-top: 0.75rem">
+            <span>Pick from results</span>
+            <select id="playerSelect">
+              <option value="">Type a player name to search…</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="studio-panel">
+          <span class="studio-panel__label">Position groups</span>
+          <div id="studioPositionNav" class="studio-position-nav" aria-label="Compared players by position"></div>
+        </section>
+
+        <section class="studio-panel">
+          <div class="studio-roster-strip">
+            <span class="studio-roster-strip__meta" id="studioRosterMeta">0 players selected</span>
+            <div id="studioRosterChips" class="studio-roster-chips"></div>
+          </div>
+          <div id="comparePlayerChips" class="chips studio-hidden-legacy" aria-hidden="true"></div>
+          <div id="comparePlayerList" class="compare-player-list hidden studio-hidden-legacy" aria-hidden="true"></div>
+          <div id="studioPlayerGrid" class="studio-player-grid" aria-label="Player slots"></div>
+        </section>
+
+        <section class="studio-panel">
+          <span class="studio-panel__label">Season &amp; data</span>
+          <p class="studio-season-note">
+            Pick <strong>one season per player</strong> in the player list below — no combined seasons.
+          </p>
+        </section>
+
+        <section class="studio-panel">
+          <span class="studio-panel__label">Profiles to compare</span>
+          <label class="field">
+            <span>Chart data</span>
+            <select id="chartSource">
+              <option value="profiles" selected>Profile scores</option>
+              <option value="metrics">Player metrics</option>
+            </select>
+          </label>
+          <div id="profilePicker">
+            <small class="field-hint">PV profiles for each player’s selected position — shared list when everyone has the same role.</small>
+            <div id="profileChips" class="chips"></div>
+            <div id="profileList" class="pick-list"></div>
+          </div>
+        </section>
+
+        <div class="studio-build-footer">
+          <p class="studio-season-note" id="studioBuildHint">Add players and select at least two profiles.</p>
+          <button id="loadChartsBtn" class="btn btn-primary" type="button" disabled>Open comparison →</button>
+        </div>
+      </main>
+
+      <!-- PAGE 2 — COMPARE -->
+      <main id="studioPageCompare" class="studio-page studio-page--compare hidden">
+        <div class="studio-compare-toolbar">
+          <div class="studio-compare-toolbar__left">
+            <button id="backToBuildBtn" class="btn btn-secondary" type="button">← Back to squad</button>
+            <span class="studio-compare-meta" id="studioCompareMeta"></span>
+          </div>
+          <div class="studio-header__actions">
+            <button id="exportRadarImageBtn" class="btn btn-ghost chart-export-btn" type="button" disabled>
+              Save radar
+            </button>
+            <button id="exportPizzaImageBtn" class="btn btn-ghost chart-export-btn hidden" type="button" disabled>
+              Save pizza
+            </button>
+          </div>
+        </div>
+
+        <section id="studioComparisonFront" class="studio-compare-panel studio-compare-front" aria-label="Profile comparison overview"></section>
+
+        <section class="studio-compare-panel charts-panel" id="studioCompareDetail">
+          <div class="card chart-card">
+            <div class="chart-card-head">
+              <div>
+                <h2>Profile radar</h2>
+                <p class="chart-caption" id="radarChartCaption">Overlay players on the same percentile scale</p>
+              </div>
+            </div>
+            <div id="radarChartMeta" class="chart-meta hidden">
+              <p class="chart-player-name" id="radarChartPlayer"></p>
+              <p class="chart-player-sub" id="radarChartSubtitle"></p>
+            </div>
+            <div id="radarChart" class="chart empty-chart">Generate from the build page</div>
+          </div>
+
+          <div id="profileDrilldownSection" class="profile-drilldown-section hidden"></div>
+        </section>
+      </main>
+
+      <footer id="statusBar" class="status-bar">Ready.</footer>
+    </div>
+
+    <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script defer src="/static/photo-studio.js?v=4"></script>
+    <script defer src="/static/app.js?v=146"></script>
+  </body>
+</html>

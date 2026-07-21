@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Generate Scout Summary</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/fixture-planner.css?v=7" />
+  <link rel="stylesheet" href="/static/scout-ops.css?v=17" />
+</head>
+<body>
+  <div class="so-app">
+    <header class="so-toolbar">
+      <div class="so-toolbar__left">
+        <p class="so-toolbar__eyebrow">Recruitment · <a href="/">← All apps</a></p>
+        <h1 class="so-toolbar__title">Generate scout summary</h1>
+        <p class="so-toolbar__subtitle">Pick a date range, preview, then export Two-pager, Full review, or Player &amp; position totals</p>
+      </div>
+      <div class="so-toolbar__right">
+        <nav class="so-toolbar__nav" aria-label="Related pages">
+          <a href="/scout-summary" class="fp-btn fp-btn--ghost">Scout summary</a>
+          <a href="/fixture-planner" class="fp-btn fp-btn--ghost">Fixture planner</a>
+        </nav>
+        <button type="button" class="fp-btn fp-btn--ghost" id="exportTwoPagerBtn" disabled>Export two-pager</button>
+        <button type="button" class="fp-btn fp-btn--ghost" id="exportPlayerPosBtn" disabled>Export player &amp; position</button>
+        <button type="button" class="fp-btn fp-btn--primary" id="exportPdfBtn" disabled>Export full review</button>
+      </div>
+    </header>
+
+    <section class="so-report-controls card">
+      <div class="so-controls__row">
+        <div class="so-controls__group">
+          <span class="fp-controls__label">Season</span>
+          <div id="seasonToggle" class="fp-season-toggle" role="group" aria-label="Season"></div>
+        </div>
+        <div class="so-controls__group so-controls__group--grow">
+          <span class="fp-controls__label">Staff</span>
+          <div id="staffToggle" class="fp-league-toggle so-staff-toggle" role="group" aria-label="Filter by staff"></div>
+        </div>
+      </div>
+
+      <div class="so-report-controls__dates">
+        <span class="fp-controls__label">Display from</span>
+        <div class="so-export-modal__presets so-report-presets" role="group" aria-label="Quick date ranges">
+          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="all_time">All time</button>
+          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="this_week">This week</button>
+          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="last_week">Last week</button>
+          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="next_week">Next week</button>
+          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="this_month">This month</button>
+          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="last_month">Last month</button>
+          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="last_3_months">Last 3 months</button>
+          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="last_6_months">Last 6 months</button>
+          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="this_season">This season</button>
+          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="last_season">Last season</button>
+          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="upcoming">Upcoming</button>
+        </div>
+        <div class="so-export-modal__dates">
+          <label class="so-export-modal__date-field">
+            <span>From</span>
+            <input type="date" id="dateFrom" class="fp-input" />
+          </label>
+          <label class="so-export-modal__date-field">
+            <span>To</span>
+            <input type="date" id="dateTo" class="fp-input" />
+          </label>
+        </div>
+        <p id="rangeSummary" class="so-export-modal__summary" aria-live="polite">Choose a date range</p>
+        <button type="button" class="fp-btn fp-btn--primary" id="generateBtn">Generate report</button>
+      </div>
+    </section>
+
+    <p id="statusBar" class="so-footer" role="status" aria-live="polite">Set a date range and click Generate report.</p>
+
+    <section id="reportEmpty" class="card so-report-empty">
+      <p>No report generated yet. Pick dates above and click <strong>Generate report</strong> to preview coverage, charts, and player reports.</p>
+    </section>
+
+    <article id="reportPreview" class="so-report-preview so-report-preview--hidden" aria-live="polite">
+      <header class="so-report-preview__head card">
+        <div>
+          <p class="so-report-preview__eyebrow">Scout coverage report</p>
+          <h2 id="reportTitle" class="so-report-preview__title">—</h2>
+          <p id="reportMeta" class="so-report-preview__meta"></p>
+        </div>
+      </header>
+
+      <section class="so-kpi-grid card" id="kpiPanel"></section>
+
+      <section class="card so-report-section">
+        <h3 class="so-section-title">Coverage by staff team</h3>
+        <div class="so-report-table-wrap">
+          <table class="so-report-table" id="staffTeamTable">
+            <thead>
+              <tr>
+                <th>Team</th>
+                <th>Total</th>
+                <th>Live</th>
+                <th>Video</th>
+                <th>Avg / person</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card so-report-section">
+        <h3 class="so-section-title">Coverage by scout</h3>
+        <div class="so-report-table-wrap">
+          <table class="so-report-table" id="scoutTable">
+            <thead>
+              <tr>
+                <th>Scout</th>
+                <th>Total</th>
+                <th>Live</th>
+                <th>Video</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card so-report-section so-report-charts">
+        <h3 class="so-section-title">League coverage</h3>
+        <p class="so-report-charts__hint">Live, video, and uncovered games per league in the selected period.</p>
+        <div id="leaguePieGrid" class="so-report-league-grid"></div>
+      </section>
+
+      <section class="card so-report-section">
+        <h3 class="so-section-title" id="playerReportsTitle">Total reports per player</h3>
+        <div class="so-report-table-wrap">
+          <table class="so-report-table" id="playerReportsTable">
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th>Team</th>
+                <th>Pos</th>
+                <th>Reports</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card so-report-section">
+        <h3 class="so-section-title">Reports by position</h3>
+        <p class="so-report-charts__hint">Mark players from match view to tag positions. Untagged reports show as Unknown.</p>
+        <div id="positionReportsGrid" class="so-report-position-grid"></div>
+      </section>
+
+      <section class="card so-report-section">
+        <h3 class="so-section-title">Recommendations</h3>
+        <div id="recommendationsPanel" class="so-report-recs"></div>
+      </section>
+
+      <section class="card so-report-section">
+        <h3 class="so-section-title">Team exposure</h3>
+        <p class="so-report-charts__hint">Per league — games per team split by live, video, and not seen.</p>
+        <div id="leagueTeamExposureGrid" class="so-report-team-exposure-grid"></div>
+      </section>
+    </article>
+  </div>
+
+  <script defer src="/static/scout-summary-report.js?v=7"></script>
+</body>
+</html>

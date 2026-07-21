@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <title>Port Vale FC — Analysis</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #111111;
+      --surface-2: #1a1a1a;
+      --border: #2a2a2a;
+      --text: #f5f5f5;
+      --text-muted: #9ca3af;
+      --gold: #f5c518;
+      --gold-dim: rgba(245, 197, 24, 0.14);
+      --radius: 12px;
+      --font: "DM Sans", system-ui, sans-serif;
+      --mono: "JetBrains Mono", monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      color: var(--text);
+      line-height: 1.5;
+      background:
+        radial-gradient(ellipse 90% 60% at 50% -15%, rgba(245, 197, 24, 0.09), transparent 55%),
+        radial-gradient(ellipse 50% 40% at 100% 100%, rgba(245, 197, 24, 0.04), transparent),
+        var(--bg);
+    }
+
+    .front {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2.5rem 1.5rem 3rem;
+      text-align: center;
+    }
+
+    .front__hero {
+      width: min(640px, 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+    }
+
+    .front__badge-wrap {
+      position: relative;
+      margin-bottom: 1.5rem;
+    }
+
+    .front__badge-glow {
+      position: absolute;
+      inset: -30% -20%;
+      background: radial-gradient(circle, rgba(245, 197, 24, 0.22), transparent 65%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .front__badge {
+      position: relative;
+      z-index: 1;
+      width: min(148px, 34vw);
+      height: auto;
+      filter: drop-shadow(0 12px 32px rgba(0, 0, 0, 0.55));
+    }
+
+    .front__club {
+      margin: 0;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--gold);
+    }
+
+    .front__title {
+      margin: 0.55rem 0 0;
+      font-size: clamp(1.85rem, 5vw, 2.65rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+    }
+
+    .front__subtitle {
+      margin: 0.85rem 0 0;
+      max-width: 28rem;
+      font-size: 1rem;
+      color: var(--text-muted);
+      line-height: 1.55;
+    }
+
+    .front__season {
+      margin: 0.65rem 0 0;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: #6b7280;
+      letter-spacing: 0.04em;
+    }
+
+    .front__actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.65rem;
+      margin-top: 2rem;
+    }
+
+    .front__btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.45rem;
+      padding: 0.75rem 1.35rem;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      font: inherit;
+      font-size: 0.9375rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: transform 0.15s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
+    }
+
+    .front__btn--primary {
+      background: var(--gold-dim);
+      border-color: rgba(245, 197, 24, 0.5);
+      color: var(--gold);
+      box-shadow: 0 8px 28px rgba(245, 197, 24, 0.12);
+    }
+
+    .front__btn--primary:hover {
+      transform: translateY(-1px);
+      border-color: var(--gold);
+      box-shadow: 0 12px 32px rgba(245, 197, 24, 0.18);
+      color: var(--gold);
+    }
+
+    .front__btn--ghost {
+      background: var(--surface);
+      border-color: var(--border);
+      color: var(--text-muted);
+    }
+
+    .front__btn--ghost:hover {
+      border-color: rgba(245, 197, 24, 0.35);
+      color: var(--text);
+    }
+
+    .front__quick {
+      width: min(720px, 100%);
+      margin-top: 3rem;
+    }
+
+    .front__quick-label {
+      margin: 0 0 0.85rem;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #6b7280;
+    }
+
+    .front__quick-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 0.65rem;
+    }
+
+    .front__quick-link {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.2rem;
+      padding: 0.85rem 1rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      text-decoration: none;
+      color: inherit;
+      text-align: left;
+      transition: border-color 0.15s, transform 0.15s;
+    }
+
+    .front__quick-link:hover {
+      border-color: rgba(245, 197, 24, 0.4);
+      transform: translateY(-1px);
+    }
+
+    .front__quick-title {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .front__quick-desc {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      line-height: 1.35;
+    }
+
+    .front__footer {
+      margin-top: auto;
+      padding-top: 2.5rem;
+      font-size: 0.75rem;
+      color: #6b7280;
+    }
+
+    .front__status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin-top: 1.25rem;
+      padding: 0.35rem 0.7rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    .front__status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #6b7280;
+    }
+
+    .front__status--online {
+      border-color: rgba(52, 211, 153, 0.35);
+      color: #6ee7b7;
+    }
+
+    .front__status--online .front__status-dot {
+      background: #34d399;
+      box-shadow: 0 0 8px rgba(52, 211, 153, 0.55);
+    }
+
+    .front__status--offline {
+      border-color: rgba(245, 197, 24, 0.35);
+      color: var(--gold);
+    }
+
+    .front__status--offline .front__status-dot {
+      background: var(--gold);
+    }
+  </style>
+  <link rel="stylesheet" href="/standalone/hub-launcher.css?v=1" />
+</head>
+<body>
+  <main class="front">
+    <div class="front__hero">
+      <div class="front__badge-wrap">
+        <div class="front__badge-glow" aria-hidden="true"></div>
+        <img
+          class="front__badge"
+          src="/standalone/port-vale-badge.png?v=2"
+          width="148"
+          height="180"
+          alt="Port Vale FC crest"
+        />
+      </div>
+
+      <p class="front__club">Port Vale FC</p>
+      <h1 class="front__title">Football analysis</h1>
+      <p class="front__subtitle">
+        Internal recruitment, squad reviews, and match analysis — powered by Impect data.
+      </p>
+      <p class="front__season" id="seasonLine">League One · 25/26</p>
+
+      <div class="front__actions">
+        <a class="front__btn front__btn--primary" href="/hub">Open analysis hub →</a>
+        <a class="front__btn front__btn--ghost" href="/squad-review">Squad comparison</a>
+      </div>
+
+      <div class="front__status" id="serverStatus" role="status">
+        <span class="front__status-dot"></span>
+        <span id="serverStatusText">Checking server…</span>
+      </div>
+    </div>
+
+    <section class="front__quick" aria-label="Quick links">
+      <p class="front__quick-label">Jump to</p>
+      <nav class="front__quick-grid">
+        <a class="front__quick-link" href="/hub">
+          <span class="front__quick-title">Analysis hub</span>
+          <span class="front__quick-desc">All recruitment &amp; analysis tools</span>
+        </a>
+        <a class="front__quick-link" href="/squad-review">
+          <span class="front__quick-title">Squad comparison</span>
+          <span class="front__quick-desc">Port Vale player profiles</span>
+        </a>
+        <a class="front__quick-link" href="/scouting">
+          <span class="front__quick-title">Player search</span>
+          <span class="front__quick-desc">Scouting long lists</span>
+        </a>
+        <a class="front__quick-link" href="/studio">
+          <span class="front__quick-title">Player studio</span>
+          <span class="front__quick-desc">Radar &amp; pizza charts</span>
+        </a>
+      </nav>
+    </section>
+
+    <footer class="front__footer">
+      Internal use only · Port Vale FC
+    </footer>
+  </main>
+
+  <script src="/standalone/hub-launcher.js?v=2"></script>
+  <script>
+    const SCOUTING_SERVER = "http://127.0.0.1:8000";
+
+    if (window.location.protocol === "file:") {
+      window.location.replace(`${SCOUTING_SERVER}/`);
+    }
+
+    const BASE =
+      window.location.origin.includes("127.0.0.1") || window.location.origin.includes("localhost")
+        ? window.location.origin
+        : SCOUTING_SERVER;
+
+    async function checkServer() {
+      const el = document.getElementById("serverStatus");
+      const text = document.getElementById("serverStatusText");
+      try {
+        const res = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          el.className = "front__status front__status--online";
+          text.textContent = "Server online";
+          return;
+        }
+      } catch (_) {
+        /* offline */
+      }
+      el.className = "front__status front__status--offline";
+      text.textContent = "Server offline — run restart.sh";
+    }
+
+    async function loadSeason() {
+      try {
+        const res = await fetch(`${BASE}/api/squad-review/meta`, { signal: AbortSignal.timeout(3000) });
+        if (!res.ok) return;
+        const data = await res.json();
+        const line = [data.competition, data.season].filter(Boolean).join(" · ");
+        if (line) document.getElementById("seasonLine").textContent = line;
+      } catch (_) {
+        /* keep default */
+      }
+    }
+
+    checkServer();
+    loadSeason();
+
+    document.querySelectorAll(".front__btn, .front__quick-link").forEach((link) => {
+      HubLauncher.attachLink(link, {
+        title: link.querySelector(".front__quick-title")?.textContent?.trim() || link.textContent.trim(),
+      });
+    });
+  </script>
+</body>
+</html>

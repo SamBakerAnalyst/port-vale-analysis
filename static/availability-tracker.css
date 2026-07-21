@@ -1,0 +1,1376 @@
+:root {
+  --bg: #0c0f14;
+  --surface: #141a22;
+  --surface-2: #1a222d;
+  --border: #2a3544;
+  --text: #e8edf4;
+  --text-muted: #8b9bb0;
+  --accent: #f5c518;
+  --green: #22c55e;
+  --red: #ef4444;
+  --amber: #f59e0b;
+  --blue: #3b82f6;
+  --grey: #6b7280;
+  --radius: 12px;
+  --font: "DM Sans", system-ui, sans-serif;
+  --display: "Barlow Condensed", sans-serif;
+  --mono: "JetBrains Mono", monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font);
+  font-size: 18px;
+  line-height: 1.45;
+  background: var(--bg);
+  color: var(--text);
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.av-app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0 1.25rem 1.5rem;
+}
+
+.av-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 0 .75rem;
+}
+
+.av-toolbar__eyebrow {
+  margin: 0;
+  font-size: .72rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.av-toolbar__title {
+  margin: .15rem 0 0;
+  font-family: var(--display);
+  font-size: 1.85rem;
+  font-weight: 700;
+}
+
+.av-toolbar__subtitle {
+  margin: .35rem 0 0;
+  color: var(--text-muted);
+  font-size: .95rem;
+}
+
+.av-toolbar__right {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  flex-wrap: wrap;
+}
+
+.av-season-toggle {
+  display: flex;
+  gap: .35rem;
+}
+
+.av-season-btn {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  border-radius: 999px;
+  padding: .35rem .8rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.av-season-btn--active {
+  background: rgba(245, 197, 24, .15);
+  border-color: rgba(245, 197, 24, .45);
+  color: var(--accent);
+}
+
+.av-log-landing {
+  padding: 2rem 1.5rem 2.25rem;
+  margin-bottom: 1rem;
+}
+
+.av-log-landing__intro {
+  max-width: 38rem;
+  margin-bottom: 1.75rem;
+}
+
+.av-log-landing__intro h2 {
+  margin: 0 0 .35rem;
+  font-family: var(--font-display);
+  font-size: 1.65rem;
+  letter-spacing: .02em;
+}
+
+.av-log-landing__intro p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.av-log-landing__actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1rem;
+}
+
+.av-log-landing__btn {
+  display: grid;
+  gap: .35rem;
+  text-align: left;
+  padding: 1.25rem 1.35rem;
+  border-radius: 12px;
+  border: 1px solid rgba(245, 197, 24, .35);
+  background: linear-gradient(180deg, rgba(245, 197, 24, .1), rgba(245, 197, 24, .03));
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  transition: border-color .15s, transform .15s;
+}
+
+.av-log-landing__btn:hover {
+  border-color: rgba(245, 197, 24, .6);
+  transform: translateY(-1px);
+}
+
+.av-log-landing__btn--match {
+  border-color: rgba(59, 130, 246, .35);
+  background: linear-gradient(180deg, rgba(59, 130, 246, .12), rgba(59, 130, 246, .03));
+}
+
+.av-log-landing__btn--match:hover {
+  border-color: rgba(59, 130, 246, .55);
+}
+
+.av-log-landing__btn-kicker {
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.av-log-landing__btn--match .av-log-landing__btn-kicker {
+  color: #60a5fa;
+}
+
+.av-log-landing__btn--injury {
+  border-color: rgba(239, 68, 68, .35);
+  background: linear-gradient(180deg, rgba(239, 68, 68, .12), rgba(239, 68, 68, .03));
+}
+
+.av-log-landing__btn--injury:hover {
+  border-color: rgba(239, 68, 68, .55);
+}
+
+.av-log-landing__btn--injury .av-log-landing__btn-kicker {
+  color: #f87171;
+}
+
+.av-muted {
+  color: var(--text-muted);
+  font-size: .85rem;
+}
+
+.av-empty {
+  margin: 0;
+  padding: 1.5rem 0;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.av-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: .2rem .55rem;
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.av-tag--inj {
+  background: rgba(239, 68, 68, .15);
+  color: #fca5a5;
+}
+
+.av-tag--ok {
+  background: rgba(34, 197, 94, .12);
+  color: #86efac;
+}
+
+.av-tag--muted {
+  background: rgba(148, 163, 184, .12);
+  color: var(--text-muted);
+}
+
+.av-injuries__header,
+.av-injury-detail__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.av-injuries__header h2,
+.av-injury-detail__header h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.35rem;
+}
+
+.av-injuries__list {
+  display: block;
+}
+
+.av-injuries__list .av-roster-grid,
+.av-injury-board-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .85rem;
+}
+
+.av-injury-board-card {
+  display: flex;
+  gap: .75rem;
+  padding: .9rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: border-color .15s, transform .15s;
+}
+
+.av-injury-board-card:hover {
+  border-color: rgba(245, 197, 24, .35);
+  transform: translateY(-1px);
+}
+
+.av-injury-board-card--active {
+  border-color: rgba(239, 68, 68, .4);
+}
+
+.av-injury-board-card__photo .av-roster-card__photo {
+  width: 56px;
+  height: 56px;
+}
+
+.av-injury-board-card__body {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: .35rem;
+}
+
+.av-injury-board-card__body h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.av-injury-board-card__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .35rem .75rem;
+  margin: .35rem 0 0;
+}
+
+.av-injury-board-card__stats div {
+  display: grid;
+  gap: .1rem;
+}
+
+.av-injury-board-card__stats dt {
+  font-size: .68rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-muted);
+}
+
+.av-injury-board-card__stats dd {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: .92rem;
+}
+
+.av-injury-log-card {
+  display: grid;
+  gap: .65rem;
+  padding: .85rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.av-injury-log-card--active {
+  border-color: rgba(239, 68, 68, .35);
+}
+
+.av-injury-log-card__head {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+}
+
+.av-injury-log-card__head strong {
+  display: block;
+}
+
+.av-injury-log-card__status {
+  margin: 0;
+  font-size: .84rem;
+}
+
+.av-injury-detail {
+  padding-bottom: 1rem;
+}
+
+.av-injury-detail__player {
+  display: flex;
+  align-items: center;
+  gap: .85rem;
+}
+
+.av-injury-detail__photo {
+  width: 64px;
+  height: 64px;
+}
+
+.av-injury-detail__header h2 {
+  margin: 0;
+}
+
+#injuryDetailHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex: 1;
+}
+
+#injuryDetailBody {
+  display: grid;
+  gap: .85rem;
+}
+
+.av-injury-episode {
+  padding: .9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  display: grid;
+  gap: .65rem;
+}
+
+.av-injury-episode--active {
+  border-color: rgba(239, 68, 68, .35);
+}
+
+.av-injury-episode__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: .75rem;
+}
+
+.av-injury-episode__meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: .5rem;
+  margin: 0;
+}
+
+.av-injury-episode__meta div {
+  display: grid;
+  gap: .1rem;
+}
+
+.av-injury-episode__meta dt {
+  font-size: .68rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-muted);
+}
+
+.av-injury-episode__meta dd {
+  margin: 0;
+  font-family: var(--mono);
+}
+
+.av-injury-episode__notes {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: .88rem;
+  line-height: 1.45;
+}
+
+.av-injury-episode__missed h4 {
+  margin: 0 0 .35rem;
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-muted);
+}
+
+.av-injury-missed {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--text-muted);
+  font-size: .86rem;
+  line-height: 1.45;
+}
+
+.av-log-landing__btn-title {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  letter-spacing: .02em;
+}
+
+.av-log-landing__btn-desc {
+  font-size: .88rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.av-log-landing__sync {
+  margin-bottom: 1rem;
+}
+
+.av-log-landing__btn:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.av-log-landing__btn:disabled:hover {
+  transform: none;
+  border-color: inherit;
+}
+
+.av-tabs {
+  display: flex;
+  gap: .5rem;
+  margin-bottom: .75rem;
+}
+
+.av-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .65rem;
+  padding: .85rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.av-actions__hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: .85rem;
+}
+
+.av-dialog__intro {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: .88rem;
+}
+
+.av-injury-quick {
+  display: grid;
+  gap: .4rem;
+}
+
+.av-injury-quick__label {
+  font-size: .82rem;
+  color: var(--text-muted);
+}
+
+.av-injury-quick__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+
+.av-tab {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  border-radius: 999px;
+  padding: .45rem 1rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.av-tab--active {
+  background: rgba(245, 197, 24, .12);
+  border-color: rgba(245, 197, 24, .4);
+  color: var(--text);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.av-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  padding: .85rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.av-controls__checkbox {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  color: var(--text-muted);
+  font-size: .92rem;
+}
+
+.av-btn {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  border-radius: 8px;
+  padding: .5rem .9rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.av-btn:hover { border-color: #3d4d61; }
+.av-btn--ghost { background: transparent; }
+.av-btn--primary {
+  background: rgba(245, 197, 24, .18);
+  border-color: rgba(245, 197, 24, .45);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.av-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 8px;
+  padding: .55rem .7rem;
+  font: inherit;
+}
+
+.av-select {
+  appearance: none;
+  cursor: pointer;
+  padding-right: 2.2rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%238b9bb0' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .75rem center;
+  background-color: var(--bg);
+}
+
+.av-textarea { resize: vertical; min-height: 4.5rem; }
+
+.av-status {
+  margin-bottom: 1rem;
+  padding: .75rem 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.av-status--error {
+  border-color: rgba(239, 68, 68, .45);
+  color: #fecaca;
+}
+
+.av-status--ok {
+  border-color: rgba(34, 197, 94, .45);
+  color: #bbf7d0;
+}
+
+.hidden { display: none !important; }
+
+.av-matrix-wrap {
+  overflow: auto;
+  max-height: calc(100vh - 260px);
+}
+
+.av-matrix {
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: max-content;
+  width: 100%;
+  font-size: .82rem;
+}
+
+.av-matrix th,
+.av-matrix td {
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: .35rem .45rem;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.av-matrix thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #11161d;
+}
+
+.av-matrix .av-sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--surface);
+  text-align: left;
+  min-width: 180px;
+}
+
+.av-matrix thead .av-sticky-col { z-index: 4; background: #11161d; }
+
+.av-player-cell {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+}
+
+.av-player-photo {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--surface-2);
+  flex-shrink: 0;
+}
+
+.av-player-name {
+  font-weight: 600;
+  font-size: .88rem;
+}
+
+.av-player-meta {
+  color: var(--text-muted);
+  font-size: .72rem;
+}
+
+.av-player-cell--youth .av-player-name { color: var(--amber); }
+.av-player-cell--loan_in .av-player-name { color: #67e8f9; }
+
+.av-col-head {
+  min-width: 58px;
+  font-family: var(--mono);
+  font-size: .72rem;
+}
+
+.av-col-head--training {
+  background: rgba(59, 130, 246, .08);
+}
+
+.av-col-head--match {
+  background: rgba(34, 197, 94, .06);
+}
+
+.av-col-date {
+  display: block;
+  color: var(--text-muted);
+  font-size: .65rem;
+}
+
+.av-col-label {
+  display: block;
+  font-weight: 600;
+}
+
+.av-col-result {
+  display: block;
+  font-size: .68rem;
+  margin-top: .1rem;
+}
+
+.av-col-result--W { color: var(--green); }
+.av-col-result--L { color: var(--red); }
+.av-col-result--D { color: var(--amber); }
+
+.av-cell {
+  font-family: var(--mono);
+  font-size: .78rem;
+  cursor: pointer;
+  min-width: 52px;
+}
+
+.av-cell:hover { outline: 1px solid rgba(245, 197, 24, .35); }
+
+.av-cell--minutes { background: rgba(34, 197, 94, .18); color: #bbf7d0; }
+.av-cell--INJ { background: rgba(239, 68, 68, .22); color: #fecaca; }
+.av-cell--UN { background: rgba(107, 114, 128, .28); color: #e5e7eb; }
+.av-cell--N { color: var(--text-muted); }
+.av-cell--INT { background: rgba(59, 130, 246, .2); color: #bfdbfe; }
+.av-cell--LOAN { background: rgba(31, 41, 55, .65); color: #9ca3af; }
+.av-cell--SUB { background: rgba(245, 158, 11, .18); color: #fde68a; }
+.av-cell--AVAIL { color: transparent; }
+.av-cell--PART { background: rgba(132, 204, 22, .18); color: #d9f99d; }
+.av-cell--SICK { background: rgba(249, 115, 22, .18); color: #fed7aa; }
+.av-cell--REST { background: rgba(168, 85, 247, .18); color: #e9d5ff; }
+.av-cell--OTHER { background: rgba(100, 116, 139, .22); color: #cbd5e1; }
+.av-cell--NAC { background: rgba(71, 85, 105, .28); color: #94a3b8; }
+.av-cell--injury { box-shadow: inset 0 0 0 1px rgba(239, 68, 68, .35); }
+
+.av-group-row td {
+  background: rgba(245, 197, 24, .08);
+  color: var(--accent);
+  font-family: var(--display);
+  font-size: .85rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  text-align: left;
+  padding: .45rem .7rem;
+}
+
+.av-injury-badge {
+  display: inline-block;
+  margin-left: .35rem;
+  padding: .05rem .35rem;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, .2);
+  color: #fecaca;
+  font-size: .62rem;
+  font-family: var(--mono);
+}
+
+.av-log,
+.av-roster,
+.av-injuries,
+.av-injury-detail {
+  padding: 1rem 1.1rem;
+}
+
+.av-log__header,
+.av-roster__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.av-log__header h2,
+.av-roster__header h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.35rem;
+}
+
+.av-log__header p,
+.av-roster__header p {
+  margin: .35rem 0 0;
+  color: var(--text-muted);
+  font-size: .92rem;
+}
+
+.av-log__meta {
+  display: flex;
+  gap: .75rem;
+  flex-wrap: wrap;
+}
+
+.av-log__meta label {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  font-size: .82rem;
+  color: var(--text-muted);
+  min-width: 11rem;
+}
+
+.av-log__meta-hint {
+  margin: 0;
+  width: 100%;
+  font-size: .82rem;
+  color: var(--text-muted);
+}
+
+.av-col-head--friendly {
+  background: rgba(168, 85, 247, .1);
+}
+
+.av-col-head--cup {
+  background: rgba(251, 191, 36, .1);
+}
+
+.av-log__players {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.av-log-group__title {
+  margin: 0 0 .75rem;
+  font-family: var(--display);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.av-log-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .75rem;
+}
+
+.av-log-card {
+  display: flex;
+  flex-direction: column;
+  gap: .65rem;
+  padding: .75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  min-height: 100%;
+}
+
+.av-log-card--INJ { border-color: rgba(239, 68, 68, .35); }
+.av-log-card--PART { border-color: rgba(132, 204, 22, .35); }
+.av-log-card--SICK { border-color: rgba(249, 115, 22, .35); }
+.av-log-card--REST { border-color: rgba(168, 85, 247, .35); }
+.av-log-card--INT { border-color: rgba(59, 130, 246, .35); }
+.av-log-card--OTHER { border-color: rgba(100, 116, 139, .45); }
+.av-log-card--NAC { border-color: rgba(71, 85, 105, .55); }
+.av-log-card--UN { border-color: rgba(107, 114, 128, .45); }
+.av-log-card--youth .av-log-card__name { color: var(--amber); }
+.av-log-card--loan_in .av-log-card__name { color: #67e8f9; }
+
+.av-log-card__head {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+}
+
+.av-log-card__photo {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg);
+  flex-shrink: 0;
+}
+
+.av-log-card__identity {
+  min-width: 0;
+}
+
+.av-log-card__name {
+  font-weight: 600;
+  font-size: .92rem;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.av-log-card__injury {
+  display: inline-block;
+  margin-top: .2rem;
+  padding: .05rem .35rem;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, .18);
+  color: #fecaca;
+  font-size: .65rem;
+  font-family: var(--mono);
+}
+
+.av-log-card__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+}
+
+.av-log-card__injury-btn {
+  width: 100%;
+  margin-top: auto;
+  font-size: .78rem;
+  padding: .4rem .6rem;
+}
+
+.av-log-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) repeat(6, minmax(64px, .6fr));
+  gap: .45rem;
+  align-items: center;
+  padding: .45rem .55rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.av-log-row__player {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+}
+
+.av-status-pill {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  border-radius: 999px;
+  padding: .35rem .55rem;
+  font: inherit;
+  font-size: .78rem;
+  cursor: pointer;
+}
+
+.av-status-pill--active {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.av-status-pill--AVAIL.av-status-pill--active { border-color: rgba(34, 197, 94, .45); color: var(--green); }
+.av-status-pill--INJ.av-status-pill--active { border-color: rgba(239, 68, 68, .45); color: #fecaca; }
+.av-status-pill--UN.av-status-pill--active { border-color: rgba(107, 114, 128, .55); }
+.av-status-pill--N.av-status-pill--active { border-color: rgba(55, 65, 81, .8); }
+.av-status-pill--INT.av-status-pill--active { border-color: rgba(59, 130, 246, .45); color: #bfdbfe; }
+.av-status-pill--LOAN.av-status-pill--active { border-color: rgba(31, 41, 55, .8); }
+.av-status-pill--PART.av-status-pill--active { border-color: rgba(132, 204, 22, .45); color: #d9f99d; }
+.av-status-pill--SICK.av-status-pill--active { border-color: rgba(249, 115, 22, .45); color: #fed7aa; }
+.av-status-pill--REST.av-status-pill--active { border-color: rgba(168, 85, 247, .45); color: #e9d5ff; }
+.av-status-pill--OTHER.av-status-pill--active { border-color: rgba(100, 116, 139, .55); color: #cbd5e1; }
+.av-status-pill--NAC.av-status-pill--active { border-color: rgba(71, 85, 105, .65); color: #94a3b8; }
+
+.av-overview-card__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .45rem;
+}
+
+.av-overview-card__stats div {
+  display: flex;
+  flex-direction: column;
+  gap: .15rem;
+  padding: .45rem .5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.av-overview-card__stats span {
+  font-size: .68rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.av-overview-card__stats strong {
+  font-family: var(--mono);
+  font-size: .88rem;
+  font-weight: 600;
+}
+
+.av-log__actions {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: .5rem;
+}
+
+.av-roster__list {
+  display: block;
+}
+
+.av-roster-cards {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.av-roster-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .85rem;
+}
+
+.av-roster-card {
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+  padding: .9rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .02), transparent), var(--surface-2);
+  min-height: 100%;
+}
+
+.av-roster-card--INJ { border-color: rgba(239, 68, 68, .35); }
+.av-roster-card--UN { border-color: rgba(107, 114, 128, .45); }
+.av-roster-card--INT { border-color: rgba(59, 130, 246, .35); }
+.av-roster-card--LOAN { border-color: rgba(31, 41, 55, .8); }
+.av-roster-card--youth .av-roster-card__name { color: var(--amber); }
+.av-roster-card--loan_in .av-roster-card__name { color: #67e8f9; }
+
+.av-roster-card__head {
+  display: flex;
+  align-items: flex-start;
+  gap: .7rem;
+}
+
+.av-roster-card__photo {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg);
+  flex-shrink: 0;
+  border: 2px solid rgba(255, 255, 255, .06);
+}
+
+.av-roster-card__identity {
+  flex: 1;
+  min-width: 0;
+}
+
+.av-roster-card__name {
+  font-weight: 700;
+  font-size: .98rem;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.av-roster-card__meta {
+  margin-top: .15rem;
+  color: var(--text-muted);
+  font-size: .78rem;
+}
+
+.av-roster-card__badge {
+  flex-shrink: 0;
+  max-width: 7.5rem;
+  padding: .2rem .45rem;
+  border-radius: 999px;
+  font-size: .64rem;
+  font-family: var(--mono);
+  line-height: 1.25;
+  text-align: right;
+}
+
+.av-roster-card__badge--fit {
+  background: rgba(34, 197, 94, .14);
+  color: #86efac;
+}
+
+.av-roster-card__badge--INJ {
+  background: rgba(239, 68, 68, .16);
+  color: #fecaca;
+}
+
+.av-roster-card__badge--UN,
+.av-roster-card__badge--N {
+  background: rgba(107, 114, 128, .18);
+  color: #d1d5db;
+}
+
+.av-roster-card__badge--INT {
+  background: rgba(59, 130, 246, .16);
+  color: #bfdbfe;
+}
+
+.av-roster-card--inactive {
+  opacity: .55;
+}
+
+.av-roster-card__badge--left {
+  background: rgba(107, 114, 128, .22);
+  color: #d1d5db;
+}
+
+.av-roster-card__badge--LOAN {
+  background: rgba(31, 41, 55, .55);
+  color: #e5e7eb;
+}
+
+.av-roster-card__section {
+  display: grid;
+  gap: .4rem;
+}
+
+.av-roster-card__section-title {
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.av-roster-card__stats {
+  display: grid;
+  gap: .45rem;
+}
+
+.av-roster-card__stats--4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.av-roster-card__stats--5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.av-roster-card__stats--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.av-roster-card__stats--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.av-roster-card__stat--pos strong {
+  color: #86efac;
+}
+
+.av-roster-card__stat--neg strong {
+  color: #fca5a5;
+}
+
+.av-roster-card__stat {
+  display: grid;
+  gap: .1rem;
+  padding: .4rem .35rem;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .18);
+  border: 1px solid rgba(255, 255, 255, .04);
+  text-align: center;
+}
+
+.av-roster-card__stat span {
+  font-size: .62rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.av-roster-card__stat strong {
+  font-family: var(--mono);
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.av-roster-card__actions {
+  display: flex;
+  gap: .45rem;
+  margin-top: auto;
+  padding-top: .15rem;
+}
+
+.av-roster-card__actions .av-btn {
+  flex: 1;
+  font-size: .78rem;
+  padding: .42rem .55rem;
+}
+
+.av-roster-table-wrap {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.av-roster-group__title {
+  margin: 0 0 .65rem;
+  font-family: var(--display);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.av-roster-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .84rem;
+}
+
+.av-roster-table thead th {
+  text-align: left;
+  color: var(--text-muted);
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: .45rem .55rem;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.av-roster-table__row td {
+  padding: .55rem;
+  border-bottom: 1px solid rgba(42, 53, 68, .65);
+  vertical-align: middle;
+}
+
+.av-roster-table__player-inner {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  min-width: 12rem;
+}
+
+.av-roster-table__player-inner--youth .av-roster-name { color: var(--amber); }
+.av-roster-table__player-inner--loan_in .av-roster-name { color: #67e8f9; }
+
+.av-roster-table__num {
+  font-family: var(--mono);
+  font-size: .8rem;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.av-roster-table__num--diff {
+  font-weight: 600;
+}
+
+.av-roster-table__status {
+  color: var(--text-muted);
+  font-size: .8rem;
+  white-space: nowrap;
+}
+
+.av-roster-table__actions {
+  display: flex;
+  gap: .35rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.av-roster-footnote {
+  margin: 1rem 0 0;
+  color: var(--text-muted);
+  font-size: .78rem;
+}
+
+.av-roster-row {
+  display: grid;
+  grid-template-columns: 48px 1.4fr .8fr .8fr auto;
+  gap: .75rem;
+  align-items: center;
+  padding: .65rem .75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.av-roster-photo {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg);
+}
+
+.av-roster-name {
+  font-weight: 600;
+}
+
+.av-roster-sub {
+  color: var(--text-muted);
+  font-size: .82rem;
+}
+
+.av-dialog {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  padding: 0;
+  width: min(420px, calc(100vw - 2rem));
+}
+
+.av-dialog::backdrop {
+  background: rgba(0, 0, 0, .55);
+}
+
+.av-dialog__body {
+  display: grid;
+  gap: .75rem;
+  padding: 1rem 1.1rem 1.1rem;
+}
+
+.av-dialog__body h3 {
+  margin: 0;
+  font-family: var(--display);
+}
+
+.av-dialog__body label {
+  display: grid;
+  gap: .3rem;
+  font-size: .85rem;
+  color: var(--text-muted);
+}
+
+.av-dialog__actions {
+  display: flex;
+  justify-content: space-between;
+  gap: .5rem;
+  margin-top: .35rem;
+}
+
+.av-footer {
+  margin-top: auto;
+  padding-top: 1rem;
+  color: var(--text-muted);
+  font-size: .82rem;
+}
+
+@media (max-width: 1200px) {
+  .av-log-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .av-roster-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .av-log-grid,
+  .av-roster-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .av-log-row {
+    grid-template-columns: 1fr;
+  }
+
+  .av-roster-row {
+    grid-template-columns: 48px 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .av-log-grid,
+  .av-roster-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .av-injury-board-grid,
+  .av-injuries__list .av-roster-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .av-roster-card__stats--4,
+  .av-roster-card__stats--5 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

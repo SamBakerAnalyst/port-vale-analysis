@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scouts Calendar</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/fixture-planner.css?v=7" />
+  <link rel="stylesheet" href="/static/scout-ops.css?v=3" />
+</head>
+<body>
+  <div class="so-app">
+    <header class="so-toolbar">
+      <div class="so-toolbar__left">
+        <p class="so-toolbar__eyebrow">Recruitment · <a href="/">← All apps</a></p>
+        <h1 class="so-toolbar__title">Scouts Calendar</h1>
+        <p class="so-toolbar__subtitle">Live view of assigned fixtures — updates automatically every 30 seconds</p>
+      </div>
+      <div class="so-toolbar__right">
+        <span class="so-live-dot" id="liveIndicator">Live</span>
+        <nav class="so-toolbar__nav" aria-label="Related pages">
+          <a href="/fixture-planner" class="fp-btn fp-btn--ghost">Fixture planner</a>
+          <a href="/scout-summary" class="fp-btn fp-btn--ghost">Scout summary</a>
+          <a href="/scout-summary-report" class="fp-btn fp-btn--ghost">Generate report</a>
+        </nav>
+        <button type="button" class="fp-btn fp-btn--ghost" id="refreshBtn">Refresh now</button>
+      </div>
+    </header>
+
+    <section class="so-controls card">
+      <div class="so-controls__group">
+        <span class="fp-controls__label">Season</span>
+        <div id="seasonToggle" class="fp-season-toggle" role="group" aria-label="Season"></div>
+      </div>
+      <div class="so-controls__group so-controls__group--grow">
+        <span class="fp-controls__label">Staff</span>
+        <div id="staffToggle" class="fp-league-toggle so-staff-toggle" role="group" aria-label="Filter by staff"></div>
+        <select id="staffSelect" class="fp-staff-filter so-staff-select hidden" aria-label="Select scout">
+          <option value="">All scouts</option>
+        </select>
+      </div>
+      <div class="so-controls__group">
+        <span class="fp-controls__label">Show</span>
+        <div id="watchToggle" class="fp-view-toggle" role="group" aria-label="Watch type">
+          <button type="button" class="fp-view-btn fp-view-btn--active" data-watch="LIVE">Live only</button>
+          <button type="button" class="fp-view-btn" data-watch="ALL">Live + Video</button>
+        </div>
+      </div>
+      <div class="so-controls__group">
+        <div class="so-calendar-nav">
+          <button type="button" class="fp-btn fp-btn--ghost" id="prevMonthBtn" aria-label="Previous month">←</button>
+          <span class="so-calendar-nav__label" id="monthLabel">—</span>
+          <button type="button" class="fp-btn fp-btn--ghost" id="nextMonthBtn" aria-label="Next month">→</button>
+          <button type="button" class="fp-btn fp-btn--ghost" id="todayBtn">Today</button>
+        </div>
+      </div>
+    </section>
+
+    <main id="calendarRoot" class="fp-calendar-root" aria-live="polite"></main>
+
+    <footer class="so-footer" id="statusBar">Loading scouts calendar…</footer>
+  </div>
+
+  <script defer src="/static/scouts-calendar.js?v=4"></script>
+</body>
+</html>

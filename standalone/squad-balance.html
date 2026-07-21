@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Squad Balance</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/squad-balance.css?v=2" />
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="header__brand">
+        <div>
+          <p class="header__eyebrow">Recruitment · <a href="/">← All apps</a></p>
+          <h1 class="header__title">Squad Balance</h1>
+          <p class="header__subtitle" id="pageSubtitle">Build your 4-3-3 squad by position · search players · see profile balance with squad averages</p>
+        </div>
+      </div>
+      <div class="header__meta">
+        <button type="button" class="btn btn--ghost" id="clearBtn">Clear squad</button>
+        <button type="button" class="btn btn--ghost" id="exportPdfBtn">Export PDF</button>
+        <button type="button" class="btn btn--primary" id="saveBtn">Save squad</button>
+      </div>
+    </header>
+
+    <section class="controls card">
+      <div class="control-group control-group--grow">
+        <label for="playerSearch">Search players</label>
+        <div class="search-wrap">
+          <input id="playerSearch" type="search" placeholder="Type at least 3 letters — e.g. Jed Ward" autocomplete="off" />
+          <div id="searchResults" class="search-results hidden" role="listbox"></div>
+        </div>
+      </div>
+      <div class="control-group">
+        <label for="targetPosition">Add to position</label>
+        <select id="targetPosition"></select>
+      </div>
+      <div class="control-group control-group--actions">
+        <button type="button" class="btn btn--primary" id="addPlayerBtn" disabled>Add player</button>
+      </div>
+    </section>
+
+    <section class="controls card controls--nav">
+      <div class="control-group control-group--grow">
+        <span class="control-label">Position groups</span>
+        <nav id="positionNav" class="position-nav" aria-label="Position groups"></nav>
+      </div>
+    </section>
+
+    <div id="statusBanner" class="status-banner hidden" role="status"></div>
+
+    <div id="comparisonDeck" class="comparison-deck" aria-live="polite"></div>
+  </div>
+
+  <script defer src="/static/squad-balance.js?v=4"></script>
+</body>
+</html>

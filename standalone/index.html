@@ -1,0 +1,1684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Player Search Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0c0f14; --surface: #141a22; --surface-2: #1a222d; --border: #2a3544;
+      --text: #e8edf4; --text-muted: #8b9bb0; --accent: #3d8bfd; --accent-dim: #2563b8;
+      --green: #34d399; --green-dim: rgba(52,211,153,.12); --amber: #fbbf24;
+      --radius: 10px; --font: "DM Sans", system-ui, sans-serif; --mono: "JetBrains Mono", monospace;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: var(--font); background: var(--bg); color: var(--text); line-height: 1.5; }
+    .app { max-width: 1600px; margin: 0 auto; padding: 1.5rem 1.75rem 2.5rem; }
+    .header { margin-bottom: 1.75rem; }
+    .header__brand { display: flex; align-items: baseline; gap: .75rem; flex-wrap: wrap; }
+    .header__hub-link {
+      margin-left: auto;
+      font-size: .8125rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-decoration: none;
+    }
+    .header__hub-link:hover { color: var(--accent); }
+    .header__logo { font-weight: 700; font-size: 1.25rem; color: var(--accent); }
+    .header__title { font-size: 1.25rem; font-weight: 600; }
+    .header__subtitle { margin: .35rem 0 0; color: var(--text-muted); font-size: .875rem; }
+    .header__coach-note { margin: .45rem 0 0; max-width: 52rem; color: var(--text-muted); font-size: .8125rem; line-height: 1.45; }
+    .controls { display: flex; flex-wrap: wrap; gap: 1.25rem 2rem; align-items: flex-end; margin-bottom: 1.5rem; padding: 1.1rem 1.25rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+    .control-group { display: flex; flex-direction: column; gap: .4rem; }
+    .control-group label, .control-label { font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
+    select, .num-input { min-width: 200px; padding: .55rem .75rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: inherit; font-size: .9375rem; }
+    .num-input { min-width: 100px; width: 100px; font-family: var(--mono); }
+    .report-month-input { min-width: 150px; width: 150px; }
+    .month-filter-row { display: flex; align-items: center; gap: .45rem; }
+    .btn-clear-month {
+      padding: .45rem .65rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: .75rem;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .btn-clear-month:disabled { opacity: .35; cursor: not-allowed; }
+    .btn-clear-month:not(:disabled):hover { color: var(--text); border-color: var(--text-muted); }
+    .control-hint { font-size: .6875rem; color: var(--text-muted); font-weight: 400; text-transform: none; letter-spacing: 0; }
+    .control-group--leagues { flex: 1; min-width: 280px; }
+    .league-chips { display: flex; flex-wrap: wrap; gap: .45rem; }
+    .chip { padding: .35rem .75rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-muted); font-family: inherit; font-size: .8125rem; font-weight: 500; cursor: pointer; }
+    .chip--active { background: rgba(61,139,253,.15); border-color: var(--accent); color: var(--accent); }
+    .chip:disabled { opacity: .45; cursor: not-allowed; }
+    .control-group--meta { margin-left: auto; align-items: flex-end; gap: .5rem; }
+    .result-count { font-size: .875rem; color: var(--text-muted); font-family: var(--mono); }
+    .btn-reset, .btn-load, .btn-export, .btn-compare, .btn-export-excel, .btn-potm { padding: .4rem .85rem; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; font-size: .8125rem; cursor: pointer; }
+    .btn-load { background: rgba(61,139,253,.15); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+    .btn-export { background: rgba(52,211,153,.1); border-color: rgba(52,211,153,.45); color: var(--green); font-weight: 600; }
+    .btn-export-excel { background: rgba(52,211,153,.08); border-color: rgba(52,211,153,.35); color: #6ee7b7; font-weight: 600; }
+    .btn-export-excel--all { background: rgba(251,191,36,.08); border-color: rgba(251,191,36,.35); color: var(--amber); font-weight: 600; }
+    .btn-potm { background: rgba(251,113,133,.12); border-color: rgba(251,113,133,.45); color: #fda4af; font-weight: 600; }
+    .btn-compare { background: rgba(167,139,250,.12); border-color: rgba(167,139,250,.45); color: #c4b5fd; font-weight: 600; }
+    .btn-load:disabled, .btn-export:disabled, .btn-compare:disabled, .btn-export-excel:disabled, .btn-potm:disabled { opacity: .5; cursor: not-allowed; }
+    .potm-modal {
+      position: fixed; inset: 0; z-index: 80;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(8, 12, 18, .72); padding: 1rem;
+    }
+    .potm-modal[hidden] { display: none; }
+    .potm-modal__card {
+      width: min(420px, 100%);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem 1.35rem 1.15rem;
+      box-shadow: 0 18px 50px rgba(0,0,0,.45);
+    }
+    .potm-modal__card h3 { margin: 0 0 .35rem; font-size: 1.05rem; }
+    .potm-modal__card p { margin: 0 0 1rem; color: var(--text-muted); font-size: .8125rem; line-height: 1.45; }
+    .potm-modal__field { display: flex; flex-direction: column; gap: .4rem; margin-bottom: 1rem; }
+    .potm-modal__field label { font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
+    .potm-modal__actions { display: flex; justify-content: flex-end; gap: .55rem; }
+    .potm-modal__actions button { padding: .45rem .9rem; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; font-size: .8125rem; cursor: pointer; }
+    .potm-modal__actions .btn-potm-go { background: rgba(251,113,133,.15); border-color: rgba(251,113,133,.5); color: #fda4af; font-weight: 600; }
+    .status-banner { margin-bottom: 1rem; padding: .75rem 1rem; border-radius: 8px; font-size: .875rem; border: 1px solid var(--border); background: var(--surface); }
+    .status-banner--loading { border-color: rgba(61,139,253,.35); color: var(--accent); }
+    .status-banner--error { border-color: rgba(248,113,113,.35); color: #fca5a5; }
+    .status-banner--warn { border-color: rgba(251,191,36,.35); color: var(--amber); }
+    .weights-panel { margin-bottom: 1.25rem; padding: 1.1rem 1.25rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+    .weights-panel h2 { margin: 0; font-size: .9375rem; }
+    .weights-panel p { margin: .2rem 0 1rem; font-size: .8125rem; color: var(--text-muted); }
+    .weights-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: .75rem; }
+    .weight-card { display: flex; flex-direction: column; gap: .35rem; padding: .75rem .85rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; }
+    .weight-card--active { border-color: rgba(61,139,253,.45); }
+    .weight-card--muted { opacity: .55; }
+    .weight-card__name { font-size: .8125rem; font-weight: 600; line-height: 1.25; }
+    .weight-card__values { display: flex; flex-direction: column; align-items: center; gap: .1rem; }
+    .weight-card__value { font-family: var(--mono); font-size: 1.125rem; color: var(--accent); }
+    .weight-card__mix { font-size: .6875rem; color: var(--text-muted); font-family: var(--mono); }
+    .weight-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+    table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+    th, td { padding: .65rem .85rem; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    th { background: var(--surface-2); font-size: .6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); position: sticky; top: 0; z-index: 1; }
+    tbody tr:hover { background: rgba(61,139,253,.04); }
+    .rank-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 1.75rem; height: 1.75rem; border-radius: 6px; background: var(--green-dim); color: var(--green); font-family: var(--mono); font-weight: 600; font-size: .8125rem; }
+    .col-name { font-weight: 600; }
+    .col-name-btn {
+      appearance: none;
+      -webkit-appearance: none;
+      display: inline;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+      font: inherit;
+      font-weight: inherit;
+      color: inherit;
+      cursor: pointer;
+      text-align: left;
+      text-decoration: underline;
+      text-decoration-color: rgba(61, 139, 253, 0.35);
+      text-underline-offset: 2px;
+    }
+    .col-name-btn:hover,
+    .col-name-btn:focus-visible {
+      color: var(--accent);
+      text-decoration-color: currentColor;
+      outline: none;
+    }
+    .row-veteran .col-name,
+    .row-veteran .col-age,
+    .row-veteran .col-name-btn { color: var(--amber); }
+    .row-veteran .col-name-btn:hover,
+    .row-veteran .col-name-btn:focus-visible { color: #fde68a; }
+    .col-num, .col-foot, .col-profile, .col-overall, .col-select { text-align: center !important; }
+    .col-select { width: 42px; }
+    .row-select {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--accent);
+      cursor: pointer;
+      vertical-align: middle;
+    }
+    .col-profile--weighted { color: var(--accent); }
+    .score-cell { font-family: var(--mono); color: var(--text-muted); }
+    .col-overall { background: rgba(52,211,153,.06); }
+    .col-overall strong { font-family: var(--mono); font-size: 1rem; color: var(--green); }
+    .col-league, .col-club { color: var(--text-muted); font-size: .8125rem; }
+    th.sortable {
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+    th.sortable:hover { color: var(--text); }
+    th.sort-active { color: var(--accent) !important; }
+    th.sort-active.col-overall { color: var(--green) !important; }
+    .sort-indicator {
+      display: inline-block;
+      margin-left: .2rem;
+      font-size: .625rem;
+      opacity: .55;
+      vertical-align: middle;
+    }
+    th.sort-active .sort-indicator { opacity: 1; }
+    .empty-row { text-align: center !important; padding: 2.5rem !important; color: var(--text-muted); }
+    .footer { margin-top: 1.5rem; text-align: center; font-size: .75rem; color: var(--text-muted); }
+    .export-root { position: fixed; left: -14000px; top: 0; pointer-events: none; }
+    .export-page {
+      width: 1123px;
+      height: 794px;
+      box-sizing: border-box;
+      padding: 22px 26px 24px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .export-page .header { margin: 0; }
+    .export-page .header__brand { gap: .65rem; }
+    .export-page .header__logo { font-size: 1.1rem; }
+    .export-page .header__title { font-size: 1.1rem; }
+    .export-page .header__subtitle { font-size: .8125rem; margin-top: .25rem; }
+    .export-page .header__coach-note { font-size: .75rem; margin-top: .35rem; max-width: none; }
+    .export-page .export-meta {
+      font-size: .75rem;
+      color: var(--text-muted);
+      font-family: var(--mono);
+    }
+    .export-page .table-wrap { flex: 1; min-height: 0; border-radius: 8px; overflow: hidden; }
+    .export-page .table-wrap table { width: max-content; max-width: none; }
+    .export-page .table-scale { transform-origin: top left; }
+    .export-page table { font-size: .875rem; }
+    .export-page th { font-size: .6875rem; padding: .65rem .85rem; position: static; }
+    .export-page td { padding: .65rem .85rem; }
+    .export-page tbody tr:hover { background: transparent; }
+    .export-page .rank-badge { min-width: 1.75rem; height: 1.75rem; font-size: .8125rem; }
+    .export-page .col-overall strong { font-size: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="header__brand">
+        <span class="header__logo">Impect</span>
+        <span class="header__title">Scouting Long Lists</span>
+        <a class="header__hub-link" href="/">← All apps</a>
+      </div>
+      <p class="header__subtitle" id="headerSubtitle">Ranked within their own league · every position a player meaningfully played</p>
+      <p class="header__coach-note">90 = top 10% in that league for that profile. An 85 in National League and an 85 in League One both mean “very good for where they play.”</p>
+    </header>
+
+    <div id="status" class="status-banner status-banner--loading">Connecting to Impect…</div>
+
+    <section class="controls">
+      <div class="control-group">
+        <label for="position">Position</label>
+        <select id="position" disabled></select>
+      </div>
+      <div class="control-group" id="seasonModeGroup">
+        <label for="seasonMode">Season</label>
+        <select id="seasonMode" disabled></select>
+      </div>
+      <div class="control-group" id="monthGroup">
+        <label for="reportMonth">Calendar month <span class="control-hint">optional</span></label>
+        <div class="month-filter-row">
+          <input id="reportMonth" class="num-input report-month-input" type="month" title="Leave blank for full season · pick a month for highlights in that period" />
+          <button type="button" class="btn-clear-month" id="clearMonth" disabled title="Clear month filter and reload full season">Clear</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <label for="minMinutes">Min minutes</label>
+        <input id="minMinutes" class="num-input" type="number" min="0" step="50" value="450" />
+      </div>
+      <div class="control-group control-group--leagues">
+        <span class="control-label">Leagues</span>
+        <div class="league-chips" id="leagues"></div>
+      </div>
+      <div class="control-group control-group--meta">
+        <span class="result-count" id="count">—</span>
+        <button type="button" class="btn-load" id="reload">Load list</button>
+        <button type="button" class="btn-compare" id="sendCompare" disabled title="Open comparison charts for selected players">Send to comparison</button>
+        <button type="button" class="btn-export-excel" id="exportExcel" disabled title="Excel file for the current filtered table">Export Excel</button>
+        <button type="button" class="btn-export-excel btn-export-excel--all" id="exportExcelAll" disabled title="One workbook, each position on its own sheet">Export all positions</button>
+        <button type="button" class="btn-export" id="exportSlides" disabled title="A4 PDF matching this table">Export A4 PDF</button>
+        <button type="button" class="btn-potm" id="exportPotm" title="Player of the Month PDF — pick a month, then loads LG2 / National League / Scottish Prem once for every position">Player of the Month PDF</button>
+        <button type="button" class="btn-reset" id="reset">Reset weights</button>
+      </div>
+    </section>
+
+    <section class="weights-panel">
+      <h2>Profile weights</h2>
+      <p>Min percentile to qualify + weight in overall · set to 0 to ignore a profile</p>
+      <div class="weights-grid" id="weights"></div>
+    </section>
+
+    <section class="table-wrap">
+      <table>
+        <thead id="thead"></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </section>
+
+    <footer class="footer">Powered by the same Impect API connection as the player comparison tool.</footer>
+
+    <div id="exportRoot" class="export-root" aria-hidden="true"></div>
+
+    <div id="potmModal" class="potm-modal" hidden>
+      <div class="potm-modal__card" role="dialog" aria-modal="true" aria-labelledby="potmModalTitle">
+        <h3 id="potmModalTitle">Player of the Month PDF</h3>
+        <p>Pick the calendar month. Loads League Two, National League and Scottish Prem once for every position — top 10 overall + profile strengths.</p>
+        <div class="potm-modal__field">
+          <label for="potmMonth">Month</label>
+          <input id="potmMonth" class="num-input report-month-input" type="month" />
+        </div>
+        <div class="potm-modal__actions">
+          <button type="button" id="potmCancel">Cancel</button>
+          <button type="button" class="btn-potm-go" id="potmConfirm">Build PDF</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SCOUTING_SERVER = "http://127.0.0.1:8000";
+
+    if (window.location.protocol === "file:") {
+      window.location.replace(`${SCOUTING_SERVER}/`);
+    }
+
+    const API = window.location.origin.includes("127.0.0.1") || window.location.origin.includes("localhost")
+      ? window.location.origin
+      : SCOUTING_SERVER;
+
+    function isFileProtocol() {
+      return window.location.protocol === "file:";
+    }
+
+    function scoutingPageUrl(path) {
+      return `${API}${path.startsWith("/") ? path : `/${path}`}`;
+    }
+
+    const state = {
+      reportMonth: "",
+      monthLabel: "",
+      suggestedMonth: "",
+      position: "CENTRAL_DEFENDER",
+      leagues: [],
+      profiles: [],
+      weights: {},
+      players: [],
+      loading: false,
+      minMinutes: 450,
+      scoringNote: "",
+      seasonMode: "current",
+      seasonModeLabel: "",
+      selectedIds: new Set(),
+      sort: { key: "overall", dir: "desc" },
+    };
+
+    const els = {
+      status: document.getElementById("status"),
+      headerSubtitle: document.getElementById("headerSubtitle"),
+      reportMonth: document.getElementById("reportMonth"),
+      clearMonth: document.getElementById("clearMonth"),
+      monthGroup: document.getElementById("monthGroup"),
+      seasonModeGroup: document.getElementById("seasonModeGroup"),
+      position: document.getElementById("position"),
+      seasonMode: document.getElementById("seasonMode"),
+      minMinutes: document.getElementById("minMinutes"),
+      leagues: document.getElementById("leagues"),
+      weights: document.getElementById("weights"),
+      thead: document.getElementById("thead"),
+      tbody: document.getElementById("tbody"),
+      count: document.getElementById("count"),
+      reload: document.getElementById("reload"),
+      exportSlides: document.getElementById("exportSlides"),
+      exportExcel: document.getElementById("exportExcel"),
+      exportExcelAll: document.getElementById("exportExcelAll"),
+      exportPotm: document.getElementById("exportPotm"),
+      potmModal: document.getElementById("potmModal"),
+      potmMonth: document.getElementById("potmMonth"),
+      potmCancel: document.getElementById("potmCancel"),
+      potmConfirm: document.getElementById("potmConfirm"),
+      sendCompare: document.getElementById("sendCompare"),
+      reset: document.getElementById("reset"),
+    };
+
+    function setStatus(message, kind = "loading") {
+      els.status.textContent = message;
+      els.status.className = `status-banner status-banner--${kind}`;
+    }
+
+    const DEFAULT_WEIGHT = 50;
+
+    function defaultWeights() {
+      state.weights = Object.fromEntries(
+        state.profiles.map((p) => [p.apiName, DEFAULT_WEIGHT]),
+      );
+    }
+
+    function syncWeights(keepExisting = false) {
+      if (!state.profiles.length) {
+        state.weights = {};
+        return;
+      }
+      if (!keepExisting) {
+        defaultWeights();
+        return;
+      }
+      const next = { ...state.weights };
+      for (const profile of state.profiles) {
+        if (next[profile.apiName] == null) {
+          next[profile.apiName] = DEFAULT_WEIGHT;
+        }
+      }
+      state.weights = next;
+      if (activeWeightTotal() === 0) {
+        defaultWeights();
+      }
+    }
+
+    function weightFor(profileApiName) {
+      const w = state.weights[profileApiName];
+      return w == null ? DEFAULT_WEIGHT : w;
+    }
+
+    function activeWeightTotal() {
+      return state.profiles.reduce(
+        (sum, p) => sum + Math.max(0, state.weights[p.apiName] ?? 0),
+        0,
+      );
+    }
+
+    function mixPercent(apiName) {
+      const w = state.weights[apiName] ?? 0;
+      const total = activeWeightTotal();
+      if (w <= 0 || total <= 0) return 0;
+      return Math.round((w / total) * 100);
+    }
+
+    function updateWeightDisplays() {
+      els.weights.querySelectorAll(".weight-card").forEach((card) => {
+        const key = card.querySelector(".weight-slider")?.dataset.profile;
+        if (!key) return;
+        const w = state.weights[key] ?? 0;
+        card.querySelector(".weight-card__value").textContent = String(w);
+        card.querySelector(".weight-card__mix").textContent =
+          `${w > 0 ? `min ${w} · ` : ""}${mixPercent(key)}% of mix`;
+      });
+    }
+
+    function hasMonthFilter() {
+      return Boolean(parseMonthInput(state.reportMonth));
+    }
+
+    function padMonth(value) {
+      return String(value).padStart(2, "0");
+    }
+
+    function monthInputValue(year, month) {
+      return `${year}-${padMonth(month)}`;
+    }
+
+    function parseMonthInput(value) {
+      const match = String(value || "").match(/^(\d{4})-(\d{2})$/);
+      if (!match) return null;
+      return { year: Number(match[1]), month: Number(match[2]) };
+    }
+
+    function monthLabelFromInput(value) {
+      const parsed = parseMonthInput(value);
+      if (!parsed) return "";
+      const date = new Date(parsed.year, parsed.month - 1, 1);
+      return date.toLocaleString(undefined, { month: "long", year: "numeric" });
+    }
+
+    function updateHeaderSubtitle() {
+      const minMins = Number.isFinite(state.minMinutes) ? state.minMinutes : 0;
+      if (hasMonthFilter()) {
+        const monthText = state.monthLabel || monthLabelFromInput(state.reportMonth) || "selected month";
+        els.headerSubtitle.textContent =
+          `Monthly highlights · ${monthText} · ${minMins}+ min in that month · every position a player meaningfully played`;
+        return;
+      }
+      els.headerSubtitle.textContent =
+        `Ranked within their own league · ${minMins}+ min · every position a player meaningfully played`;
+    }
+
+    function updateMonthFilterUI() {
+      const filtered = hasMonthFilter();
+      els.seasonMode.disabled = filtered;
+      els.clearMonth.disabled = !filtered;
+      els.exportExcelAll.disabled = state.loading || !state.leagues.length || filtered;
+      els.exportPotm.disabled = state.loading;
+      updateHeaderSubtitle();
+    }
+
+    function cacheKey(position, leagues, minMinutes, seasonMode, reportMonth) {
+      if (reportMonth) {
+        return `scouting:monthly:v1:${position}:${leagues.slice().sort().join("|")}:${minMinutes}:${reportMonth}`;
+      }
+      return `scouting:v2:${position}:${leagues.slice().sort().join("|")}:${minMinutes}:${seasonMode}`;
+    }
+
+    function readSessionCache(key) {
+      try {
+        const raw = sessionStorage.getItem(key);
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function writeSessionCache(key, data) {
+      try {
+        sessionStorage.setItem(key, JSON.stringify(data));
+      } catch {
+        return;
+      }
+    }
+
+    function updateCompareButton() {
+      const count = state.selectedIds.size;
+      els.sendCompare.disabled = count === 0;
+      els.sendCompare.textContent =
+        count === 0 ? "Send to comparison" : `Send to comparison (${count})`;
+    }
+
+    function pruneSelectedIds() {
+      const valid = new Set(state.players.map((player) => player.id));
+      state.selectedIds = new Set([...state.selectedIds].filter((id) => valid.has(id)));
+      updateCompareButton();
+    }
+
+    function togglePlayerSelected(playerId, selected) {
+      if (selected) state.selectedIds.add(playerId);
+      else state.selectedIds.delete(playerId);
+      updateCompareButton();
+    }
+
+    function toggleAllVisibleSelected(selected) {
+      rankedPlayers().forEach((player) => {
+        if (selected) state.selectedIds.add(player.id);
+        else state.selectedIds.delete(player.id);
+      });
+      updateCompareButton();
+      renderTable();
+    }
+
+    function areAllVisibleSelected() {
+      const ranked = rankedPlayers();
+      return ranked.length > 0 && ranked.every((player) => state.selectedIds.has(player.id));
+    }
+
+    function updateExportButton() {
+      const hasRows = rankedPlayers().length > 0;
+      els.exportSlides.disabled = state.loading || !hasRows;
+      els.exportExcel.disabled = state.loading || !hasRows;
+      els.exportExcelAll.disabled = state.loading || !state.leagues.length || hasMonthFilter();
+      els.exportPotm.disabled = state.loading;
+      updateCompareButton();
+    }
+
+    function applyListData(data, { keepWeights = false } = {}) {
+      state.profiles = data.profiles;
+      state.players = data.players;
+      state.scoringNote = data.scoring?.note || "";
+      state.seasonModeLabel = data.seasonModeLabel || state.seasonModeLabel;
+      state.monthLabel = data.monthLabel || state.monthLabel;
+      syncWeights(keepWeights);
+      pruneSelectedIds();
+      normalizeSortKey();
+      renderWeights();
+      renderTable();
+      updateExportButton();
+      updateHeaderSubtitle();
+    }
+
+    function showLoadedMessage(data) {
+        const seasonText = (data.seasons || []).map((s) => `${s.league} ${s.season}`).join(" · ");
+        let message = `Loaded ${data.playerCount} players · ${data.seasonModeLabel || "Season"}`;
+        if (hasMonthFilter() && data.matchCount != null) {
+          message += ` · ${data.matchCount} matches`;
+        }
+        if (seasonText) message += ` · ${seasonText}`;
+        if (data.scoring?.note) message += ` · ${data.scoring.note}`;
+        else if (data.warnings?.length) message += ` · ${data.warnings[0]}`;
+      els.status.className = data.warnings?.length ? "status-banner status-banner--warn" : "status-banner";
+      els.status.style.borderColor = data.warnings?.length ? "" : "var(--border)";
+      els.status.style.color = data.warnings?.length ? "" : "var(--text-muted)";
+      els.status.textContent = message;
+    }
+
+    function passesProfileFilters(profileScores) {
+      for (const profile of state.profiles) {
+        const minimum = state.weights[profile.apiName] ?? 0;
+        if (minimum <= 0) continue;
+        const value = profileScores[profile.apiName];
+        if (value == null || value < minimum) return false;
+      }
+      return true;
+    }
+
+    function computeOverall(profileScores) {
+      let sum = 0;
+      let wSum = 0;
+      const fallbackValues = [];
+
+      for (const profile of state.profiles) {
+        const value = profileScores[profile.apiName];
+        if (value == null) continue;
+        fallbackValues.push(value);
+        const w = weightFor(profile.apiName);
+        if (w <= 0) continue;
+        sum += value * w;
+        wSum += w;
+      }
+
+      if (wSum > 0) return sum / wSum;
+      if (!fallbackValues.length) return 0;
+      return fallbackValues.reduce((total, value) => total + value, 0) / fallbackValues.length;
+    }
+
+    function rankedPlayers() {
+      const players = state.players
+        .filter((p) => passesProfileFilters(p.profileScores))
+        .map((p) => ({ ...p, overall: computeOverall(p.profileScores) }));
+      return sortPlayerList(players);
+    }
+
+    function isTextSortKey(key) {
+      return key === "name" || key === "league" || key === "club" || key === "foot";
+    }
+
+    function parseHeightSortValue(height) {
+      if (height == null || height === "") return null;
+      if (typeof height === "number") return height;
+      const text = String(height);
+      const cmMatch = text.match(/(\d+)\s*cm/i);
+      if (cmMatch) return Number(cmMatch[1]);
+      const digits = text.match(/\d+/);
+      return digits ? Number(digits[0]) : null;
+    }
+
+    function playerSortValue(player, key) {
+      if (key === "overall") return player.overall;
+      if (key === "name") return player.name || "";
+      if (key === "age") return player.age;
+      if (key === "minutes") return player.minutes;
+      if (key === "height") return parseHeightSortValue(player.height);
+      if (key === "foot") return player.foot || "";
+      if (key === "league") return player.league || "";
+      if (key === "club") return player.club || "";
+      if (key.startsWith("profile:")) {
+        return player.profileScores[key.slice(8)];
+      }
+      return null;
+    }
+
+    function compareSortValues(a, b, dir) {
+      const aMissing = a == null || a === "" || Number.isNaN(a);
+      const bMissing = b == null || b === "" || Number.isNaN(b);
+      if (aMissing && bMissing) return 0;
+      if (aMissing) return 1;
+      if (bMissing) return -1;
+
+      if (typeof a === "string" || typeof b === "string") {
+        const cmp = String(a).localeCompare(String(b), undefined, { sensitivity: "base", numeric: true });
+        return dir === "asc" ? cmp : -cmp;
+      }
+
+      const cmp = a - b;
+      return dir === "asc" ? cmp : -cmp;
+    }
+
+    function sortPlayerList(players) {
+      const { key, dir } = state.sort;
+      return [...players].sort((a, b) =>
+        compareSortValues(playerSortValue(a, key), playerSortValue(b, key), dir),
+      );
+    }
+
+    function sortIndicator(key) {
+      if (state.sort.key !== key) return '<span class="sort-indicator" aria-hidden="true">↕</span>';
+      return state.sort.dir === "asc"
+        ? '<span class="sort-indicator" aria-hidden="true">↑</span>'
+        : '<span class="sort-indicator" aria-hidden="true">↓</span>';
+    }
+
+    function sortableTh(key, label, { exportMode = false, className = "", title = "" } = {}) {
+      if (exportMode) {
+        return `<th class="${className}">${label}</th>`;
+      }
+      const active = state.sort.key === key ? " sort-active" : "";
+      const sortTitle = title || `Sort by ${label.replace(/ ≥\d+$/, "")}`;
+      return `<th class="sortable${active} ${className}" data-sort-key="${key}" title="${sortTitle}">${label}${sortIndicator(key)}</th>`;
+    }
+
+    function toggleSort(key) {
+      if (state.sort.key === key) {
+        state.sort.dir = state.sort.dir === "asc" ? "desc" : "asc";
+      } else {
+        state.sort.key = key;
+        state.sort.dir = isTextSortKey(key) ? "asc" : "desc";
+      }
+      renderTable();
+    }
+
+    function normalizeSortKey() {
+      if (state.sort.key === "overall") return;
+      if (state.sort.key.startsWith("profile:")) {
+        const apiName = state.sort.key.slice(8);
+        if (state.profiles.some((profile) => profile.apiName === apiName)) return;
+      } else if (["name", "age", "minutes", "height", "foot", "league", "club"].includes(state.sort.key)) {
+        return;
+      }
+      state.sort = { key: "overall", dir: "desc" };
+    }
+
+    function renderWeights() {
+      els.weights.innerHTML = state.profiles.map((profile) => {
+        const stored = state.weights[profile.apiName] ?? DEFAULT_WEIGHT;
+        const cls = stored > 0 ? "weight-card weight-card--active" : "weight-card weight-card--muted";
+        return `<div class="${cls}">
+          <span class="weight-card__name" title="${profile.apiName}">${profile.label}</span>
+          <input type="range" min="0" max="100" step="1" value="${stored}" class="weight-slider" data-profile="${profile.apiName}" />
+          <div class="weight-card__values">
+            <span class="weight-card__value">${stored}</span>
+            <span class="weight-card__mix">${stored > 0 ? `min ${stored} · ` : ""}${mixPercent(profile.apiName)}% of mix</span>
+          </div>
+        </div>`;
+      }).join("");
+
+      els.weights.querySelectorAll(".weight-slider").forEach((slider) => {
+        slider.addEventListener("input", (e) => {
+          const key = e.target.dataset.profile;
+          state.weights[key] = Number(e.target.value);
+          const card = e.target.closest(".weight-card");
+          card.className = state.weights[key] > 0 ? "weight-card weight-card--active" : "weight-card weight-card--muted";
+          updateWeightDisplays();
+          renderTable();
+        });
+      });
+      updateExportButton();
+    }
+
+    function exportProfileLabel(label) {
+      const short = {
+        "LINK / DEEP PLAY MAKER": "LINK / DM",
+        "THREAT IN BEHIND": "BEHIND",
+      };
+      return short[label] || label;
+    }
+
+    function buildTheadHtml({ exportMode = false } = {}) {
+      const selectHead = exportMode
+        ? ""
+        : `<th class="col-select"><input type="checkbox" class="row-select" id="selectAllPlayers" aria-label="Select all visible players" ${areAllVisibleSelected() ? "checked" : ""} /></th>`;
+      return `<tr>
+        ${selectHead}<th>Rank</th>
+        ${sortableTh("name", "Name", { exportMode })}
+        ${sortableTh("age", "Age", { exportMode, className: "col-num" })}
+        ${sortableTh("minutes", "Min", { exportMode, className: "col-num" })}
+        ${sortableTh("height", "Height", { exportMode })}
+        ${sortableTh("foot", "Foot", { exportMode, className: "col-foot" })}
+        ${sortableTh("league", "League", { exportMode, className: "col-league" })}
+        ${sortableTh("club", "Club", { exportMode, className: "col-club" })}
+        ${state.profiles.map((p) => {
+          const min = state.weights[p.apiName] ?? 0;
+          const active = min > 0;
+          const label = exportMode ? exportProfileLabel(p.label) : p.label;
+          const headerLabel = `${label}${active ? ` ≥${min}` : ""}`;
+          return sortableTh(`profile:${p.apiName}`, headerLabel, {
+            exportMode,
+            className: active ? "col-profile col-profile--weighted" : "col-profile",
+            title: `${p.apiName}${active ? ` · min ${min}` : ""}`,
+          });
+        }).join("")}
+        ${sortableTh("overall", "Overall", { exportMode, className: "col-overall" })}
+      </tr>`;
+    }
+
+    function isVeteranPlayer(age) {
+      return age != null && age >= 30;
+    }
+
+    function buildPlayerRowsHtml(players, rankStart = 0, { interactive = true } = {}) {
+      return players.map((p, i) => {
+        const rank = rankStart + i + 1;
+        const veteranClass = isVeteranPlayer(p.age) ? ' class="row-veteran"' : "";
+        const selectCell = interactive
+          ? `<td class="col-select"><input type="checkbox" class="row-select" data-player-id="${p.id}" aria-label="Select ${p.name}" ${state.selectedIds.has(p.id) ? "checked" : ""} /></td>`
+          : "";
+        const nameCell = interactive
+          ? `<td class="col-name"><button type="button" class="col-name-btn" data-player-id="${p.id}" title="Open charts in new tab">${p.name}</button></td>`
+          : `<td class="col-name">${p.name}</td>`;
+        return `<tr${veteranClass}>
+          ${selectCell}<td style="text-align:center"><span class="rank-badge">${rank}</span></td>
+          ${nameCell}
+          <td class="col-num col-age">${p.age ?? "—"}</td>
+          <td class="col-num">${p.minutes != null ? Math.round(p.minutes) : "—"}</td>
+          <td>${p.height ?? "—"}</td>
+          <td class="col-foot">${p.foot ?? "—"}</td>
+          <td class="col-league">${p.league}</td>
+          <td class="col-club">${p.club || "—"}</td>
+          ${state.profiles.map((profile) => {
+            const v = p.profileScores[profile.apiName];
+            return `<td class="col-profile score-cell">${v == null ? "—" : v.toFixed(1)}</td>`;
+          }).join("")}
+          <td class="col-overall"><strong>${p.overall.toFixed(1)}</strong></td>
+        </tr>`;
+      }).join("");
+    }
+
+    function renderTable() {
+      const ranked = rankedPlayers();
+      els.count.textContent = `${ranked.length} player${ranked.length !== 1 ? "s" : ""}`;
+
+      els.thead.innerHTML = buildTheadHtml();
+
+      if (!ranked.length) {
+        const msg = state.players.length
+          ? "No players match your profile minimums — lower the sliders or set one to 0."
+          : "No players loaded yet.";
+        els.tbody.innerHTML = `<tr><td colspan="${9 + state.profiles.length + 1}" class="empty-row">${msg}</td></tr>`;
+        updateExportButton();
+        return;
+      }
+
+      els.tbody.innerHTML = buildPlayerRowsHtml(ranked);
+      const selectAll = document.getElementById("selectAllPlayers");
+      if (selectAll) {
+        selectAll.indeterminate =
+          state.selectedIds.size > 0 && !areAllVisibleSelected();
+      }
+      updateExportButton();
+    }
+
+    const MAX_COMPARE_PLAYERS = 8;
+    const SCOUTING_COMPARE_STORAGE_PREFIX = "scouting-compare:";
+
+    function buildCompareChartRequest(players) {
+      const profiles = state.profiles.map((profile) => profile.apiName);
+      if (profiles.length < 2) return null;
+
+      const playerKeys = [];
+      const playerCatalog = {};
+      const playerSeasons = {};
+      const playerPositions = {};
+      const iterationIds = new Set();
+
+      for (const player of players) {
+        const request = buildChartRequestForPlayer(player);
+        if (!request) continue;
+        const key = request.player_keys[0];
+        playerKeys.push(key);
+        Object.assign(playerCatalog, request.player_catalog);
+        playerSeasons[key] = request.player_seasons[key];
+        playerPositions[key] = request.player_positions[key];
+        request.iteration_ids.forEach((id) => iterationIds.add(id));
+      }
+
+      if (!playerKeys.length) return null;
+
+      return {
+        iteration_ids: [...iterationIds],
+        player_keys: playerKeys,
+        player_catalog: playerCatalog,
+        player_seasons: playerSeasons,
+        player_positions: playerPositions,
+        positions: [state.position],
+        profiles,
+        chart_source: "profiles",
+      };
+    }
+
+    function sendToComparison() {
+      if (isFileProtocol()) {
+        setStatus(`Open the scouting tool via the server first: ${scoutingPageUrl("/scouting")}`, "error");
+        return;
+      }
+
+      const selected = rankedPlayers().filter((player) => state.selectedIds.has(player.id));
+      if (!selected.length) {
+        setStatus("Select at least one player to compare.", "warn");
+        return;
+      }
+      if (selected.length > MAX_COMPARE_PLAYERS) {
+        setStatus(`Select up to ${MAX_COMPARE_PLAYERS} players for one comparison.`, "warn");
+        return;
+      }
+
+      const chartRequest = buildCompareChartRequest(selected);
+      if (!chartRequest) {
+        setStatus("Chart data unavailable for the selected players.", "warn");
+        return;
+      }
+
+      const positionLabel = els.position.selectedOptions[0]?.text || state.position;
+      const batchId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const names = selected.map((player) => player.name);
+      const title =
+        names.length === 1
+          ? names[0]
+          : names.length <= 3
+            ? names.join(" vs ")
+            : `${names.length} players compared`;
+
+      try {
+        localStorage.setItem(
+          `${SCOUTING_COMPARE_STORAGE_PREFIX}${batchId}`,
+          JSON.stringify({
+            title,
+            meta: `${positionLabel} · ${state.seasonModeLabel} · ${names.join(", ")}`,
+            chartRequest,
+            createdAt: Date.now(),
+          }),
+        );
+      } catch {
+        setStatus("Could not store comparison data in this browser.", "error");
+        return;
+      }
+
+      window.open(
+        scoutingPageUrl(`/scouting/compare?batch=${encodeURIComponent(batchId)}`),
+        "_blank",
+        "noopener,noreferrer",
+      );
+    }
+
+    function slugify(text) {
+      return String(text || "export")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "export";
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function selectedLeagues() {
+      return [...els.leagues.querySelectorAll(".chip.chip--active")].map((btn) => btn.dataset.league);
+    }
+
+    function exportFileName() {
+      const positionLabel = els.position.selectedOptions[0]?.text || state.position;
+      const stamp = new Date().toISOString().slice(0, 10);
+      if (hasMonthFilter()) {
+        const monthSlug = slugify(state.monthLabel || state.reportMonth || "month");
+        return `scouting-highlights-${slugify(positionLabel)}-${monthSlug}.pdf`;
+      }
+      return `scouting-${slugify(positionLabel)}-${stamp}.pdf`;
+    }
+
+    function rowsPerExportPage(firstPage = false) {
+      const cols = 9 + state.profiles.length + 1;
+      if (firstPage) {
+        if (cols > 14) return 11;
+        if (cols > 11) return 13;
+        return 14;
+      }
+      if (cols > 14) return 14;
+      if (cols > 11) return 16;
+      return 18;
+    }
+
+    function buildExportHeaderHtml({ firstPage, positionLabel, pageLabel, rankRange, leagues, generatedAt }) {
+      if (firstPage) {
+        return `<header class="header">
+          <div class="header__brand">
+            <span class="header__logo">Impect</span>
+            <span class="header__title">Scouting Long Lists</span>
+          </div>
+          <p class="header__subtitle">${positionLabel} · ${state.seasonModeLabel} · ${state.minMinutes}+ min</p>
+          <p class="header__coach-note">${state.scoringNote || "90 = top 10% in that league for that profile."}</p>
+          <p class="export-meta">${leagues.join(", ")} · ${generatedAt} · ${pageLabel}${rankRange ? ` · ${rankRange}` : ""}</p>
+        </header>`;
+      }
+      return `<header class="header">
+        <div class="header__brand">
+          <span class="header__logo">Impect</span>
+          <span class="header__title">Scouting Long Lists</span>
+        </div>
+        <p class="export-meta">${positionLabel} · ${pageLabel}${rankRange ? ` · ${rankRange}` : ""}</p>
+      </header>`;
+    }
+
+    function buildExportPageHtml({ firstPage, players, rankStart, positionLabel, pageNum, totalPages, leagues, generatedAt }) {
+      const rankEnd = rankStart + players.length;
+      const rankRange = players.length ? `Ranks ${rankStart + 1}–${rankEnd}` : "";
+      const pageLabel = `Page ${pageNum}/${totalPages}`;
+      const wide = state.profiles.length >= 4;
+      return `<div class="export-page${wide ? " export-page--wide" : ""}">
+        ${buildExportHeaderHtml({ firstPage, positionLabel, pageLabel, rankRange, leagues, generatedAt })}
+        <section class="table-wrap">
+          <div class="table-scale">
+            <table>
+              <thead>${buildTheadHtml({ exportMode: true })}</thead>
+              <tbody>${buildPlayerRowsHtml(players, rankStart, { interactive: false })}</tbody>
+            </table>
+          </div>
+        </section>
+      </div>`;
+    }
+
+    function fitExportTable(pageEl) {
+      const wrap = pageEl.querySelector(".table-wrap");
+      const scaleEl = pageEl.querySelector(".table-scale");
+      const table = pageEl.querySelector("table");
+      scaleEl.style.transform = "none";
+      scaleEl.style.height = "auto";
+      const available = wrap.clientWidth;
+      const needed = table.scrollWidth;
+      const scale = needed > available ? available / needed : 1;
+      if (scale < 1) {
+        scaleEl.style.transform = `scale(${scale})`;
+        scaleEl.style.height = `${Math.ceil(table.offsetHeight * scale)}px`;
+      }
+    }
+
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        if (document.querySelector(`script[src="${src}"]`)) {
+          resolve();
+          return;
+        }
+        const script = document.createElement("script");
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error("Could not load export library."));
+        document.head.appendChild(script);
+      });
+    }
+
+    async function captureExportPages(ranked, meta) {
+      await loadScript("https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js");
+      if (!window.html2canvas) throw new Error("Export capture failed.");
+      if (document.fonts?.ready) await document.fonts.ready;
+
+      const firstPageRows = rowsPerExportPage(true);
+      const otherPageRows = rowsPerExportPage(false);
+      const totalPages = ranked.length
+        ? 1 + Math.ceil(Math.max(0, ranked.length - firstPageRows) / otherPageRows)
+        : 1;
+      const root = document.getElementById("exportRoot");
+      const pages = [];
+
+      let offset = 0;
+      for (let page = 0; page < totalPages; page += 1) {
+        const perPage = page === 0 ? firstPageRows : otherPageRows;
+        const chunk = ranked.slice(offset, offset + perPage);
+        root.innerHTML = buildExportPageHtml({
+          firstPage: page === 0,
+          players: chunk,
+          rankStart: offset,
+          positionLabel: meta.positionLabel,
+          pageNum: page + 1,
+          totalPages,
+          leagues: meta.leagues,
+          generatedAt: meta.generatedAt,
+        });
+
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+        fitExportTable(root.firstElementChild);
+
+        setStatus(`Rendering A4 page ${page + 1}/${totalPages}…`, "loading");
+
+        const canvas = await window.html2canvas(root.firstElementChild, {
+          backgroundColor: "#0c0f14",
+          scale: 2,
+          logging: false,
+          useCORS: true,
+          width: 1123,
+          height: 794,
+          windowWidth: 1123,
+          windowHeight: 794,
+        });
+        pages.push({ imageData: canvas.toDataURL("image/jpeg", 0.94) });
+        offset += perPage;
+      }
+
+      root.innerHTML = "";
+      return pages;
+    }
+
+    function playerChartTabUrl(player) {
+      const chartRequest = buildChartRequestForPlayer(player);
+      if (!chartRequest) return null;
+
+      const iterationId = chartRequest.iteration_ids[0];
+      const playerId = chartRequest.player_catalog[chartRequest.player_keys[0]].ids_by_iteration[String(iterationId)];
+      const params = new URLSearchParams({
+        iteration: String(iterationId),
+        playerId: String(playerId),
+        name: player.name,
+        position: state.position,
+        profiles: chartRequest.profiles.join(","),
+      });
+      if (player.squadId != null) params.set("squad", String(player.squadId));
+      if (player.club) params.set("club", player.club);
+      if (player.league) params.set("league", player.league);
+      if (player.season) params.set("season", player.season);
+      return scoutingPageUrl(`/scouting/player?${params.toString()}`);
+    }
+
+    function openPlayerChartsTab(player) {
+      if (isFileProtocol()) {
+        setStatus(`Open the scouting tool via the server first: ${scoutingPageUrl("/scouting")}`, "error");
+        return;
+      }
+      const url = playerChartTabUrl(player);
+      if (!url) {
+        setStatus("Chart data unavailable for this player.", "warn");
+        return;
+      }
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+
+    function buildChartRequestForPlayer(player) {
+      if (player?.chartRequest) return player.chartRequest;
+
+      let iterationId = player?.iterationId;
+      let playerId = player?.playerId;
+      if ((!iterationId || !playerId) && player?.id) {
+        const parts = String(player.id).split(":");
+        if (parts.length === 2) {
+          iterationId = iterationId ?? Number(parts[0]);
+          playerId = playerId ?? Number(parts[1]);
+        }
+      }
+      if (!player?.name || !iterationId || !playerId) return null;
+
+      const key = player.playerKey || `${String(player.name).toLowerCase().trim()}|${playerId}`;
+      const iterStr = String(iterationId);
+      const catalogEntry = {
+        name: player.name,
+        ids_by_iteration: { [iterStr]: playerId },
+      };
+      if (player.squadId != null) {
+        catalogEntry.squad_ids_by_iteration = { [iterStr]: player.squadId };
+      }
+
+      return {
+        iteration_ids: [iterationId],
+        player_keys: [key],
+        player_catalog: { [key]: catalogEntry },
+        player_seasons: { [key]: [iterationId] },
+        player_positions: { [key]: [state.position] },
+        positions: [state.position],
+        profiles: state.profiles.map((profile) => profile.apiName),
+        chart_source: "profiles",
+      };
+    }
+
+    function playerById(playerId) {
+      return state.players.find((player) => player.id === playerId);
+    }
+
+    function readFilterSettingsFromUI() {
+      const minMinutes = Number(els.minMinutes.value);
+      return {
+        leagues: selectedLeagues(),
+        min_minutes: Number.isFinite(minMinutes) ? minMinutes : state.minMinutes,
+        season_mode: els.seasonMode.value || state.seasonMode || "current",
+        season_mode_label:
+          els.seasonMode.selectedOptions[0]?.text || state.seasonModeLabel || "Season",
+      };
+    }
+
+    function syncFilterStateFromUI() {
+      const filters = readFilterSettingsFromUI();
+      state.minMinutes = filters.min_minutes;
+      state.seasonMode = filters.season_mode;
+      state.seasonModeLabel = filters.season_mode_label;
+    }
+
+    function filterSettingsSummary(filters) {
+      const leagueText = (filters.leagues || []).join(", ") || "no leagues";
+      return `${filters.season_mode_label} · ${filters.min_minutes}+ min · ${leagueText}`;
+    }
+
+    function exportTimestamp() {
+      return new Date().toLocaleString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
+
+    function buildExportPayload(ranked) {
+      syncFilterStateFromUI();
+      const filters = readFilterSettingsFromUI();
+      const positionLabel = els.position.selectedOptions[0]?.text || state.position;
+      return {
+        generated_at: exportTimestamp(),
+        position_label: positionLabel,
+        leagues: filters.leagues,
+        min_minutes: filters.min_minutes,
+        season_mode: filters.season_mode,
+        season_mode_label: filters.season_mode_label,
+        scoring_note: state.scoringNote,
+        profiles: state.profiles.map((profile) => ({
+          apiName: profile.apiName,
+          label: profile.label,
+          weight: state.weights[profile.apiName] ?? 0,
+        })),
+        players: ranked.map((player, index) => ({
+          rank: index + 1,
+          name: player.name,
+          age: player.age ?? null,
+          minutes: player.minutes != null ? Math.round(player.minutes) : null,
+          height: player.height ?? "",
+          foot: player.foot ?? "",
+          league: player.league ?? "",
+          club: player.club ?? "",
+          overall: player.overall,
+          profileScores: player.profileScores,
+        })),
+      };
+    }
+
+    function exportExcelFileName() {
+      const positionLabel = els.position.selectedOptions[0]?.text || state.position;
+      const stamp = new Date().toISOString().slice(0, 10);
+      if (hasMonthFilter()) {
+        const monthSlug = slugify(state.monthLabel || state.reportMonth || "month");
+        return `scouting-highlights-${slugify(positionLabel)}-${monthSlug}.xlsx`;
+      }
+      return `scouting-${slugify(positionLabel)}-${stamp}.xlsx`;
+    }
+
+    function exportAllExcelFileName() {
+      const stamp = new Date().toISOString().slice(0, 10);
+      return `scouting-all-positions-${stamp}.xlsx`;
+    }
+
+    async function downloadExportResponse(res, fallbackFilename) {
+      if (!res.ok) {
+        const raw = await res.text();
+        let message = `Export failed (${res.status}).`;
+        try {
+          const data = raw ? JSON.parse(raw) : {};
+          message = data.detail || message;
+        } catch {
+          if (raw) message = raw.slice(0, 160);
+        }
+        throw new Error(message);
+      }
+
+      const blob = await res.blob();
+      const savedDesktopPath = res.headers.get("X-Saved-Desktop-Path");
+      const filename =
+        res.headers.get("Content-Disposition")?.match(/filename="([^"]+)"/)?.[1] ||
+        fallbackFilename;
+      downloadBlob(blob, filename);
+      if (savedDesktopPath) {
+        const savedName = savedDesktopPath.split("/").pop();
+        setStatus(`Excel saved to Desktop (${savedName}) and downloaded.`, "warn");
+      } else {
+        setStatus("Excel downloaded.", "warn");
+      }
+    }
+
+    async function exportExcel() {
+      const ranked = rankedPlayers();
+      if (!ranked.length) {
+        setStatus("Load players before exporting.", "warn");
+        return;
+      }
+
+      const payload = {
+        ...buildExportPayload(ranked),
+        filename: exportExcelFileName(),
+      };
+
+      els.exportExcel.disabled = true;
+      setStatus(`Building Excel for ${ranked.length} players…`, "loading");
+
+      try {
+        const res = await fetch(`${API}/api/scouting/export-excel`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        await downloadExportResponse(res, payload.filename);
+      } catch (err) {
+        setStatus(err.message || "Excel export failed.", "error");
+      } finally {
+        updateExportButton();
+      }
+    }
+
+    async function exportAllPositionsExcel() {
+      syncFilterStateFromUI();
+      const filters = readFilterSettingsFromUI();
+      if (!filters.leagues.length) {
+        setStatus("Select at least one league.", "warn");
+        return;
+      }
+
+      const payload = {
+        filename: exportAllExcelFileName(),
+        generated_at: exportTimestamp(),
+        leagues: filters.leagues,
+        min_minutes: filters.min_minutes,
+        season_mode: filters.season_mode,
+        season_mode_label: filters.season_mode_label,
+      };
+
+      els.exportExcelAll.disabled = true;
+      els.exportExcel.disabled = true;
+      els.exportSlides.disabled = true;
+      setStatus(
+        `Building Excel for all positions (${filterSettingsSummary(filters)})… ` +
+          `Fetching each league once — usually 1–3 min with one league, longer with all six. ` +
+          `If Impect rate-limits, wait 2–3 minutes and retry.`,
+        "loading",
+      );
+
+      try {
+        const res = await fetch(`${API}/api/scouting/export-excel-all`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        await downloadExportResponse(res, payload.filename);
+      } catch (err) {
+        setStatus(err.message || "All-positions Excel export failed.", "error");
+      } finally {
+        updateExportButton();
+      }
+    }
+
+    async function exportSlides() {
+      const ranked = rankedPlayers();
+      if (!ranked.length) {
+        setStatus("Load players before exporting.", "warn");
+        return;
+      }
+
+      const positionLabel = els.position.selectedOptions[0]?.text || state.position;
+      const payload = {
+        ...buildExportPayload(ranked),
+        filename: exportFileName(),
+        pages: [],
+      };
+
+      els.exportSlides.disabled = true;
+      setStatus(`Rendering A4 pages for ${ranked.length} players…`, "loading");
+
+      try {
+        payload.pages = await captureExportPages(ranked, {
+          positionLabel,
+          leagues: selectedLeagues(),
+          generatedAt: payload.generated_at,
+        });
+        setStatus("Building PDF…", "loading");
+        const res = await fetch(`${API}/api/scouting/export-pdf`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const raw = await res.text();
+          let message = `Export failed (${res.status}).`;
+          try {
+            const data = raw ? JSON.parse(raw) : {};
+            message = data.detail || message;
+          } catch {
+            if (raw) message = raw.slice(0, 160);
+          }
+          throw new Error(message);
+        }
+
+        const blob = await res.blob();
+        const savedDesktopPath = res.headers.get("X-Saved-Desktop-Path");
+        downloadBlob(blob, payload.filename);
+        if (savedDesktopPath) {
+          const savedName = savedDesktopPath.split("/").pop();
+          setStatus(`PDF saved to Desktop (${savedName}) and downloaded.`, "warn");
+        } else {
+          setStatus("PDF downloaded.", "warn");
+        }
+      } catch (err) {
+        setStatus(err.message || "Export failed.", "error");
+      } finally {
+        updateExportButton();
+      }
+    }
+
+    const POTM_DEFAULT_LEAGUES = ["League Two", "National League", "Scottish Prem"];
+
+    function defaultPotmMonthValue() {
+      if (state.suggestedMonth) return state.suggestedMonth;
+      if (els.reportMonth.value) return els.reportMonth.value;
+      const now = new Date();
+      const previous = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      return monthInputValue(previous.getFullYear(), previous.getMonth() + 1);
+    }
+
+    function openPotmModal() {
+      if (isFileProtocol()) {
+        setStatus(`Open the scouting tool via the server first: ${scoutingPageUrl("/scouting")}`, "error");
+        return;
+      }
+      els.potmMonth.value = defaultPotmMonthValue();
+      els.potmModal.hidden = false;
+      els.potmMonth.focus();
+    }
+
+    function closePotmModal() {
+      els.potmModal.hidden = true;
+    }
+
+    async function exportPlayerOfTheMonth() {
+      const parsed = parseMonthInput(els.potmMonth.value);
+      if (!parsed) {
+        setStatus("Pick a calendar month for the Player of the Month report.", "warn");
+        return;
+      }
+
+      const leagues = [...POTM_DEFAULT_LEAGUES];
+      const payload = {
+        year: parsed.year,
+        month: parsed.month,
+        leagues,
+        min_minutes: 180,
+        top_n: 10,
+      };
+
+      const monthText = monthLabelFromInput(els.potmMonth.value) || `${parsed.year}-${parsed.month}`;
+      closePotmModal();
+      els.exportPotm.disabled = true;
+      state.loading = true;
+      setStatus(
+        `Building Player of the Month for ${monthText} · ${leagues.join(", ")} · all positions… loads shared match data once, then each position.`,
+        "loading",
+      );
+
+      try {
+        const res = await fetch(`${API}/api/scouting/monthly-report-pdf`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const raw = await res.text();
+          let message = `Player of the Month export failed (${res.status}).`;
+          try {
+            const data = raw ? JSON.parse(raw) : {};
+            message = data.detail || message;
+          } catch {
+            if (raw) message = raw.slice(0, 200);
+          }
+          throw new Error(message);
+        }
+
+        const blob = await res.blob();
+        const savedDesktopPath = res.headers.get("X-Saved-Desktop-Path");
+        const filename = `player-of-the-month-${parsed.year}-${String(parsed.month).padStart(2, "0")}.pdf`;
+        downloadBlob(blob, filename);
+        if (savedDesktopPath) {
+          const savedName = savedDesktopPath.split("/").pop();
+          setStatus(`Player of the Month PDF saved to Desktop (${savedName}) and downloaded.`, "warn");
+        } else {
+          setStatus("Player of the Month PDF downloaded.", "warn");
+        }
+      } catch (err) {
+        setStatus(err.message || "Player of the Month export failed.", "error");
+      } finally {
+        state.loading = false;
+        updateExportButton();
+      }
+    }
+
+    function renderLeagues() {
+      els.leagues.innerHTML = state.leagues.map((league) =>
+        `<button type="button" class="chip chip--active" data-league="${league}">${league}</button>`
+      ).join("");
+
+      const selected = new Set(state.leagues);
+      els.leagues.querySelectorAll(".chip").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const league = btn.dataset.league;
+          if (selected.has(league)) {
+            if (selected.size === 1) return;
+            selected.delete(league);
+            btn.classList.remove("chip--active");
+          } else {
+            selected.add(league);
+            btn.classList.add("chip--active");
+          }
+          loadLongList();
+        });
+      });
+    }
+
+    async function loadMeta() {
+      const res = await fetch(`${API}/api/scouting/meta`);
+      if (!res.ok) throw new Error("Could not load scouting metadata.");
+      const data = await res.json();
+      state.leagues = data.leagues;
+      state.minMinutes = data.default_min_minutes ?? 450;
+      els.minMinutes.value = state.minMinutes;
+      state.seasonMode = data.default_season_mode ?? "current";
+      els.seasonMode.innerHTML = (data.season_modes || []).map((mode) =>
+        `<option value="${mode.value}">${mode.label}</option>`
+      ).join("");
+      els.seasonMode.value = state.seasonMode;
+      els.seasonMode.disabled = false;
+      state.seasonModeLabel = (data.season_modes || []).find((m) => m.value === state.seasonMode)?.label || "";
+
+      const monthlyDefaults = data.monthly || {};
+      const defaultYear = monthlyDefaults.default_year ?? new Date().getFullYear();
+      const defaultMonth = monthlyDefaults.default_month ?? Math.max(1, new Date().getMonth());
+      state.suggestedMonth = monthInputValue(defaultYear, defaultMonth);
+      state.reportMonth = "";
+      state.monthLabel = "";
+      els.reportMonth.value = "";
+      updateMonthFilterUI();
+
+      els.position.innerHTML = data.positions.map((p) =>
+        `<option value="${p.value}">${p.label}</option>`
+      ).join("");
+      state.position = data.positions[0]?.value || "CENTRAL_DEFENDER";
+      els.position.disabled = false;
+      renderLeagues();
+    }
+
+    async function loadLongList() {
+      const selectedLeagues = [...els.leagues.querySelectorAll(".chip.chip--active")].map((b) => b.dataset.league);
+      if (!selectedLeagues.length) {
+        setStatus("Select at least one league.", "warn");
+        return;
+      }
+
+      state.position = els.position.value;
+      state.reportMonth = els.reportMonth.value || "";
+      state.monthLabel = monthLabelFromInput(state.reportMonth);
+      state.minMinutes = Number(els.minMinutes.value) || 0;
+      state.seasonMode = els.seasonMode.value || "current";
+      state.seasonModeLabel = els.seasonMode.selectedOptions[0]?.text || state.seasonModeLabel;
+      updateMonthFilterUI();
+
+      const monthFilter = hasMonthFilter();
+      const parsedMonth = parseMonthInput(state.reportMonth);
+
+      const key = cacheKey(
+        state.position,
+        selectedLeagues,
+        state.minMinutes,
+        state.seasonMode,
+        state.reportMonth,
+      );
+      const cached = readSessionCache(key);
+
+      if (cached) {
+        applyListData(cached, { keepWeights: true });
+        showLoadedMessage(cached);
+        setStatus(`${cached.playerCount} players (cached) — refreshing…`, "loading");
+      } else {
+        state.loading = true;
+        els.reload.disabled = true;
+        updateExportButton();
+        const loadingLabel = monthFilter
+          ? `${state.monthLabel || "month"} ${els.position.selectedOptions[0].text}`
+          : els.position.selectedOptions[0].text;
+        setStatus(
+          monthFilter
+            ? `Loading monthly highlights for ${loadingLabel} from Impect… (this can take 1–2 min per league)`
+            : `Loading ${loadingLabel} from Impect…`,
+          "loading",
+        );
+      }
+
+      try {
+        const endpoint = monthFilter ? "/api/scouting/monthly-list" : "/api/scouting/long-list";
+        const payload = monthFilter
+          ? {
+              position: state.position,
+              leagues: selectedLeagues,
+              min_minutes: state.minMinutes,
+              year: parsedMonth.year,
+              month: parsedMonth.month,
+            }
+          : {
+              position: state.position,
+              leagues: selectedLeagues,
+              min_minutes: state.minMinutes,
+              season_mode: state.seasonMode,
+            };
+
+        const res = await fetch(`${API}${endpoint}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const raw = await res.text();
+        let data;
+        try {
+          data = raw ? JSON.parse(raw) : {};
+        } catch {
+          throw new Error(
+            res.ok
+              ? "Server returned invalid JSON."
+              : raw.slice(0, 120) || `Request failed (${res.status}).`
+          );
+        }
+        if (!res.ok) throw new Error(data.detail || `Failed to load scouting data (${res.status}).`);
+
+        writeSessionCache(key, data);
+        applyListData(data);
+        showLoadedMessage(data);
+      } catch (err) {
+        if (!cached) {
+          setStatus(err.message || "Failed to load data.", "error");
+          state.players = [];
+          state.profiles = [];
+          renderWeights();
+          renderTable();
+        } else {
+          setStatus(`${cached.playerCount} players (cached) — refresh failed`, "warn");
+        }
+      } finally {
+        state.loading = false;
+        els.reload.disabled = false;
+        updateExportButton();
+      }
+    }
+
+    els.reportMonth.addEventListener("change", loadLongList);
+    els.clearMonth.addEventListener("click", () => {
+      els.reportMonth.value = "";
+      loadLongList();
+    });
+    els.position.addEventListener("change", loadLongList);
+    els.seasonMode.addEventListener("change", loadLongList);
+    els.minMinutes.addEventListener("change", loadLongList);
+    els.reload.addEventListener("click", loadLongList);
+    els.exportSlides.addEventListener("click", exportSlides);
+    els.exportExcel.addEventListener("click", exportExcel);
+    els.exportExcelAll.addEventListener("click", exportAllPositionsExcel);
+    els.exportPotm.addEventListener("click", openPotmModal);
+    els.potmCancel.addEventListener("click", closePotmModal);
+    els.potmConfirm.addEventListener("click", exportPlayerOfTheMonth);
+    els.potmModal.addEventListener("click", (event) => {
+      if (event.target === els.potmModal) closePotmModal();
+    });
+    els.potmMonth.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        exportPlayerOfTheMonth();
+      }
+    });
+    els.sendCompare.addEventListener("click", sendToComparison);
+    els.thead.addEventListener("change", (event) => {
+      if (event.target.id === "selectAllPlayers") {
+        toggleAllVisibleSelected(event.target.checked);
+      }
+    });
+    els.thead.addEventListener("click", (event) => {
+      const header = event.target.closest("th[data-sort-key]");
+      if (!header) return;
+      toggleSort(header.dataset.sortKey);
+    });
+    els.tbody.addEventListener("change", (event) => {
+      const checkbox = event.target.closest("[data-player-id].row-select");
+      if (!checkbox) return;
+      togglePlayerSelected(checkbox.dataset.playerId, checkbox.checked);
+      const selectAll = document.getElementById("selectAllPlayers");
+      if (selectAll) {
+        selectAll.checked = areAllVisibleSelected();
+        selectAll.indeterminate =
+          state.selectedIds.size > 0 && !areAllVisibleSelected();
+      }
+    });
+    els.tbody.addEventListener("click", (event) => {
+      const button = event.target.closest("button.col-name-btn[data-player-id]");
+      if (!button) return;
+      const player = playerById(button.dataset.playerId);
+      if (player) openPlayerChartsTab(player);
+    });
+    els.reset.addEventListener("click", () => {
+      defaultWeights();
+      renderWeights();
+      renderTable();
+    });
+
+    (async function init() {
+      try {
+        await loadMeta();
+        await loadLongList();
+      } catch (err) {
+        setStatus(
+          `${err.message} Start the server: ./start.sh`,
+          "error"
+        );
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pre-Match Handout</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/pre-match-handout.css?v=19" />
+</head>
+<body>
+  <div class="ph-app">
+    <header class="ph-toolbar">
+      <div class="ph-toolbar__left">
+        <p class="ph-toolbar__eyebrow">Port Vale FC · Analysis · <a href="/">← All apps</a></p>
+        <h1 class="ph-toolbar__title">Pre-match handout</h1>
+      </div>
+      <div class="ph-toolbar__right">
+        <button type="button" class="ph-btn ph-btn--ghost" id="editNotesBtn">Edit notes</button>
+        <button type="button" class="ph-btn ph-btn--primary" id="exportPdfBtn" disabled>Export A4 PDF</button>
+        <button type="button" class="ph-btn ph-btn--primary" id="exportPptxBtn" disabled>Export A4 Slides</button>
+        <button type="button" class="ph-btn ph-btn--ghost" id="refreshBtn" disabled>Refresh</button>
+      </div>
+    </header>
+
+    <div class="ph-match-bar-wrap">
+      <div class="ph-season-bar">
+        <span class="ph-season-bar__label">Season</span>
+        <div id="seasonToggle" class="ph-season-toggle" role="group" aria-label="Season"></div>
+      </div>
+      <div id="matchBar" class="ph-match-bar" role="listbox" aria-label="Fixtures"></div>
+    </div>
+
+    <div id="statusBanner" class="ph-status hidden" role="status"></div>
+
+    <aside id="notesPanel" class="ph-notes hidden" aria-label="Analyst notes">
+      <div class="ph-notes__head">
+        <h2>Analyst notes</h2>
+        <button type="button" class="ph-btn ph-btn--ghost" id="closeNotesBtn">Close</button>
+      </div>
+      <label class="ph-notes__field">
+        <span>In possession style</span>
+        <textarea id="notesInPossession" rows="4"></textarea>
+      </label>
+      <label class="ph-notes__field">
+        <span>Out of possession style</span>
+        <textarea id="notesOutPossession" rows="4"></textarea>
+      </label>
+      <label class="ph-notes__field">
+        <span>Confirmed out (one per line)</span>
+        <textarea id="notesConfirmedOut" rows="3"></textarea>
+      </label>
+      <label class="ph-notes__field">
+        <span>Possibly out (one per line)</span>
+        <textarea id="notesPossiblyOut" rows="3"></textarea>
+      </label>
+      <label class="ph-notes__field">
+        <span>Suspended (one per line)</span>
+        <textarea id="notesSuspended" rows="2"></textarea>
+      </label>
+      <div id="playerNotesFields" class="ph-notes__players"></div>
+      <button type="button" class="ph-btn ph-btn--primary" id="saveNotesBtn">Save notes</button>
+    </aside>
+
+    <div class="ph-deck-shell">
+      <div class="ph-paper-scaler" id="paperScaler">
+        <main id="deckViewport" class="ph-deck-viewport" aria-live="polite">
+          <div id="deck" class="ph-deck"></div>
+        </main>
+      </div>
+    </div>
+
+    <footer id="statusBar" class="ph-footer">Select a fixture to build the handout.</footer>
+  </div>
+
+  <input type="hidden" id="iterationId" value="" />
+  <input type="hidden" id="opponentId" value="" />
+  <input type="hidden" id="matchId" value="" />
+
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script defer src="/static/pre-match-handout.js?v=19"></script>
+</body>
+</html>

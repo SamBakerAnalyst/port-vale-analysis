@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Squad Comparison</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/squad-review.css?v=9" />
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="header__brand">
+        <img class="header__badge" src="/standalone/port-vale-badge.png?v=2" width="56" height="68" alt="Port Vale FC crest" />
+        <div>
+          <p class="header__eyebrow">Internal player reviews · <a href="/">← All apps</a></p>
+          <h1 class="header__title">Player comparison</h1>
+          <p class="header__subtitle" id="seasonSubtitle">Loading all position groups…</p>
+        </div>
+      </div>
+      <div class="header__meta">
+        <div class="season-toggle-wrap">
+          <span class="season-toggle__label">Season</span>
+          <div id="seasonToggle" class="season-toggle" role="group" aria-label="Season"></div>
+        </div>
+        <div class="header__updated" id="lastUpdated" aria-live="polite">Loading…</div>
+        <button type="button" class="btn btn--ghost" id="refreshBtn">Refresh data</button>
+      </div>
+    </header>
+
+    <section class="controls card">
+      <div class="control-group">
+        <label for="minMinutes">Min minutes</label>
+        <input id="minMinutes" class="num-input" type="number" min="0" step="45" value="0" />
+      </div>
+      <div class="control-group control-group--grow">
+        <span class="control-label">Position groups</span>
+        <nav id="positionNav" class="position-nav" aria-label="Position groups"></nav>
+      </div>
+      <div class="control-group control-group--actions">
+        <button type="button" class="btn btn--ghost" id="exportBtn" disabled>Save all slides</button>
+        <button type="button" class="btn btn--ghost" id="exportPdfBtn" disabled>Export PDF</button>
+      </div>
+    </section>
+
+    <div id="statusBanner" class="status-banner hidden" role="status"></div>
+
+    <div id="comparisonDeck" class="comparison-deck" aria-live="polite"></div>
+  </div>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script defer src="/static/squad-review.js?v=12"></script>
+</body>
+</html>

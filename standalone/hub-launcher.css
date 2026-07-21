@@ -1,0 +1,56 @@
+/**
+ * Overlay styles for HubLauncher — loaded by hub.html and front.html.
+ */
+.hub-launcher {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  background: rgba(8, 10, 14, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.hub-launcher[hidden] {
+  display: none !important;
+}
+
+.hub-launcher__panel {
+  width: min(22rem, calc(100vw - 2rem));
+  padding: 1.35rem 1.5rem;
+  border-radius: 12px;
+  border: 1px solid #2a3544;
+  background: #141a22;
+  color: #e8edf4;
+  text-align: center;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+}
+
+.hub-launcher__spinner {
+  width: 2rem;
+  height: 2rem;
+  margin: 0 auto 0.85rem;
+  border-radius: 50%;
+  border: 3px solid rgba(61, 139, 253, 0.2);
+  border-top-color: #3d8bfd;
+  animation: hub-launcher-spin 0.8s linear infinite;
+}
+
+.hub-launcher__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.hub-launcher__detail {
+  margin: 0.45rem 0 0;
+  font-size: 0.8125rem;
+  color: #8b9bb0;
+  line-height: 1.45;
+}
+
+@keyframes hub-launcher-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
