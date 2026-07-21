@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta name="pm-build" content="dev" />
+  <title>Pre-Match Report</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/pre-match.css?v=dev" />
+</head>
+<body>
+  <div class="pm-app" id="pmApp">
+    <header class="pm-toolbar">
+      <div class="pm-toolbar__left">
+          <p class="pm-toolbar__eyebrow">Port Vale FC · Analysis · <a href="/">← All apps</a></p>
+        <h1 class="pm-toolbar__title">Pre-match report <span class="pm-build-badge" id="buildBadge">vdev</span></h1>
+      </div>
+      <div class="pm-toolbar__right">
+        <div class="pm-slide-nav">
+          <button type="button" class="pm-btn pm-btn--ghost" id="prevSlideBtn" aria-label="Previous slide">←</button>
+          <span class="pm-slide-nav__count" id="slideCounter">—</span>
+          <button type="button" class="pm-btn pm-btn--ghost" id="nextSlideBtn" aria-label="Next slide">→</button>
+        </div>
+        <button type="button" class="pm-btn pm-btn--ghost" id="refreshBtn" disabled title="Reload report data from Impect (not page code)">Refresh data</button>
+        <button type="button" class="pm-btn pm-btn--whatsapp" id="exportWhatsappPdfBtn" disabled title="Best for WhatsApp — full 1080p PDF of every slide">WhatsApp PDF</button>
+        <button type="button" class="pm-btn pm-btn--export" id="exportPngsBtn" disabled title="PNG zip (Keynote / archive) — prefer WhatsApp PDF for sharing">Export PNGs</button>
+      </div>
+    </header>
+
+    <div id="matchBarWrap" class="pm-match-bar-wrap">
+      <div class="pm-season-bar">
+        <span class="pm-season-bar__label">Season</span>
+        <div id="seasonToggle" class="pm-season-toggle" role="group" aria-label="Season"></div>
+      </div>
+      <div id="matchBar" class="pm-match-bar" role="listbox" aria-label="Upcoming fixtures"></div>
+    </div>
+
+    <div id="statusBanner" class="pm-status hidden" role="status"></div>
+
+    <div class="pm-deck-shell">
+      <main id="deckViewport" class="pm-deck-viewport" aria-live="polite">
+        <div id="deck" class="pm-deck"></div>
+      </main>
+    </div>
+
+    <footer id="statusBar" class="pm-footer">Select a fixture to load the report.</footer>
+  </div>
+
+  <input type="hidden" id="iterationId" value="" />
+  <input type="hidden" id="opponentId" value="" />
+  <input type="hidden" id="matchId" value="" />
+
+  <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script defer src="/static/pre-match.js?v=dev"></script>
+</body>
+</html>
