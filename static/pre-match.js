@@ -252,6 +252,7 @@ function formatMatchDate(iso) {
 
 async function fetchJson(url, options = {}) {
   const res = await fetch(url, {
+    cache: "no-store",
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     body: options.body,
     method: options.method || "GET",
@@ -3046,7 +3047,7 @@ function renderPlayerRankingsSlide(report, sideKey) {
   const splitsReady = Number(rankings.splits_version || 0) >= 5;
   const staleNote = splitsReady
     ? ""
-    : `<p class="pm-rank-stale">Rankings splits outdated — click <strong>Refresh report</strong> for clearer labels and reconciled breakdowns.</p>`;
+    : `<p class="pm-rank-stale">Rankings splits outdated — click <strong>Refresh data</strong> for clearer labels and reconciled breakdowns.</p>`;
   const sub = isIn
     ? `${clubName} · goals & assists total · rest /90 · min ${minMinutes}' · last ${matches} · assist phase · PXT by action`
     : `${clubName} · per 90 · min ${minMinutes}' · last ${matches} · win type · press phase · ground/aerial`;

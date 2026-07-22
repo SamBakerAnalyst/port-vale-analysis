@@ -1,0 +1,74 @@
+# Deploy to your existing DigitalOcean droplet — no App Platform.
+# See deploy/DROPLET-DEPLOY.md (use this) or deploy/APP-PLATFORM.md (optional, not needed).
+
+name: port-vale-analysis
+region: lon
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
+
+ingress:
+  rules:
+    - component:
+        name: hub
+      match:
+        path:
+          prefix: /
+
+services:
+  - name: hub
+    dockerfile_path: Dockerfile
+    source_dir: /
+    github:
+      repo: SamBakerAnalyst/port-vale-analysis
+      branch: main
+      deploy_on_push: true
+    http_port: 8000
+    instance_count: 1
+    # 4 GB RAM — matches your current droplet. Downgrade to professional-s (2 GB) later if needed.
+    instance_size_slug: professional-m
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 90
+      period_seconds: 30
+      timeout_seconds: 10
+      failure_threshold: 5
+    envs:
+      - key: HOST
+        value: "0.0.0.0"
+      - key: PORT
+        value: "8000"
+      - key: HUB_ROOT
+        value: "/app"
+      - key: DATA_ROOT
+        value: "/data"
+      # --- Set these in the DO dashboard (encrypted) on first create ---
+      - key: IMPECT_USERNAME
+        scope: RUN_TIME
+        type: SECRET
+      - key: IMPECT_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+      - key: TEAM_USERNAME
+        scope: RUN_TIME
+        value: PortVale
+      - key: TEAM_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+      - key: HUB_AUTH_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      # --- Optional (fixture emails) ---
+      - key: SMTP_HOST
+        scope: RUN_TIME
+        type: SECRET
+      - key: SMTP_USER
+        scope: RUN_TIME
+        type: SECRET
+      - key: SMTP_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+      - key: FIXTURE_EMAIL_FROM
+        scope: RUN_TIME
+        type: SECRET

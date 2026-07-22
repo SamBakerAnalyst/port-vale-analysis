@@ -1,0 +1,35 @@
+---
+description: MANDATORY — git push deploys to live droplet at 178.128.161.215
+alwaysApply: true
+---
+
+# LIVE WEBSITE = GIT PUSH (existing droplet)
+
+**Staff use http://178.128.161.215/** — same droplet Sam already pays for. No App Platform.
+
+## Definition of done
+
+1. Edit code in this repo
+2. **Commit and push to `main`**
+3. GitHub Actions deploys to the droplet (~5–10 min)
+4. Verify at http://178.128.161.215/
+
+**Never** mark complete after only local changes.
+
+## Deploy
+
+```bash
+git push origin main
+```
+
+Or user runs **`Deploy to Website.command`**.
+
+## Do not
+
+- Set up App Platform or new paid services
+- Stop at local-only fixes
+- Use rsync/SSH manually unless Actions is broken
+
+## Setup reference
+
+`deploy/DROPLET-DEPLOY.md` — one-time GitHub secrets + deploy key

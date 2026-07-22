@@ -9,6 +9,10 @@
       ? SCOUTING_SERVER
       : global.location.origin;
 
+  const IS_LOCAL_HUB =
+    global.location.protocol === "file:" ||
+    /^(localhost|127\.0\.0\.1)$/.test(global.location.hostname);
+
   const SERVER_BY_PORT = {
     8000: "hub",
     8002: "pre-match-standalone",
@@ -75,6 +79,9 @@
     if (await healthOk(`${BASE}/health`)) {
       return { started: false };
     }
+    if (!IS_LOCAL_HUB) {
+      throw new Error("The analysis hub is temporarily unavailable. Try again in a minute or contact the analysis team.");
+    }
     showOverlay("Starting analysis hub…", "Port 8000 · this only takes a few seconds.");
     await postEnsure({ server: "hub" });
     const online = await waitForHealth(`${BASE}/health`, 35000);
@@ -117,9 +124,13 @@
     const title = options.title || "Opening tool";
     const serverId = resolveServerForHref(href, options.server);
     try {
-      await ensureHub();
-      if (serverId && serverId !== "hub") {
-        await ensureServer(serverId, options.serverLabel || title);
+      if (IS_LOCAL_HUB) {
+        await ensureHub();
+        if (serverId && serverId !== "hub") {
+          await ensureServer(serverId, options.serverLabel || title);
+        }
+      } else if (!(await healthOk(`${BASE}/health`))) {
+        throw new Error("The analysis hub is temporarily unavailable. Try again in a minute.");
       }
       hideOverlay();
       global.location.href = href;
@@ -152,6 +163,7 @@
 
   global.HubLauncher = {
     BASE,
+    IS_LOCAL_HUB,
     ensureHub,
     openApp,
     openHref,

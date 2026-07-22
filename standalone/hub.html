@@ -885,7 +885,7 @@
     </div>
   </div>
 
-  <script src="/standalone/hub-launcher.js?v=2"></script>
+  <script src="/standalone/hub-launcher.js?v=3"></script>
   <script src="/standalone/apps.js?v=20260720-scouts-map"></script>
   <script>
     const SCOUTING_SERVER = "http://127.0.0.1:8000";
@@ -898,6 +898,10 @@
       window.location.protocol === "file:"
         ? SCOUTING_SERVER
         : window.location.origin;
+
+    const IS_LOCAL_HUB =
+      window.location.protocol === "file:" ||
+      /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
 
     function appUrl(href) {
       return href.startsWith("http") ? href : `${BASE}${href}`;
@@ -1048,6 +1052,14 @@
       const btn = document.getElementById("restartServerBtn");
       const startLink = document.getElementById("startServerLink");
       const hint = document.getElementById("restartHint");
+      if (!IS_LOCAL_HUB) {
+        el.className = "hub__status hub__status--online";
+        text.textContent = "Hub online";
+        btn.hidden = true;
+        startLink.hidden = true;
+        hint.hidden = true;
+        return true;
+      }
       try {
         const res = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(3000) });
         if (res.ok) {
