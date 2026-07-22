@@ -23,6 +23,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from app.auth import register_auth
 from app.label_utils import humanize_metric_label, humanize_profile_name
 from app.profile_resolve import (
     FACTOR_SCORE_ALIASES,
@@ -234,6 +235,7 @@ async def pre_match_asset_no_cache(request: Request, call_next):
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+register_auth(app, BASE_DIR / "standalone" / "login.html")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 PLAYER_PHOTOS_DIR = BASE_DIR / "static" / "player-photos"
 PLAYER_PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
