@@ -22,6 +22,13 @@ const LEAGUE_TO_FIXTURE = {
   "Scottish Prem": "Scottish Prem",
 };
 
+// Conservative UK scouting estimates: crow-flies → road distance, then mixed-road average speed.
+const ROAD_DISTANCE_FACTOR = 1.38;
+const AVG_SPEED_MPH = 36;
+const ARRIVE_BEFORE_KICKOFF_MIN = 15;
+const HALFTIME_MINUTE = 45;
+const FULLTIME_MINUTE = 90;
+
 const state = {
   meta: null,
   allStadiums: [],
@@ -32,6 +39,8 @@ const state = {
   reachable: [],
   reachableClubs: new Set(),
   fixtures: [],
+  allFixturesForPlanning: [],
+  dayPlans: [],
   loading: false,
   map: null,
   markers: [],
@@ -46,10 +55,12 @@ function bindElements() {
     addressInput: document.getElementById("addressInput"),
     searchBtn: document.getElementById("searchBtn"),
     maxMinutes: document.getElementById("maxMinutes"),
+    maxMiles: document.getElementById("maxMiles"),
     leagueToggle: document.getElementById("leagueToggle"),
     seasonToggle: document.getElementById("seasonToggle"),
     mapLegend: document.getElementById("mapLegend"),
     summaryPanel: document.getElementById("summaryPanel"),
+    dayPlansList: document.getElementById("dayPlansList"),
     fixturesList: document.getElementById("fixturesList"),
     statusBanner: document.getElementById("statusBanner"),
     statusBar: document.getElementById("statusBar"),
@@ -102,6 +113,7 @@ function buildMeta(stadiums) {
     })),
     stadium_count: stadiums.length,
     default_max_minutes: 60,
+    default_max_miles: 36,
     seasons: ALLOWED_SEASONS,
   };
 }
@@ -178,23 +190,292 @@ function haversineKm(lat1, lng1, lat2, lng2) {
   return radius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function estimateDriveMinutes(distanceKm) {
-  if (distanceKm <= 0) return 0;
-  return Math.max(1, Math.round((distanceKm / 88) * 60));
+function kmToMiles(km) {
+  return km * 0.621371;
 }
 
-function computeReachable(origin, stadiums, maxMinutes) {
+function estimateDrive(distanceKmStraight) {
+  if (distanceKmStraight <= 0) {
+    return { minutes: 0, miles: 0 };
+  }
+  const roadKm = distanceKmStraight * ROAD_DISTANCE_FACTOR;
+  const miles = kmToMiles(roadKm);
+  const minutes = Math.max(1, Math.round((miles / AVG_SPEED_MPH) * 60));
+  return {
+    minutes,
+    miles: Math.round(miles * 10) / 10,
+  };
+}
+
+function maxStraightLineRadiusKm(maxMinutes) {
+  const maxRoadMiles = (maxMinutes / 60) * AVG_SPEED_MPH;
+  const maxRoadKm = maxRoadMiles / 0.621371;
+  return maxRoadKm / ROAD_DISTANCE_FACTOR;
+}
+
+function maxStraightLineRadiusKmFromMiles(maxMiles) {
+  const maxRoadKm = maxMiles / 0.621371;
+  return maxRoadKm / ROAD_DISTANCE_FACTOR;
+}
+
+function effectiveRadiusKm(maxMinutes, maxMiles) {
+  return Math.min(maxStraightLineRadiusKm(maxMinutes), maxStraightLineRadiusKmFromMiles(maxMiles));
+}
+
+function filterLimits() {
+  return {
+    maxMinutes: Number(els.maxMinutes.value || 60),
+    maxMiles: Number(els.maxMiles.value || 36),
+  };
+}
+
+function formatFilterSummary(maxMinutes, maxMiles) {
+  return `${maxMinutes} min · ${maxMiles} mi`;
+}
+
+function formatDriveEstimate(drive) {
+  if (!drive?.minutes) return "";
+  if (drive.miles > 0) return `${drive.minutes} min · ${drive.miles} mi`;
+  return `${drive.minutes} min`;
+}
+
+function formatDriveTime(row) {
+  if (!row?.drive_minutes) return "";
+  return formatDriveEstimate({ minutes: row.drive_minutes, miles: row.drive_miles });
+}
+
+function driveBetween(lat1, lng1, lat2, lng2) {
+  return estimateDrive(haversineKm(lat1, lng1, lat2, lng2));
+}
+
+function formatClock(when) {
+  return when.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+function ordinalMinute(minute) {
+  const n = Math.floor(minute);
+  const mod100 = n % 100;
+  const mod10 = n % 10;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  if (mod10 === 1) return `${n}st`;
+  if (mod10 === 2) return `${n}nd`;
+  if (mod10 === 3) return `${n}rd`;
+  return `${n}th`;
+}
+
+function formatLeaveByMinute(leaveByMinute, leaveAt) {
+  const minute = Math.floor(leaveByMinute);
+  if (minute >= FULLTIME_MINUTE) {
+    return {
+      label: "Leave anytime from half-time",
+      short: "45'+",
+      detail: `Latest ${formatClock(leaveAt)} (90')`,
+      minute: FULLTIME_MINUTE,
+    };
+  }
+  if (minute <= HALFTIME_MINUTE) {
+    return {
+      label: "Leave at half-time",
+      short: "45'",
+      detail: formatClock(leaveAt),
+      minute: HALFTIME_MINUTE,
+    };
+  }
+  return {
+    label: `Leave by ${ordinalMinute(minute)} minute`,
+    short: `${minute}'`,
+    detail: formatClock(leaveAt),
+    minute,
+  };
+}
+
+function fixtureKickoffTime(fixture) {
+  const raw = fixture.kickoff_utc || fixture.scheduled_date;
+  if (!raw) return null;
+  const when = new Date(raw);
+  return Number.isNaN(when.getTime()) ? null : when;
+}
+
+function findStadiumForClub(clubName) {
+  return state.allStadiums.find((row) => clubMatchesFixtureHome(clubName, row.club));
+}
+
+function isReachableFromHome(stadium) {
+  return state.reachable.some((row) => row.club === stadium?.club);
+}
+
+function enrichFixture(fixture) {
+  const home = fixture.home?.name || fixture.home || "TBC";
+  const away = fixture.away?.name || fixture.away || "TBC";
+  const kickoffAt = fixtureKickoffTime(fixture);
+  return {
+    ...fixture,
+    home,
+    away,
+    kickoff_utc: fixture.kickoff_utc || fixture.scheduled_date || null,
+    kickoff_at: kickoffAt,
+    kickoff: kickoffAt
+      ? kickoffAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+      : "",
+    date_label: fixture.date
+      ? new Date(fixture.date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })
+      : "TBC",
+    date_key: fixture.date ? String(fixture.date).slice(0, 10) : "",
+    stadium: findStadiumForClub(home),
+  };
+}
+
+function computeDayPlans() {
+  if (!state.origin || !state.allFixturesForPlanning.length) return [];
+
+  const byDate = {};
+  state.allFixturesForPlanning.forEach((fixture) => {
+    if (!fixture.date_key || !fixture.kickoff_at || !fixture.stadium) return;
+    if (!byDate[fixture.date_key]) byDate[fixture.date_key] = [];
+    byDate[fixture.date_key].push(fixture);
+  });
+
+  const plans = [];
+
+  Object.keys(byDate)
+    .sort()
+    .forEach((dateKey) => {
+      const dayFixtures = byDate[dateKey].sort((a, b) => a.kickoff_at - b.kickoff_at);
+      for (let i = 0; i < dayFixtures.length; i += 1) {
+        const first = dayFixtures[i];
+        if (!isReachableFromHome(first.stadium)) continue;
+
+        const homeToFirst = driveBetween(
+          state.origin.lat,
+          state.origin.lng,
+          first.stadium.lat,
+          first.stadium.lng
+        );
+        const leaveHomeBy = new Date(
+          first.kickoff_at.getTime() - (homeToFirst.minutes + ARRIVE_BEFORE_KICKOFF_MIN) * 60000
+        );
+
+        for (let j = i + 1; j < dayFixtures.length; j += 1) {
+          const second = dayFixtures[j];
+          if (!second.stadium || second.stadium.club === first.stadium.club) continue;
+
+          const between = driveBetween(
+            first.stadium.lat,
+            first.stadium.lng,
+            second.stadium.lat,
+            second.stadium.lng
+          );
+          const mustArriveSecond = new Date(
+            second.kickoff_at.getTime() - ARRIVE_BEFORE_KICKOFF_MIN * 60000
+          );
+          const leaveFirst = new Date(mustArriveSecond.getTime() - between.minutes * 60000);
+          const leaveByMinute =
+            (leaveFirst.getTime() - first.kickoff_at.getTime()) / 60000;
+
+          if (leaveByMinute < HALFTIME_MINUTE) continue;
+
+          const leaveInfo = formatLeaveByMinute(leaveByMinute, leaveFirst);
+          const arriveSecond = new Date(leaveFirst.getTime() + between.minutes * 60000);
+          const cushionAfterHalf = Math.floor(leaveByMinute - HALFTIME_MINUTE);
+
+          plans.push({
+            date_key: dateKey,
+            date_label: first.date_label,
+            first,
+            second,
+            homeToFirst,
+            between,
+            leaveHomeBy,
+            leaveFirst,
+            leaveByMinute: leaveInfo.minute,
+            leaveInfo,
+            arriveSecond,
+            cushionAfterHalf,
+          });
+        }
+      }
+    });
+
+  return plans.sort((a, b) => {
+    const dateCmp = a.date_key.localeCompare(b.date_key);
+    if (dateCmp) return dateCmp;
+    return a.first.kickoff_at - b.first.kickoff_at;
+  });
+}
+
+function renderDayPlans() {
+  if (!els.dayPlansList) return;
+
+  if (!state.origin) {
+    els.dayPlansList.innerHTML =
+      '<p class="sa-summary__empty">Enter your address to see feasible two-game days.</p>';
+    return;
+  }
+
+  if (!state.dayPlans.length) {
+    els.dayPlansList.innerHTML =
+      '<p class="sa-summary__empty">No same-day double headers found. Try widening max drive time or distance, or check fixtures have kick-off times.</p>';
+    return;
+  }
+
+  els.dayPlansList.innerHTML = state.dayPlans
+    .slice(0, 40)
+    .map((plan) => {
+      const firstColor = leagueColor(plan.first.league);
+      const secondColor = leagueColor(plan.second.league);
+      return `
+        <article class="sa-day-plan">
+          <div class="sa-day-plan__date">${plan.date_label}</div>
+          <div class="sa-day-plan__leg">
+            <div class="sa-day-plan__time">${formatClock(plan.first.kickoff_at)}</div>
+            <div>
+              <div class="sa-day-plan__match">${plan.first.home} vs ${plan.first.away}</div>
+              <div class="sa-day-plan__meta">
+                <span class="sa-league-pill" style="background:${firstColor}">${leagueLabel(plan.first.league)}</span>
+                · ${plan.first.stadium.stadium}
+              </div>
+            </div>
+            <div class="sa-day-plan__drive">${formatDriveEstimate(plan.homeToFirst)}</div>
+          </div>
+          <div class="sa-day-plan__connector">
+            <strong>${plan.leaveInfo.label}</strong> (${plan.leaveInfo.detail})<br />
+            ${plan.between.minutes} min · ${plan.between.miles} mi to second ground
+          </div>
+          <div class="sa-day-plan__leg">
+            <div class="sa-day-plan__time">${formatClock(plan.second.kickoff_at)}</div>
+            <div>
+              <div class="sa-day-plan__match">${plan.second.home} vs ${plan.second.away}</div>
+              <div class="sa-day-plan__meta">
+                <span class="sa-league-pill" style="background:${secondColor}">${leagueLabel(plan.second.league)}</span>
+                · ${plan.second.stadium.stadium}
+              </div>
+            </div>
+            <div class="sa-day-plan__drive">Arrive ${formatClock(plan.arriveSecond)}</div>
+          </div>
+          <div class="sa-day-plan__footer">
+            Leave home by <strong>${formatClock(plan.leaveHomeBy)}</strong>
+            · Leave 1st game by <strong>${plan.leaveInfo.short}</strong> (${plan.leaveInfo.detail})
+            ${plan.cushionAfterHalf > 0 ? ` · ${plan.cushionAfterHalf} min after half-time` : ""}
+          </div>
+        </article>`;
+    })
+    .join("");
+}
+
+function computeReachable(origin, stadiums, maxMinutes, maxMiles) {
   return stadiums
     .map((stadium) => {
       const distanceKm = haversineKm(origin.lat, origin.lng, stadium.lat, stadium.lng);
+      const drive = estimateDrive(distanceKm);
       return {
         ...stadium,
-        drive_minutes: estimateDriveMinutes(distanceKm),
+        drive_minutes: drive.minutes,
+        drive_miles: drive.miles,
         drive_source: "estimate",
       };
     })
-    .filter((row) => row.drive_minutes <= maxMinutes)
-    .sort((a, b) => a.drive_minutes - b.drive_minutes);
+    .filter((row) => row.drive_minutes <= maxMinutes && row.drive_miles <= maxMiles)
+    .sort((a, b) => a.drive_minutes - b.drive_minutes || a.drive_miles - b.drive_miles);
 }
 
 function renderLeagueToggle() {
@@ -283,7 +564,7 @@ function renderStadiumMarkers() {
         <strong>${stadium.club}</strong><br />
         ${stadium.stadium}, ${stadium.city}<br />
         <span style="color:${color};font-weight:600">${leagueLabel(stadium.league)}</span>
-        ${driveInfo ? `<br /><span style="color:#34d399">${driveInfo.drive_minutes} min drive</span>` : ""}
+        ${driveInfo ? `<br /><span style="color:#34d399">${formatDriveTime(driveInfo)}</span>` : ""}
       `);
       state.markers.push(marker);
     });
@@ -310,8 +591,8 @@ function renderOriginMarker() {
     .addTo(state.map)
     .bindPopup(`<strong>Scout location</strong><br />${state.origin.label || ""}`);
 
-  const maxMinutes = Number(els.maxMinutes.value || 60);
-  const radiusKm = (maxMinutes / 60) * 88;
+  const { maxMinutes, maxMiles } = filterLimits();
+  const radiusKm = effectiveRadiusKm(maxMinutes, maxMiles);
   state.radiusCircle = L.circle([state.origin.lat, state.origin.lng], {
     radius: radiusKm * 1000,
     color: "#34d399",
@@ -340,12 +621,12 @@ function renderSummary() {
     return;
   }
 
-  const maxMinutes = Number(els.maxMinutes.value || 60);
+  const { maxMinutes, maxMiles } = filterLimits();
   els.summaryPanel.innerHTML = `
     <p class="sa-origin-label">${state.origin.label || "Scout location"}</p>
     <div class="sa-summary__stats">
       <div class="sa-stat">
-        <span class="sa-stat__label">Reachable within ${maxMinutes} min</span>
+        <span class="sa-stat__label">Reachable within ${formatFilterSummary(maxMinutes, maxMiles)}</span>
         <span class="sa-stat__value">${state.reachable.length}</span>
       </div>
       <div class="sa-stat">
@@ -363,7 +644,7 @@ function renderSummary() {
                 <div class="sa-reachable-item__club">${row.club}</div>
                 <div class="sa-reachable-item__meta">${row.stadium} · <span class="sa-league-pill" style="background:${leagueColor(row.league)}">${leagueLabel(row.league)}</span></div>
               </div>
-              <div class="sa-reachable-item__time">${row.drive_minutes}m</div>
+              <div class="sa-reachable-item__time">${formatDriveTime(row)}</div>
             </div>`
         )
         .join("")}
@@ -423,7 +704,7 @@ function renderFixtures() {
               ${fixture.kickoff ? ` · ${fixture.kickoff}` : ""}
             </div>
           </div>
-          <div class="sa-fixture-time">${reachable ? `${reachable.drive_minutes}m` : ""}</div>
+          <div class="sa-fixture-time">${reachable ? formatDriveTime(reachable) : ""}</div>
         </article>`;
     })
     .join("");
@@ -436,7 +717,10 @@ async function loadFixturesForReachable() {
 
   if (!fixtureLeagues.length) {
     state.fixtures = [];
+    state.allFixturesForPlanning = [];
+    state.dayPlans = [];
     renderFixtures();
+    renderDayPlans();
     return;
   }
 
@@ -445,32 +729,30 @@ async function loadFixturesForReachable() {
     const fixtures = payload.fixtures || [];
     const now = Date.now();
 
-    state.fixtures = fixtures
+    state.allFixturesForPlanning = fixtures
       .filter((fixture) => {
         if (!fixtureLeagues.includes(fixture.league)) return false;
-        const homeName = fixture.home?.name || fixture.home || "";
-        const homeReachable = state.reachable.some((row) => clubMatchesFixtureHome(homeName, row.club));
-        if (!homeReachable) return false;
-        if (!fixture.date) return true;
+        if (!fixture.date) return false;
         const when = new Date(fixture.date).getTime();
         return Number.isNaN(when) || when >= now - 86400000;
       })
-      .map((fixture) => ({
-        ...fixture,
-        home: fixture.home?.name || fixture.home || "TBC",
-        away: fixture.away?.name || fixture.away || "TBC",
-        kickoff: fixture.kickoff_utc
-          ? new Date(fixture.kickoff_utc).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
-          : "",
-        date_label: fixture.date
-          ? new Date(fixture.date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })
-          : "TBC",
-      }))
-      .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+      .map(enrichFixture)
+      .filter((fixture) => fixture.stadium && fixture.kickoff_at);
+
+    state.fixtures = state.allFixturesForPlanning
+      .filter((fixture) => isReachableFromHome(fixture.stadium))
+      .sort(
+        (a, b) =>
+          String(a.date_key).localeCompare(String(b.date_key)) || a.kickoff_at - b.kickoff_at
+      );
+    state.dayPlans = computeDayPlans();
   } catch {
     state.fixtures = [];
+    state.allFixturesForPlanning = [];
+    state.dayPlans = [];
   }
 
+  renderDayPlans();
   renderFixtures();
 }
 
@@ -492,10 +774,10 @@ async function loadStadiums() {
 }
 
 function applySearchResults() {
-  const maxMinutes = Number(els.maxMinutes.value || 60);
+  const { maxMinutes, maxMiles } = filterLimits();
   const allowed = new Set(selectedLeagues());
   const pool = state.allStadiums.filter((row) => allowed.has(row.league));
-  state.reachable = computeReachable(state.origin, pool, maxMinutes);
+  state.reachable = computeReachable(state.origin, pool, maxMinutes, maxMiles);
   state.reachableClubs = new Set(state.reachable.map((row) => row.club));
   renderOriginMarker();
   renderStadiumMarkers();
@@ -526,8 +808,9 @@ async function runSearch() {
       state.map.fitBounds(bounds.pad(0.1));
     }
 
+    const { maxMinutes, maxMiles } = filterLimits();
     setStatus(
-      `${state.reachable.length} stadiums reachable within ${els.maxMinutes.value} minutes · ${state.fixtures.length} upcoming fixtures`,
+      `${state.reachable.length} stadiums reachable within ${formatFilterSummary(maxMinutes, maxMiles)} · ${state.fixtures.length} fixtures · ${state.dayPlans.length} day plans`,
       "ok"
     );
   } catch (error) {
@@ -573,12 +856,15 @@ function bindEvents() {
     if (state.origin) await loadFixturesForReachable();
   });
 
-  els.maxMinutes.addEventListener("change", () => {
+  function onFilterChange() {
     if (state.origin) {
       applySearchResults();
       loadFixturesForReachable();
     }
-  });
+  }
+
+  els.maxMinutes.addEventListener("change", onFilterChange);
+  if (els.maxMiles) els.maxMiles.addEventListener("change", onFilterChange);
 }
 
 async function init() {

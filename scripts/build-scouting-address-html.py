@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CSS = (ROOT / "standalone/scouting-address.css").read_text(encoding="utf-8")
 JS = (ROOT / "standalone/scouting-address.js").read_text(encoding="utf-8")
-BUILD = "webpage-v8"
+BUILD = "webpage-v12"
 
 HTML = f"""<!DOCTYPE html>
 <html lang="en">
@@ -62,6 +62,18 @@ HTML = f"""<!DOCTYPE html>
             <option value="90">90 minutes</option>
           </select>
         </div>
+        <div class="sa-controls__group">
+          <span class="fp-controls__label">Max distance</span>
+          <select id="maxMiles" class="fp-staff-filter" aria-label="Maximum drive distance">
+            <option value="20">20 miles</option>
+            <option value="30">30 miles</option>
+            <option value="36" selected>36 miles</option>
+            <option value="45">45 miles</option>
+            <option value="60">60 miles</option>
+            <option value="75">75 miles</option>
+            <option value="90">90 miles</option>
+          </select>
+        </div>
       </div>
       <div class="sa-controls__row">
         <div class="sa-controls__group sa-controls__group--grow">
@@ -86,6 +98,13 @@ HTML = f"""<!DOCTYPE html>
       <aside class="sa-side-panel">
         <section class="sa-summary card" id="summaryPanel" aria-live="polite">
           <p class="sa-summary__empty">Enter a scout address to highlight reachable stadiums and upcoming fixtures.</p>
+        </section>
+        <section class="sa-fixtures card" id="dayPlansPanel" aria-live="polite">
+          <h2 class="sa-panel-title">Day plans</h2>
+          <p class="sa-panel-hint">Same-day double headers — assumes you can leave the first game from half-time onwards. Shows the latest minute you can stay.</p>
+          <div id="dayPlansList" class="sa-day-plans-list">
+            <p class="sa-summary__empty">Enter your address to see feasible two-game days.</p>
+          </div>
         </section>
         <section class="sa-fixtures card" id="fixturesPanel" aria-live="polite">
           <h2 class="sa-panel-title">Reachable fixtures</h2>

@@ -124,6 +124,89 @@
   font-weight: 700;
 }
 
+.sa-panel-hint {
+  margin: -.45rem 0 .65rem;
+  font-size: var(--fp-text-xs, .85rem);
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.sa-day-plans-list {
+  display: flex;
+  flex-direction: column;
+  gap: .65rem;
+  max-height: 22rem;
+  overflow: auto;
+}
+
+.sa-day-plan {
+  padding: .65rem .75rem;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.sa-day-plan__date {
+  font-family: var(--mono);
+  font-size: var(--fp-text-xs, .85rem);
+  color: var(--accent);
+  margin-bottom: .45rem;
+}
+
+.sa-day-plan__leg {
+  display: grid;
+  grid-template-columns: 3.25rem 1fr auto;
+  gap: .45rem .55rem;
+  align-items: start;
+}
+
+.sa-day-plan__time {
+  font-family: var(--mono);
+  font-size: var(--fp-text-xs, .85rem);
+  color: var(--text-muted);
+}
+
+.sa-day-plan__match {
+  font-size: var(--fp-text-sm, .95rem);
+  font-weight: 600;
+}
+
+.sa-day-plan__meta {
+  font-size: var(--fp-text-xs, .85rem);
+  color: var(--text-muted);
+  margin-top: .1rem;
+}
+
+.sa-day-plan__drive {
+  font-family: var(--mono);
+  font-size: var(--fp-text-xs, .85rem);
+  color: var(--accent);
+  white-space: nowrap;
+  text-align: right;
+}
+
+.sa-day-plan__connector {
+  margin: .35rem 0 .35rem 1.1rem;
+  padding-left: .65rem;
+  border-left: 2px dashed var(--border);
+  font-size: var(--fp-text-xs, .85rem);
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.sa-day-plan__footer {
+  margin-top: .45rem;
+  padding-top: .45rem;
+  border-top: 1px solid var(--border);
+  font-size: var(--fp-text-xs, .85rem);
+  color: var(--text-muted);
+}
+
+.sa-day-plan__footer strong {
+  color: var(--green, #34d399);
+  font-weight: 600;
+}
+
 .sa-summary__empty {
   margin: 0;
   color: var(--text-muted);

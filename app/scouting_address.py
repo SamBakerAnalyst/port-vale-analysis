@@ -51,6 +51,7 @@ class ReachableRequest(BaseModel):
     lat: float
     lng: float
     max_minutes: int = Field(default=60, ge=5, le=180)
+    max_miles: float = Field(default=36.0, ge=5, le=200)
     leagues: list[str] | None = None
 
 
@@ -127,11 +128,18 @@ def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     return radius * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-def _estimate_drive_minutes(distance_km: float) -> int:
-    # UK average ~55 mph / 88 km/h for fallback when OSRM unavailable
+ROAD_DISTANCE_FACTOR = 1.38
+AVG_SPEED_MPH = 36.0
+
+
+def _estimate_drive(distance_km: float) -> tuple[int, float]:
+    # Conservative UK scouting fallback when OSRM unavailable.
     if distance_km <= 0:
-        return 0
-    return max(1, round((distance_km / 88.0) * 60))
+        return 0, 0.0
+    road_km = distance_km * ROAD_DISTANCE_FACTOR
+    miles = road_km * 0.621371
+    minutes = max(1, round((miles / AVG_SPEED_MPH) * 60))
+    return minutes, round(miles, 1)
 
 
 def _geocode_address(query: str) -> dict[str, Any]:
@@ -200,18 +208,21 @@ def _travel_times(origin_lat: float, origin_lng: float, stadiums: list[dict[str,
     enriched: list[dict[str, Any]] = []
     for index, stadium in enumerate(stadiums):
         drive_minutes: int | None = None
+        drive_miles: float | None = None
         source = "estimate"
+        distance_km = _haversine_km(origin_lat, origin_lng, stadium["lat"], stadium["lng"])
         if index < len(osrm_seconds) and osrm_seconds[index] is not None:
             drive_minutes = max(1, round(osrm_seconds[index] / 60))
+            drive_miles = round((distance_km * ROAD_DISTANCE_FACTOR) * 0.621371, 1)
             source = "osrm"
         else:
-            distance_km = _haversine_km(origin_lat, origin_lng, stadium["lat"], stadium["lng"])
-            drive_minutes = _estimate_drive_minutes(distance_km)
+            drive_minutes, drive_miles = _estimate_drive(distance_km)
 
         enriched.append(
             {
                 **stadium,
                 "drive_minutes": drive_minutes,
+                "drive_miles": drive_miles,
                 "drive_source": source,
             }
         )
@@ -230,6 +241,7 @@ def scouting_address_meta() -> dict[str, Any]:
         ],
         "stadium_count": len(stadiums),
         "default_max_minutes": 60,
+        "default_max_miles": 36,
         "seasons": ["26/27", "25/26"],
     }
 
@@ -272,11 +284,17 @@ def register_scouting_address_routes(app: FastAPI) -> None:
             stadiums = [row for row in stadiums if row["league"] in allowed]
 
         timed = _travel_times(body.lat, body.lng, stadiums)
-        reachable = [row for row in timed if row["drive_minutes"] <= body.max_minutes]
-        reachable.sort(key=lambda row: row["drive_minutes"])
+        reachable = [
+            row
+            for row in timed
+            if row["drive_minutes"] <= body.max_minutes
+            and (row.get("drive_miles") or 0) <= body.max_miles
+        ]
+        reachable.sort(key=lambda row: (row["drive_minutes"], row.get("drive_miles") or 0))
         return {
             "origin": {"lat": body.lat, "lng": body.lng},
             "max_minutes": body.max_minutes,
+            "max_miles": body.max_miles,
             "reachable": reachable,
             "reachable_count": len(reachable),
             "total_checked": len(timed),
