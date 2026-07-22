@@ -1,35 +1,27 @@
 ---
-description: MANDATORY — git push deploys to live droplet at 178.128.161.215
+description: MANDATORY — one deploy path to live droplet at 178.128.161.215
 alwaysApply: true
 ---
 
-# LIVE WEBSITE = GIT PUSH (existing droplet)
+# LIVE WEBSITE = ONE DEPLOY PATH
 
-**Staff use http://178.128.161.215/** — same droplet Sam already pays for. No App Platform.
+**Staff use http://178.128.161.215/** — existing DigitalOcean droplet. No App Platform.
 
 ## Definition of done
 
 1. Edit code in this repo
-2. **Commit and push to `main`**
-3. GitHub Actions deploys to the droplet (~5–10 min)
-4. Verify at http://178.128.161.215/
+2. **Commit** changes
+3. Run **`bash ~/impect-football-dashboard/deploy-live.sh`** (pushes GitHub + syncs droplet)
+   - Or user double-clicks **`Deploy to Website.command`**
+4. Verify at http://178.128.161.215/ (hard refresh)
 
 **Never** mark complete after only local changes.
-
-## Deploy
-
-```bash
-git push origin main
-```
-
-Or user runs **`Deploy to Website.command`**.
+**Never** rsync without also pushing to GitHub — that caused rollbacks.
 
 ## Do not
 
 - Set up App Platform or new paid services
-- Stop at local-only fixes
-- Use rsync/SSH manually unless Actions is broken
+- Use DigitalOcean Console `update-live.sh` unless Mac deploy is broken
+- Invent a second deploy path
 
-## Setup reference
-
-`deploy/DROPLET-DEPLOY.md` — one-time GitHub secrets + deploy key
+See `deploy/HOW-WE-DEPLOY.md`.
