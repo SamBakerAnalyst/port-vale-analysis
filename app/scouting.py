@@ -17,13 +17,7 @@ from app.paths import STANDALONE_DIR
 from app.scouting_monthly import ScoutingMonthlyListRequest
 from app.scouting_monthly_report import ScoutingMonthlyReportRequest
 
-_impect_standalone = Path("/Users/AnalysisMac1/impect-football-dashboard/standalone")
-if (STANDALONE_DIR / "pre-match.html").exists():
-    SCOUTING_DIR = STANDALONE_DIR
-elif _impect_standalone.exists():
-    SCOUTING_DIR = _impect_standalone
-else:
-    SCOUTING_DIR = STANDALONE_DIR
+SCOUTING_DIR = STANDALONE_DIR
 STRATEGY_REPORTS_DIR = Path("/Users/AnalysisMac1/strategy-reports")
 SCOUTING_CACHE_TTL_SECONDS = 3600
 SCOUTING_DISK_CACHE_DIR = Path.home() / ".cache" / "impect-scouting"

@@ -27,11 +27,19 @@ echo "Syncing code → ${TARGET}:${REMOTE}"
 "${RSYNC[@]}" -av \
   "$ROOT/static/pre-match.js" \
   "$ROOT/static/pre-match.css" \
+  "$ROOT/static/scouting-address.js" \
+  "$ROOT/static/scouting-address.css" \
+  "$ROOT/static/stadiums.json" \
   "$TARGET:$REMOTE/static/"
 
 "${RSYNC[@]}" -av \
   "$ROOT/standalone/pre-match.html" \
   "$ROOT/standalone/pre-match.page.html" \
+  "$ROOT/standalone/scouting-address.html" \
+  "$ROOT/standalone/scouting-address.js" \
+  "$ROOT/standalone/scouting-address.css" \
+  "$ROOT/standalone/stadiums.json" \
+  "$ROOT/standalone/apps.js" \
   "$TARGET:$REMOTE/standalone/"
 
 echo "Redeploying on server (no cache)…"
