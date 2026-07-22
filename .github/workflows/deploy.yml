@@ -1,0 +1,56 @@
+# Deploy to your existing DigitalOcean droplet — no extra services.
+# Push to main → this workflow updates http://178.128.161.215/
+
+name: Deploy to production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Rsync and restart on droplet
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          SSH="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+
+          rsync -avz \
+            --exclude '.git' \
+            --exclude '.venv' \
+            --exclude '__pycache__' \
+            --exclude 'data' \
+            --exclude '.env' \
+            -e "$SSH" \
+            ./ "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/port-vale-analysis/"
+
+          $SSH "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            'cd /opt/port-vale-analysis && bash deploy/deploy-ip.sh'
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf "http://${{ secrets.DEPLOY_HOST }}/health" >/dev/null; then
+              echo "✓ Live site healthy"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Health check failed"
+          exit 1
