@@ -235,8 +235,12 @@ def scouting_address_meta() -> dict[str, Any]:
 
 
 def register_scouting_address_routes(app: FastAPI) -> None:
+    page_path = Path(__file__).parent / "scouting_address_page.html"
+
     @app.get("/scouting-address", response_class=HTMLResponse)
     def scouting_address_page() -> HTMLResponse:
+        if page_path.exists():
+            return HTMLResponse(page_path.read_text(encoding="utf-8"))
         html_path = SCOUTING_DIR / "scouting-address.html"
         if not html_path.exists():
             raise HTTPException(status_code=404, detail="Scouting address UI not found.")

@@ -8,13 +8,19 @@ cd "$ROOT"
 
 SERVER="root@178.128.161.215"
 REMOTE="/opt/port-vale-analysis"
-SSH_KEY="${PORTVALE_SSH_KEY:-$HOME/.ssh/portvale_analysis}"
-SSH_OPTS=(-i "$SSH_KEY" -o StrictHostKeyChecking=no)
+SSH_KEY="${PORTVALE_SSH_KEY:-}"
+for candidate in "$HOME/.ssh/portvale_deploy" "$HOME/.ssh/portvale_analysis" "$HOME/.ssh/id_ed25519"; do
+  if [[ -z "$SSH_KEY" && -f "$candidate" ]]; then
+    SSH_KEY="$candidate"
+  fi
+done
+SSH_OPTS=()
+if [[ -n "$SSH_KEY" && -f "$SSH_KEY" ]]; then
+  SSH_OPTS=(-i "$SSH_KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no)
+fi
 
-if [[ ! -f "$SSH_KEY" ]]; then
-  echo "ERROR: SSH key not found at $SSH_KEY"
-  echo "Set PORTVALE_SSH_KEY=/path/to/key if needed."
-  exit 1
+if [[ ${#SSH_OPTS[@]} -eq 0 ]]; then
+  echo "WARNING: No SSH key found — trying ssh-agent keys…"
 fi
 
 echo "=============================================="
