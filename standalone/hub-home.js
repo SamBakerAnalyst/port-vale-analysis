@@ -1904,6 +1904,7 @@
       });
     }
     if (tabId === "performance") {
+      loadAvailability();
       // Performance tab needs both:
       // 1) phase goals / defending (from /api/home/strategy?detail=true)
       // 2) league form + rankings (from /api/club-strategy/report)
@@ -2065,53 +2066,29 @@
     bindRecruitSubtabs();
     bindCalendarNav();
 
-    // Paint Home tab ASAP: fixtures + activity + scout calendar.
-    // Heavy recruitment / full strategy detail load only when those tabs open.
-    const critical = Promise.all([
-      loadFotmobFixtures().catch((err) => {
-        widgetError("homePvUpcoming", `Could not load FotMob fixtures: ${err.message}`);
-        widgetError("homePvPlayed", "FotMob results unavailable.");
-        widgetError("homeForm", "Could not load recent form.");
-        setHtml("homeNext", `<p class="home-empty">Could not load next fixture.</p>`);
-        return null;
-      }),
-      loadFeeds(),
-      loadScoutCalendar().catch((err) => {
-        widgetError("homeScoutUpcoming", "Assign fixtures in Fixture Planner.");
-        console.warn("Scout calendar:", err.message);
-        return null;
-      }),
-      loadTeamSchedule({ silent: true }),
-      loadStrategyTab({ detail: false }).then((snap) => {
-        cachedStrategySnapshot = snap;
-      }),
-    ]);
-
+    // Home tab only: calendar, fixtures, activity. Heavy Impect work loads when you open other tabs.
     try {
-      const strategy = await loadStrategyBundle();
-      cachedStrategyBundle = strategy;
-      renderKpis(strategy.pv, strategy.averages, `${COMPETITION} · ${strategy.season}`);
-      renderTable(strategy.standings);
-      loadAvailability();
-    } catch (err) {
-      widgetError("homeTableBody", `Could not load league data: ${err.message}`);
+      await Promise.all([
+        loadFotmobFixtures().catch((err) => {
+          widgetError("homePvUpcoming", `Could not load FotMob fixtures: ${err.message}`);
+          widgetError("homePvPlayed", "FotMob results unavailable.");
+          setHtml("homeNext", `<p class="home-empty">Could not load next fixture.</p>`);
+          return null;
+        }),
+        loadFeeds(),
+        loadScoutCalendar().catch((err) => {
+          widgetError("homeScoutUpcoming", "Assign fixtures in Fixture Planner.");
+          console.warn("Scout calendar:", err.message);
+          return null;
+        }),
+        loadTeamSchedule({ silent: true }),
+      ]);
+    } catch (_) {
+      /* individual handlers above */
     }
 
-    await critical;
     renderHomeTab();
     document.body.classList.remove("home-loading");
-
-    // Warm recruitment + stand outs in background so those tabs feel instant later.
-    loadRecruitmentTab()
-      .then(() => {
-        recruitmentLoaded = true;
-      })
-      .catch(() => {});
-    loadStandoutsTab({ silent: true })
-      .then(() => {
-        standoutsLoaded = true;
-      })
-      .catch(() => {});
 
     if (refreshTimer) clearInterval(refreshTimer);
     refreshTimer = setInterval(loadFeeds, 60000);
