@@ -214,10 +214,23 @@ a:hover { text-decoration: underline; }
 }
 
 .weights__grid {
+  display: block;
+}
+
+.weights__picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.weights__cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
   gap: 0.65rem;
 }
+
+.hidden { display: none !important; }
 
 .weight-card {
   display: flex;
@@ -289,7 +302,14 @@ a:hover { text-decoration: underline; }
   color: #fca5a5;
 }
 
-.hidden { display: none !important; }
+.filter--grow {
+  flex: 1;
+  min-width: 12rem;
+}
+
+.filter--grow .filter__control {
+  flex-wrap: wrap;
+}
 
 .empty {
   margin: 0;
@@ -344,6 +364,29 @@ a:hover { text-decoration: underline; }
   white-space: nowrap;
 }
 
+.league-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.league-card__edit-weights {
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.league-card__edit-weights:hover {
+  border-color: rgba(61, 139, 253, 0.45);
+  color: #cfe2ff;
+}
+
 .league-card__empty {
   margin: 0.35rem 0 0;
   font-size: 0.8125rem;
@@ -368,6 +411,7 @@ a:hover { text-decoration: underline; }
 .scout-table col.col-player { width: 11rem; }
 .scout-table col.col-club { width: 10rem; }
 .scout-table col.col-pos { width: 5.5rem; }
+.scout-table col.col-league { width: 7rem; }
 .scout-table col.col-overall { width: 4.25rem; }
 .scout-table col.col-mins { width: 4.5rem; }
 .scout-table col.col-scout { width: 3.25rem; }
@@ -422,12 +466,17 @@ a:hover { text-decoration: underline; }
 }
 
 .scout-table .col-club,
-.scout-table .col-pos {
+.scout-table .col-pos,
+.scout-table .col-league {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-muted);
   font-size: 0.8125rem;
+}
+
+.scout-table--position-view {
+  min-width: 48rem;
 }
 
 .scout-table .col-overall,

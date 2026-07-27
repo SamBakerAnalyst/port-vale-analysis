@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/who-to-scout.css?v=1" />
+  <link rel="stylesheet" href="/static/who-to-scout.css?v=2" />
 </head>
 <body>
   <div class="app">
@@ -40,8 +40,21 @@
           <select id="monthSelect" aria-label="Calendar month"></select>
         </div>
         <div class="filter">
+          <span class="filter__label">Group by</span>
+          <div class="filter__control" id="groupByControl" role="group" aria-label="Group results by">
+            <button type="button" class="filter__btn is-active" data-group-by="league">Per league</button>
+            <button type="button" class="filter__btn" data-group-by="position">Per position</button>
+          </div>
+        </div>
+        <div class="filter filter--grow" id="leagueFilterWrap" hidden>
+          <span class="filter__label">League</span>
+          <div class="filter__control" id="leagueGroup" role="group" aria-label="League filter">
+            <button type="button" class="filter__btn is-active" data-league="ALL">All</button>
+          </div>
+        </div>
+        <div class="filter filter--grow" id="positionFilterWrap">
           <span class="filter__label">Position</span>
-          <div class="filter__control" id="positionGroup" role="group" aria-label="Position">
+          <div class="filter__control" id="positionGroup" role="group" aria-label="Position filter">
             <button type="button" class="filter__btn is-active" data-position="ALL">All</button>
           </div>
         </div>
@@ -68,7 +81,7 @@
           <input type="search" id="clubFilter" class="filter__input filter__input--wide" placeholder="e.g. Vale, Wrexham" />
         </div>
         <div class="filter filter--num">
-          <label for="perLeague">Top per league</label>
+          <label for="perLeague" id="perGroupLabel">Top per league</label>
           <input type="number" id="perLeague" class="filter__input" min="5" max="25" value="10" />
         </div>
       </div>
@@ -87,6 +100,6 @@
     <div id="leagueGrid" class="league-grid"><p class="empty">Loading…</p></div>
   </div>
 
-  <script defer src="/static/who-to-scout.js?v=1"></script>
+  <script defer src="/static/who-to-scout.js?v=2"></script>
 </body>
 </html>
