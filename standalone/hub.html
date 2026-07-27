@@ -852,6 +852,17 @@
       color: #9ec5ff;
     }
 
+    a.home-subtab {
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    a.home-subtab:hover {
+      border-color: rgba(52, 211, 153, 0.55);
+      color: #6ee7b7;
+    }
+
     .home-subpanel[hidden] { display: none; }
 
     .home-filter-bar {
@@ -2136,6 +2147,7 @@
           <div class="home-subtabs" role="tablist" aria-label="Recruitment sections">
             <button type="button" class="home-subtab is-active" data-recruit-sub="league" role="tab">League profile</button>
             <button type="button" class="home-subtab" data-recruit-sub="standouts" role="tab">Stand outs</button>
+            <a class="home-subtab home-subtab--link" href="/who-to-scout" role="tab">Who To Scout →</a>
           </div>
 
           <div class="home-subpanel" data-recruit-panel="league">
@@ -2336,9 +2348,9 @@
   </div>
 
   <script src="/standalone/hub-launcher.js?v=2"></script>
-  <script src="/standalone/apps.js?v=20260727-set-piece"></script>
+  <script src="/standalone/apps.js?v=20260727-who-to-scout"></script>
   <script src="/standalone/hub-player-search.js?v=1"></script>
-  <script src="/standalone/hub-home.js?v=20260727-standouts-month3"></script>
+  <script src="/standalone/hub-home.js?v=20260727-who-to-scout"></script>
   <script>
     const SCOUTING_SERVER = "http://127.0.0.1:8000";
     if (window.location.protocol === "file:") {

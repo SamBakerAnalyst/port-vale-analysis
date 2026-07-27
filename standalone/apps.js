@@ -90,17 +90,6 @@ window.IMPECT_APPS = [
     tags: ["Charts", "Profiles"],
   },
   {
-    id: "player-search",
-    group: "recruitment",
-    title: "Player Search Dashboard",
-    description:
-      "Profile-weighted scouting lists by position and league. Rank, filter, export Excel or PDF.",
-    href: "/scouting",
-    icon: "🔍",
-    accent: "#3d8bfd",
-    tags: ["Scouting", "Search"],
-  },
-  {
     id: "who-to-scout",
     group: "recruitment",
     title: "Who To Scout",
@@ -110,6 +99,17 @@ window.IMPECT_APPS = [
     icon: "🎯",
     accent: "#34d399",
     tags: ["Scouting", "Profiles", "Leagues"],
+  },
+  {
+    id: "player-search",
+    group: "recruitment",
+    title: "Player Search Dashboard",
+    description:
+      "Profile-weighted scouting lists by position and league. Rank, filter, export Excel or PDF.",
+    href: "/scouting",
+    icon: "🔍",
+    accent: "#3d8bfd",
+    tags: ["Scouting", "Search"],
   },
   {
     id: "squad-balance",
