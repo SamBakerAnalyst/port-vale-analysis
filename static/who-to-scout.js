@@ -187,18 +187,32 @@
   }
 
   function syncFilterVisibility() {
-    const byLeague = state.groupBy === "league";
-    if (els.leagueFilterWrap) els.leagueFilterWrap.hidden = byLeague;
-    if (els.positionFilterWrap) els.positionFilterWrap.hidden = !byLeague;
-    if (els.perGroupLabel) {
-      els.perGroupLabel.textContent = byLeague ? "Top per league" : "Top per position";
-    }
+    if (els.leagueFilterWrap) els.leagueFilterWrap.hidden = false;
+    if (els.positionFilterWrap) els.positionFilterWrap.hidden = false;
+    updatePerGroupLabel();
+  }
+
+  function resolveViewMode() {
+    if (state.position !== "ALL") return "profiles";
+    if (state.groupBy === "league" && state.league !== "ALL") return "positions";
+    if (state.groupBy === "position") return "positions";
+    return "leagues";
+  }
+
+  function updatePerGroupLabel() {
+    if (!els.perGroupLabel) return;
+    const mode = resolveViewMode();
+    const labels = {
+      leagues: "Top per league",
+      positions: "Top per position",
+      profiles: "Top per profile",
+    };
+    els.perGroupLabel.textContent = labels[mode] || "Top per group";
   }
 
   function activeWeightPosition() {
-    if (state.groupBy === "league") {
-      return state.position === "ALL" ? null : state.position;
-    }
+    if (state.position !== "ALL") return state.position;
+    if (state.groupBy === "league") return null;
     return state.weightEditPosition || state.positions[0]?.value || null;
   }
 
@@ -331,6 +345,7 @@
       .filter((p) => state.groupBy !== "league" || state.position === "ALL" || p.position === state.position)
       .filter((p) => passesDemographicFilters(p))
       .filter((p) => {
+        if (resolveViewMode() === "profiles") return true;
         if (state.groupBy === "league") {
           if (state.position === "ALL") return true;
           return passesProfileFilters(p.profileScores, profiles, state.weights);
@@ -378,39 +393,90 @@
 
   function buildByLeague(pool) {
     const limit = Math.max(5, Math.min(25, parseNum(els.perLeague) || 10));
-    const leagues =
-      state.league !== "ALL"
-        ? [state.league]
-        : state.leagues.length
-          ? state.leagues
-          : [...new Set(pool.map((p) => p.league))];
+    const leagues = state.leagues.length
+      ? state.leagues
+      : [...new Set(pool.map((p) => p.league))];
     const blocks = leagues.map((league) => {
       const slice = topFromPool(
         pool.filter((p) => p.league === league),
         limit,
       );
-      return { key: league, title: league, ...slice };
+      return { key: league, title: league, kind: "league", ...slice };
     });
-    return { blocks, limit, groupLabel: "league" };
+    return { blocks, limit, groupLabel: "league", viewMode: "leagues" };
   }
 
-  function buildByPosition(pool) {
+  function buildPositionsInContext(pool) {
     const limit = Math.max(5, Math.min(25, parseNum(els.perLeague) || 10));
     const positionOrder = state.positions.map((p) => p.value);
     const blocks = positionOrder.map((position) => {
-      const slice = topFromPool(
-        pool.filter((p) => p.position === position),
-        limit,
-      );
-      const short = posShort(posLabel(position), position);
+        const positionPool = pool
+          .filter((p) => p.position === position)
+          .map((p) => {
+            const profiles = state.profilesByPosition[position] || [];
+            const overall = computeOverall(p.profileScores, profiles, {}, { equalWeight: true });
+            return { ...p, overall };
+          })
+          .sort((a, b) => {
+            const diff = (b.overall || 0) - (a.overall || 0);
+            if (Math.abs(diff) > 1e-9) return diff;
+            return String(a.name || "").localeCompare(String(b.name || ""));
+          });
+        const slice = topFromPool(positionPool, limit);
+        return {
+          key: position,
+          title: posLabel(position),
+          titleShort: posShort(posLabel(position), position),
+          kind: "position",
+          ...slice,
+        };
+      });
+    return { blocks, limit, groupLabel: "position", viewMode: "positions" };
+  }
+
+  function buildByProfile(pool, position) {
+    const limit = Math.max(5, Math.min(25, parseNum(els.perLeague) || 10));
+    const profiles = state.profilesByPosition[position] || [];
+    const positionPool = pool.filter((p) => p.position === position);
+
+    const blocks = profiles.map((profile) => {
+      const scored = positionPool
+        .filter((p) => p.profileScores?.[profile.apiName] != null)
+        .map((p) => ({
+          ...p,
+          overall: Number(p.profileScores[profile.apiName]),
+          highlightProfile: profile.apiName,
+        }))
+        .sort((a, b) => {
+          const diff = (b.overall || 0) - (a.overall || 0);
+          if (Math.abs(diff) > 1e-9) return diff;
+          return String(a.name || "").localeCompare(String(b.name || ""));
+        });
+      const slice = topFromPool(scored, limit);
       return {
-        key: position,
-        title: posLabel(position),
-        titleShort: short,
+        key: profile.apiName,
+        title: profile.label,
+        profileApiName: profile.apiName,
+        kind: "profile",
         ...slice,
       };
     });
-    return { blocks, limit, groupLabel: "position" };
+
+    return { blocks, limit, groupLabel: "profile", viewMode: "profiles" };
+  }
+
+  function buildGrouped(pool) {
+    const viewMode = resolveViewMode();
+    if (viewMode === "profiles") {
+      return buildByProfile(pool, state.position);
+    }
+    if (viewMode === "positions") {
+      return buildPositionsInContext(pool);
+    }
+    if (state.groupBy === "position") {
+      return buildPositionsInContext(pool);
+    }
+    return buildByLeague(pool);
   }
 
   function scoutCountCell(count, kind) {
@@ -419,7 +485,7 @@
     return `<td class="col-scout"><span class="scout-pill scout-pill--${kind}">${value}</span></td>`;
   }
 
-  function playerRows(players, { showPos = true, showLeague = true } = {}) {
+  function playerRows(players, { showPos = true, showLeague = true, scoreLabel = "Ovr" } = {}) {
     return (players || [])
       .map((p, index) => {
         const mins =
@@ -447,14 +513,13 @@
       .join("");
   }
 
-  function resultsTable(players, { showPos = true, showLeague = true } = {}) {
-    const leagueCol = showLeague
-      ? '<col class="col-league">'
-      : "";
+  function resultsTable(players, { showPos = true, showLeague = true, scoreLabel = "Ovr" } = {}) {
+    const leagueCol = showLeague ? '<col class="col-league">' : "";
     const posCol = showPos ? '<col class="col-pos">' : "";
     const leagueHead = showLeague ? '<th class="col-league">League</th>' : "";
     const posHead = showPos ? '<th class="col-pos">Pos</th>' : "";
-    return `<div class="league-scroll"><table class="scout-table scout-table--${showPos ? "league" : "position"}-view">
+    const viewClass = showPos ? "league" : showLeague ? "position" : "profile";
+    return `<div class="league-scroll"><table class="scout-table scout-table--${viewClass}-view">
       <colgroup>
         <col class="col-rank"><col class="col-player"><col class="col-club">${leagueCol}${posCol}
         <col class="col-overall"><col class="col-mins"><col class="col-scout"><col class="col-scout"><col class="col-scout">
@@ -466,14 +531,14 @@
           <th class="col-club">Club</th>
           ${leagueHead}
           ${posHead}
-          <th class="col-overall">Ovr</th>
+          <th class="col-overall">${scoreLabel}</th>
           <th class="col-mins">Mins</th>
           <th class="col-scout">Live</th>
           <th class="col-scout">Vid</th>
           <th class="col-scout">Rep</th>
         </tr>
       </thead>
-      <tbody>${playerRows(players, { showPos, showLeague })}</tbody>
+      <tbody>${playerRows(players, { showPos, showLeague, scoreLabel })}</tbody>
     </table></div>`;
   }
 
@@ -575,11 +640,11 @@
     }
 
     const pool = rankedPool();
-    const grouped =
-      state.groupBy === "position" ? buildByPosition(pool) : buildByLeague(pool);
-    const { blocks, limit, groupLabel } = grouped;
-    const showPos = state.groupBy === "league";
-    const showLeague = state.groupBy === "position";
+    const grouped = buildGrouped(pool);
+    const { blocks, limit, groupLabel, viewMode } = grouped;
+
+    const showPos = viewMode === "leagues";
+    const showLeague = viewMode !== "leagues" && state.league === "ALL";
 
     const cards = blocks
       .map((block) => {
@@ -587,13 +652,17 @@
         const meta = block.highest_overall
           ? `≥85% of pool (= ${fmt(block.min_score_effective, 1)}) · ${block.qualify_count} qualify · pool ${block.pool_count}`
           : `pool ${block.pool_count}`;
+        const scoreLabel =
+          block.kind === "profile" ? "Score" : "Ovr";
         const body = players.length
-          ? resultsTable(players, { showPos, showLeague })
+          ? resultsTable(players, { showPos, showLeague, scoreLabel })
           : `<p class="league-card__empty">No matches for current filters</p>`;
-        const editBtn =
-          state.groupBy === "position" && block.key
-            ? `<button type="button" class="league-card__edit-weights" data-weight-position="${block.key}" title="Adjust profile weights">Profiles</button>`
-            : "";
+        const drillBtn =
+          block.kind === "league"
+            ? `<button type="button" class="league-card__edit-weights" data-drill-league="${block.key}" title="Top 10 per position">Positions</button>`
+            : block.kind === "position"
+              ? `<button type="button" class="league-card__edit-weights" data-drill-position="${block.key}" title="Top 10 per profile">Profiles</button>`
+              : "";
         return `<section class="league-card">
           <div class="league-card__head">
             <div>
@@ -601,7 +670,7 @@
               <p class="league-card__meta">${meta}</p>
             </div>
             <div class="league-card__actions">
-              ${editBtn}
+              ${drillBtn}
               <span class="league-card__count">${players.length}/${limit}</span>
             </div>
           </div>
@@ -611,6 +680,30 @@
       .join("");
 
     els.leagueGrid.innerHTML = cards || `<p class="empty">No ${groupLabel}s to show.</p>`;
+
+    els.leagueGrid.querySelectorAll("[data-drill-league]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state.league = btn.dataset.drillLeague || "ALL";
+        state.position = "ALL";
+        fillLeagues(state.leagues);
+        fillPositions(state.positions);
+        updatePerGroupLabel();
+        updateSeasonLabel({});
+        renderWeights();
+        renderGrid();
+      });
+    });
+
+    els.leagueGrid.querySelectorAll("[data-drill-position]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state.position = btn.dataset.drillPosition || "ALL";
+        fillPositions(state.positions);
+        updatePerGroupLabel();
+        updateSeasonLabel({});
+        renderWeights();
+        renderGrid();
+      });
+    });
 
     els.leagueGrid.querySelectorAll("[data-weight-position].league-card__edit-weights").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -622,17 +715,26 @@
 
     const leagueLabel = state.league === "ALL" ? "all leagues" : state.league;
     const posLabelText =
-      state.groupBy === "league"
-        ? state.position === "ALL"
-          ? "all positions"
-          : posLabel(state.position)
-        : "each position";
-    const groupText = state.groupBy === "league" ? "league" : "position";
+      state.position === "ALL"
+        ? viewMode === "positions"
+          ? "each position"
+          : "all positions"
+        : posLabel(state.position);
+    const viewText =
+      viewMode === "profiles"
+        ? "profile"
+        : viewMode === "positions"
+          ? "position"
+          : state.groupBy === "league"
+            ? "league"
+            : "position";
     const note =
       state.period === "month"
         ? "Monthly overall uses league-relative profile percentiles."
-        : "Season overall uses Impect PV profile ratings (0–100).";
-    els.pageNote.textContent = `${note} Top ${limit} per ${groupText} · ${leagueLabel} · ${posLabelText}. Live / Video / Reports from Fixture Planner — unscouted names are your priority targets.`;
+        : viewMode === "profiles"
+          ? "Ranked by raw Impect profile score (0–100) for each PV profile."
+          : "Season overall uses Impect PV profile ratings (0–100).";
+    els.pageNote.textContent = `${note} Top ${limit} per ${viewText} · ${leagueLabel} · ${posLabelText}. Live / Video / Reports from Fixture Planner — unscouted names are your priority targets.`;
   }
 
   function updateSeasonLabel(data) {
@@ -641,8 +743,20 @@
       (data?.period === "month" ? data?.month_label : data?.season_label) ||
       "Full season";
     const limit = parseNum(els.perLeague) || data?.per_league_limit || 10;
-    const groupWord = state.groupBy === "league" ? "league" : "position";
-    els.seasonLabel.textContent = `${label} · Top ${limit} per ${groupWord} (fills below 85% cut-off if needed)`;
+    const mode = resolveViewMode();
+    const groupWord =
+      mode === "profiles" ? "profile" : mode === "positions" ? "position" : "league";
+    const context =
+      state.league !== "ALL"
+        ? state.position !== "ALL"
+          ? `${state.league} · ${posLabel(state.position)}`
+          : state.league
+        : state.position !== "ALL"
+          ? posLabel(state.position)
+          : null;
+    els.seasonLabel.textContent = context
+      ? `${label} · ${context} · Top ${limit} per ${groupWord}`
+      : `${label} · Top ${limit} per ${groupWord} (fills below 85% cut-off if needed)`;
   }
 
   function schedulePoll() {
@@ -751,9 +865,14 @@
       const btn = event.target.closest("[data-league]");
       if (!btn) return;
       state.league = btn.dataset.league || "ALL";
+      if (state.league === "ALL" && state.position !== "ALL" && state.groupBy === "league") {
+        /* keep position drill-down across all leagues */
+      }
       els.leagueGroup.querySelectorAll(".filter__btn").forEach((el) => {
         el.classList.toggle("is-active", el === btn);
       });
+      updatePerGroupLabel();
+      updateSeasonLabel({});
       renderGrid();
     });
 
@@ -764,6 +883,8 @@
       els.positionGroup.querySelectorAll(".filter__btn").forEach((el) => {
         el.classList.toggle("is-active", el === btn);
       });
+      updatePerGroupLabel();
+      updateSeasonLabel({});
       renderWeights();
       renderGrid();
     });
@@ -794,7 +915,6 @@
       state.positions = meta.positions || [];
       fillLeagues(state.leagues);
       fillPositions(state.positions);
-      fillLeagues(state.leagues);
       syncFilterVisibility();
     } catch {
       /* meta optional — data endpoint includes profiles */
