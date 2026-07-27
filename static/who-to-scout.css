@@ -412,9 +412,26 @@ a:hover { text-decoration: underline; }
 .scout-table col.col-club { width: 10rem; }
 .scout-table col.col-pos { width: 5.5rem; }
 .scout-table col.col-league { width: 7rem; }
+.scout-table col.col-age { width: 2.75rem; }
 .scout-table col.col-overall { width: 4.25rem; }
-.scout-table col.col-mins { width: 4.5rem; }
+.scout-table col.col-mins { width: 4.75rem; }
 .scout-table col.col-scout { width: 3.25rem; }
+
+.scout-table--profile-view {
+  min-width: 0;
+  font-size: 0.8125rem;
+}
+
+.scout-table--profile-view col.col-player { width: 8.25rem; }
+.scout-table--profile-view col.col-club { width: 6.75rem; }
+.scout-table--profile-view col.col-age { width: 2.5rem; }
+.scout-table--profile-view col.col-overall { width: 3.75rem; }
+.scout-table--profile-view col.col-mins { width: 4.25rem; }
+
+.scout-table--profile-view th,
+.scout-table--profile-view td {
+  padding: 0.45rem 0.35rem;
+}
 
 .scout-table th {
   position: sticky;
@@ -480,11 +497,18 @@ a:hover { text-decoration: underline; }
 }
 
 .scout-table .col-overall,
+.scout-table .col-age,
 .scout-table .col-mins,
 .scout-table .col-scout {
   text-align: center;
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
+}
+
+.scout-table .col-age,
+.scout-table .col-mins {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
 }
 
 .scout-table .col-overall {
@@ -493,9 +517,8 @@ a:hover { text-decoration: underline; }
   color: var(--green);
 }
 
-.scout-table .col-mins {
-  color: var(--text-muted);
-  font-size: 0.8125rem;
+.scout-table--profile-view .col-overall {
+  font-size: 0.875rem;
 }
 
 .scout-dash { color: rgba(148, 163, 184, 0.45); }

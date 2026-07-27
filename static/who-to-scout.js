@@ -485,13 +485,15 @@
     return `<td class="col-scout"><span class="scout-pill scout-pill--${kind}">${value}</span></td>`;
   }
 
-  function playerRows(players, { showPos = true, showLeague = true, scoreLabel = "Ovr" } = {}) {
+  function playerRows(players, { showPos = true, showLeague = true, scoreLabel = "Ovr", showScout = true } = {}) {
     return (players || [])
       .map((p, index) => {
         const mins =
           p.minutes == null || p.minutes === ""
             ? "—"
             : `${Number(p.minutes).toLocaleString()}′`;
+        const age =
+          p.age == null || p.age === "" ? "—" : String(Math.round(Number(p.age)));
         const href = playerHref(p);
         const scout = p.scout || {};
         const scoutTotal = Number(p.scout_total) || 0;
@@ -503,26 +505,33 @@
           <td class="col-club" title="${p.club || ""}">${p.club || "—"}</td>
           ${showLeague ? `<td class="col-league" title="${p.league || ""}">${p.league || "—"}</td>` : ""}
           ${showPos ? `<td class="col-pos" title="${p.positionLabel || p.position || ""}">${pos}</td>` : ""}
+          <td class="col-age">${age}</td>
           <td class="col-overall">${fmt(p.overall, 1)}</td>
           <td class="col-mins">${mins}</td>
-          ${scoutCountCell(scout.live_watches, "live")}
-          ${scoutCountCell(scout.video_watches, "video")}
-          ${scoutCountCell(scout.report_count, "report")}
+          ${showScout ? scoutCountCell(scout.live_watches, "live") : ""}
+          ${showScout ? scoutCountCell(scout.video_watches, "video") : ""}
+          ${showScout ? scoutCountCell(scout.report_count, "report") : ""}
         </tr>`;
       })
       .join("");
   }
 
-  function resultsTable(players, { showPos = true, showLeague = true, scoreLabel = "Ovr" } = {}) {
+  function resultsTable(players, { showPos = true, showLeague = true, scoreLabel = "Ovr", showScout = true } = {}) {
     const leagueCol = showLeague ? '<col class="col-league">' : "";
     const posCol = showPos ? '<col class="col-pos">' : "";
     const leagueHead = showLeague ? '<th class="col-league">League</th>' : "";
     const posHead = showPos ? '<th class="col-pos">Pos</th>' : "";
+    const scoutCols = showScout
+      ? '<col class="col-scout"><col class="col-scout"><col class="col-scout">'
+      : "";
+    const scoutHead = showScout
+      ? `<th class="col-scout">Live</th><th class="col-scout">Vid</th><th class="col-scout">Rep</th>`
+      : "";
     const viewClass = showPos ? "league" : showLeague ? "position" : "profile";
     return `<div class="league-scroll"><table class="scout-table scout-table--${viewClass}-view">
       <colgroup>
         <col class="col-rank"><col class="col-player"><col class="col-club">${leagueCol}${posCol}
-        <col class="col-overall"><col class="col-mins"><col class="col-scout"><col class="col-scout"><col class="col-scout">
+        <col class="col-age"><col class="col-overall"><col class="col-mins">${scoutCols}
       </colgroup>
       <thead>
         <tr>
@@ -531,14 +540,13 @@
           <th class="col-club">Club</th>
           ${leagueHead}
           ${posHead}
+          <th class="col-age">Age</th>
           <th class="col-overall">${scoreLabel}</th>
           <th class="col-mins">Mins</th>
-          <th class="col-scout">Live</th>
-          <th class="col-scout">Vid</th>
-          <th class="col-scout">Rep</th>
+          ${scoutHead}
         </tr>
       </thead>
-      <tbody>${playerRows(players, { showPos, showLeague, scoreLabel })}</tbody>
+      <tbody>${playerRows(players, { showPos, showLeague, scoreLabel, showScout })}</tbody>
     </table></div>`;
   }
 
@@ -645,6 +653,7 @@
 
     const showPos = viewMode === "leagues";
     const showLeague = viewMode !== "leagues" && state.league === "ALL";
+    const showScout = viewMode === "leagues" || (viewMode === "positions" && state.league === "ALL");
 
     const cards = blocks
       .map((block) => {
@@ -655,7 +664,7 @@
         const scoreLabel =
           block.kind === "profile" ? "Score" : "Ovr";
         const body = players.length
-          ? resultsTable(players, { showPos, showLeague, scoreLabel })
+          ? resultsTable(players, { showPos, showLeague, scoreLabel, showScout })
           : `<p class="league-card__empty">No matches for current filters</p>`;
         const drillBtn =
           block.kind === "league"

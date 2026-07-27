@@ -37,7 +37,7 @@ STANDOUTS_LEAGUES: tuple[str, ...] = (
     "Irish Prem",
 )
 STANDOUTS_PER_LEAGUE_LIMIT = 10
-STANDOUTS_CACHE_VERSION = 2
+STANDOUTS_CACHE_VERSION = 3
 STANDOUTS_VIEW_CACHE_TTL = 120.0
 STANDOUTS_CACHE_TTL = 6 * 3600.0
 
@@ -1760,12 +1760,30 @@ def _standouts_missing_leagues(payload: dict[str, Any]) -> list[str]:
     return [league for league in STANDOUTS_LEAGUES if league not in present]
 
 
+def _standouts_gk_incomplete(payload: dict[str, Any]) -> bool:
+    """True when a league has outfield players but no keepers (partial cache build)."""
+    gk_leagues: set[str] = set()
+    active_leagues: set[str] = set()
+    for row in payload.get("players") or []:
+        if not isinstance(row, dict):
+            continue
+        league = str(row.get("league") or "").strip()
+        if league not in STANDOUTS_LEAGUES:
+            continue
+        active_leagues.add(league)
+        if str(row.get("position") or "") == "GOALKEEPER":
+            gk_leagues.add(league)
+    return any(league not in gk_leagues for league in active_leagues)
+
+
 def _standouts_cache_is_stale(payload: dict[str, Any]) -> bool:
     try:
         version = int(payload.get("cache_version") or 1)
     except (TypeError, ValueError):
         version = 1
     if version < STANDOUTS_CACHE_VERSION:
+        return True
+    if _standouts_gk_incomplete(payload):
         return True
     return bool(_standouts_missing_leagues(payload))
 
@@ -1927,25 +1945,30 @@ def _load_season_position_players(
     )
     from fastapi import HTTPException
 
-    try:
-        data = build_scouting_long_list(
-            ScoutingLongListRequest(
-                position=position,
-                leagues=list(STANDOUTS_LEAGUES),
-                min_minutes=STANDOUTS_SEASON_MIN_MINUTES,
-                season_mode=season_mode,
-            )
-        )
-    except HTTPException as exc:
-        return [], f"{_scouting_position_label(position)}: {exc.detail}"
-    return (
-        _player_rows_from_scouting_list(
-            data,
-            position=position,
-            position_label=_scouting_position_label(position),
-        ),
-        None,
+    request = ScoutingLongListRequest(
+        position=position,
+        leagues=list(STANDOUTS_LEAGUES),
+        min_minutes=STANDOUTS_SEASON_MIN_MINUTES,
+        season_mode=season_mode,
     )
+    label = _scouting_position_label(position)
+    for attempt in range(4):
+        try:
+            data = build_scouting_long_list(request)
+        except HTTPException as exc:
+            if exc.status_code == 429 and attempt < 3:
+                time.sleep(min(60.0, 5.0 * (2**attempt)))
+                continue
+            return [], f"{label}: {exc.detail}"
+        return (
+            _player_rows_from_scouting_list(
+                data,
+                position=position,
+                position_label=label,
+            ),
+            None,
+        )
+    return [], f"{label}: Impect API rate limit — retries exhausted."
 
 
 def _build_standouts_season_payload() -> dict[str, Any]:
@@ -1960,32 +1983,31 @@ def _build_standouts_season_payload() -> dict[str, Any]:
     warnings: list[str] = []
     players: list[dict[str, Any]] = []
 
-    def load_position(position: str) -> tuple[list[dict[str, Any]], str | None]:
-        return _load_season_position_players(position, season_mode=season_mode)
-
-    with ThreadPoolExecutor(max_workers=min(4, len(impect.ALLOWED_POSITIONS))) as pool:
-        futures = [pool.submit(load_position, position) for position in impect.ALLOWED_POSITIONS]
-        for future in as_completed(futures):
-            rows, warning = future.result()
-            players.extend(rows)
-            if warning:
-                warnings.append(warning)
+    # Load one position at a time — parallel long-list builds hit Impect rate limits
+    # and Goalkeeper pools were coming back empty for most leagues.
+    for index, position in enumerate(impect.ALLOWED_POSITIONS):
+        rows, warning = _load_season_position_players(position, season_mode=season_mode)
+        players.extend(rows)
+        if warning:
+            warnings.append(warning)
+        if index + 1 < len(impect.ALLOWED_POSITIONS):
+            time.sleep(2.0)
 
     # If preferred season was empty (e.g. brand-new shell), fall back once.
     if not players and season_mode == "current":
         season_mode = "previous"
         season_label = label_by_mode.get("previous", "previous")
         warnings = []
-        with ThreadPoolExecutor(max_workers=min(4, len(impect.ALLOWED_POSITIONS))) as pool:
-            futures = [
-                pool.submit(_load_season_position_players, position, season_mode=season_mode)
-                for position in impect.ALLOWED_POSITIONS
-            ]
-            for future in as_completed(futures):
-                rows, warning = future.result()
-                players.extend(rows)
-                if warning:
-                    warnings.append(warning)
+        for index, position in enumerate(impect.ALLOWED_POSITIONS):
+            rows, warning = _load_season_position_players(
+                position,
+                season_mode=season_mode,
+            )
+            players.extend(rows)
+            if warning:
+                warnings.append(warning)
+            if index + 1 < len(impect.ALLOWED_POSITIONS):
+                time.sleep(2.0)
 
     players.sort(key=lambda row: (-float(row["overall"]), str(row.get("name") or "")))
     highest = players[0]["overall"] if players else None

@@ -166,6 +166,9 @@ def _load_primary_from_disk(
             int(player_id): {str(pos): float(value) for pos, value in pos_map.items()}
             for player_id, pos_map in raw_shares.items()
         }
+        # Empty files were saved after rate-limited builds — treat as a cache miss.
+        if not primary and not shares:
+            return None
         return primary, shares
     except (OSError, TypeError, ValueError, json.JSONDecodeError):
         return None
@@ -176,6 +179,8 @@ def _save_primary_to_disk(
     primary_positions: dict[int, str],
     position_shares: dict[int, dict[str, float]],
 ) -> None:
+    if not primary_positions:
+        return
     try:
         SCOUTING_DISK_CACHE_DIR.mkdir(parents=True, exist_ok=True)
         payload = {
@@ -436,6 +441,16 @@ def _merge_player_season_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return merged
 
 
+def _impect_profile_score(raw_value: float | None) -> float | None:
+    """Impect profile ratings are 0–1; expose as 0–100 without cohort re-ranking."""
+    if raw_value is None:
+        return None
+    value = float(raw_value)
+    if value <= 1.0:
+        return round(value * 100.0, 1)
+    return round(value, 1)
+
+
 def _cohort_values_from_combined_rows(
     merged_rows: list[dict[str, Any]],
     profiles: list[str],
@@ -612,6 +627,7 @@ def _row_passes_position_filter(
     *,
     check_minutes: bool = True,
     position_shares: dict[int, dict[str, float]] | None = None,
+    trust_position_fetch: bool = False,
 ) -> bool:
     impect = _impect()
     if check_minutes and (impect._play_duration_minutes(row) or 0) < min_minutes:
@@ -620,11 +636,21 @@ def _row_passes_position_filter(
     if player_id is None:
         return False
 
+    if trust_position_fetch:
+        return True
+
     player_key = int(player_id)
     # Preferred: a player qualifies for any position where they spent a
     # meaningful share of their own minutes (so low-minute players still show).
     if position_shares is not None:
-        return _player_plays_position(position_shares, player_key, position)
+        if _player_plays_position(position_shares, player_key, position):
+            return True
+        # Row came from a position-specific Impect fetch — if share data is
+        # missing or incomplete, fall back to matchShare on the row itself.
+        if not position_shares.get(player_key):
+            match_share = float(row.get("matchShare") or 0)
+            return match_share >= MIN_POSITION_MATCH_SHARE
+        return False
     if primary_positions is not None:
         return primary_positions.get(player_key) == position
 
@@ -654,6 +680,8 @@ def _league_benchmark_rows(
     primary_positions: dict[int, str] | None,
     benchmark_minutes: float,
     position_shares: dict[int, dict[str, float]] | None = None,
+    *,
+    trust_position_fetch: bool = False,
 ) -> list[dict[str, Any]]:
     return [
         row
@@ -664,8 +692,65 @@ def _league_benchmark_rows(
             primary_positions,
             benchmark_minutes,
             position_shares=position_shares,
+            trust_position_fetch=trust_position_fetch,
         )
     ]
+
+
+def _load_iteration_bundle_with_retry(
+    iteration: dict[str, Any],
+    position: str,
+    load_minutes: float,
+) -> dict[str, Any]:
+    from fastapi import HTTPException
+
+    for attempt in range(4):
+        try:
+            return _load_iteration_bundle(iteration, position, load_minutes)
+        except HTTPException as exc:
+            if exc.status_code == 429 and attempt < 3:
+                time.sleep(min(60.0, 5.0 * (2**attempt)))
+                continue
+            raise
+    raise RuntimeError("unreachable")
+
+
+def _load_iteration_bundles(
+    iteration_rows: list[dict[str, Any]],
+    position: str,
+    load_minutes: float,
+    *,
+    season_offset: int = 0,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Load leagues one at a time — parallel fetches routinely hit Impect rate limits."""
+    bundles: list[dict[str, Any]] = []
+    fallback_warnings: list[str] = []
+    for index, iteration in enumerate(iteration_rows):
+        bundle = _load_iteration_bundle_with_retry(iteration, position, load_minutes)
+        if season_offset == 0 and not (bundle.get("score_rows") or []):
+            competition_name = str(iteration.get("competition_name", "")).strip()
+            previous_rows = _scouting_iteration_rows(
+                [competition_name],
+                season_offset=1,
+                combine_seasons=False,
+            )
+            if previous_rows:
+                previous = previous_rows[0]
+                if int(previous.get("id") or 0) != int(iteration.get("id") or 0):
+                    bundle = _load_iteration_bundle_with_retry(previous, position, load_minutes)
+                    league_label = SCOUTING_COMPETITION_TO_LEAGUE.get(
+                        competition_name,
+                        competition_name,
+                    )
+                    season_label = str(previous.get("season", "")).strip() or "previous season"
+                    fallback_warnings.append(
+                        f"{league_label}: using {season_label} data — current Impect "
+                        "season shell has no profile scores yet."
+                    )
+        bundles.append(bundle)
+        if index + 1 < len(iteration_rows):
+            time.sleep(1.5)
+    return bundles, fallback_warnings
 
 
 def _ensure_position_shares(
@@ -809,15 +894,15 @@ def build_scouting_long_list(body: ScoutingLongListRequest) -> dict[str, Any]:
     primary_ready = True
     benchmark_minutes = float(impect.BENCHMARK_MIN_MINUTES)
 
-    iteration_bundles: list[dict[str, Any]] = []
-    max_workers = min(6, max(len(iteration_rows), 1))
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [
-            executor.submit(_load_iteration_bundle, iteration, position, load_minutes)
-            for iteration in iteration_rows
-        ]
-        for future in as_completed(futures):
-            iteration_bundles.append(future.result())
+    iteration_bundles, fallback_warnings = _load_iteration_bundles(
+        iteration_rows,
+        position,
+        load_minutes,
+        season_offset=season_offset,
+    )
+    for note in fallback_warnings:
+        if note not in warnings:
+            warnings.append(note)
 
     for bundle in iteration_bundles:
         iteration_id = bundle["iteration_id"]
@@ -921,6 +1006,7 @@ def build_scouting_long_list(body: ScoutingLongListRequest) -> dict[str, Any]:
                 primary_positions,
                 benchmark_minutes,
                 position_shares=position_shares,
+                trust_position_fetch=True,
             )
             cohort_by_league[league_label] = _cohort_values_by_profile(
                 league_cohort_rows,
@@ -937,6 +1023,7 @@ def build_scouting_long_list(body: ScoutingLongListRequest) -> dict[str, Any]:
                     primary_positions,
                     body.min_minutes,
                     position_shares=position_shares,
+                    trust_position_fetch=True,
                 )
             ]
             for row in filtered_rows:
@@ -971,7 +1058,6 @@ def build_scouting_long_list(body: ScoutingLongListRequest) -> dict[str, Any]:
 
         iteration_id = int(iteration_id)
         league_label = str(row.get("_leagueLabel", ""))
-        league_cohort = cohort_by_league.get(league_label, {})
         combined_values = row.get("_combinedProfileValues") or {}
 
         catalog_player = player_lookup.get((iteration_id, int(player_id)), {})
@@ -994,13 +1080,9 @@ def build_scouting_long_list(body: ScoutingLongListRequest) -> dict[str, Any]:
 
         profile_scores: dict[str, float | None] = {}
         for profile_key, profile_name in profile_keys.items():
-            raw_value = combined_values.get(profile_key)
-            cohort_values = league_cohort.get(profile_key, [])
-            if raw_value is None or not cohort_values:
-                profile_scores[profile_name] = None
-                continue
-            percentile = impect._cohort_percentile(raw_value, cohort_values)
-            profile_scores[profile_name] = percentile
+            profile_scores[profile_name] = _impect_profile_score(
+                combined_values.get(profile_key)
+            )
 
         if not any(value is not None for value in profile_scores.values()):
             continue
@@ -1030,19 +1112,17 @@ def build_scouting_long_list(body: ScoutingLongListRequest) -> dict[str, Any]:
     current_title, previous_title = _scouting_season_titles()
 
     scoring_note = (
-        f"{season_mode_label}. Scores compare each player to others in the same league only "
-        f"({benchmark_minutes:.0f}+ min, primary role)."
+        f"{season_mode_label}. Scores are Impect’s exact profile ratings (0–100), "
+        "not league-relative percentiles."
     )
     if combine_seasons:
         scoring_note = (
             f"Combined minutes from {current_title} + {previous_title}. Profile scores are "
-            "minutes-weighted across both seasons, then ranked vs the same league "
-            f"({benchmark_minutes:.0f}+ combined min, primary role in latest season)."
+            "Impect’s exact ratings, minutes-weighted across both seasons (0–100)."
         )
     elif season_mode_key == "previous":
         scoring_note = (
-            f"{previous_title} only. Scores compare each player to others in the same "
-            f"league ({benchmark_minutes:.0f}+ min, primary role)."
+            f"{previous_title} only. Scores are Impect’s exact profile ratings (0–100)."
         )
 
     return {
@@ -1055,7 +1135,7 @@ def build_scouting_long_list(body: ScoutingLongListRequest) -> dict[str, Any]:
         "seasonMode": season_mode_key,
         "seasonModeLabel": season_mode_label,
         "scoring": {
-            "method": "league_relative_percentile",
+            "method": "impect_profile_score",
             "benchmarkMinutes": benchmark_minutes,
             "note": scoring_note,
             "leagueCohortSizes": league_cohort_sizes,
