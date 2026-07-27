@@ -7,7 +7,7 @@ services:
       HOST: 0.0.0.0
       PORT: 8000
       DATA_ROOT: /data
-      UVICORN_WORKERS: "2"
+      UVICORN_WORKERS: "1"
     volumes:
       - pv-data:/data
     restart: unless-stopped

@@ -6,7 +6,7 @@ services:
       HOST: 0.0.0.0
       PORT: 8000
       DATA_ROOT: /data
-      UVICORN_WORKERS: "2"
+      UVICORN_WORKERS: "1"
     volumes:
       - pv-data:/data
     restart: unless-stopped
@@ -26,10 +26,6 @@ services:
       - "443:443"
     environment:
       SITE_DOMAIN: ${SITE_DOMAIN:?Set SITE_DOMAIN in .env e.g. analysis.port-vale.co.uk}
-      UVICORN_WORKERS: "2"
-    environment:
-      SITE_DOMAIN: ${SITE_DOMAIN:?Set SITE_DOMAIN in .env e.g. analysis.port-vale.co.uk}
-      UVICORN_WORKERS: "2"
     volumes:
       - ./deploy/Caddyfile.active:/etc/caddy/Caddyfile:ro
       - ./static:/srv/static:ro
