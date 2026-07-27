@@ -6,7 +6,6 @@
 :80 {
 	encode zstd gzip
 
-	# JS/CSS/images/fonts — long cache. Pages use ?v=… so deploys still bust.
 	handle /static/* {
 		root * /srv
 		header Cache-Control "public, max-age=604800, immutable"
@@ -20,13 +19,8 @@
 		file_server
 	}
 
+	# Single upstream — no active health checker (was marking hub dead under load → 503).
 	handle {
-		reverse_proxy hub:8000 {
-			health_uri /health
-			health_interval 10s
-			health_timeout 5s
-			fail_duration 15s
-			max_fails 3
-		}
+		reverse_proxy hub:8000
 	}
 }
