@@ -836,11 +836,7 @@ def _rank_metric(
 
 def _match_play_minutes(row: dict[str, Any]) -> float:
     impect = _impect()
-    raw = impect._to_number(row.get("playDuration"))
-    if raw is None or raw <= 0:
-        return 0.0
-    # Match-level playDuration is reported in seconds.
-    return float(round(raw / 60.0))
+    return float(impect._play_duration_minutes(row) or 0.0)
 
 
 TM_POSITION_TO_CODE: dict[str, str] = {
@@ -4655,6 +4651,10 @@ def register_pre_match_routes(app: FastAPI) -> None:
         "Pragma": "no-cache",
         "Expires": "0",
     }
+    # HTML uses ?b=<content-hash>, so long-cache assets stay correct after deploy.
+    asset_cache_headers = {
+        "Cache-Control": "public, max-age=604800, immutable",
+    }
 
     def _pre_match_asset_build() -> str:
         """Content hash — changes automatically whenever JS/CSS change on deploy."""
@@ -4705,7 +4705,7 @@ def register_pre_match_routes(app: FastAPI) -> None:
         return FileResponse(
             path,
             media_type="application/javascript",
-            headers=no_cache_headers,
+            headers=asset_cache_headers,
         )
 
     @app.get("/pre-match/assets/app.css")
@@ -4716,7 +4716,7 @@ def register_pre_match_routes(app: FastAPI) -> None:
         return FileResponse(
             path,
             media_type="text/css",
-            headers=no_cache_headers,
+            headers=asset_cache_headers,
         )
 
     @app.get("/api/pre-match/build")

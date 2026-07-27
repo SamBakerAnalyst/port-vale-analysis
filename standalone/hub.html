@@ -24,9 +24,12 @@
       --accent: #3d8bfd;
       --green: #34d399;
       --amber: #fbbf24;
+      --danger: #f87171;
+      --gold: #f5c518;
       --radius: 12px;
       --font: "DM Sans", system-ui, sans-serif;
       --mono: "JetBrains Mono", monospace;
+      --rail: 248px;
     }
 
     * { box-sizing: border-box; }
@@ -45,132 +48,328 @@
       position: fixed;
       inset: 0;
       background:
-        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(61, 139, 253, 0.18), transparent),
-        radial-gradient(ellipse 60% 40% at 100% 100%, rgba(52, 211, 153, 0.06), transparent);
+        radial-gradient(ellipse 70% 45% at 70% -10%, rgba(61, 139, 253, 0.14), transparent),
+        radial-gradient(ellipse 50% 35% at 100% 100%, rgba(52, 211, 153, 0.05), transparent);
       pointer-events: none;
       z-index: 0;
     }
 
-    .hub {
+    .shell {
       position: relative;
       z-index: 1;
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 2rem 1.75rem 2.5rem;
+      display: grid;
+      grid-template-columns: var(--rail) minmax(0, 1fr);
+      min-height: 100vh;
     }
 
-    .hub__top {
+    /* ——— Left app ribbon ——— */
+    .rail {
+      position: sticky;
+      top: 0;
+      align-self: start;
+      height: 100vh;
+      overflow-y: auto;
+      padding: 1.1rem 0.85rem 1.5rem;
+      background: rgba(12, 15, 20, 0.92);
+      border-right: 1px solid var(--border);
+      backdrop-filter: blur(8px);
+    }
+
+    .rail__brand {
       display: flex;
-      flex-wrap: wrap;
       align-items: center;
-      justify-content: space-between;
-      gap: 1.5rem;
-      margin-bottom: 2rem;
+      gap: 0.7rem;
+      padding: 0.25rem 0.4rem 1rem;
+      text-decoration: none;
+      color: inherit;
     }
 
-    .hub__brand {
-      display: flex;
-      align-items: center;
-      gap: 1.1rem;
-    }
-
-    .hub__badge {
-      width: 4.5rem;
+    .rail__badge {
+      width: 2.6rem;
       height: auto;
-      flex-shrink: 0;
-      object-fit: contain;
-      filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.4));
+      filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35));
     }
 
-    .hub__brand-text {
+    .rail__brand-text {
       min-width: 0;
     }
 
-    .hub__brand-logo {
+    .rail__club {
+      font-size: 0.65rem;
       font-weight: 700;
-      font-size: 1.125rem;
-      color: var(--text-muted);
-      letter-spacing: 0.06em;
+      letter-spacing: 0.1em;
       text-transform: uppercase;
+      color: var(--gold);
     }
 
-    .hub__greeting {
-      margin: 0.35rem 0 0;
-      font-size: 1.75rem;
-      font-weight: 600;
+    .rail__title {
+      font-size: 0.95rem;
+      font-weight: 700;
       letter-spacing: -0.02em;
     }
 
-    .hub__subtitle {
-      margin: 0.4rem 0 0;
+    .rail__home {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      width: 100%;
+      margin-bottom: 0.85rem;
+      padding: 0.65rem 0.75rem;
+      border-radius: 10px;
+      border: 1px solid rgba(245, 197, 24, 0.35);
+      background: rgba(245, 197, 24, 0.08);
+      color: var(--gold);
+      font: inherit;
+      font-size: 0.8125rem;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .rail__home:hover,
+    .rail__home.is-active {
+      border-color: var(--gold);
+      background: rgba(245, 197, 24, 0.14);
+    }
+
+    .rail__group {
+      margin-bottom: 0.85rem;
+    }
+
+    .rail__group-label {
+      margin: 0 0 0.35rem 0.55rem;
+      font-size: 0.625rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--group-accent, var(--text-muted));
+    }
+
+    .rail__group--analysis { --group-accent: #34d399; }
+    .rail__group--recruitment { --group-accent: #3d8bfd; }
+    .rail__group--scouts { --group-accent: #f97316; }
+    .rail__group--strategy { --group-accent: #f5c518; }
+
+    .rail__link {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      width: 100%;
+      padding: 0.45rem 0.65rem;
+      margin-bottom: 0.15rem;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      background: transparent;
       color: var(--text-muted);
-      font-size: 0.9375rem;
-      max-width: 32rem;
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 500;
+      text-decoration: none;
+      text-align: left;
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s, border-color 0.12s;
+    }
+
+    .rail__link:hover {
+      color: var(--text);
+      background: var(--surface);
+      border-color: var(--border);
+    }
+
+    .rail__link.is-soon {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .rail__icon {
+      flex-shrink: 0;
+      width: 1.25rem;
+      text-align: center;
+      font-size: 0.9rem;
+    }
+
+    .rail__link-title {
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ——— Main ——— */
+    .main {
+      min-width: 0;
+      padding: 1.35rem 1.75rem 2.5rem;
+    }
+
+    .main__top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .main__greeting {
+      margin: 0;
+      font-size: 1.55rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .main__subtitle {
+      margin: 0.3rem 0 0;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    .main__meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.55rem;
+    }
+
+    .hub-search-bar {
+      flex: 1 1 16rem;
+      min-width: min(100%, 14rem);
+      max-width: 28rem;
+      margin: 0 auto;
+    }
+
+    .hub-search {
+      position: relative;
+    }
+
+    .hub-search__input {
+      width: 100%;
+      padding: 0.65rem 0.95rem 0.65rem 2.35rem;
+      border-radius: 999px;
+      border: 1px solid rgba(42, 53, 68, 0.9);
+      background: rgba(20, 26, 34, 0.92);
+      color: var(--text);
+      font: inherit;
+      font-size: 0.875rem;
+      outline: none;
+      transition: border-color 0.12s, box-shadow 0.12s;
+    }
+
+    .hub-search__input::placeholder { color: #6b7c93; }
+
+    .hub-search__input:focus {
+      border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+      box-shadow: 0 0 0 3px rgba(61, 139, 253, 0.14);
+    }
+
+    .hub-search__icon {
+      position: absolute;
+      left: 0.85rem;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 0.95rem;
+      opacity: 0.55;
+      pointer-events: none;
+    }
+
+    .hub-search__results {
+      position: absolute;
+      z-index: 40;
+      top: calc(100% + 0.35rem);
+      left: 0;
+      right: 0;
+      max-height: 18rem;
+      overflow-y: auto;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: rgba(14, 18, 24, 0.98);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(10px);
+    }
+
+    .hub-search__results.hidden { display: none; }
+
+    .hub-search__result {
+      display: block;
+      width: 100%;
+      padding: 0.65rem 0.85rem;
+      border: 0;
+      border-bottom: 1px solid rgba(42, 53, 68, 0.55);
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .hub-search__result:last-child { border-bottom: 0; }
+    .hub-search__result:hover,
+    .hub-search__result.is-active {
+      background: rgba(61, 139, 253, 0.12);
+    }
+
+    .hub-search__result strong {
+      display: block;
+      font-size: 0.84rem;
+      font-weight: 700;
+    }
+
+    .hub-search__result span {
+      display: block;
+      margin-top: 0.12rem;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    .hub-search__empty {
+      padding: 0.75rem 0.85rem;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    @media (max-width: 900px) {
+      .main__top {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .hub-search-bar {
+        order: 3;
+        max-width: none;
+        margin: 0;
+      }
+      .main__meta { order: 2; }
     }
 
     .hub__clock {
       text-align: right;
-      padding: 0.85rem 1.1rem;
+      padding: 0.65rem 0.9rem;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      min-width: 10rem;
+      min-width: 8.5rem;
     }
 
     .hub__clock-time {
       font-family: var(--mono);
-      font-size: 1.75rem;
+      font-size: 1.35rem;
       font-weight: 500;
       line-height: 1.1;
-      color: var(--text);
     }
 
     .hub__clock-date {
-      margin-top: 0.25rem;
-      font-size: 0.8125rem;
+      margin-top: 0.2rem;
+      font-size: 0.72rem;
       color: var(--text-muted);
-    }
-
-    .hub__top-actions {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 0.65rem;
-    }
-
-    .hub__signout {
-      padding: 0.45rem 0.85rem;
-      font: inherit;
-      font-size: 0.8125rem;
-      font-weight: 600;
-      color: var(--text-muted);
-      background: transparent;
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      cursor: pointer;
-      transition: color 0.15s, border-color 0.15s;
-    }
-
-    .hub__signout:hover {
-      color: var(--text);
-      border-color: rgba(139, 155, 176, 0.55);
-    }
-
-    .hub__status-row {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 0.65rem;
-      margin-bottom: 1.25rem;
     }
 
     .hub__status {
       display: inline-flex;
       align-items: center;
-      gap: 0.45rem;
-      padding: 0.4rem 0.75rem;
+      gap: 0.4rem;
+      padding: 0.35rem 0.7rem;
       border-radius: 999px;
-      font-size: 0.75rem;
+      font-size: 0.7rem;
       font-weight: 600;
       border: 1px solid var(--border);
       background: var(--surface);
@@ -191,7 +390,7 @@
 
     .hub__status--online .hub__status-dot {
       background: var(--green);
-      box-shadow: 0 0 8px rgba(52, 211, 153, 0.6);
+      box-shadow: 0 0 8px rgba(52, 211, 153, 0.55);
     }
 
     .hub__status--offline {
@@ -205,394 +404,30 @@
 
     .hub__restart-btn {
       display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      padding: 0.42rem 0.85rem;
+      padding: 0.35rem 0.75rem;
       border-radius: 999px;
       border: 1px solid var(--border);
       background: var(--surface-2);
       color: var(--text);
-      font-family: var(--font);
-      font-size: 0.75rem;
+      font: inherit;
+      font-size: 0.7rem;
       font-weight: 600;
       cursor: pointer;
-      transition: border-color 0.15s, background 0.15s, color 0.15s;
+      text-decoration: none;
     }
 
     .hub__restart-btn:hover:not(:disabled) {
       border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-      background: color-mix(in srgb, var(--accent) 10%, var(--surface-2));
-      color: var(--text);
     }
 
-    .hub__restart-btn:focus-visible {
-      outline: 2px solid var(--accent);
-      outline-offset: 2px;
-    }
-
-    .hub__restart-btn:disabled {
-      opacity: 0.55;
-      cursor: wait;
-    }
-
-    .hub__restart-btn--link {
-      text-decoration: none;
-    }
-
-    .hub__restart-btn--link:hover {
-      color: var(--text);
-    }
-
-    .hub__restart-hint {
-      flex: 1 1 100%;
-      margin: 0;
-      font-size: 0.75rem;
-      color: var(--text-muted);
-    }
-
-    .hub__restart-hint code {
-      font-family: var(--mono);
-      font-size: 0.7rem;
-      padding: 0.1rem 0.35rem;
-      border-radius: 4px;
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-    }
-
-    .hub__section-title {
-      margin: 0;
-      font-size: 1rem;
-      font-weight: 600;
-      letter-spacing: -0.01em;
-      color: var(--text);
-    }
-
-    .hub__section-sub {
-      margin: 0.2rem 0 0;
-      font-size: 0.8125rem;
-      color: var(--text-muted);
-    }
-
-    .hub__section-head {
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      gap: 1rem;
-      margin-bottom: 1rem;
-    }
-
-    .hub__section {
-      margin-bottom: 2.25rem;
-      padding-left: 1rem;
-      border-left: 3px solid var(--section-accent, var(--accent));
-    }
-
-    .hub__section--recruitment { --section-accent: #3d8bfd; }
-    .hub__section--analysis { --section-accent: #34d399; }
-    .hub__section--scouts { --section-accent: #f97316; }
-    .hub__section--strategy { --section-accent: #f5c518; }
-
-    .hub__back {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.35rem;
-      margin-bottom: 1rem;
-      padding: 0.4rem 0.75rem;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      background: var(--surface);
-      color: var(--text-muted);
-      font-size: 0.8125rem;
-      font-weight: 600;
-      text-decoration: none;
-      transition: border-color 0.15s, color 0.15s;
-    }
-
-    .hub__back:hover {
-      border-color: var(--accent);
-      color: var(--text);
-    }
-
-    .hub__category-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 1rem;
-      margin-top: 0.5rem;
-    }
-
-    @media (max-width: 640px) {
-      .hub__category-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    .category-card {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-      min-height: 9.5rem;
-      padding: 1.35rem 1.4rem;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      text-decoration: none;
-      color: inherit;
-      transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .category-card::before {
-      content: "";
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 4px;
-      background: var(--cat-accent, var(--accent));
-    }
-
-    .category-card:hover {
-      border-color: color-mix(in srgb, var(--cat-accent, var(--accent)) 45%, var(--border));
-      transform: translateY(-2px);
-      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
-    }
-
-    .category-card__icon {
-      font-size: 1.75rem;
-      line-height: 1;
-    }
-
-    .category-card__title {
-      margin: 0;
-      font-size: 1.2rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-    }
-
-    .category-card__desc {
-      margin: 0;
-      font-size: 0.8125rem;
-      color: var(--text-muted);
-      line-height: 1.45;
-      flex: 1;
-    }
-
-    .category-card__count {
-      font-family: var(--mono);
-      font-size: 0.6875rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-    }
-
-    .category-card__arrow {
-      position: absolute;
-      right: 1.1rem;
-      bottom: 1.1rem;
-      font-size: 1.25rem;
-      color: var(--text-muted);
-      transition: transform 0.15s, color 0.15s;
-    }
-
-    .category-card:hover .category-card__arrow {
-      transform: translateX(3px);
-      color: var(--cat-accent, var(--accent));
-    }
-
-    .hub__grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 1rem;
-    }
-
-    .app-card {
-      display: flex;
-      flex-direction: column;
-      gap: 0.65rem;
-      padding: 1.25rem 1.35rem;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      text-decoration: none;
-      color: inherit;
-      transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .app-card::before {
-      content: "";
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 3px;
-      background: var(--card-accent, var(--accent));
-      opacity: 0.85;
-    }
-
-    .app-card:hover {
-      border-color: color-mix(in srgb, var(--card-accent, var(--accent)) 45%, var(--border));
-      transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-    }
-
-    .app-card:focus-visible {
-      outline: 2px solid var(--accent);
-      outline-offset: 2px;
-    }
-
-    .app-card--primary {
-      grid-column: 1 / -1;
-      flex-direction: row;
-      align-items: center;
-      gap: 1.25rem;
-      padding: 1.5rem 1.75rem;
-    }
-
-    @media (max-width: 640px) {
-      .app-card--primary {
-        flex-direction: column;
-        align-items: flex-start;
-      }
-    }
-
-    .app-card__icon {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 2.75rem;
-      height: 2.75rem;
-      border-radius: 10px;
-      font-size: 1.35rem;
-      background: color-mix(in srgb, var(--card-accent, var(--accent)) 14%, transparent);
-      border: 1px solid color-mix(in srgb, var(--card-accent, var(--accent)) 28%, transparent);
-      flex-shrink: 0;
-    }
-
-    .app-card--primary .app-card__icon {
-      width: 3.25rem;
-      height: 3.25rem;
-      font-size: 1.6rem;
-    }
-
-    .app-card__body {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .app-card__title {
-      margin: 0;
-      font-size: 1.0625rem;
-      font-weight: 600;
-    }
-
-    .app-card--primary .app-card__title {
-      font-size: 1.2rem;
-    }
-
-    .app-card__desc {
-      margin: 0.3rem 0 0;
-      font-size: 0.875rem;
-      color: var(--text-muted);
-      line-height: 1.45;
-    }
-
-    .app-card__note {
-      margin: 0.35rem 0 0;
-      font-size: 0.75rem;
-      color: var(--amber);
-      font-style: italic;
-    }
-
-    .app-card__tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.35rem;
-      margin-top: 0.15rem;
-    }
-
-    .app-card__tag {
-      padding: 0.2rem 0.55rem;
-      border-radius: 999px;
-      font-size: 0.6875rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      color: var(--text-muted);
-    }
-
-    .app-card__arrow {
-      margin-left: auto;
-      align-self: center;
-      font-size: 1.25rem;
-      color: var(--text-muted);
-      transition: transform 0.15s, color 0.15s;
-      flex-shrink: 0;
-    }
-
-    .app-card:hover .app-card__arrow {
-      transform: translateX(3px);
-      color: var(--card-accent, var(--accent));
-    }
-
-    .app-card--soon {
-      opacity: 0.72;
-      cursor: not-allowed;
-      pointer-events: none;
-    }
-
-    .app-card--soon .app-card__arrow {
-      display: none;
-    }
-
-    .app-card__soon-badge {
-      margin-left: auto;
-      align-self: center;
-      padding: 0.25rem 0.6rem;
-      border-radius: 999px;
-      font-size: 0.6875rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      background: rgba(251, 191, 36, 0.12);
-      border: 1px solid rgba(251, 191, 36, 0.35);
-      color: var(--amber);
-      flex-shrink: 0;
-    }
-
-    .hub__footer {
-      margin-top: 2.5rem;
-      padding-top: 1.5rem;
-      border-top: 1px solid var(--border);
-      font-size: 0.8125rem;
-      color: var(--text-muted);
-    }
-
-    .hub__footer code {
-      font-family: var(--mono);
-      font-size: 0.75rem;
-      padding: 0.15rem 0.4rem;
-      border-radius: 4px;
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-    }
-
-    .hub__feedback-bar {
-      display: flex;
-      justify-content: flex-end;
-      margin-bottom: 0.85rem;
-    }
+    .hub__restart-btn:disabled { opacity: 0.55; cursor: wait; }
 
     .hub__feedback-link {
       padding: 0;
       font: inherit;
-      font-size: 0.6875rem;
+      font-size: 0.65rem;
       font-weight: 700;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.05em;
       text-transform: uppercase;
       color: var(--text-muted);
       background: none;
@@ -600,273 +435,1364 @@
       cursor: pointer;
       text-decoration: underline;
       text-underline-offset: 3px;
-      transition: color 0.15s;
     }
 
-    .hub__feedback-link:hover {
-      color: var(--accent);
+    .hub__feedback-link:hover { color: var(--accent); }
+
+    /* ——— Home dashboard ——— */
+    .home-kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1rem;
     }
 
-    .feedback-modal {
-      position: fixed;
-      inset: 0;
-      z-index: 100;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 1.25rem;
-      background: rgba(8, 10, 14, 0.72);
-      backdrop-filter: blur(4px);
-    }
-
-    .feedback-modal[hidden] {
-      display: none;
-    }
-
-    .feedback-modal__panel {
-      width: 100%;
-      max-width: 520px;
+    .home-kpi {
+      padding: 0.9rem 1rem;
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: calc(var(--radius) + 4px);
-      padding: 1.5rem 1.5rem 1.25rem;
-      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+      border-radius: var(--radius);
+      border-top: 3px solid var(--kpi-accent, var(--accent));
     }
 
-    .feedback-modal__title {
-      margin: 0 0 0.35rem;
-      font-size: 1.125rem;
-      font-weight: 600;
-    }
-
-    .feedback-modal__hint {
-      margin: 0 0 1rem;
-      font-size: 0.875rem;
+    .home-kpi__label {
+      margin: 0;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
       color: var(--text-muted);
     }
 
-    .feedback-modal__textarea {
-      width: 100%;
-      min-height: 8rem;
-      padding: 0.75rem 0.9rem;
-      font: inherit;
-      font-size: 0.9375rem;
-      color: var(--text);
-      background: var(--surface-2);
+    .home-kpi__value {
+      margin: 0.25rem 0 0;
+      font-family: var(--mono);
+      font-size: 1.55rem;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+    }
+
+    .home-kpi__sub {
+      margin: 0.2rem 0 0;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    .home-grid {
+      display: grid;
+      grid-template-columns: 1.35fr 1fr;
+      gap: 0.85rem;
+    }
+
+    .home-card--wide {
+      grid-column: 1 / -1;
+    }
+
+    .home-rank-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.85rem;
+    }
+
+    @media (max-width: 960px) {
+      .home-rank-grid { grid-template-columns: 1fr; }
+    }
+
+    .home-rank-block__title {
+      margin: 0 0 0.45rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .home-table .col-val {
+      font-family: var(--mono);
+      font-weight: 700;
+      text-align: right;
+    }
+
+    .home-table td.col-delta {
+      font-family: var(--mono);
+      text-align: right;
+    }
+
+    .home-table td.col-delta.is-up { color: var(--green); }
+    .home-table td.col-delta.is-down { color: var(--danger); }
+
+    .home-table td.col-rank {
+      font-family: var(--mono);
+      color: var(--text-muted);
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .home-card {
+      padding: 1rem 1.1rem 1.1rem;
+      background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      resize: vertical;
-      outline: none;
+      min-height: 12rem;
     }
 
-    .feedback-modal__textarea:focus {
-      border-color: rgba(61, 139, 253, 0.6);
-      box-shadow: 0 0 0 3px rgba(61, 139, 253, 0.15);
-    }
-
-    .feedback-modal__shots {
-      margin-top: 0.85rem;
-    }
-
-    .feedback-modal__shots-label {
-      display: block;
-      margin-bottom: 0.45rem;
-      font-size: 0.8125rem;
-      font-weight: 600;
-      color: var(--text-muted);
-    }
-
-    .feedback-modal__shots-hint {
-      margin: 0 0 0.65rem;
-      font-size: 0.8125rem;
-      color: var(--text-muted);
-    }
-
-    .feedback-modal__shot-actions {
+    .home-card__head {
       display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.75rem;
       margin-bottom: 0.75rem;
     }
 
-    .feedback-modal__shot-btn {
-      padding: 0.45rem 0.75rem;
-      font: inherit;
-      font-size: 0.8125rem;
+    .home-card__title {
+      margin: 0;
+      font-size: 0.95rem;
+      font-weight: 700;
+    }
+
+    .home-card__link {
+      font-size: 0.72rem;
       font-weight: 600;
-      color: var(--text);
-      background: var(--surface-2);
-      border: 1px dashed var(--border);
-      border-radius: var(--radius);
-      cursor: pointer;
-    }
-
-    .feedback-modal__shot-btn:hover {
-      border-color: rgba(61, 139, 253, 0.45);
       color: var(--accent);
+      text-decoration: none;
     }
 
-    .feedback-modal__shot-input {
-      display: none;
+    .home-card__link:hover { text-decoration: underline; }
+
+    .home-empty {
+      margin: 0.5rem 0 0;
+      font-size: 0.8125rem;
+      color: var(--text-muted);
     }
 
-    .feedback-modal__shot-grid {
+    .home-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+
+    .home-table th {
+      text-align: left;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 0.35rem 0.4rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .home-table td {
+      padding: 0.4rem;
+      border-bottom: 1px solid rgba(42, 53, 68, 0.55);
+    }
+
+    .home-table .col-pos { width: 2rem; font-family: var(--mono); color: var(--text-muted); }
+    .home-table .col-club { font-weight: 600; }
+    .home-table .col-pts { font-family: var(--mono); font-weight: 700; text-align: right; }
+    .home-table th:last-child,
+    .home-table td:nth-child(3),
+    .home-table td:nth-child(4) { text-align: center; font-family: var(--mono); }
+    .home-table td.col-val,
+    .home-table td.col-delta,
+    .home-table td.col-rank,
+    .home-table th.col-val,
+    .home-table th.col-delta,
+    .home-table th.col-rank { text-align: right; }
+
+    .home-table tr.is-focus td {
+      background: rgba(245, 197, 24, 0.1);
+      color: var(--gold);
+    }
+
+    .home-form__row {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.65rem;
+      gap: 0.4rem;
     }
 
-    .feedback-modal__shot {
-      position: relative;
-      width: 5.5rem;
-      height: 5.5rem;
-      border-radius: var(--radius);
-      overflow: hidden;
+    .home-form__pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 8px;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      font-weight: 700;
       border: 1px solid var(--border);
       background: var(--surface-2);
+      color: var(--text-muted);
     }
 
-    .feedback-modal__shot img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-
-    .feedback-modal__shot-remove {
-      position: absolute;
-      top: 0.25rem;
-      right: 0.25rem;
-      width: 1.35rem;
-      height: 1.35rem;
-      padding: 0;
-      font-size: 0.9rem;
-      line-height: 1;
-      color: #fff;
-      background: rgba(8, 10, 14, 0.72);
-      border: none;
-      border-radius: 999px;
-      cursor: pointer;
-    }
-
-    .feedback-modal__error,
-    .feedback-modal__success {
-      display: none;
-      margin: 0.75rem 0 0;
-      font-size: 0.875rem;
-    }
-
-    .feedback-modal__error {
-      color: var(--danger, #f87171);
-    }
-
-    .feedback-modal__success {
+    .home-form__pill.is-win {
+      background: rgba(52, 211, 153, 0.15);
+      border-color: rgba(52, 211, 153, 0.4);
       color: var(--green);
     }
 
-    .feedback-modal__error--visible,
-    .feedback-modal__success--visible {
-      display: block;
+    .home-form__pill.is-draw {
+      background: rgba(251, 191, 36, 0.12);
+      border-color: rgba(251, 191, 36, 0.35);
+      color: var(--amber);
     }
 
-    .feedback-modal__actions {
-      display: flex;
-      justify-content: flex-end;
+    .home-form__pill.is-loss {
+      background: rgba(248, 113, 113, 0.12);
+      border-color: rgba(248, 113, 113, 0.35);
+      color: var(--danger);
+    }
+
+    .home-next__opp {
+      margin: 0;
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+
+    .home-next__meta {
+      margin: 0.25rem 0 0;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .home-vs__row {
+      display: grid;
+      grid-template-columns: 1.4fr auto auto auto;
+      gap: 0.5rem;
+      align-items: center;
+      padding: 0.45rem 0;
+      border-bottom: 1px solid rgba(42, 53, 68, 0.5);
+      font-size: 0.8rem;
+    }
+
+    .home-vs__row:last-child { border-bottom: 0; }
+    .home-vs__label { color: var(--text-muted); }
+    .home-vs__us { font-family: var(--mono); font-weight: 700; text-align: right; }
+    .home-vs__us.is-up { color: var(--green); }
+    .home-vs__us.is-down { color: var(--danger); }
+    .home-vs__vs { color: var(--text-muted); font-size: 0.7rem; text-align: center; }
+    .home-vs__league { font-family: var(--mono); color: var(--text-muted); text-align: right; min-width: 3.2rem; }
+
+    .home-avail {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
       gap: 0.65rem;
-      margin-top: 1rem;
+      text-align: center;
     }
 
-    .feedback-modal__btn {
-      padding: 0.6rem 1rem;
-      font: inherit;
-      font-size: 0.875rem;
+    .home-avail strong {
+      display: block;
+      font-family: var(--mono);
+      font-size: 1.4rem;
       font-weight: 600;
-      border-radius: var(--radius);
+    }
+
+    .home-avail span {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .home-season {
+      margin: 0 0 0.85rem;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-family: var(--mono);
+    }
+
+    .home-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin-bottom: 1rem;
+    }
+
+    .home-tab {
+      padding: 0.55rem 0.95rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-muted);
+      font: inherit;
+      font-size: 0.8125rem;
+      font-weight: 700;
       cursor: pointer;
+      transition: border-color 0.12s, color 0.12s, background 0.12s;
+    }
+
+    .home-tab:hover {
+      color: var(--text);
+      border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+    }
+
+    .home-tab.is-active {
+      color: #0c0f14;
+      background: var(--gold);
+      border-color: var(--gold);
+    }
+
+    .home-panel[hidden] { display: none; }
+
+    .home-pace {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.55rem 0.85rem;
+      margin: 0 0 0.85rem;
+      padding: 0.75rem 0.95rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .home-pace__badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.3rem 0.7rem;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .home-pace__badge.is-on {
+      background: rgba(52, 211, 153, 0.16);
+      color: var(--green);
+      border: 1px solid rgba(52, 211, 153, 0.35);
+    }
+
+    .home-pace__badge.is-off {
+      background: rgba(248, 113, 113, 0.14);
+      color: var(--danger);
+      border: 1px solid rgba(248, 113, 113, 0.35);
+    }
+
+    .home-pace__text {
+      margin: 0;
+      font-size: 0.84rem;
+      color: var(--text-muted);
+    }
+
+    .home-pace__text strong { color: var(--text); font-weight: 700; }
+
+    .home-bars { display: flex; flex-direction: column; gap: 0.7rem; }
+
+    .home-bar {
+      display: grid;
+      grid-template-columns: 5.5rem 1fr auto;
+      gap: 0.55rem;
+      align-items: center;
+    }
+
+    .home-bar__label {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .home-bar__track {
+      position: relative;
+      height: 0.55rem;
+      border-radius: 999px;
+      background: rgba(42, 53, 68, 0.85);
+      overflow: hidden;
+    }
+
+    .home-bar__fill {
+      height: 100%;
+      border-radius: 999px;
+      background: var(--accent);
+      min-width: 2px;
+    }
+
+    .home-bar__fill.is-good { background: var(--green); }
+    .home-bar__fill.is-bad { background: var(--danger); }
+    .home-bar__fill.is-age-u21 { background: #34d399; }
+    .home-bar__fill.is-age-2125 { background: #3d8bfd; }
+    .home-bar__fill.is-age-2629 { background: #fbbf24; }
+    .home-bar__fill.is-age-30 { background: #f87171; }
+    .home-bar__fill.is-poss { background: #3d8bfd; }
+    .home-bar__fill.is-trans { background: #34d399; }
+    .home-bar__fill.is-set { background: #f5c518; }
+
+    .home-bar__meta {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      text-align: right;
+      min-width: 7.5rem;
+    }
+
+    .home-bar__meta .is-up { color: var(--green); }
+    .home-bar__meta .is-down { color: var(--danger); }
+
+    .home-stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.65rem;
+    }
+
+    .home-stat {
+      padding: 0.7rem 0.8rem;
+      border-radius: 10px;
+      background: var(--surface-2);
+      border: 1px solid rgba(42, 53, 68, 0.7);
+    }
+
+    .home-stat__label {
+      margin: 0 0 0.25rem;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .home-stat__value {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .home-stat__sub {
+      margin: 0.2rem 0 0;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    .home-schedule-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
+    }
+
+    .home-schedule-item {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.65rem;
+      padding: 0.65rem 0.75rem;
+      border-radius: 10px;
+      background: var(--surface-2);
+      border: 1px solid rgba(42, 53, 68, 0.65);
+    }
+
+    .home-schedule-item__time {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--gold);
+      white-space: nowrap;
+      padding-top: 0.1rem;
+    }
+
+    .home-schedule-item__title {
+      margin: 0;
+      font-size: 0.84rem;
+      font-weight: 700;
+    }
+
+    .home-schedule-item__meta {
+      margin: 0.15rem 0 0;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    .home-schedule-item__tag {
+      display: inline-flex;
+      margin-top: 0.35rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 999px;
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .home-schedule-item__tag--pv {
+      background: rgba(245, 197, 24, 0.16);
+      color: var(--gold);
+      border: 1px solid rgba(245, 197, 24, 0.35);
+    }
+
+    .home-schedule-item__tag--live {
+      background: rgba(52, 211, 153, 0.14);
+      color: var(--green);
+      border: 1px solid rgba(52, 211, 153, 0.35);
+    }
+
+    .home-schedule-item__tag--video {
+      background: rgba(61, 139, 253, 0.14);
+      color: var(--accent);
+      border: 1px solid rgba(61, 139, 253, 0.35);
+    }
+
+    .home-cal-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.65rem;
+    }
+
+    .home-cal-nav__label {
+      margin: 0;
+      font-size: 0.9rem;
+      font-weight: 700;
+    }
+
+    .home-cal-nav__btns {
+      display: flex;
+      gap: 0.35rem;
+    }
+
+    .home-cal-nav__btn {
+      padding: 0.3rem 0.55rem;
+      border-radius: 8px;
       border: 1px solid var(--border);
       background: var(--surface-2);
       color: var(--text);
+      font: inherit;
+      font-size: 0.72rem;
+      font-weight: 600;
+      cursor: pointer;
     }
 
-    .feedback-modal__btn--primary {
-      background: var(--accent);
-      border-color: var(--accent);
+    .home-cal-nav__btn:hover {
+      border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+    }
+
+    .home-cal {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 0.25rem;
+    }
+
+    .home-cal__weekday {
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      text-align: center;
+      padding-bottom: 0.25rem;
+    }
+
+    .home-cal__day {
+      min-height: 4.1rem;
+      padding: 0.25rem 0.2rem;
+      border-radius: 8px;
+      background: rgba(20, 26, 34, 0.55);
+      border: 1px solid transparent;
+      cursor: pointer;
+      position: relative;
+      user-select: none;
+      transition: background 0.12s ease, border-color 0.12s ease;
+    }
+
+    .home-cal__day:hover {
+      border-color: rgba(255, 255, 255, 0.12);
+    }
+
+    .home-cal__day--muted { visibility: hidden; pointer-events: none; cursor: default; }
+
+    .home-cal__day--today {
+      border-color: rgba(245, 197, 24, 0.45);
+      background: rgba(245, 197, 24, 0.06);
+    }
+
+    .home-cal__day--training {
+      background: #1b7a3d;
+      border-color: #2fd46a;
+      box-shadow: inset 0 0 0 1px rgba(47, 212, 106, 0.45);
+    }
+
+    .home-cal__day--regen {
+      background: #9b1c2e;
+      border-color: #ff4d6d;
+      box-shadow: inset 0 0 0 1px rgba(255, 77, 109, 0.45);
+    }
+
+    .home-cal__day--preseason {
+      background: #0369a1;
+      border-color: #38bdf8;
+      box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.55);
+    }
+
+    .home-cal__day--match.home-cal__day--home {
+      background: #c9a227;
+      border-color: #ffe566;
+      box-shadow: inset 0 0 0 1px rgba(255, 229, 102, 0.55);
+    }
+
+    .home-cal__day--match.home-cal__day--away {
+      background: #1a4fd6;
+      border-color: #6ea8ff;
+      box-shadow: inset 0 0 0 1px rgba(110, 168, 255, 0.55);
+    }
+
+    .home-cal__day--training .home-cal__num,
+    .home-cal__day--regen .home-cal__num,
+    .home-cal__day--preseason .home-cal__num,
+    .home-cal__day--match .home-cal__num {
       color: #fff;
     }
 
-    .feedback-modal__btn:disabled {
-      opacity: 0.6;
-      cursor: wait;
+    .home-cal__day--match.home-cal__day--home .home-cal__num {
+      color: #1a1400;
     }
+
+    .home-cal__session {
+      display: flex;
+      flex-direction: column;
+      gap: 0.05rem;
+      align-items: center;
+      font-size: 0.68rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      color: #fff;
+      line-height: 1.15;
+      text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
+    }
+
+    .home-cal__session span {
+      font-weight: 700;
+      letter-spacing: 0;
+      color: rgba(255, 255, 255, 0.92);
+    }
+
+    .home-cal__fixture {
+      display: flex;
+      align-items: center;
+      gap: 0.2rem;
+      padding: 0.18rem 0.22rem;
+      border-radius: 5px;
+      border-left: 3px solid transparent;
+      min-width: 0;
+      background: rgba(0, 0, 0, 0.22);
+    }
+
+    .home-cal__fixture--home {
+      border-left-color: #1a1400;
+      background: rgba(255, 255, 255, 0.28);
+    }
+
+    .home-cal__fixture--home .home-cal__fixture-meta {
+      color: #1a1400;
+    }
+
+    .home-cal__fixture--away {
+      border-left-color: #dce9ff;
+      background: rgba(0, 0, 0, 0.28);
+    }
+
+    .home-cal__fixture--away .home-cal__fixture-meta {
+      color: #f4f8ff;
+    }
+
+    .home-cal__day--training.home-cal__day--today,
+    .home-cal__day--regen.home-cal__day--today,
+    .home-cal__day--preseason.home-cal__day--today,
+    .home-cal__day--match.home-cal__day--today {
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.35),
+        0 0 0 2px rgba(245, 197, 24, 0.75);
+    }
+
+    .home-cal__num {
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-align: center;
+      margin-bottom: 0.2rem;
+    }
+
+    .home-cal__day--today .home-cal__num { color: var(--gold); }
+
+    .home-cal__r {
+      position: absolute;
+      top: 0.15rem;
+      right: 0.2rem;
+      width: 0.95rem;
+      height: 0.95rem;
+      border-radius: 4px;
+      background: #f5c518;
+      color: #111;
+      font-size: 0.58rem;
+      font-weight: 800;
+      line-height: 0.95rem;
+      text-align: center;
+      letter-spacing: 0;
+    }
+
+    .home-cal__dots {
+      display: flex;
+      flex-direction: column;
+      gap: 0.18rem;
+      align-items: stretch;
+      min-width: 0;
+    }
+
+    .home-cal__dot {
+      height: 0.28rem;
+      border-radius: 999px;
+    }
+
+    .home-cal__dot--pv { background: var(--gold); }
+    .home-cal__dot--live { background: var(--green); }
+    .home-cal__dot--video { background: var(--accent); }
+
+    .home-cal__fixture {
+      display: flex;
+      align-items: center;
+      gap: 0.2rem;
+      padding: 0.14rem 0.18rem;
+      border-radius: 5px;
+      border-left: 2px solid transparent;
+      min-width: 0;
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .home-cal__badge {
+      width: 1.55rem;
+      height: 1.55rem;
+      object-fit: contain;
+      border-radius: 3px;
+      flex-shrink: 0;
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    .home-cal__fixture-meta {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.02rem;
+      overflow: hidden;
+      font-size: 0.58rem;
+      font-weight: 700;
+      color: #e8ecf4;
+      line-height: 1.1;
+    }
+
+    .home-cal__fixture-meta strong {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 800;
+    }
+
+    .home-cal__fixture-meta span {
+      font-weight: 700;
+      opacity: 0.92;
+    }
+
+    .home-cal-people {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin: 0 0 0.7rem;
+    }
+
+    .home-cal-people__btn {
+      padding: 0.32rem 0.7rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text-muted);
+      font: inherit;
+      font-size: 0.72rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .home-cal-people__btn:hover {
+      border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+      color: var(--text);
+    }
+
+    .home-cal-people__btn.is-active {
+      background: rgba(245, 197, 24, 0.14);
+      border-color: rgba(245, 197, 24, 0.55);
+      color: var(--gold);
+    }
+
+    .home-cal__hint {
+      margin: 0.55rem 0 0;
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      line-height: 1.35;
+    }
+
+    .home-cal__legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem 0.85rem;
+      margin-top: 0.65rem;
+      font-size: 0.68rem;
+      color: var(--text-muted);
+    }
+
+    .home-cal__legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .home-cal__legend i {
+      display: inline-block;
+      width: 0.55rem;
+      height: 0.55rem;
+      border-radius: 999px;
+      font-style: normal;
+    }
+
+    .home-cal__legend-r {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 0.85rem;
+      height: 0.85rem;
+      border-radius: 3px;
+      background: #f5c518;
+      color: #111;
+      font-size: 0.55rem;
+      font-weight: 800;
+      font-style: normal;
+    }
+
+    .home-live-grid {
+      display: grid;
+      grid-template-columns: 1.35fr 1fr;
+      gap: 0.85rem;
+      margin-top: 0.85rem;
+    }
+
+    .home-feed__item {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 0.65rem;
+      align-items: start;
+      padding: 0.65rem 0;
+      border-bottom: 1px solid rgba(42, 53, 68, 0.55);
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .home-feed__item:last-child { border-bottom: 0; }
+    .home-feed__item:hover strong { color: var(--accent); }
+    .home-feed__icon { font-size: 1rem; line-height: 1.3; }
+    .home-feed__body { min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+    .home-feed__body strong { font-size: 0.84rem; font-weight: 700; }
+    .home-feed__body span { font-size: 0.75rem; color: var(--text-muted); }
+    .home-feed__time {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .home-change__item {
+      padding: 0.7rem 0;
+      border-bottom: 1px solid rgba(42, 53, 68, 0.55);
+    }
+
+    .home-change__item:last-child { border-bottom: 0; }
+    .home-change__top {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .home-change__tag {
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--gold);
+    }
+
+    .home-change__date {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--text-muted);
+    }
+
+    .home-change__item strong {
+      display: block;
+      font-size: 0.86rem;
+      margin-bottom: 0.15rem;
+    }
+
+    .home-change__item p {
+      margin: 0;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .home-quick {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin-top: 0.75rem;
+    }
+
+    .home-quick a {
+      padding: 0.4rem 0.7rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .home-quick a:hover {
+      color: var(--text);
+      border-color: var(--accent);
+    }
+
+    @media (max-width: 1100px) {
+      .home-kpis { grid-template-columns: repeat(2, 1fr); }
+      .home-grid, .home-live-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 860px) {
+      .shell { grid-template-columns: 1fr; }
+      .rail {
+        position: relative;
+        height: auto;
+        max-height: none;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+    }
+
+    /* Feedback modal (unchanged behaviour) */
+    .feedback-modal {
+      position: fixed; inset: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: center;
+      padding: 1.25rem; background: rgba(8, 10, 14, 0.72); backdrop-filter: blur(4px);
+    }
+    .feedback-modal[hidden] { display: none; }
+    .feedback-modal__panel {
+      width: 100%; max-width: 520px; background: var(--surface);
+      border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px);
+      padding: 1.5rem 1.5rem 1.25rem; box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+    }
+    .feedback-modal__title { margin: 0 0 0.35rem; font-size: 1.125rem; font-weight: 600; }
+    .feedback-modal__hint { margin: 0 0 1rem; font-size: 0.875rem; color: var(--text-muted); }
+    .feedback-modal__textarea {
+      width: 100%; min-height: 8rem; padding: 0.75rem 0.9rem; font: inherit; font-size: 0.9375rem;
+      color: var(--text); background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--radius); resize: vertical; outline: none;
+    }
+    .feedback-modal__textarea:focus {
+      border-color: rgba(61, 139, 253, 0.6); box-shadow: 0 0 0 3px rgba(61, 139, 253, 0.15);
+    }
+    .feedback-modal__shots { margin-top: 0.85rem; }
+    .feedback-modal__shots-label { display: block; margin-bottom: 0.45rem; font-size: 0.8125rem; font-weight: 600; color: var(--text-muted); }
+    .feedback-modal__shots-hint { margin: 0 0 0.65rem; font-size: 0.8125rem; color: var(--text-muted); }
+    .feedback-modal__shot-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .feedback-modal__shot-btn {
+      padding: 0.45rem 0.75rem; font: inherit; font-size: 0.8125rem; font-weight: 600;
+      color: var(--text); background: var(--surface-2); border: 1px dashed var(--border);
+      border-radius: var(--radius); cursor: pointer;
+    }
+    .feedback-modal__shot-input { display: none; }
+    .feedback-modal__shot-grid { display: flex; flex-wrap: wrap; gap: 0.65rem; }
+    .feedback-modal__shot {
+      position: relative; width: 5.5rem; height: 5.5rem; border-radius: var(--radius);
+      overflow: hidden; border: 1px solid var(--border); background: var(--surface-2);
+    }
+    .feedback-modal__shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .feedback-modal__shot-remove {
+      position: absolute; top: 0.25rem; right: 0.25rem; width: 1.35rem; height: 1.35rem;
+      padding: 0; font-size: 0.9rem; line-height: 1; color: #fff; background: rgba(8, 10, 14, 0.72);
+      border: none; border-radius: 999px; cursor: pointer;
+    }
+    .feedback-modal__error, .feedback-modal__success { display: none; margin: 0.75rem 0 0; font-size: 0.875rem; }
+    .feedback-modal__error { color: var(--danger); }
+    .feedback-modal__success { color: var(--green); }
+    .feedback-modal__error--visible, .feedback-modal__success--visible { display: block; }
+    .feedback-modal__actions { display: flex; justify-content: flex-end; gap: 0.65rem; margin-top: 1rem; }
+    .feedback-modal__btn {
+      padding: 0.6rem 1rem; font: inherit; font-size: 0.875rem; font-weight: 600;
+      border-radius: var(--radius); cursor: pointer; border: 1px solid var(--border);
+      background: var(--surface-2); color: var(--text);
+    }
+    .feedback-modal__btn--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .feedback-modal__btn:disabled { opacity: 0.6; cursor: wait; }
   </style>
-  <link rel="stylesheet" href="/standalone/hub-launcher.css?v=1" />
+  <link rel="stylesheet" href="/standalone/hub-launcher.css?v=3" />
 </head>
 <body>
-  <div class="hub">
-    <div class="hub__feedback-bar">
-      <button type="button" class="hub__feedback-link" id="feedbackOpenBtn">
-        Make a suggestion or report a bug
-      </button>
-    </div>
-
-    <header class="hub__top">
-      <div class="hub__brand">
-        <img class="hub__badge" src="/standalone/port-vale-badge.png?v=2" width="72" height="88" alt="Port Vale FC crest" />
-        <div class="hub__brand-text">
-          <div class="hub__brand-logo">Port Vale FC</div>
-          <h1 class="hub__greeting" id="greeting">Football analysis</h1>
-          <p class="hub__subtitle" id="hubSubtitle">Pick a department to get started.</p>
+  <div class="shell">
+    <aside class="rail" aria-label="Apps">
+      <a class="rail__brand" href="/" id="railBrand">
+        <img class="rail__badge" src="/standalone/port-vale-badge.png?v=2" width="42" height="52" alt="Port Vale FC crest" />
+        <div class="rail__brand-text">
+          <div class="rail__club">Port Vale FC</div>
+          <div class="rail__title">Hub</div>
         </div>
-      </div>
-      <div class="hub__top-actions">
-        <button type="button" class="hub__signout" id="signOutBtn" hidden>Sign out</button>
-        <div class="hub__clock" aria-live="polite">
-          <div class="hub__clock-time" id="clockTime">--:--</div>
-          <div class="hub__clock-date" id="clockDate">Loading…</div>
-        </div>
-      </div>
-    </header>
-
-    <div class="hub__status-row">
-      <div class="hub__status" id="serverStatus" role="status">
-        <span class="hub__status-dot"></span>
-        <span id="serverStatusText">Checking server…</span>
-      </div>
-      <button type="button" class="hub__restart-btn" id="restartServerBtn">
-        Restart server
-      </button>
-      <a class="hub__restart-btn hub__restart-btn--link" id="startServerLink" href="/standalone/restart.command" hidden>
-        Start server (Terminal)
       </a>
-      <p class="hub__restart-hint" id="restartHint" hidden>
-        Server offline — use <strong>Start server (Terminal)</strong> or run
-        <code>bash restart.sh</code> in the project root.
-      </p>
-    </div>
+      <button type="button" class="rail__home is-active" id="railHomeBtn">
+        <span aria-hidden="true">🏠</span> Home dashboard
+      </button>
+      <div id="railGroups"></div>
+    </aside>
 
-    <div id="landingView" hidden>
-      <nav class="hub__category-grid" id="categoryGrid" aria-label="Departments"></nav>
-    </div>
+    <main class="main">
+      <div class="main__top">
+        <div>
+          <h1 class="main__greeting" id="greeting">Football analysis</h1>
+          <p class="main__subtitle" id="hubSubtitle">Live league snapshot · pick an app from the left ribbon</p>
+        </div>
+        <div class="hub-search-bar">
+          <div class="hub-search" id="hubPlayerSearchWrap">
+            <span class="hub-search__icon" aria-hidden="true">⌕</span>
+            <input
+              id="hubPlayerSearch"
+              class="hub-search__input"
+              type="search"
+              placeholder="Search for a player…"
+              autocomplete="off"
+              spellcheck="false"
+              aria-label="Search for a player"
+              aria-controls="hubPlayerResults"
+              aria-expanded="false"
+              aria-autocomplete="list"
+            />
+            <div id="hubPlayerResults" class="hub-search__results hidden" role="listbox"></div>
+          </div>
+        </div>
+        <div class="main__meta">
+          <div class="hub__status" id="serverStatus" role="status">
+            <span class="hub__status-dot"></span>
+            <span id="serverStatusText">Checking…</span>
+          </div>
+          <button type="button" class="hub__restart-btn" id="restartServerBtn">Restart</button>
+          <a class="hub__restart-btn" id="startServerLink" href="/standalone/restart.command" hidden>Start server</a>
+          <div class="hub__clock" aria-live="polite">
+            <div class="hub__clock-time" id="clockTime">--:--</div>
+            <div class="hub__clock-date" id="clockDate">Loading…</div>
+          </div>
+        </div>
+      </div>
 
-    <a class="hub__back" id="backToHome" href="/" hidden>← All departments</a>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:0.75rem">
+        <button type="button" class="hub__feedback-link" id="feedbackOpenBtn">Suggestion / bug</button>
+      </div>
 
-    <div id="appSections" aria-label="Port Vale tools" hidden></div>
+      <section id="homeDashboard" aria-label="Home dashboard">
+        <div class="home-tabs" role="tablist" aria-label="Home sections">
+          <button type="button" class="home-tab is-active" data-tab="home" role="tab">Home</button>
+          <button type="button" class="home-tab" data-tab="performance" role="tab">Performance analysis</button>
+          <button type="button" class="home-tab" data-tab="recruitment" role="tab">Recruitment</button>
+          <button type="button" class="home-tab" data-tab="strategy" role="tab">Strategy</button>
+        </div>
 
-    <footer class="hub__footer">
-      New app? Add an entry to <code>standalone/apps.js</code> and it shows up here automatically.
-    </footer>
+        <div class="home-panel" data-panel="home" role="tabpanel">
+          <p class="home-season" id="homeOverviewSeason">Port Vale · League One</p>
+          <div class="home-kpis">
+            <article class="home-kpi" id="homeKpiOverviewPos" style="--kpi-accent:#f5c518">
+              <p class="home-kpi__label">League position</p>
+              <p class="home-kpi__value">—</p>
+              <p class="home-kpi__sub">Loading…</p>
+            </article>
+            <article class="home-kpi" id="homeKpiOverviewPpg" style="--kpi-accent:#3d8bfd">
+              <p class="home-kpi__label">Points / game</p>
+              <p class="home-kpi__value">—</p>
+              <p class="home-kpi__sub">vs league</p>
+            </article>
+            <article class="home-kpi" id="homeKpiOverviewPace" style="--kpi-accent:#34d399">
+              <p class="home-kpi__label">Play-off pace</p>
+              <p class="home-kpi__value">—</p>
+              <p class="home-kpi__sub">target line</p>
+            </article>
+            <article class="home-kpi" id="homeKpiOverviewNext" style="--kpi-accent:#f97316">
+              <p class="home-kpi__label">Next match</p>
+              <p class="home-kpi__value">—</p>
+              <p class="home-kpi__sub">upcoming</p>
+            </article>
+          </div>
+          <div class="home-grid">
+            <article class="home-card">
+              <div class="home-card__head">
+                <h2 class="home-card__title">Today's schedule</h2>
+                <span class="home-season" style="margin:0" id="homeTodayLabel"></span>
+              </div>
+              <div id="homeTodaySchedule"><p class="home-empty">Loading today's schedule…</p></div>
+            </article>
+            <article class="home-card">
+              <div class="home-card__head">
+                <h2 class="home-card__title">Month view</h2>
+                <a class="home-card__link" href="/schedule">Full schedule →</a>
+              </div>
+              <div class="home-cal-people" id="homeCalPeople" role="tablist" aria-label="Calendar owner">
+                <button type="button" class="home-cal-people__btn is-active" data-owner="team" role="tab" aria-selected="true">Team</button>
+                <button type="button" class="home-cal-people__btn" data-owner="sam" role="tab" aria-selected="false">Sam</button>
+                <button type="button" class="home-cal-people__btn" data-owner="tommy" role="tab" aria-selected="false">Tommy</button>
+                <button type="button" class="home-cal-people__btn" data-owner="lee" role="tab" aria-selected="false">Lee</button>
+                <button type="button" class="home-cal-people__btn" data-owner="martin" role="tab" aria-selected="false">Martin</button>
+              </div>
+              <div class="home-cal-nav">
+                <p class="home-cal-nav__label" id="homeMonthCalLabel">—</p>
+                <div class="home-cal-nav__btns">
+                  <button type="button" class="home-cal-nav__btn" id="homeCalPrev" aria-label="Previous month">←</button>
+                  <button type="button" class="home-cal-nav__btn" id="homeCalToday">Today</button>
+                  <button type="button" class="home-cal-nav__btn" id="homeCalNext" aria-label="Next month">→</button>
+                </div>
+              </div>
+              <div id="homeMonthCal"><p class="home-empty">Loading calendar…</p></div>
+            </article>
+            <article class="home-card">
+              <div class="home-card__head">
+                <h2 class="home-card__title">Port Vale fixtures</h2>
+                <a class="home-card__link" href="https://www.fotmob.com/teams/9799/overview/port-vale" target="_blank" rel="noopener">FotMob →</a>
+              </div>
+              <p class="home-season" style="margin-top:0">Upcoming</p>
+              <div id="homePvUpcoming"><p class="home-empty">Loading fixtures…</p></div>
+              <div class="home-card__head" style="margin-top:1.1rem">
+                <h2 class="home-card__title">Recent results</h2>
+              </div>
+              <div id="homePvPlayed"><p class="home-empty">Loading results…</p></div>
+            </article>
+            <article class="home-card">
+              <div class="home-card__head">
+                <h2 class="home-card__title">Scout assignments</h2>
+                <a class="home-card__link" href="/fixture-planner">Fixture planner →</a>
+              </div>
+              <div id="homeScoutUpcoming"><p class="home-empty">Loading scout schedule…</p></div>
+            </article>
+          </div>
+          <div class="home-live-grid">
+            <article class="home-card">
+              <div class="home-card__head">
+                <h2 class="home-card__title">Live team activity</h2>
+                <span class="home-season" style="margin:0">Watches · reports · games</span>
+              </div>
+              <div id="homeActivity"><p class="home-empty">Loading activity…</p></div>
+            </article>
+            <article class="home-card">
+              <div class="home-card__head">
+                <h2 class="home-card__title">What's new on the app</h2>
+                <span class="home-season" style="margin:0">Changelog</span>
+              </div>
+              <div id="homeChangelog"><p class="home-empty">Loading updates…</p></div>
+            </article>
+          </div>
+        </div>
+
+        <div class="home-panel" data-panel="performance" role="tabpanel" hidden>
+          <p class="home-season" id="homeSeasonLabel">League One</p>
+          <div class="home-kpis">
+            <article class="home-kpi" id="homeKpiPos" style="--kpi-accent:#f5c518">
+              <p class="home-kpi__label">League position</p>
+              <p class="home-kpi__value">—</p>
+              <p class="home-kpi__sub">Loading…</p>
+            </article>
+            <article class="home-kpi" id="homeKpiPpg" style="--kpi-accent:#3d8bfd">
+              <p class="home-kpi__label">Points / game</p>
+              <p class="home-kpi__value">—</p>
+              <p class="home-kpi__sub">vs league</p>
+            </article>
+            <article class="home-kpi" id="homeKpiXgd" style="--kpi-accent:#34d399">
+              <p class="home-kpi__label">xG difference</p>
+              <p class="home-kpi__value">—</p>
+              <p class="home-kpi__sub">vs league</p>
+            </article>
+            <article class="home-kpi" id="homeKpiCs" style="--kpi-accent:#f97316">
+              <p class="home-kpi__label">Clean sheet %</p>
+              <p class="home-kpi__value">—</p>
+              <p class="home-kpi__sub">vs league</p>
+            </article>
+          </div>
+          <div class="home-grid">
+            <article class="home-card">
+              <div class="home-card__head">
+                <h2 class="home-card__title">League table</h2>
+                <a class="home-card__link" href="/club-strategy">Full club strategy →</a>
+              </div>
+              <div id="homeTableBody"><p class="home-empty">Loading standings…</p></div>
+            </article>
+            <article class="home-card">
+              <div class="home-card__head">
+                <h2 class="home-card__title">Recent form</h2>
+                <a class="home-card__link" href="/post-match">Post-match →</a>
+              </div>
+              <div id="homeForm"><p class="home-empty">Loading form…</p></div>
+              <div class="home-card__head" style="margin-top:1.1rem">
+                <h2 class="home-card__title">Next fixture</h2>
+                <a class="home-card__link" href="/pre-match">Pre-match →</a>
+              </div>
+              <div id="homeNext"><p class="home-empty">Loading…</p></div>
+              <div class="home-card__head" style="margin-top:1.1rem">
+                <h2 class="home-card__title">Squad availability</h2>
+                <a class="home-card__link" href="/availability-tracker">Tracker →</a>
+              </div>
+              <div id="homeAvail"><p class="home-empty">Loading…</p></div>
+              <div class="home-quick">
+                <a href="/pre-match-handout">Pre-Match Handout</a>
+                <a href="/xg-chance-analysis">xG Chance Analysis</a>
+                <a href="/post-match">Post-Match Report</a>
+              </div>
+            </article>
+          </div>
+        </div>
+
+        <div class="home-panel" data-panel="recruitment" role="tabpanel" hidden>
+          <p class="home-season" id="homeRecruitSeason">Squad profile</p>
+          <div class="home-kpis">
+            <article class="home-kpi" id="recruitKpiAge" style="--kpi-accent:#3d8bfd">
+              <p class="home-kpi__label">Avg squad age</p>
+              <p class="home-kpi__value">—</p>
+              <p class="home-kpi__sub">Loading…</p>
+            </article>
+            <article class="home-kpi" id="recruitKpiU25" style="--kpi-accent:#34d399">
+              <p class="home-kpi__label">Minutes from U25</p>
+              <p class="home-kpi__value">—</p>
+              <p class="home-kpi__sub">vs league</p>
+            </article>
+            <article class="home-kpi" id="recruitKpiU21" style="--kpi-accent:#f5c518">
+              <p class="home-kpi__label">Minutes from U21</p>
+              <p class="home-kpi__value">—</p>
+              <p class="home-kpi__sub">youth share</p>
+            </article>
+            <article class="home-kpi" id="recruitKpiWeighted" style="--kpi-accent:#f97316">
+              <p class="home-kpi__label">Mins-weighted age</p>
+              <p class="home-kpi__value">—</p>
+              <p class="home-kpi__sub">who actually plays</p>
+            </article>
+          </div>
+          <div class="home-grid">
+            <article class="home-card">
+              <div class="home-card__head">
+                <h2 class="home-card__title">Minutes by age band</h2>
+                <a class="home-card__link" href="/squad-review">Squad comparison →</a>
+              </div>
+              <div id="homeAgeBands"><p class="home-empty">Loading age profile…</p></div>
+            </article>
+            <article class="home-card">
+              <div class="home-card__head">
+                <h2 class="home-card__title">Recruitment snapshot</h2>
+                <a class="home-card__link" href="/squad-planner">Squad planner →</a>
+              </div>
+              <div id="homeRecruitSnapshot"><p class="home-empty">Loading…</p></div>
+              <div class="home-quick" style="margin-top:0.85rem">
+                <a href="/studio">Player Comparison</a>
+                <a href="/scouting">Player Search</a>
+                <a href="/squad-balance">Squad Balance</a>
+                <a href="/fixture-planner">Fixture Planner</a>
+                <a href="/scout-summary">Scout Summary</a>
+              </div>
+            </article>
+            <article class="home-card home-card--wide">
+              <div class="home-card__head">
+                <h2 class="home-card__title">Port Vale vs League One</h2>
+                <span class="home-card__link" id="homeRecruitLeagueNote">Rank · avg</span>
+              </div>
+              <div id="homeRecruitVsLeague"><p class="home-empty">Loading league comparison…</p></div>
+            </article>
+            <article class="home-card">
+              <div class="home-card__head">
+                <h2 class="home-card__title">League rankings</h2>
+                <span class="home-card__link" id="homeRecruitRankNote">Club tables</span>
+              </div>
+              <div id="homeRecruitRankings"><p class="home-empty">Loading rankings…</p></div>
+            </article>
+            <article class="home-card">
+              <div class="home-card__head">
+                <h2 class="home-card__title">Live recruitment activity</h2>
+                <a class="home-card__link" href="/played-fixtures">Played fixtures →</a>
+              </div>
+              <div id="homeRecruitFeed"><p class="home-empty">Loading watches &amp; reports…</p></div>
+            </article>
+          </div>
+        </div>
+
+        <div class="home-panel" data-panel="strategy" role="tabpanel" hidden>
+          <div id="homePaceBanner" class="home-pace">
+            <span class="home-pace__badge is-off">Checking pace…</span>
+            <p class="home-pace__text">Loading points-per-game track…</p>
+          </div>
+          <div class="home-kpis">
+            <article class="home-kpi" id="stratKpiPpg" style="--kpi-accent:#f5c518">
+              <p class="home-kpi__label">Points / game</p>
+              <p class="home-kpi__value">—</p>
+              <p class="home-kpi__sub">vs play-off line</p>
+            </article>
+            <article class="home-kpi" id="stratKpiProj" style="--kpi-accent:#3d8bfd">
+              <p class="home-kpi__label">Season projection</p>
+              <p class="home-kpi__value">—</p>
+              <p class="home-kpi__sub">PPG × 46</p>
+            </article>
+            <article class="home-kpi" id="stratKpiXppg" style="--kpi-accent:#34d399">
+              <p class="home-kpi__label">Expected PPG</p>
+              <p class="home-kpi__value">—</p>
+              <p class="home-kpi__sub">process track</p>
+            </article>
+            <article class="home-kpi" id="stratKpiLuck" style="--kpi-accent:#f97316">
+              <p class="home-kpi__label">Pts vs xPts</p>
+              <p class="home-kpi__value">—</p>
+              <p class="home-kpi__sub">over / under</p>
+            </article>
+          </div>
+          <div class="home-grid">
+            <article class="home-card">
+              <div class="home-card__head">
+                <h2 class="home-card__title">Scoring by phase</h2>
+                <a class="home-card__link" href="/strategy">Strategy report →</a>
+              </div>
+              <p class="home-season" id="homePhaseScoredNote" style="margin-top:0">vs play-off benchmark</p>
+              <div id="homePhaseScored"><p class="home-empty">Loading phase goals…</p></div>
+            </article>
+            <article class="home-card">
+              <div class="home-card__head">
+                <h2 class="home-card__title">Conceding by phase</h2>
+                <a class="home-card__link" href="/strategy">Strategy report →</a>
+              </div>
+              <p class="home-season" id="homePhaseConcededNote" style="margin-top:0">vs play-off benchmark</p>
+              <div id="homePhaseConceded"><p class="home-empty">Loading phase goals…</p></div>
+            </article>
+            <article class="home-card">
+              <div class="home-card__head">
+                <h2 class="home-card__title">Game state</h2>
+                <a class="home-card__link" href="/club-strategy">Club strategy →</a>
+              </div>
+              <div id="homeGameState"><p class="home-empty">Loading first-goal outcomes…</p></div>
+            </article>
+            <article class="home-card">
+              <div class="home-card__head">
+                <h2 class="home-card__title">Port Vale vs league</h2>
+                <a class="home-card__link" href="/club-strategy">Full board →</a>
+              </div>
+              <div id="homeVsLeague"><p class="home-empty">Loading comparison…</p></div>
+              <div class="home-quick" style="margin-top:0.85rem">
+                <a href="/squad-review">Squad Comparison</a>
+                <a href="/availability-tracker">Availability</a>
+                <a href="/strategy">L2 Strategy Report</a>
+              </div>
+            </article>
+          </div>
+        </div>
+
+      </section>
+    </main>
   </div>
 
   <div class="feedback-modal" id="feedbackModal" hidden role="dialog" aria-modal="true" aria-labelledby="feedbackModalTitle">
     <div class="feedback-modal__panel">
       <h2 class="feedback-modal__title" id="feedbackModalTitle">Suggestion or bug report</h2>
       <p class="feedback-modal__hint">Describe what happened or what you’d like improved. This goes straight to the analysis team.</p>
-      <textarea
-        class="feedback-modal__textarea"
-        id="feedbackMessage"
-        maxlength="4000"
-        placeholder="e.g. Post-match report freezes when I export PDF…"
-      ></textarea>
+      <textarea class="feedback-modal__textarea" id="feedbackMessage" placeholder="What’s working, what’s broken, or what you’d change…"></textarea>
       <div class="feedback-modal__shots">
         <span class="feedback-modal__shots-label">Screenshots (optional)</span>
         <p class="feedback-modal__shots-hint">Attach up to 3 images, or paste with Cmd+V / Ctrl+V.</p>
@@ -886,22 +1812,19 @@
   </div>
 
   <script src="/standalone/hub-launcher.js?v=3"></script>
-  <script src="/standalone/apps.js?v=20260720-scouts-map"></script>
+  <script src="/standalone/apps.js?v=20260727-speed"></script>
+  <script src="/standalone/hub-player-search.js?v=2"></script>
+  <script src="/standalone/hub-home.js?v=20260727-speed"></script>
   <script>
     const SCOUTING_SERVER = "http://127.0.0.1:8000";
-
     if (window.location.protocol === "file:") {
       window.location.replace(`${SCOUTING_SERVER}/`);
     }
 
     const BASE =
-      window.location.protocol === "file:"
-        ? SCOUTING_SERVER
-        : window.location.origin;
-
-    const IS_LOCAL_HUB =
-      window.location.protocol === "file:" ||
-      /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
+      window.location.protocol === "http:" || window.location.protocol === "https:"
+        ? window.location.origin
+        : SCOUTING_SERVER;
 
     function appUrl(href) {
       return href.startsWith("http") ? href : `${BASE}${href}`;
@@ -927,123 +1850,45 @@
       });
     }
 
-    function buildAppCard(app) {
-      const soon = Boolean(app.comingSoon);
-      const card = document.createElement(soon ? "div" : "a");
-      card.className = "app-card" + (soon ? " app-card--soon" : "");
-      if (!soon) {
-        card.href = appUrl(app.href);
-        card.setAttribute("aria-label", `Open ${app.title}`);
-        card.addEventListener("click", (event) => {
-          event.preventDefault();
-          HubLauncher.openApp(app, appUrl(app.href)).catch((err) => {
-            window.alert(err.message || String(err));
-          });
-        });
-      } else {
-        card.setAttribute("aria-disabled", "true");
-      }
-      card.style.setProperty("--card-accent", app.accent || "var(--accent)");
-
-      const tags = (app.tags || [])
-        .map((t) => `<span class="app-card__tag">${t}</span>`)
-        .join("");
-
-      card.innerHTML = `
-        <div class="app-card__icon" aria-hidden="true">${app.icon || "◆"}</div>
-        <div class="app-card__body">
-          <h3 class="app-card__title">${app.title}</h3>
-          <p class="app-card__desc">${app.description}</p>
-          ${app.note ? `<p class="app-card__note">${app.note}</p>` : ""}
-          ${tags ? `<div class="app-card__tags">${tags}</div>` : ""}
-        </div>
-        ${soon ? `<span class="app-card__soon-badge">Coming soon</span>` : `<span class="app-card__arrow" aria-hidden="true">→</span>`}
-      `;
-      return card;
-    }
-
-    function getActiveSection() {
-      const id = new URLSearchParams(window.location.search).get("section");
-      const groups = window.IMPECT_APP_GROUPS || [];
-      return groups.some((g) => g.id === id) ? id : null;
-    }
-
-    function buildCategoryCard(group, appCount) {
-      const card = document.createElement("a");
-      card.className = "category-card";
-      card.href = `/?section=${encodeURIComponent(group.id)}`;
-      card.style.setProperty("--cat-accent", group.accent || "var(--accent)");
-      card.setAttribute("aria-label", `Open ${group.title}`);
-      card.innerHTML = `
-        <span class="category-card__icon" aria-hidden="true">${group.icon || "◆"}</span>
-        <h2 class="category-card__title">${group.title}</h2>
-        <p class="category-card__desc">${group.subtitle || ""}</p>
-        <span class="category-card__count">${appCount} tool${appCount === 1 ? "" : "s"}</span>
-        <span class="category-card__arrow" aria-hidden="true">→</span>
-      `;
-      return card;
-    }
-
-    function renderLanding() {
+    function renderRail() {
       const apps = window.IMPECT_APPS || [];
       const groups = window.IMPECT_APP_GROUPS || [];
-      const grid = document.getElementById("categoryGrid");
-      grid.innerHTML = "";
-      groups.forEach((group) => {
-        const count = apps.filter((a) => a.group === group.id).length;
-        if (count) grid.appendChild(buildCategoryCard(group, count));
-      });
-      document.getElementById("landingView").hidden = false;
-      document.getElementById("appSections").hidden = true;
-      document.getElementById("backToHome").hidden = true;
-      document.getElementById("hubSubtitle").textContent = "Pick a department to get started.";
-      document.title = "Port Vale Hub";
-    }
-
-    function renderApps(sectionId) {
-      const apps = window.IMPECT_APPS || [];
-      const groups = window.IMPECT_APP_GROUPS || [];
-      const group = groups.find((g) => g.id === sectionId);
-      const root = document.getElementById("appSections");
+      const root = document.getElementById("railGroups");
       root.innerHTML = "";
 
-      if (!group) {
-        renderLanding();
-        return;
-      }
+      groups.forEach((group) => {
+        const sectionApps = apps.filter((app) => app.group === group.id);
+        if (!sectionApps.length) return;
 
-      document.getElementById("landingView").hidden = true;
-      document.getElementById("appSections").hidden = false;
-      document.getElementById("backToHome").hidden = false;
-      document.getElementById("hubSubtitle").textContent = group.subtitle || group.title;
-      document.title = group.title;
+        const block = document.createElement("div");
+        block.className = `rail__group rail__group--${group.id}`;
+        block.innerHTML = `<p class="rail__group-label">${group.title}</p>`;
 
-      const sectionApps = apps.filter((app) => app.group === sectionId);
-      const section = document.createElement("section");
-      section.className = `hub__section hub__section--${group.id}`;
+        sectionApps.forEach((app) => {
+          if (app.comingSoon) {
+            const soon = document.createElement("div");
+            soon.className = "rail__link is-soon";
+            soon.innerHTML = `<span class="rail__icon">${app.icon || "◆"}</span><span class="rail__link-title">${app.title}</span>`;
+            soon.title = app.note || "Coming soon";
+            block.appendChild(soon);
+            return;
+          }
 
-      const head = document.createElement("div");
-      head.className = "hub__section-head";
-      head.innerHTML = `
-        <div>
-          <h2 class="hub__section-title">${group.title}</h2>
-          ${group.subtitle ? `<p class="hub__section-sub">${group.subtitle}</p>` : ""}
-        </div>
-      `;
-      section.appendChild(head);
+          const link = document.createElement("a");
+          link.className = "rail__link";
+          link.href = appUrl(app.href);
+          link.innerHTML = `<span class="rail__icon">${app.icon || "◆"}</span><span class="rail__link-title">${app.title}</span>`;
+          link.addEventListener("click", (event) => {
+            event.preventDefault();
+            HubLauncher.openApp(app, appUrl(app.href)).catch((err) => {
+              window.alert(err.message || String(err));
+            });
+          });
+          block.appendChild(link);
+        });
 
-      const grid = document.createElement("nav");
-      grid.className = "hub__grid";
-      grid.setAttribute("aria-label", group.title);
-      sectionApps.forEach((app) => grid.appendChild(buildAppCard(app)));
-      section.appendChild(grid);
-      root.appendChild(section);
-    }
-
-    async function initPage() {
-      const section = getActiveSection();
-      if (section) renderApps(section);
-      else renderLanding();
+        root.appendChild(block);
+      });
     }
 
     async function checkServer() {
@@ -1051,47 +1896,20 @@
       const text = document.getElementById("serverStatusText");
       const btn = document.getElementById("restartServerBtn");
       const startLink = document.getElementById("startServerLink");
-      const hint = document.getElementById("restartHint");
-      if (!IS_LOCAL_HUB) {
-        el.className = "hub__status hub__status--online";
-        text.textContent = "Hub online";
-        btn.hidden = true;
-        startLink.hidden = true;
-        hint.hidden = true;
-        return true;
-      }
       try {
         const res = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(3000) });
         if (res.ok) {
           el.className = "hub__status hub__status--online";
-          text.textContent = "Server online · port 8000";
-          btn.textContent = "Restart server";
+          text.textContent = "Online";
           btn.hidden = false;
           startLink.hidden = true;
-          hint.hidden = true;
           return true;
         }
-      } catch (_) {
-        /* fall through */
-      }
+      } catch (_) { /* offline */ }
       el.className = "hub__status hub__status--offline";
-      text.textContent = "Server offline";
+      text.textContent = "Offline";
       btn.hidden = true;
       startLink.hidden = false;
-      hint.hidden = false;
-      return false;
-    }
-
-    function wait(ms) {
-      return new Promise((resolve) => setTimeout(resolve, ms));
-    }
-
-    async function waitForServer(maxMs = 30000) {
-      const started = Date.now();
-      while (Date.now() - started < maxMs) {
-        if (await checkServer()) return true;
-        await wait(800);
-      }
       return false;
     }
 
@@ -1099,68 +1917,32 @@
       const el = document.getElementById("serverStatus");
       const text = document.getElementById("serverStatusText");
       const btn = document.getElementById("restartServerBtn");
-      const wasOnline = el.classList.contains("hub__status--online");
-      const action = wasOnline ? "Restarting" : "Starting";
-
       btn.disabled = true;
-      el.className = "hub__status";
-      text.textContent = `${action}…`;
-
+      text.textContent = "Restarting…";
       try {
-        const res = await fetch(`${BASE}/api/server/restart`, {
-          method: "POST",
-          signal: AbortSignal.timeout(5000),
-        });
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
-        }
-      } catch (_) {
-        if (!wasOnline) {
-          el.className = "hub__status hub__status--offline";
-          text.textContent = "Server offline — use ./restart.sh in Terminal";
-          btn.disabled = false;
-          return;
-        }
-      }
-
-      text.textContent = "Waiting for server…";
-      const online = await waitForServer(35000);
-      if (!online) {
-        el.className = "hub__status hub__status--offline";
-        text.textContent = "Still offline — use Start server (Terminal)";
-        btn.hidden = true;
-        document.getElementById("startServerLink").hidden = false;
-        document.getElementById("restartHint").hidden = false;
+        await fetch(`${BASE}/api/server/restart`, { method: "POST", signal: AbortSignal.timeout(5000) });
+      } catch (_) { /* wait loop */ }
+      for (let i = 0; i < 40; i += 1) {
+        await new Promise((r) => setTimeout(r, 800));
+        if (await checkServer()) break;
       }
       btn.disabled = false;
+      if (window.HubHome) HubHome.load();
     }
 
-    document.getElementById("greeting").textContent = `${greeting()} — football analysis`;
+    document.getElementById("greeting").textContent = `${greeting()} — Port Vale`;
+    document.title = "Port Vale Hub";
     updateClock();
     setInterval(updateClock, 30_000);
-    initPage();
+    renderRail();
     checkServer();
+    setInterval(checkServer, 30_000);
     document.getElementById("restartServerBtn").addEventListener("click", restartServer);
-
-    (async function initAuthUi() {
-      const signOutBtn = document.getElementById("signOutBtn");
-      try {
-        const res = await fetch(`${BASE}/login`, { redirect: "manual" });
-        if (res.status === 200) {
-          signOutBtn.hidden = false;
-        }
-      } catch (_) {
-        /* local dev without login */
-      }
-      signOutBtn.addEventListener("click", async () => {
-        try {
-          await fetch(`${BASE}/api/auth/logout`, { method: "POST" });
-        } catch (_) {
-          /* ignore */
-        }
-        window.location.href = `${BASE}/login`;
-      });
-    })();
+    document.getElementById("railHomeBtn").addEventListener("click", () => {
+      if (window.HubHome) HubHome.setTab("home");
+      document.getElementById("homeDashboard").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    if (window.HubHome) HubHome.load();
 
     (function initFeedback() {
       const modal = document.getElementById("feedbackModal");
@@ -1173,106 +1955,61 @@
       const attachBtn = document.getElementById("feedbackAttachBtn");
       const fileInput = document.getElementById("feedbackFileInput");
       const shotGrid = document.getElementById("feedbackShotGrid");
-      const MAX_SHOTS = 3;
-      const MAX_SHOT_BYTES = 5 * 1024 * 1024;
       let screenshots = [];
 
-      function showError(text) {
-        errorEl.textContent = text;
+      function showError(msg) {
+        errorEl.textContent = msg;
         errorEl.classList.add("feedback-modal__error--visible");
         successEl.classList.remove("feedback-modal__success--visible");
       }
-
       function showSuccess() {
         errorEl.classList.remove("feedback-modal__error--visible");
         successEl.classList.add("feedback-modal__success--visible");
       }
-
       function renderShots() {
         shotGrid.innerHTML = "";
         screenshots.forEach((dataUrl, index) => {
           const wrap = document.createElement("div");
           wrap.className = "feedback-modal__shot";
-          wrap.innerHTML = `
-            <img src="${dataUrl}" alt="Screenshot ${index + 1}" />
-            <button type="button" class="feedback-modal__shot-remove" aria-label="Remove screenshot">×</button>
-          `;
+          wrap.innerHTML = `<img src="${dataUrl}" alt="" /><button type="button" class="feedback-modal__shot-remove" aria-label="Remove screenshot">×</button>`;
           wrap.querySelector(".feedback-modal__shot-remove").addEventListener("click", () => {
-            screenshots = screenshots.filter((_, i) => i !== index);
+            screenshots.splice(index, 1);
             renderShots();
           });
           shotGrid.appendChild(wrap);
         });
-        attachBtn.hidden = screenshots.length >= MAX_SHOTS;
       }
-
-      function readImageFile(file) {
-        return new Promise((resolve, reject) => {
-          if (!file.type.startsWith("image/")) {
-            reject(new Error("Only image files can be attached."));
-            return;
-          }
-          if (file.size > MAX_SHOT_BYTES) {
-            reject(new Error("Each screenshot must be 5 MB or smaller."));
-            return;
-          }
+      function addScreenshotFiles(files) {
+        files.slice(0, 3 - screenshots.length).forEach((file) => {
           const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result || ""));
-          reader.onerror = () => reject(new Error("Could not read that image."));
+          reader.onload = () => {
+            if (screenshots.length >= 3) return;
+            screenshots.push(reader.result);
+            renderShots();
+          };
           reader.readAsDataURL(file);
         });
       }
-
-      async function addScreenshotFiles(files) {
-        for (const file of files) {
-          if (screenshots.length >= MAX_SHOTS) {
-            showError(`You can attach up to ${MAX_SHOTS} screenshots.`);
-            break;
-          }
-          try {
-            const dataUrl = await readImageFile(file);
-            screenshots.push(dataUrl);
-          } catch (err) {
-            showError(err.message || "Could not add that screenshot.");
-          }
-        }
-        renderShots();
-      }
-
       function resetModal() {
         messageEl.value = "";
         screenshots = [];
         renderShots();
-        fileInput.value = "";
         errorEl.classList.remove("feedback-modal__error--visible");
         successEl.classList.remove("feedback-modal__success--visible");
         submitBtn.disabled = false;
         submitBtn.textContent = "Send";
-        attachBtn.hidden = false;
       }
 
-      function openModal() {
-        resetModal();
-        modal.hidden = false;
-        messageEl.focus();
-      }
-
-      function closeModal() {
-        modal.hidden = true;
-      }
-
-      openBtn.addEventListener("click", openModal);
-      cancelBtn.addEventListener("click", closeModal);
+      openBtn.addEventListener("click", () => { resetModal(); modal.hidden = false; messageEl.focus(); });
+      cancelBtn.addEventListener("click", () => { modal.hidden = true; });
       attachBtn.addEventListener("click", () => fileInput.click());
       fileInput.addEventListener("change", () => {
         addScreenshotFiles(Array.from(fileInput.files || []));
         fileInput.value = "";
       });
-      modal.addEventListener("click", (event) => {
-        if (event.target === modal) closeModal();
-      });
+      modal.addEventListener("click", (event) => { if (event.target === modal) modal.hidden = true; });
       document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape" && !modal.hidden) closeModal();
+        if (event.key === "Escape" && !modal.hidden) modal.hidden = true;
       });
       modal.addEventListener("paste", (event) => {
         if (modal.hidden) return;
@@ -1280,20 +2017,13 @@
         const imageItems = items.filter((item) => item.type.startsWith("image/"));
         if (!imageItems.length) return;
         event.preventDefault();
-        const files = imageItems.map((item) => item.getAsFile()).filter(Boolean);
-        addScreenshotFiles(files);
+        addScreenshotFiles(imageItems.map((item) => item.getAsFile()).filter(Boolean));
       });
-
       submitBtn.addEventListener("click", async () => {
         const message = messageEl.value.trim();
-        if (message.length < 3) {
-          showError("Please add a few words so we know what to look at.");
-          return;
-        }
-
+        if (message.length < 3) { showError("Please add a few words so we know what to look at."); return; }
         submitBtn.disabled = true;
         submitBtn.textContent = "Sending…";
-
         try {
           const res = await fetch(`${BASE}/api/feedback`, {
             method: "POST",
@@ -1305,22 +2035,15 @@
             }),
           });
           if (!res.ok) {
-            let detail = "Could not send — try again in a moment.";
-            try {
-              const data = await res.json();
-              if (data.detail) detail = typeof data.detail === "string" ? data.detail : detail;
-            } catch (_) {
-              /* ignore */
-            }
-            showError(detail);
+            showError("Could not send — try again in a moment.");
             submitBtn.disabled = false;
             submitBtn.textContent = "Send";
             return;
           }
           showSuccess();
-          setTimeout(closeModal, 1400);
+          setTimeout(() => { modal.hidden = true; }, 1400);
         } catch (_) {
-          showError("Could not reach the server. Check your connection and try again.");
+          showError("Could not reach the server.");
           submitBtn.disabled = false;
           submitBtn.textContent = "Send";
         }

@@ -227,7 +227,8 @@ app.add_middleware(
 async def pre_match_asset_no_cache(request: Request, call_next):
     response = await call_next(request)
     path = request.url.path
-    if path == "/pre-match" or path.startswith("/pre-match/assets/") or path.startswith("/static/pre-match."):
+    # HTML shell only — JS/CSS are hashed (?b=) and may be cached.
+    if path == "/pre-match":
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
@@ -1252,12 +1253,22 @@ def _iterations_for_benchmark_season(season: str) -> list[int]:
 
 
 def _play_duration_minutes(row: dict[str, Any]) -> float | None:
-    raw = _to_number(row.get("playDuration"))
-    if raw is None:
+    """Convert Impect duration fields to whole minutes.
+
+    Impect ``playDuration`` is always seconds on profile/metrics season scores and
+    match player KPIs. Prefer ``playedMinutes`` when present (already minutes).
+    Never treat small ``playDuration`` values as minutes — that inflated low
+    sample sizes (e.g. ~732 seconds shown as 732′ instead of ~12′).
+    """
+    if not isinstance(row, dict):
         return None
-    if raw >= 1000:
-        return float(round(raw / 60.0))
-    return float(round(raw))
+    played = _to_number(row.get("playedMinutes"))
+    if played is not None and played >= 0:
+        return float(round(played))
+    raw = _to_number(row.get("playDuration"))
+    if raw is None or raw < 0:
+        return None
+    return float(round(raw / 60.0))
 
 
 def _meets_benchmark_minutes(row: dict[str, Any], min_minutes: float) -> bool:
@@ -4941,3 +4952,6 @@ register_xg_chance_analysis_routes(app)
 register_club_strategy_routes(app)
 register_availability_tracker_routes(app)
 register_scouting_address_routes(app)
+
+from app.home_dashboard import register_home_dashboard_routes
+register_home_dashboard_routes(app)

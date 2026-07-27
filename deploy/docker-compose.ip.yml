@@ -1,4 +1,4 @@
-# IP-only deploy with password protection — http://YOUR_IP/
+# IP-only deploy — http://YOUR_IP/
 services:
   hub:
     build: .
@@ -7,6 +7,7 @@ services:
       HOST: 0.0.0.0
       PORT: 8000
       DATA_ROOT: /data
+      UVICORN_WORKERS: "2"
     volumes:
       - pv-data:/data
     restart: unless-stopped
@@ -25,6 +26,8 @@ services:
       - "80:80"
     volumes:
       - ./deploy/Caddyfile.ip:/etc/caddy/Caddyfile:ro
+      - ./static:/srv/static:ro
+      - ./standalone:/srv/standalone:ro
     depends_on:
       hub:
         condition: service_healthy

@@ -22,5 +22,5 @@ ENV PORT=8000
 
 EXPOSE 8000
 
-# App Platform may override PORT at runtime
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# UVICORN_WORKERS=2 on the droplet (2 vCPU). Override PORT if needed.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers ${UVICORN_WORKERS:-2}"]
