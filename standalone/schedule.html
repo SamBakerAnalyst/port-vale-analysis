@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Port Vale Schedule</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/schedule.css?v=7" />
+</head>
+<body>
+  <div class="pv-sch">
+    <header class="pv-sch__banner">
+      <img class="pv-sch__crest" src="/standalone/port-vale-badge.png?v=2" alt="Port Vale" width="56" height="70" />
+      <div class="pv-sch__banner-title">
+        <p class="pv-sch__eyebrow"><a href="/">← Home</a> · Analysis</p>
+        <h1>Port Vale Schedule</h1>
+        <p class="pv-sch__season" id="seasonLabel">26/27 season</p>
+      </div>
+      <div class="pv-sch__banner-actions">
+        <button type="button" class="pv-sch__btn" id="refreshBtn">Refresh fixtures</button>
+      </div>
+    </header>
+
+    <section class="pv-sch__toolbar">
+      <div class="pv-sch__owners" id="ownerToggle" role="tablist" aria-label="Calendar owner"></div>
+      <div class="pv-sch__nav">
+        <button type="button" class="pv-sch__btn" id="prevMonthBtn" aria-label="Previous month">←</button>
+        <span class="pv-sch__month" id="monthLabel">—</span>
+        <button type="button" class="pv-sch__btn" id="nextMonthBtn" aria-label="Next month">→</button>
+        <button type="button" class="pv-sch__btn" id="todayBtn">Today</button>
+      </div>
+    </section>
+
+    <p class="pv-sch__hint">
+      Click a day: <strong>IN</strong> → <strong>Regen</strong> → <strong>Pre-season</strong> (blue) → blank.
+      Shift-click / right-click for <strong>R</strong> (recruitment in).
+      Match days pull from FotMob. Add travel / notes in the side panel.
+    </p>
+
+    <div class="pv-sch__layout">
+      <main id="calendarRoot" class="pv-sch__board" aria-live="polite"></main>
+      <aside class="pv-sch__panel" id="dayPanel">
+        <header>
+          <h2 id="panelTitle">Select a day</h2>
+          <p id="panelSubtitle">Click a date to edit report time, day type, R, or events.</p>
+        </header>
+        <div id="panelBody"><p class="pv-sch__empty">No day selected.</p></div>
+      </aside>
+    </div>
+
+    <footer class="pv-sch__footer" id="statusBar">Loading schedule…</footer>
+  </div>
+
+  <script defer src="/static/schedule.js?v=8"></script>
+</body>
+</html>
