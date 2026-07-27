@@ -4940,6 +4940,7 @@ from app.club_strategy import register_club_strategy_routes
 from app.availability_tracker import register_availability_tracker_routes
 from app.scouting_address import register_scouting_address_routes
 from app.home_dashboard import register_home_dashboard_routes
+from app.who_to_scout import register_who_to_scout_routes
 from app.schedule import register_schedule_routes
 
 register_post_match_routes(app)
@@ -4955,4 +4956,5 @@ register_club_strategy_routes(app)
 register_availability_tracker_routes(app)
 register_scouting_address_routes(app)
 register_home_dashboard_routes(app)
+register_who_to_scout_routes(app)
 register_schedule_routes(app)

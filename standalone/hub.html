@@ -528,6 +528,24 @@
       white-space: nowrap;
     }
 
+    .home-form-inline {
+      display: inline-flex;
+      gap: 0.2rem;
+      vertical-align: middle;
+    }
+
+    .home-form-inline .home-form__pill {
+      width: 1.35rem;
+      height: 1.35rem;
+      font-size: 0.68rem;
+      border-radius: 5px;
+    }
+
+    .home-table td.col-form {
+      text-align: left;
+      white-space: nowrap;
+    }
+
     .home-card {
       padding: 1rem 1.1rem 1.1rem;
       background: var(--surface);
@@ -590,15 +608,89 @@
     .home-table .col-pos { width: 2rem; font-family: var(--mono); color: var(--text-muted); }
     .home-table .col-club { font-weight: 600; }
     .home-table .col-pts { font-family: var(--mono); font-weight: 700; text-align: right; }
-    .home-table th:last-child,
-    .home-table td:nth-child(3),
-    .home-table td:nth-child(4) { text-align: center; font-family: var(--mono); }
-    .home-table td.col-val,
-    .home-table td.col-delta,
-    .home-table td.col-rank,
-    .home-table th.col-val,
-    .home-table th.col-delta,
-    .home-table th.col-rank { text-align: right; }
+    .home-table .col-num {
+      text-align: center;
+      font-family: var(--mono);
+      width: 2.75rem;
+    }
+    .home-table:not(.home-compare-table) td.col-val,
+    .home-table:not(.home-compare-table) td.col-delta,
+    .home-table:not(.home-compare-table) td.col-rank,
+    .home-table:not(.home-compare-table) th.col-val,
+    .home-table:not(.home-compare-table) th.col-delta,
+    .home-table:not(.home-compare-table) th.col-rank { text-align: right; }
+
+    /* Us / League / Δ / Rank comparison tables */
+    .home-compare-table {
+      table-layout: fixed;
+      width: 100%;
+    }
+
+    .home-compare-table col.compare-col-metric { width: 36%; }
+    .home-compare-table col.compare-col-val { width: 14%; }
+    .home-compare-table col.compare-col-delta { width: 18%; }
+    .home-compare-table col.compare-col-rank { width: 18%; }
+
+    .home-compare-table th,
+    .home-compare-table td {
+      padding: 0.42rem 0.55rem;
+      vertical-align: middle;
+    }
+
+    .home-compare-table th {
+      text-align: right;
+      font-size: 0.62rem;
+      letter-spacing: 0.07em;
+      padding-bottom: 0.48rem;
+    }
+
+    .home-compare-table th.col-metric,
+    .home-compare-table td.col-metric {
+      text-align: left;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .home-compare-table th.col-metric { font-weight: 700; }
+
+    .home-compare-table .col-val,
+    .home-compare-table .col-delta,
+    .home-compare-table .col-rank {
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .home-compare-table td.col-val { font-weight: 700; }
+    .home-compare-table td.col-delta.is-up { color: var(--green); }
+    .home-compare-table td.col-delta.is-down { color: var(--danger); }
+    .home-compare-table td.col-rank { color: var(--text-muted); }
+
+    .home-age-bands__table {
+      margin-top: 1rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid rgba(42, 53, 68, 0.55);
+    }
+
+    .home-panel[data-panel="recruitment"] .home-card {
+      padding: 1.1rem 1.25rem 1.2rem;
+    }
+
+    .home-panel[data-panel="recruitment"] .home-card__head {
+      margin-bottom: 0.85rem;
+    }
+
+    .home-panel[data-panel="recruitment"] .home-rank-block .home-table {
+      table-layout: fixed;
+    }
+
+    .home-panel[data-panel="recruitment"] .home-rank-block .home-table .col-club {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
     .home-table tr.is-focus td {
       background: rgba(245, 197, 24, 0.1);
@@ -735,6 +827,362 @@
 
     .home-panel[hidden] { display: none; }
 
+    .home-subtabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin: 0 0 0.85rem;
+    }
+
+    .home-subtab {
+      padding: 0.4rem 0.85rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-muted);
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .home-subtab.is-active {
+      background: rgba(61, 139, 253, 0.16);
+      border-color: rgba(61, 139, 253, 0.55);
+      color: #9ec5ff;
+    }
+
+    .home-subpanel[hidden] { display: none; }
+
+    .home-filter-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1.1rem;
+      align-items: flex-end;
+      margin: 0 0 0.85rem;
+      padding: 0.75rem 0.9rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .home-filter {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+      min-width: 9rem;
+    }
+
+    .home-filter--grow {
+      flex: 1 1 100%;
+      min-width: 0;
+    }
+
+    .home-filter__label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .home-filter__control {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+    }
+
+    .home-filter__btn {
+      padding: 0.35rem 0.7rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text-muted);
+      font: inherit;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .home-filter__btn.is-active {
+      background: rgba(61, 139, 253, 0.18);
+      border-color: rgba(61, 139, 253, 0.5);
+      color: #cfe2ff;
+    }
+
+    .home-filter select {
+      min-width: 11rem;
+      padding: 0.4rem 0.55rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text);
+      font: inherit;
+      font-size: 0.8125rem;
+    }
+
+    .home-filter--month select {
+      min-width: 9.5rem;
+      border-color: rgba(61, 139, 253, 0.45);
+    }
+
+    .home-standouts-note {
+      margin: 0 0 0.75rem;
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+
+    .home-standouts-scroll {
+      overflow-x: auto;
+      margin: 0 -0.15rem;
+      padding: 0 0.15rem 0.1rem;
+    }
+
+    .home-standouts-table {
+      table-layout: fixed;
+      width: 100%;
+      min-width: 52rem;
+      font-size: 0.875rem;
+    }
+
+    .home-standouts-table col.col-rank { width: 2.25rem; }
+    .home-standouts-table col.col-player { width: 11rem; }
+    .home-standouts-table col.col-club { width: 10rem; }
+    .home-standouts-table col.col-pos { width: 5.5rem; }
+    .home-standouts-table col.col-league { width: 5.5rem; }
+    .home-standouts-table col.col-overall { width: 4.25rem; }
+    .home-standouts-table col.col-scout { width: 3.25rem; }
+    .home-standouts-table col.col-mins { width: 4.5rem; }
+
+    .home-standouts-table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: var(--surface);
+      font-size: 0.68rem;
+      letter-spacing: 0.05em;
+      padding: 0.55rem 0.45rem;
+      white-space: nowrap;
+    }
+
+    .home-standouts-table td {
+      padding: 0.55rem 0.45rem;
+      vertical-align: middle;
+      line-height: 1.35;
+    }
+
+    .home-standouts-table tbody tr:nth-child(even) td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .home-standouts-table tbody tr:hover td {
+      background: rgba(61, 139, 253, 0.08);
+    }
+
+    .home-standouts-table .col-rank {
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      color: var(--text-muted);
+      text-align: right;
+    }
+
+    .home-standouts-table .col-player {
+      font-weight: 650;
+    }
+
+    .home-standouts-table .col-player a {
+      color: #cfe2ff;
+      text-decoration: none;
+    }
+
+    .home-standouts-table .col-player a:hover {
+      color: #fff;
+      text-decoration: underline;
+    }
+
+    .home-standouts-table .col-club,
+    .home-standouts-table .col-pos,
+    .home-standouts-table .col-league {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--text-muted);
+    }
+
+    .home-standouts-table .col-pos,
+    .home-standouts-table .col-league {
+      font-size: 0.8125rem;
+    }
+
+    .home-standouts-table .col-overall,
+    .home-standouts-table .col-mins,
+    .home-standouts-table .col-scout {
+      text-align: center;
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .home-standouts-table .col-overall {
+      font-weight: 800;
+      font-size: 0.9375rem;
+      color: var(--green);
+    }
+
+    .home-standouts-table .col-mins {
+      color: var(--text-muted);
+      font-size: 0.8125rem;
+    }
+
+    .home-scout-dash {
+      color: rgba(148, 163, 184, 0.45);
+    }
+
+    .home-scout-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 1.55rem;
+      padding: 0.12rem 0.38rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .home-scout-pill--live {
+      background: rgba(248, 113, 113, 0.16);
+      color: #fecaca;
+      border: 1px solid rgba(248, 113, 113, 0.35);
+    }
+
+    .home-scout-pill--video {
+      background: rgba(61, 139, 253, 0.16);
+      color: #cfe2ff;
+      border: 1px solid rgba(61, 139, 253, 0.35);
+    }
+
+    .home-scout-pill--report {
+      background: rgba(245, 197, 24, 0.14);
+      color: #fde68a;
+      border: 1px solid rgba(245, 197, 24, 0.35);
+    }
+
+    .home-standouts-table tr.has-scout td.col-player a {
+      color: #fff;
+    }
+
+    .home-standouts-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.85rem;
+    }
+
+    @media (min-width: 1280px) {
+      .home-standouts-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    .home-standouts-league {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: rgba(15, 20, 28, 0.55);
+      padding: 0.75rem 0.8rem 0.65rem;
+      min-width: 0;
+    }
+
+    .home-standouts-league__head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.55rem;
+    }
+
+    .home-standouts-league__title {
+      margin: 0;
+      font-size: 0.9375rem;
+      font-weight: 750;
+      color: var(--text);
+      line-height: 1.25;
+    }
+
+    .home-standouts-league__meta {
+      margin: 0.15rem 0 0;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      line-height: 1.35;
+    }
+
+    .home-standouts-league__count {
+      flex-shrink: 0;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      padding-top: 0.1rem;
+    }
+
+    .home-standouts-league .home-standouts-scroll {
+      margin: 0;
+      padding: 0;
+    }
+
+    .home-standouts-league .home-standouts-table {
+      min-width: 0;
+      font-size: 0.8125rem;
+    }
+
+    .home-standouts-league .home-standouts-table col.col-club { width: 7.5rem; }
+    .home-standouts-league .home-standouts-table col.col-pos { width: 2.6rem; }
+    .home-standouts-league .home-standouts-table col.col-mins { width: 3.6rem; }
+    .home-standouts-league .home-standouts-table col.col-scout { width: 2.4rem; }
+
+    .home-standouts-league .home-standouts-table .col-pos {
+      text-align: center;
+      font-family: var(--mono);
+      font-weight: 700;
+      font-size: 0.75rem;
+      color: #cfe2ff;
+    }
+
+    .home-standouts-league .home-standouts-table .col-mins {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .home-standouts-league .home-standouts-table .col-player a {
+      color: #7eb6ff;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      text-decoration-color: rgba(126, 182, 255, 0.45);
+    }
+
+    .home-standouts-league .home-standouts-table tr.is-below td.col-overall {
+      color: #94a3b8;
+      font-weight: 650;
+    }
+
+    .home-standouts-league .home-standouts-table th {
+      font-size: 0.62rem;
+      padding: 0.4rem 0.3rem;
+    }
+
+    .home-standouts-league .home-standouts-table td {
+      padding: 0.42rem 0.3rem;
+    }
+
+    .home-standouts-league .home-standouts-table .col-overall {
+      font-size: 0.875rem;
+    }
+
+    .home-standouts-league__empty {
+      margin: 0.35rem 0 0.15rem;
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+    }
+
     .home-pace {
       display: flex;
       flex-wrap: wrap;
@@ -782,8 +1230,8 @@
 
     .home-bar {
       display: grid;
-      grid-template-columns: 5.5rem 1fr auto;
-      gap: 0.55rem;
+      grid-template-columns: 4.5rem 1fr;
+      gap: 0.65rem;
       align-items: center;
     }
 
@@ -1339,24 +1787,30 @@
     .home-quick {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.45rem;
-      margin-top: 0.75rem;
+      gap: 0.5rem;
+      margin-top: 1rem;
+      padding: 0.15rem 0 0.1rem;
     }
 
     .home-quick a {
-      padding: 0.4rem 0.7rem;
+      padding: 0.5rem 0.85rem;
       border-radius: 999px;
       border: 1px solid var(--border);
       background: var(--surface-2);
       color: var(--text-muted);
-      font-size: 0.72rem;
+      font-size: 0.75rem;
       font-weight: 600;
+      line-height: 1.25;
       text-decoration: none;
     }
 
     .home-quick a:hover {
       color: var(--text);
       border-color: var(--accent);
+    }
+
+    .home-card > .home-quick:last-child {
+      margin-bottom: 0.15rem;
     }
 
     @media (max-width: 1100px) {
@@ -1431,7 +1885,7 @@
     .feedback-modal__btn--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
     .feedback-modal__btn:disabled { opacity: 0.6; cursor: wait; }
   </style>
-  <link rel="stylesheet" href="/standalone/hub-launcher.css?v=3" />
+  <link rel="stylesheet" href="/standalone/hub-launcher.css?v=1" />
 </head>
 <body>
   <div class="shell">
@@ -1645,10 +2099,46 @@
                 <a href="/post-match">Post-Match Report</a>
               </div>
             </article>
+            <article class="home-card home-card--wide">
+              <div class="home-card__head">
+                <h2 class="home-card__title">League form table</h2>
+                <span class="home-card__link">Last 5 · sorted by form pts</span>
+              </div>
+              <div id="homeLeagueForm"><p class="home-empty">Loading league form…</p></div>
+            </article>
+            <article class="home-card">
+              <div class="home-card__head">
+                <h2 class="home-card__title">Goals by type</h2>
+                <a class="home-card__link" href="/strategy">Strategy report →</a>
+              </div>
+              <p class="home-season" id="homePerfPhaseNote" style="margin-top:0">Possession · Transition · Set play</p>
+              <div id="homePerfPhases"><p class="home-empty">Loading phase goals…</p></div>
+            </article>
+            <article class="home-card">
+              <div class="home-card__head">
+                <h2 class="home-card__title">Goals against by type</h2>
+                <a class="home-card__link" href="/strategy">Strategy report →</a>
+              </div>
+              <p class="home-season" id="homePerfPhaseConcededNote" style="margin-top:0">vs play-off benchmark</p>
+              <div id="homePerfPhasesConceded"><p class="home-empty">Loading phase goals…</p></div>
+            </article>
+            <article class="home-card home-card--wide">
+              <div class="home-card__head">
+                <h2 class="home-card__title">League rankings</h2>
+                <span class="home-card__link" id="homePerfRankNote">Process + output</span>
+              </div>
+              <div id="homePerfRankings"><p class="home-empty">Loading rankings…</p></div>
+            </article>
           </div>
         </div>
 
         <div class="home-panel" data-panel="recruitment" role="tabpanel" hidden>
+          <div class="home-subtabs" role="tablist" aria-label="Recruitment sections">
+            <button type="button" class="home-subtab is-active" data-recruit-sub="league" role="tab">League profile</button>
+            <button type="button" class="home-subtab" data-recruit-sub="standouts" role="tab">Stand outs</button>
+          </div>
+
+          <div class="home-subpanel" data-recruit-panel="league">
           <p class="home-season" id="homeRecruitSeason">Squad profile</p>
           <div class="home-kpis">
             <article class="home-kpi" id="recruitKpiAge" style="--kpi-accent:#3d8bfd">
@@ -1686,7 +2176,8 @@
                 <a class="home-card__link" href="/squad-planner">Squad planner →</a>
               </div>
               <div id="homeRecruitSnapshot"><p class="home-empty">Loading…</p></div>
-              <div class="home-quick" style="margin-top:0.85rem">
+              <div class="home-quick">
+                <a href="/who-to-scout">Who To Scout</a>
                 <a href="/studio">Player Comparison</a>
                 <a href="/scouting">Player Search</a>
                 <a href="/squad-balance">Squad Balance</a>
@@ -1701,10 +2192,10 @@
               </div>
               <div id="homeRecruitVsLeague"><p class="home-empty">Loading league comparison…</p></div>
             </article>
-            <article class="home-card">
+            <article class="home-card home-card--wide">
               <div class="home-card__head">
                 <h2 class="home-card__title">League rankings</h2>
-                <span class="home-card__link" id="homeRecruitRankNote">Club tables</span>
+                <span class="home-card__link" id="homeRecruitRankNote">Young minutes + age</span>
               </div>
               <div id="homeRecruitRankings"><p class="home-empty">Loading rankings…</p></div>
             </article>
@@ -1715,6 +2206,39 @@
               </div>
               <div id="homeRecruitFeed"><p class="home-empty">Loading watches &amp; reports…</p></div>
             </article>
+          </div>
+          </div>
+
+          <div class="home-subpanel" data-recruit-panel="standouts" hidden>
+            <p class="home-season" id="homeStandoutsSeason">Overall ≥ 85</p>
+            <div class="home-filter-bar">
+              <div class="home-filter">
+                <span class="home-filter__label">Period</span>
+                <div class="home-filter__control" id="homeStandoutsPeriod" role="group" aria-label="Period">
+                  <button type="button" class="home-filter__btn is-active" data-period="season">Full season</button>
+                  <button type="button" class="home-filter__btn" data-period="month">Monthly</button>
+                </div>
+              </div>
+              <div class="home-filter home-filter--month" id="homeStandoutsMonthWrap" hidden>
+                <span class="home-filter__label">Month</span>
+                <div class="home-filter__control">
+                  <select id="homeStandoutsMonth" aria-label="Calendar month">
+                    <option value="">Pick month…</option>
+                  </select>
+                </div>
+              </div>
+              <div class="home-filter home-filter--grow">
+                <span class="home-filter__label">Position</span>
+                <div class="home-filter__control" id="homeStandoutsPosition" role="group" aria-label="Position">
+                  <button type="button" class="home-filter__btn is-active" data-position="ALL">All</button>
+                </div>
+              </div>
+            </div>
+            <p class="home-standouts-note" id="homeStandoutsNote">
+              Top players per league at ≥85% of that league's pool — fair comparison across all six leagues.
+              <a href="/who-to-scout">Open Who To Scout →</a> for profile weights and filters.
+            </p>
+            <div id="homeStandoutsList"><p class="home-empty">Open this tab to load stand outs…</p></div>
           </div>
         </div>
 
@@ -1811,10 +2335,10 @@
     </div>
   </div>
 
-  <script src="/standalone/hub-launcher.js?v=3"></script>
-  <script src="/standalone/apps.js?v=20260727-speed"></script>
-  <script src="/standalone/hub-player-search.js?v=2"></script>
-  <script src="/standalone/hub-home.js?v=20260727-speed"></script>
+  <script src="/standalone/hub-launcher.js?v=2"></script>
+  <script src="/standalone/apps.js?v=20260727-set-piece"></script>
+  <script src="/standalone/hub-player-search.js?v=1"></script>
+  <script src="/standalone/hub-home.js?v=20260727-standouts-month3"></script>
   <script>
     const SCOUTING_SERVER = "http://127.0.0.1:8000";
     if (window.location.protocol === "file:") {

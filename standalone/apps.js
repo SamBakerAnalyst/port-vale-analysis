@@ -1,5 +1,5 @@
 /**
- * Port Vale landing — 4 departments on home, tools inside each.
+ * Port Vale Hub app registry — left ribbon + home dashboard.
  *   group on each app: analysis | recruitment | scouts | strategy
  */
 window.IMPECT_APP_GROUPS = [
@@ -101,6 +101,17 @@ window.IMPECT_APPS = [
     tags: ["Scouting", "Search"],
   },
   {
+    id: "who-to-scout",
+    group: "recruitment",
+    title: "Who To Scout",
+    description:
+      "Top profile scorers by league and position — adjust profile weights, filter by age, height, club and minutes. Points scouts at the best targets.",
+    href: "/who-to-scout",
+    icon: "🎯",
+    accent: "#34d399",
+    tags: ["Scouting", "Profiles", "Leagues"],
+  },
+  {
     id: "squad-balance",
     group: "recruitment",
     title: "Squad Balance",
@@ -127,11 +138,22 @@ window.IMPECT_APPS = [
     group: "scouts",
     title: "Fixture Planner",
     description:
-      "View 26/27 fixtures across five leagues. Cross-referenced with Impect, FotMob, BBC and Transfermarkt.",
+      "Upcoming fixtures only — assign scouts Live or Video across the leagues. Feeds Scout Summary.",
     href: "/fixture-planner",
     icon: "📅",
     accent: "#34d399",
-    tags: ["Fixtures", "Calendar"],
+    tags: ["Fixtures", "Upcoming"],
+  },
+  {
+    id: "played-fixtures",
+    group: "scouts",
+    title: "Played Fixtures",
+    description:
+      "Games that have taken place — keep LIVE ownership, pick up VIDEO coverage, players and reports. Same look as Fixture Planner.",
+    href: "/played-fixtures",
+    icon: "🎬",
+    accent: "#fbbf24",
+    tags: ["Fixtures", "Played", "Video"],
   },
   {
     id: "scouting-address",
@@ -160,7 +182,7 @@ window.IMPECT_APPS = [
     group: "scouts",
     title: "Scout Summary",
     description:
-      "Who has covered what — total games assigned, live vs video split, breakdown by scout and league.",
+      "Who has covered what — pulls from Fixture Planner and Played Fixtures (live vs video, by scout and league).",
     href: "/scout-summary",
     icon: "📊",
     accent: "#a78bfa",

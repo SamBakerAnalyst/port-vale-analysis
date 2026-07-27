@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Who To Scout</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/who-to-scout.css?v=1" />
+</head>
+<body>
+  <div class="app">
+    <header class="page-head card">
+      <div class="page-head__row">
+        <div class="page-head__brand">
+          <p class="page-head__eyebrow">Recruitment · <a href="/">← Home</a></p>
+          <h1 class="page-head__title">Who To Scout</h1>
+        </div>
+        <div class="page-head__actions">
+          <a class="btn btn--ghost" href="/scouting">Player Search</a>
+          <a class="btn btn--ghost" href="/fixture-planner">Fixture Planner</a>
+          <button type="button" class="btn btn--ghost" id="refreshBtn">Refresh data</button>
+        </div>
+      </div>
+      <p class="page-head__season" id="seasonLabel">Loading…</p>
+    </header>
+
+    <section class="filters card">
+      <div class="filters__row">
+        <div class="filter">
+          <span class="filter__label">Period</span>
+          <div class="filter__control" id="periodGroup" role="group" aria-label="Period">
+            <button type="button" class="filter__btn is-active" data-period="season">Full season</button>
+            <button type="button" class="filter__btn" data-period="month">Monthly</button>
+          </div>
+        </div>
+        <div class="filter filter--month" id="monthWrap" hidden>
+          <span class="filter__label">Month</span>
+          <select id="monthSelect" aria-label="Calendar month"></select>
+        </div>
+        <div class="filter">
+          <span class="filter__label">Position</span>
+          <div class="filter__control" id="positionGroup" role="group" aria-label="Position">
+            <button type="button" class="filter__btn is-active" data-position="ALL">All</button>
+          </div>
+        </div>
+      </div>
+      <div class="filters__row filters__row--demographics">
+        <div class="filter filter--num">
+          <label for="minMinutes">Min minutes</label>
+          <input type="number" id="minMinutes" class="filter__input" min="0" step="50" value="0" />
+        </div>
+        <div class="filter filter--num">
+          <label for="minAge">Min age</label>
+          <input type="number" id="minAge" class="filter__input" min="15" max="45" placeholder="—" />
+        </div>
+        <div class="filter filter--num">
+          <label for="maxAge">Max age</label>
+          <input type="number" id="maxAge" class="filter__input" min="15" max="45" placeholder="—" />
+        </div>
+        <div class="filter filter--num">
+          <label for="minHeight">Min height (cm)</label>
+          <input type="number" id="minHeight" class="filter__input" min="150" max="210" placeholder="—" />
+        </div>
+        <div class="filter filter--club">
+          <label for="clubFilter">Club contains</label>
+          <input type="search" id="clubFilter" class="filter__input filter__input--wide" placeholder="e.g. Vale, Wrexham" />
+        </div>
+        <div class="filter filter--num">
+          <label for="perLeague">Top per league</label>
+          <input type="number" id="perLeague" class="filter__input" min="5" max="25" value="10" />
+        </div>
+      </div>
+    </section>
+
+    <section class="weights card" id="weightsPanel">
+      <div class="weights__head">
+        <h2 class="weights__title">Profile weights</h2>
+        <p class="weights__hint" id="weightsHint">Select a position to adjust profile sliders — 0 ignores a profile, higher = minimum score + weight in overall.</p>
+      </div>
+      <div class="weights__grid" id="weightsGrid"></div>
+    </section>
+
+    <p class="page-note" id="pageNote">Loading player pool…</p>
+    <div id="statusBanner" class="status-banner hidden" role="status"></div>
+    <div id="leagueGrid" class="league-grid"><p class="empty">Loading…</p></div>
+  </div>
+
+  <script defer src="/static/who-to-scout.js?v=1"></script>
+</body>
+</html>
