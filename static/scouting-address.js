@@ -656,36 +656,53 @@ function renderSummary() {
 function normalizeClub(name) {
   return String(name || "")
     .toLowerCase()
-    .replace(/fc|afc|town|city|united|athletic|rovers|county|borough|&/g, "")
-    .replace(/[^a-z0-9]/g, "");
+    .replace(/fc|afc|town|city|united|athletic|rovers|county|borough|dons|&/g, " ")
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+// Fixture provider names often differ from our stadium list (e.g. MK Dons vs Milton Keynes Dons).
+const CLUB_ALIAS_GROUPS = [
+  ["MK Dons", "Milton Keynes Dons", "Milton Keynes"],
+  ["Brackley Town", "Brackley"],
+  ["Bedford Town", "Bedford"],
+  ["Notts County", "Nottingham County"],
+  ["Harrogate Town", "Harrogate"],
+  ["Sutton United", "Sutton"],
+  ["Gateshead", "Gateshead FC"],
+];
+
+function clubAliasKeys(name) {
+  const keys = new Set();
+  const raw = String(name || "").trim();
+  if (!raw) return keys;
+  keys.add(normalizeClub(raw));
+  const lower = raw.toLowerCase();
+  CLUB_ALIAS_GROUPS.forEach((group) => {
+    if (group.some((alias) => lower === alias.toLowerCase() || normalizeClub(alias) === normalizeClub(raw))) {
+      group.forEach((alias) => keys.add(normalizeClub(alias)));
+    }
+  });
+  return [...keys].filter(Boolean);
 }
 
 function clubMatchesFixtureHome(homeTeam, club) {
-  const a = normalizeClub(homeTeam);
-  const b = normalizeClub(club);
-  return a.includes(b) || b.includes(a);
+  const homeKeys = clubAliasKeys(homeTeam);
+  const clubKeys = clubAliasKeys(club);
+  return homeKeys.some((a) => clubKeys.some((b) => a === b || a.includes(b) || b.includes(a)));
 }
 
 function renderFixtures() {
+  if (!els.fixturesList) return;
+
   if (!state.origin) {
     els.fixturesList.innerHTML =
       '<p class="sa-summary__empty">Fixtures at reachable grounds will appear here.</p>';
     return;
   }
 
-  const fixtureLeagues = new Set(
-    state.reachable.map((row) => LEAGUE_TO_FIXTURE[row.league]).filter(Boolean)
-  );
-
-  if (!fixtureLeagues.size) {
-    els.fixturesList.innerHTML =
-      '<p class="sa-summary__empty">Fixture data is available for League One, League Two, National League and Scottish Prem. EFL Championship, NL North/South and Scottish Champ show reachable stadiums on the map only.</p>';
-    return;
-  }
-
   if (!state.fixtures.length) {
     els.fixturesList.innerHTML =
-      '<p class="sa-summary__empty">No upcoming fixtures at reachable grounds for the selected season.</p>';
+      '<p class="sa-summary__empty">No upcoming fixtures matched reachable grounds for this season. Try another season, or check Fixture planner has data loaded.</p>';
     return;
   }
 
@@ -711,33 +728,57 @@ function renderFixtures() {
 }
 
 async function loadFixturesForReachable() {
-  const fixtureLeagues = [
-    ...new Set(state.reachable.map((row) => LEAGUE_TO_FIXTURE[row.league]).filter(Boolean)),
-  ];
-
-  if (!fixtureLeagues.length) {
+  if (!state.origin) {
     state.fixtures = [];
     state.allFixturesForPlanning = [];
     state.dayPlans = [];
-    renderFixtures();
     renderDayPlans();
+    renderFixtures();
+    renderSummary();
+    return;
+  }
+
+  if (!state.reachable.length) {
+    state.fixtures = [];
+    state.allFixturesForPlanning = [];
+    state.dayPlans = [];
+    renderDayPlans();
+    renderFixtures();
+    renderSummary();
     return;
   }
 
   try {
-    const payload = await fetchJson(`/api/fixture-planner/fixtures?season=${encodeURIComponent(state.season)}`);
+    setStatus("Loading fixtures for reachable grounds…", "info");
+    const payload = await fetchJson(
+      `/api/fixture-planner/fixtures?season=${encodeURIComponent(state.season)}`
+    );
     const fixtures = payload.fixtures || [];
     const now = Date.now();
 
+    // Include a wider ring for day-plan second games (still matched to known stadiums).
+    const { maxMinutes, maxMiles } = filterLimits();
+    const planningPool = computeReachable(
+      state.origin,
+      state.allStadiums,
+      Math.max(maxMinutes * 2, 120),
+      Math.max(maxMiles * 2, 60)
+    );
+    const planningClubs = new Set(planningPool.map((row) => row.club));
+
     state.allFixturesForPlanning = fixtures
       .filter((fixture) => {
-        if (!fixtureLeagues.includes(fixture.league)) return false;
         if (!fixture.date) return false;
         const when = new Date(fixture.date).getTime();
         return Number.isNaN(when) || when >= now - 86400000;
       })
       .map(enrichFixture)
-      .filter((fixture) => fixture.stadium && fixture.kickoff_at);
+      .filter(
+        (fixture) =>
+          fixture.stadium &&
+          fixture.kickoff_at &&
+          planningClubs.has(fixture.stadium.club)
+      );
 
     state.fixtures = state.allFixturesForPlanning
       .filter((fixture) => isReachableFromHome(fixture.stadium))
@@ -746,14 +787,25 @@ async function loadFixturesForReachable() {
           String(a.date_key).localeCompare(String(b.date_key)) || a.kickoff_at - b.kickoff_at
       );
     state.dayPlans = computeDayPlans();
-  } catch {
+    setStatus(
+      `${state.reachable.length} stadiums · ${state.fixtures.length} fixtures · ${state.dayPlans.length} day plans`,
+      "ok"
+    );
+  } catch (error) {
     state.fixtures = [];
     state.allFixturesForPlanning = [];
     state.dayPlans = [];
+    setStatus(
+      error.message
+        ? `Stadiums loaded, but fixtures failed: ${error.message}`
+        : "Stadiums loaded, but fixtures could not be loaded.",
+      "error"
+    );
   }
 
   renderDayPlans();
   renderFixtures();
+  renderSummary();
 }
 
 function applyStadiumFilter() {

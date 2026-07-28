@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CSS = (ROOT / "standalone/scouting-address.css").read_text(encoding="utf-8")
 JS = (ROOT / "standalone/scouting-address.js").read_text(encoding="utf-8")
-BUILD = "webpage-v13"
+BUILD = "webpage-v14"
 
 HTML = f"""<!DOCTYPE html>
 <html lang="en">
