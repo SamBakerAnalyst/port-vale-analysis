@@ -17,8 +17,20 @@ from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-PUBLIC_PATHS = frozenset({"/health", "/login", "/api/auth/login", "/api/auth/logout"})
-PUBLIC_PREFIXES = ("/standalone/port-vale-badge",)
+PUBLIC_PATHS = frozenset(
+    {
+        "/health",
+        "/login",
+        "/api/auth/login",
+        "/api/auth/logout",
+        "/fixture-planner/reject-assignment",
+    }
+)
+PUBLIC_PREFIXES = (
+    "/standalone/port-vale-badge",
+    "/standalone/stadiums.json",
+    "/static/stadiums.json",
+)
 
 
 def auth_enabled() -> bool:

@@ -28,8 +28,11 @@ TEMPLATES_DIR = Path(os.environ.get("TEMPLATES_DIR", HUB_ROOT / "templates"))
 # Club badge used in PDF exports
 PORT_VALE_BADGE = STANDALONE_DIR / "port-vale-badge.png"
 
-# Stadium coordinates for scouting address tool
-STADIUMS_PATH = Path(os.environ.get("STADIUMS_PATH", STATIC_DIR / "stadiums.json"))
+# Stadium coordinates for scouting address tool (standalone is the source of truth)
+_default_stadiums = STANDALONE_DIR / "stadiums.json"
+if not _default_stadiums.exists():
+    _default_stadiums = STATIC_DIR / "stadiums.json"
+STADIUMS_PATH = Path(os.environ.get("STADIUMS_PATH", _default_stadiums))
 
 # Per-tool disk caches (shared across team when DATA_ROOT is on a volume)
 CACHE_ROOT = Path(os.environ.get("CACHE_ROOT", DATA_ROOT / "cache"))

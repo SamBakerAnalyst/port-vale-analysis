@@ -763,11 +763,35 @@ function applyStadiumFilter() {
 }
 
 async function loadStadiums() {
-  const response = await fetch(STADIUMS_URL);
-  if (!response.ok) {
-    throw new Error("Stadium database not found. Check that standalone/stadiums.json exists.");
+  const urls = [
+    STADIUMS_URL,
+    "/static/stadiums.json",
+    "/api/scouting-address/stadiums",
+  ];
+  let stadiums = null;
+  let lastError = null;
+
+  for (const url of urls) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        lastError = new Error(`Stadium fetch failed (${response.status}) from ${url}`);
+        continue;
+      }
+      const payload = await response.json();
+      stadiums = Array.isArray(payload) ? payload : payload.stadiums;
+      if (Array.isArray(stadiums) && stadiums.length) break;
+      lastError = new Error(`Empty stadium list from ${url}`);
+      stadiums = null;
+    } catch (error) {
+      lastError = error;
+    }
   }
-  const stadiums = await response.json();
+
+  if (!stadiums?.length) {
+    throw lastError || new Error("Stadium database not found.");
+  }
+
   state.allStadiums = stadiums.filter((row) => row.lat != null && row.lng != null);
   state.meta = buildMeta(state.allStadiums);
   applyStadiumFilter();
