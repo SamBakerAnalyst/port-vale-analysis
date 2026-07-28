@@ -99,17 +99,17 @@ HTML = f"""<!DOCTYPE html>
         <section class="sa-summary card" id="summaryPanel" aria-live="polite">
           <p class="sa-summary__empty">Enter a scout address to highlight reachable stadiums and upcoming fixtures.</p>
         </section>
+        <section class="sa-fixtures card" id="fixturesPanel" aria-live="polite">
+          <h2 class="sa-panel-title">Reachable fixtures</h2>
+          <div id="fixturesList" class="sa-fixtures-list">
+            <p class="sa-summary__empty">Fixtures at reachable grounds will appear here.</p>
+          </div>
+        </section>
         <section class="sa-fixtures card" id="dayPlansPanel" aria-live="polite">
           <h2 class="sa-panel-title">Day plans</h2>
           <p class="sa-panel-hint">Same-day double headers — assumes you can leave the first game from half-time onwards. Shows the latest minute you can stay.</p>
           <div id="dayPlansList" class="sa-day-plans-list">
             <p class="sa-summary__empty">Enter your address to see feasible two-game days.</p>
-          </div>
-        </section>
-        <section class="sa-fixtures card" id="fixturesPanel" aria-live="polite">
-          <h2 class="sa-panel-title">Reachable fixtures</h2>
-          <div id="fixturesList" class="sa-fixtures-list">
-            <p class="sa-summary__empty">Fixtures at reachable grounds will appear here.</p>
           </div>
         </section>
       </aside>
