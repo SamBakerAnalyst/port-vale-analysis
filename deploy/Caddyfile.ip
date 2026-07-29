@@ -6,16 +6,19 @@
 :80 {
 	encode zstd gzip
 
+	# Cache assets but always revalidate — Caddy auto-generates ETags from
+	# file content, so after a deploy the browser fetches the new file
+	# without needing manual ?v= bumps. Adds ~50ms (one HEAD) per asset.
 	handle /static/* {
 		root * /srv
-		header Cache-Control "public, max-age=604800, immutable"
+		header Cache-Control "public, no-cache"
 		file_server
 	}
 
 	@standalone_assets path_regexp ^/standalone/.*\.(js|css|png|jpe?g|webp|svg|json|woff2?|map)$
 	handle @standalone_assets {
 		root * /srv
-		header Cache-Control "public, max-age=604800, immutable"
+		header Cache-Control "public, no-cache"
 		file_server
 	}
 
