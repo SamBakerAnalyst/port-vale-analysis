@@ -962,6 +962,7 @@
     .home-standouts-table col.col-club { width: 10rem; }
     .home-standouts-table col.col-pos { width: 5.5rem; }
     .home-standouts-table col.col-league { width: 5.5rem; }
+    .home-standouts-table col.col-age { width: 3.25rem; }
     .home-standouts-table col.col-overall { width: 4.25rem; }
     .home-standouts-table col.col-scout { width: 3.25rem; }
     .home-standouts-table col.col-mins { width: 4.5rem; }
@@ -1026,12 +1027,27 @@
       font-size: 0.8125rem;
     }
 
+    .home-standouts-table .col-age,
     .home-standouts-table .col-overall,
     .home-standouts-table .col-mins,
     .home-standouts-table .col-scout {
       text-align: center;
       font-family: var(--mono);
       font-variant-numeric: tabular-nums;
+    }
+
+    .home-standouts-table .col-age {
+      color: var(--text-muted);
+      font-size: 0.8125rem;
+      font-weight: 700;
+    }
+
+    .home-standouts-table .col-age.is-age-u23 {
+      color: #34d399;
+    }
+
+    .home-standouts-table .col-age.is-age-o30 {
+      color: #f87171;
     }
 
     .home-standouts-table .col-overall {
@@ -1147,6 +1163,7 @@
 
     .home-standouts-league .home-standouts-table col.col-club { width: 7.5rem; }
     .home-standouts-league .home-standouts-table col.col-pos { width: 2.6rem; }
+    .home-standouts-league .home-standouts-table col.col-age { width: 2.5rem; }
     .home-standouts-league .home-standouts-table col.col-mins { width: 3.6rem; }
     .home-standouts-league .home-standouts-table col.col-scout { width: 2.4rem; }
 
@@ -1896,7 +1913,7 @@
     .feedback-modal__btn--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
     .feedback-modal__btn:disabled { opacity: 0.6; cursor: wait; }
   </style>
-  <link rel="stylesheet" href="/standalone/hub-launcher.css?v=1" />
+  <link rel="stylesheet" href="/standalone/hub-launcher.css?v=20260729" />
 </head>
 <body>
   <div class="shell">
@@ -2239,6 +2256,21 @@
                   </select>
                 </div>
               </div>
+              <div class="home-filter home-filter--month" id="homeStandoutsProfileWrap" hidden>
+                <span class="home-filter__label">Profile</span>
+                <div class="home-filter__control">
+                  <select id="homeStandoutsProfile" aria-label="PV Profile">
+                    <option value="">Overall (equal-weighted)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="home-filter">
+                <span class="home-filter__label">Age</span>
+                <div class="home-filter__control" id="homeStandoutsAge" role="group" aria-label="Age filter">
+                  <button type="button" class="home-filter__btn is-active" data-age="all">All</button>
+                  <button type="button" class="home-filter__btn" data-age="u25">U25</button>
+                </div>
+              </div>
               <div class="home-filter home-filter--grow">
                 <span class="home-filter__label">Position</span>
                 <div class="home-filter__control" id="homeStandoutsPosition" role="group" aria-label="Position">
@@ -2347,10 +2379,10 @@
     </div>
   </div>
 
-  <script src="/standalone/hub-launcher.js?v=2"></script>
+  <script src="/standalone/hub-launcher.js?v=20260729"></script>
   <script src="/standalone/apps.js?v=20260727-who-to-scout"></script>
   <script src="/standalone/hub-player-search.js?v=1"></script>
-  <script src="/standalone/hub-home.js?v=20260727-stable"></script>
+  <script src="/standalone/hub-home.js?v=20260729-u25-filter"></script>
   <script>
     const SCOUTING_SERVER = "http://127.0.0.1:8000";
     if (window.location.protocol === "file:") {
