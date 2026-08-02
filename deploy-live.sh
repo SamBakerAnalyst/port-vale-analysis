@@ -33,6 +33,15 @@ echo " Ship to live → http://178.128.161.215/"
 echo " Repo: $ROOT"
 echo "=============================================="
 
+# Never ship from a second copy of the repo — that caused "old version" / missing nav.
+case "$ROOT" in
+  */Desktop/*|*/Downloads/*)
+    echo "ERROR: refusing to deploy from $ROOT"
+    echo "Use ~/impect-football-dashboard only (Desktop copy drifts from live)."
+    exit 1
+    ;;
+esac
+
 # Keep GitHub in sync so Actions / console updates can't overwrite with older code.
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   branch="$(git branch --show-current 2>/dev/null || echo main)"
@@ -62,7 +71,11 @@ RSYNC_EXCLUDES=(
   --exclude '.venv'
   --exclude '__pycache__'
   --exclude '.git'
-  --exclude 'data'
+  --include 'data/home-standouts-cache.json'
+  --include 'data/home-recruitment-cache.json'
+  --include 'data/home-strategy-cache.json'
+  --include 'data/'
+  --exclude 'data/*'
   --exclude '.env'
   --exclude '.env.auth'
   --exclude 'static/player-photos/'
@@ -84,8 +97,13 @@ else
 fi
 
 echo ""
-echo "✓ Live site updated: http://178.128.161.215/"
-echo "  Scouting address:  http://178.128.161.215/scouting-address"
-echo "  Hard refresh: Cmd+Shift+R"
-echo ""
-echo "Expect footer: Build: webpage-v12 (or newer)"
+echo "4/4 Smoke check (would the owner see a broken hub?)…"
+if bash "$ROOT/deploy/smoke-live.sh" "http://178.128.161.215"; then
+  echo ""
+  echo "✓ Live site updated and verified: http://178.128.161.215/"
+  echo "  Safe for staff / owner login."
+else
+  echo ""
+  echo "✗ Deploy finished but SMOKE FAILED — fix before telling anyone to use it."
+  exit 1
+fi
