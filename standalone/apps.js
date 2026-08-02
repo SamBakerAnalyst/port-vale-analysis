@@ -244,6 +244,17 @@ window.IMPECT_APPS = [
     tags: ["League Two", "Strategy"],
   },
   {
+    id: "players-strategy",
+    group: "strategy",
+    title: "Players Strategy Report",
+    description:
+      "Dressing-room presentation — punchy promotion standards. Build here, then Present or Export PDF.",
+    href: "/players-strategy",
+    icon: "🗣️",
+    accent: "#f5c518",
+    tags: ["League Two", "Players", "Presentation"],
+  },
+  {
     id: "league-two-progress",
     group: "strategy",
     title: "League Two Progress Report",
