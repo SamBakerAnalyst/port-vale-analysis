@@ -26,15 +26,15 @@ if [[ "$login" == "200" ]]; then pass "login 200"; else bad "login returned $log
 
 html="$(curl -s -b "$COOKIE_JAR" --max-time 20 "$BASE_URL/" || true)"
 if echo "$html" | grep -q 'hub-home.js'; then pass "hub HTML serves"; else bad "hub HTML missing hub-home.js"; fi
-if echo "$html" | grep -q 'Good \|Port Vale'; then pass "hub HTML body"; else bad "hub HTML looks empty/wrong"; fi
+if echo "$html" | grep -q 'homeDashboard\|homeKpiOverviewPos\|homeTodaySchedule'; then pass "hub HTML body"; else bad "hub HTML looks empty/wrong"; fi
 
 apps="$(curl -s --max-time 15 "$BASE_URL/standalone/apps.js" || true)"
 for need in "players-strategy" "Players Strategy Report" "availability-tracker" "fixture-planner"; do
-  if echo "$apps" | grep -Fq "$need"; then pass "apps.js has $need"; else bad "apps.js MISSING $need — sidebar will look old"; fi
+  if printf '%s' "$apps" | grep -Fq "$need"; then pass "apps.js has $need"; else bad "apps.js MISSING $need — sidebar will look old"; fi
 done
 
 home_js="$(curl -s --max-time 15 "$BASE_URL/standalone/hub-home.js" || true)"
-if echo "$home_js" | grep -Fq "Promise.allSettled"; then pass "hub-home paints widgets independently"; else bad "hub-home missing paint fix — Loading… can stick"; fi
+if printf '%s' "$home_js" | grep -Fq "Promise.allSettled"; then pass "hub-home paints widgets independently"; else bad "hub-home missing paint fix — Loading… can stick"; fi
 
 for path in \
   "/api/home/fixtures" \
