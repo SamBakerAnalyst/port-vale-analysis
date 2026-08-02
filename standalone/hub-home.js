@@ -24,6 +24,9 @@
   let standoutsPosition = "ALL";
   let standoutsYear = null;
   let standoutsMonth = null;
+  let standoutsU25 = false;
+  let standoutsProfile = "";
+  let standoutsLastData = null;
   let strategyDetailLoaded = false;
 
   const SCHEDULE_OWNERS = [
@@ -1475,6 +1478,25 @@
     group.dataset.filled = "1";
   }
 
+  function fillStandoutsProfiles(profiles) {
+    const wrap = document.getElementById("homeStandoutsProfileWrap");
+    const sel = document.getElementById("homeStandoutsProfile");
+    if (!wrap || !sel) return;
+    if (standoutsPosition === "ALL" || !profiles?.length) {
+      wrap.hidden = true;
+      standoutsProfile = "";
+      return;
+    }
+    wrap.hidden = false;
+    const options = [`<option value="">Overall (equal-weighted)</option>`].concat(
+      profiles.map((p) => {
+        const selected = standoutsProfile === p.apiName ? " selected" : "";
+        return `<option value="${p.apiName}"${selected}>${p.label}</option>`;
+      })
+    );
+    sel.innerHTML = options.join("");
+  }
+
   function scoutCountCell(count, kind) {
     const value = Number(count) || 0;
     if (!value) {
@@ -1512,14 +1534,14 @@
   function standoutsPlayerHref(p) {
     const id = p.playerId ?? p.player_id ?? null;
     if (id != null && id !== "") {
-      return `/player?id=${encodeURIComponent(id)}`;
+      return `/player/${encodeURIComponent(id)}`;
     }
     const composite = String(p.id || "");
     if (composite.includes(":")) {
       const tail = composite.split(":").pop();
-      if (tail) return `/player?id=${encodeURIComponent(tail)}`;
+      if (tail) return `/player/${encodeURIComponent(tail)}`;
     }
-    return "/scouting";
+    return "#";
   }
 
   function standoutsPlayerRows(players) {
@@ -1529,6 +1551,14 @@
           p.minutes == null || p.minutes === ""
             ? "—"
             : `${Number(p.minutes).toLocaleString()}′`;
+        const age =
+          p.age == null || p.age === "" ? "—" : String(Math.round(Number(p.age)));
+        let ageClass = "";
+        const ageNum = Number(p.age);
+        if (Number.isFinite(ageNum)) {
+          if (ageNum < 23) ageClass = " is-age-u23";
+          else if (ageNum > 30) ageClass = " is-age-o30";
+        }
         const href = standoutsPlayerHref(p);
         const scout = p.scout || {};
         const scoutTotal = Number(p.scout_total) || 0;
@@ -1540,7 +1570,8 @@
           <td class="col-player"><a href="${href}">${p.name || "—"}</a></td>
           <td class="col-club" title="${p.club || ""}">${p.club || "—"}</td>
           <td class="col-pos" title="${posFull}">${pos}</td>
-          <td class="col-overall">${fmt(p.overall, 1)}</td>
+          <td class="col-age${ageClass}">${age}</td>
+          <td class="col-overall">${fmt(standoutsProfile && p.profile_score != null ? p.profile_score : p.overall, 1)}</td>
           <td class="col-mins">${mins}</td>
           ${scoutCountCell(scout.live_watches, "live")}
           ${scoutCountCell(scout.video_watches, "video")}
@@ -1552,10 +1583,11 @@
 
   function standoutsLeagueTable(players) {
     const body = standoutsPlayerRows(players);
+    const scoreHeader = standoutsProfile ? "Profile" : "Ovr";
     return `<div class="home-standouts-scroll"><table class="home-table home-standouts-table">
       <colgroup>
         <col class="col-rank"><col class="col-player"><col class="col-club"><col class="col-pos">
-        <col class="col-overall"><col class="col-mins"><col class="col-scout"><col class="col-scout"><col class="col-scout">
+        <col class="col-age"><col class="col-overall"><col class="col-mins"><col class="col-scout"><col class="col-scout"><col class="col-scout">
       </colgroup>
       <thead>
         <tr>
@@ -1563,7 +1595,8 @@
           <th class="col-player">Player</th>
           <th class="col-club">Club</th>
           <th class="col-pos">Pos</th>
-          <th class="col-overall">Ovr</th>
+          <th class="col-age">Age</th>
+          <th class="col-overall">${scoreHeader}</th>
           <th class="col-mins">Mins</th>
           <th class="col-scout">Live</th>
           <th class="col-scout">Vid</th>
@@ -1579,7 +1612,9 @@
       widgetError("homeStandoutsList", data.error);
       return;
     }
+    standoutsLastData = data;
     fillStandoutsPositions(data.positions || []);
+    fillStandoutsProfiles(data.profiles || []);
     syncStandoutsMonthFromData(data);
     const periodLabel = data.period_label || (data.period === "month" ? "Monthly" : "Full season");
     const minScore = data.min_score ?? 85;
@@ -1626,7 +1661,7 @@
         data.highest_overall != null ? ` Highest overall in pool: ${fmt(data.highest_overall, 1)}.` : "";
       setHtml(
         "homeStandoutsList",
-        `<p class="home-empty">No stand outs at ≥ ${minScore}% of any league pool for this filter.${highest}</p>`
+        `<p class="home-empty">No stand outs at ≥ ${minScore}% of any league pool for this filter.${standoutsU25 ? " (U25 only)" : ""}${highest}</p>`
       );
       return;
     }
@@ -1673,9 +1708,13 @@
       panel.hidden = panel.dataset.recruitPanel !== subId;
     });
     if (subId === "standouts") {
-      loadStandoutsTab().finally(() => {
-        standoutsLoaded = true;
-      });
+      if (standoutsLastData && standoutsLoaded) {
+        renderStandouts(standoutsLastData);
+      } else {
+        loadStandoutsTab().finally(() => {
+          standoutsLoaded = true;
+        });
+      }
     }
   }
 
@@ -1690,9 +1729,23 @@
           el.classList.toggle("is-active", el === btn);
         });
         toggleStandoutsMonthPicker(standoutsPeriod === "month");
+        standoutsLastData = null;
         loadStandoutsTab();
       });
     });
+    const ageGroup = document.getElementById("homeStandoutsAge");
+    if (ageGroup) {
+      ageGroup.addEventListener("click", (event) => {
+        const btn = event.target.closest("[data-age]");
+        if (!btn) return;
+        standoutsU25 = btn.dataset.age === "u25";
+        standoutsLastData = null;
+        ageGroup.querySelectorAll(".home-filter__btn").forEach((el) => {
+          el.classList.toggle("is-active", el === btn);
+        });
+        loadStandoutsTab();
+      });
+    }
     const monthSel = document.getElementById("homeStandoutsMonth");
     if (monthSel) {
       monthSel.addEventListener("change", () => {
@@ -1709,9 +1762,19 @@
         const btn = event.target.closest(".home-filter__btn[data-position]");
         if (!btn || !pos.contains(btn)) return;
         standoutsPosition = btn.dataset.position || "ALL";
+        standoutsProfile = "";
+        standoutsLastData = null;
         pos.querySelectorAll(".home-filter__btn").forEach((el) => {
           el.classList.toggle("is-active", el === btn);
         });
+        loadStandoutsTab();
+      });
+    }
+    const profileSel = document.getElementById("homeStandoutsProfile");
+    if (profileSel) {
+      profileSel.addEventListener("change", () => {
+        standoutsProfile = profileSel.value;
+        standoutsLastData = null;
         loadStandoutsTab();
       });
     }
@@ -2025,6 +2088,12 @@
         params.set("year", String(standoutsYear));
         params.set("month", String(standoutsMonth));
       }
+      if (standoutsProfile) {
+        params.set("profile", standoutsProfile);
+      }
+      if (standoutsU25) {
+        params.set("max_age", "25");
+      }
       const data = await fetchJson(`/api/home/recruitment/standouts?${params}`);
       renderStandouts(data);
     } catch (err) {
@@ -2066,30 +2135,59 @@
     bindRecruitSubtabs();
     bindCalendarNav();
 
-    // Home tab only: calendar, fixtures, activity. Heavy Impect work loads when you open other tabs.
-    try {
-      await Promise.all([
-        loadFotmobFixtures().catch((err) => {
+    // Paint each home widget as soon as its data arrives — never leave
+    // "Loading…" forever because one slow request held Promise.all.
+    const paintHome = () => {
+      try {
+        renderHomeTab();
+      } catch (err) {
+        console.error("Home render failed:", err);
+      }
+    };
+
+    const jobs = [
+      loadFotmobFixtures()
+        .then(paintHome)
+        .catch((err) => {
           widgetError("homePvUpcoming", `Could not load FotMob fixtures: ${err.message}`);
           widgetError("homePvPlayed", "FotMob results unavailable.");
           setHtml("homeNext", `<p class="home-empty">Could not load next fixture.</p>`);
-          return null;
         }),
-        loadFeeds(),
-        loadScoutCalendar().catch((err) => {
+      loadFeeds(),
+      loadScoutCalendar()
+        .then(paintHome)
+        .catch((err) => {
           widgetError("homeScoutUpcoming", "Assign fixtures in Fixture Planner.");
           console.warn("Scout calendar:", err.message);
-          return null;
         }),
-        loadTeamSchedule({ silent: true }),
-      ]);
-    } catch (_) {
-      /* individual handlers above */
-    }
+      loadTeamSchedule({ silent: true }).then(paintHome),
+      // Overview KPIs need league standings + play-off pace (light, cached).
+      loadStrategyBundle()
+        .then((strategy) => {
+          cachedStrategyBundle = strategy;
+          paintHome();
+        })
+        .catch((err) => {
+          setKpi("homeKpiOverviewPos", "—", "League data unavailable");
+          setKpi("homeKpiOverviewPpg", "—", "—");
+          setKpi("homeKpiOverviewPace", "—", "—");
+          console.warn("Strategy bundle:", err.message);
+        }),
+      loadStrategyTab({ detail: false })
+        .then((snap) => {
+          cachedStrategySnapshot = snap;
+          paintHome();
+        })
+        .catch((err) => {
+          console.warn("Strategy snapshot:", err.message);
+        }),
+    ];
 
-    renderHomeTab();
+    await Promise.allSettled(jobs);
+    paintHome();
     document.body.classList.remove("home-loading");
 
+    // Heavy recruitment / stand outs / phase detail still wait for their tabs.
     if (refreshTimer) clearInterval(refreshTimer);
     refreshTimer = setInterval(loadFeeds, 60000);
   }
