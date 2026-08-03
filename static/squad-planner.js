@@ -36,6 +36,21 @@ const LABEL_SHORT = {
   "in on loan": "L",
 };
 
+const LABEL_BREAKDOWN = [
+  { id: "young player", short: "Y", name: "Young", tone: "young" },
+  { id: "potential asset", short: "P", name: "Potential", tone: "potential" },
+  { id: "prime player", short: "★", name: "Prime", tone: "prime" },
+  { id: "experienced player", short: "E", name: "Experienced", tone: "experienced" },
+  { id: "in on loan", short: "L", name: "Loan", tone: "loan" },
+];
+
+const AGE_BANDS = [
+  { id: "u21", label: "<21", min: 0, max: 20 },
+  { id: "21-25", label: "21–25", min: 21, max: 25 },
+  { id: "25-30", label: "25–30", min: 26, max: 30 },
+  { id: "31+", label: "31+", min: 31, max: 200 },
+];
+
 // The backend only has generic CB/CM roles (CENTRAL_DEFENDER / CENTRAL_MIDFIELD).
 // This UI splits them into left/right boxes for planning purposes, while mapping
 // requests back to the same backend role so profile scores still work.
@@ -302,6 +317,7 @@ const state = {
     shadow: {},
   },
   selectedPosition: null,
+  selectedPlayerId: null,
   selectedSearchPlayer: null,
   searchResults: [],
   loading: false,
@@ -630,8 +646,35 @@ function updateTabUi() {
   els.tabShadow.setAttribute("aria-selected", String(!isCurrent));
   els.pitchTitle.textContent = `${state.formation} · ${TAB_TITLES[state.activeTab]}`;
   els.pageSubtitle.textContent = isCurrent
-    ? "Build your current squad · profile gap analysis on the right · click names to cycle labels"
-    : "Plan potential signings · profile gap analysis on the right · click names to cycle labels";
+    ? "Click a player for his gap scores · click again to cycle label · hover to remove"
+    : "Click a player for his gap scores · click again to cycle label · hover to remove";
+}
+
+function shortPlayerName(name) {
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length <= 1) return parts[0] || "Player";
+  return parts[parts.length - 1];
+}
+
+function getFocusedPlayer() {
+  if (!state.selectedPlayerId || !state.selectedPosition) return null;
+  const player = playersForPosition(state.selectedPosition).find(
+    (item) => item.id === state.selectedPlayerId
+  );
+  if (!player) return null;
+  return { positionId: state.selectedPosition, player };
+}
+
+function selectFocusedPlayer(positionId, playerId) {
+  state.selectedPosition = positionId;
+  state.selectedPlayerId = playerId;
+  if (els.targetPosition.querySelector(`option[value="${positionId}"]`)) {
+    els.targetPosition.value = positionId;
+  }
+  renderPitch();
 }
 
 function renderGapAnalysis() {
@@ -645,12 +688,18 @@ function renderGapAnalysis() {
     return;
   }
 
-  const activeLabel = state.selectedPosition
-    ? positionMeta(state.selectedPosition)?.label
-    : null;
-  els.gapSubtitle.textContent = activeLabel
-    ? `Showing ${activeLabel} · profile averages across assigned players`
-    : "Profile averages in formation · click a position to select";
+  const focused = getFocusedPlayer();
+  if (focused) {
+    const posLabel = positionMeta(focused.positionId)?.label || focused.positionId;
+    els.gapSubtitle.textContent = `${focused.player.name} · ${posLabel} (individual scores)`;
+  } else {
+    const activeLabel = state.selectedPosition
+      ? positionMeta(state.selectedPosition)?.label
+      : null;
+    els.gapSubtitle.textContent = activeLabel
+      ? `Showing ${activeLabel} · profile averages across assigned players`
+      : "Profile averages in formation · click a player for his scores";
+  }
 
   const lines = buildFormationLines(positions);
 
@@ -661,26 +710,42 @@ function renderGapAnalysis() {
     lineDef.positions.forEach((position) => {
       const players = playersForPosition(position.id);
       const profiles = position.profiles || [];
-      const averages = averageProfileScores(players, profiles);
+      const isPlayerFocus = focused && focused.positionId === position.id;
+      const scorePlayers = isPlayerFocus ? [focused.player] : players;
+      const averages = averageProfileScores(scorePlayers, profiles);
       const overall = overallAverage(averages);
-      const isActive = position.id === state.selectedPosition;
+      const isActive =
+        position.id === state.selectedPosition || isPlayerFocus;
+      const isDimmed = Boolean(focused) && !isPlayerFocus;
 
       const slot = document.createElement("div");
       slot.className = "gap-slot";
 
       const section = document.createElement("section");
-      section.className = `gap-position${isActive ? " gap-position--active" : ""}`;
+      section.className = [
+        "gap-position",
+        isActive ? "gap-position--active" : "",
+        isDimmed ? "gap-position--dimmed" : "",
+        isPlayerFocus ? "gap-position--player" : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
       section.dataset.position = position.id;
       section.setAttribute("role", "button");
       section.tabIndex = 0;
-      section.title = `Select ${position.label}`;
+      section.title = isPlayerFocus
+        ? `${focused.player.name} at ${position.label}`
+        : `Select ${position.label}`;
 
       const overallText = overall == null ? "—" : `${Math.round(overall)}%`;
+      const titleText = isPlayerFocus
+        ? `${position.shortLabel} · ${shortPlayerName(focused.player.name)}`
+        : position.shortLabel;
 
       const head = document.createElement("div");
       head.className = "gap-position__head";
       head.innerHTML = `
-        <span class="gap-position__title">${position.shortLabel}</span>
+        <span class="gap-position__title">${titleText}</span>
         <span class="gap-position__avg">${overallText}</span>
       `;
 
@@ -689,6 +754,8 @@ function renderGapAnalysis() {
 
       if (!profiles.length) {
         profilesWrap.innerHTML = `<p class="gap-empty gap-empty--inline">No benchmarks</p>`;
+      } else if (!scorePlayers.length) {
+        profilesWrap.innerHTML = `<p class="gap-empty gap-empty--inline">No players</p>`;
       } else {
         profiles.forEach((profile) => {
           const value = averages[profile.apiName];
@@ -737,6 +804,9 @@ function renderPlayerCard(positionId, player, index) {
   } else {
     row.classList.add("player-row--neutral");
   }
+  const isFocused =
+    state.selectedPlayerId === player.id && state.selectedPosition === positionId;
+  if (isFocused) row.classList.add("player-row--focused");
   row.dataset.position = positionId;
   row.dataset.index = String(index);
 
@@ -774,8 +844,16 @@ function renderPlayerCard(positionId, player, index) {
   const mainBtn = document.createElement("button");
   mainBtn.type = "button";
   mainBtn.className = "player-row__main";
-  mainBtn.title = [player.name, player.club, player.league].filter(Boolean).join(" · ");
-  mainBtn.setAttribute("aria-label", `Cycle label for ${player.name}`);
+  mainBtn.title = isFocused
+    ? `Click again to cycle label · ${[player.name, player.club, player.league].filter(Boolean).join(" · ")}`
+    : `Show gap scores for ${player.name}`;
+  mainBtn.setAttribute(
+    "aria-label",
+    isFocused
+      ? `Cycle label for ${player.name}`
+      : `Show gap analysis for ${player.name}`
+  );
+  mainBtn.setAttribute("aria-pressed", String(isFocused));
 
   const nameEl = document.createElement("span");
   nameEl.className = "player-row__name";
@@ -794,7 +872,11 @@ function renderPlayerCard(positionId, player, index) {
 
   mainBtn.addEventListener("click", (event) => {
     event.stopPropagation();
-    cyclePlayerLabel(positionId, index);
+    if (isFocused) {
+      cyclePlayerLabel(positionId, index);
+      return;
+    }
+    selectFocusedPlayer(positionId, player.id);
   });
 
   const removeBtn = document.createElement("button");
@@ -851,7 +933,11 @@ function handlePhotoPaste(positionId, index, event) {
 
 function removePlayer(positionId, index) {
   const players = playersForPosition(positionId);
+  const removed = players[index];
   players.splice(index, 1);
+  if (removed && state.selectedPlayerId === removed.id) {
+    state.selectedPlayerId = null;
+  }
   saveToStorage();
   renderPitch();
 }
@@ -904,6 +990,101 @@ function createPositionSlot(position) {
   return slot;
 }
 
+function allSquadPlayers() {
+  return Object.values(activeSquad()).flatMap((players) =>
+    Array.isArray(players) ? players : []
+  );
+}
+
+function ageBandFor(age) {
+  const n = Number(age);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return AGE_BANDS.find((band) => n >= band.min && n <= band.max) || null;
+}
+
+function breakdownRowHtml(mark, name, count, tone, max) {
+  const pct = Math.round((count / max) * 100);
+  return `
+    <div class="pitch-breakdown__row">
+      <span class="pitch-breakdown__mark pitch-breakdown__mark--${tone}">${mark}</span>
+      <span class="pitch-breakdown__name">${name}</span>
+      <span class="pitch-breakdown__bar" aria-hidden="true">
+        <span class="pitch-breakdown__fill pitch-breakdown__fill--${tone}" style="width:${pct}%"></span>
+      </span>
+      <span class="pitch-breakdown__count">${count}</span>
+    </div>
+  `;
+}
+
+function createBreakdownPanel({ side, title, totalLabel, ariaLabel, rowsHtml }) {
+  const panel = document.createElement("aside");
+  panel.className = `pitch-breakdown pitch-breakdown--${side}`;
+  panel.setAttribute("aria-label", ariaLabel);
+  panel.innerHTML = `
+    <div class="pitch-breakdown__head">
+      <span class="pitch-breakdown__title">${title}</span>
+      <span class="pitch-breakdown__total">${totalLabel}</span>
+    </div>
+    <div class="pitch-breakdown__section">
+      ${rowsHtml}
+    </div>
+  `;
+  return panel;
+}
+
+function createSquadBreakdowns() {
+  const players = allSquadPlayers();
+  const total = players.length;
+  const totalLabel = `${total} player${total === 1 ? "" : "s"}`;
+
+  const ageCounts = Object.fromEntries(AGE_BANDS.map((band) => [band.id, 0]));
+  let ageUnknown = 0;
+  players.forEach((player) => {
+    const band = ageBandFor(player.age);
+    if (band) ageCounts[band.id] += 1;
+    else ageUnknown += 1;
+  });
+
+  const labelCounts = Object.fromEntries(LABEL_BREAKDOWN.map((item) => [item.id, 0]));
+  let unlabeled = 0;
+  players.forEach((player) => {
+    if (player.label && labelCounts[player.label] != null) labelCounts[player.label] += 1;
+    else unlabeled += 1;
+  });
+
+  const maxAge = Math.max(1, ...Object.values(ageCounts), ageUnknown);
+  const maxLabel = Math.max(1, ...Object.values(labelCounts), unlabeled);
+
+  const ageRows = AGE_BANDS.map((band) =>
+    breakdownRowHtml("", band.label, ageCounts[band.id], "age", maxAge)
+  ).join("");
+  const ageUnknownRow =
+    ageUnknown > 0 ? breakdownRowHtml("?", "Unknown", ageUnknown, "muted", maxAge) : "";
+
+  const labelRows = LABEL_BREAKDOWN.map((item) =>
+    breakdownRowHtml(item.short, item.name, labelCounts[item.id], item.tone, maxLabel)
+  ).join("");
+  const unlabeledRow =
+    unlabeled > 0 ? breakdownRowHtml("–", "Unlabeled", unlabeled, "muted", maxLabel) : "";
+
+  return [
+    createBreakdownPanel({
+      side: "left",
+      title: "Age",
+      totalLabel,
+      ariaLabel: "Squad age breakdown",
+      rowsHtml: `${ageRows}${ageUnknownRow}`,
+    }),
+    createBreakdownPanel({
+      side: "right",
+      title: "Labels",
+      totalLabel,
+      ariaLabel: "Squad label breakdown",
+      rowsHtml: `${labelRows}${unlabeledRow}`,
+    }),
+  ];
+}
+
 function renderPitch() {
   const positions = formationPositionsWithProfiles();
   els.pitch.innerHTML = "";
@@ -926,11 +1107,13 @@ function renderPitch() {
     els.pitch.appendChild(line);
   });
 
+  createSquadBreakdowns().forEach((panel) => els.pitch.appendChild(panel));
   renderGapAnalysis();
 }
 
 function selectPosition(positionId) {
   state.selectedPosition = positionId;
+  state.selectedPlayerId = null;
   els.targetPosition.value = positionId;
   renderPitch();
 }
@@ -971,6 +1154,7 @@ function populatePositionSelect() {
 function switchTab(tabId) {
   if (tabId !== "current" && tabId !== "shadow") return;
   state.activeTab = tabId;
+  state.selectedPlayerId = null;
   updateTabUi();
   populatePositionSelect();
   saveToStorage();
@@ -980,6 +1164,7 @@ function switchTab(tabId) {
 function changeFormation(formationId) {
   if (formationId === state.formation) return;
   state.formation = formationId;
+  state.selectedPlayerId = null;
 
   ["current", "shadow"].forEach((tab) => {
     state.squads[tab] = initSquadForFormation(formationId, state.squads[tab]);
@@ -1143,7 +1328,9 @@ async function addSelectedPlayer() {
       label: null,
     });
 
+    const added = existing[existing.length - 1];
     state.selectedPosition = positionId;
+    state.selectedPlayerId = added.id;
     saveToStorage();
     renderPitch();
     setStatus(`${player.name} added to ${positionMeta(positionId)?.label || positionId}.`, "success");
@@ -1164,6 +1351,7 @@ function clearActiveSquad() {
   const tabLabel = TAB_TITLES[state.activeTab].toLowerCase();
   if (!confirm(`Clear all players from the ${tabLabel}?`)) return;
   state.squads[state.activeTab] = initSquadForFormation(state.formation);
+  state.selectedPlayerId = null;
   saveToStorage();
   renderPitch();
   setStatus(`${TAB_TITLES[state.activeTab]} cleared.`, "success");
