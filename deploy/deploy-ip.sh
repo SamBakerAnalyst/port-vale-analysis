@@ -54,6 +54,15 @@ docker compose --project-directory "$ROOT" -f deploy/docker-compose.ip.yml up -d
 echo "Waiting for health…"
 for _ in $(seq 1 30); do
   if docker compose --project-directory "$ROOT" -f deploy/docker-compose.ip.yml exec -T hub curl -sf http://localhost:8000/health >/dev/null 2>&1; then
+    # Prebuilt home-tab caches live in repo data/ (rsynced from Mac) — seed into the
+    # persistent volume so Stand outs / Recruitment tabs work immediately on cold deploy.
+    for cache in home-standouts-cache.json home-recruitment-cache.json home-strategy-cache.json squad-planner.json; do
+      if [[ -f "$ROOT/data/$cache" ]]; then
+        echo "Seeding /data/$cache into hub volume…"
+        docker compose --project-directory "$ROOT" -f deploy/docker-compose.ip.yml \
+          cp "$ROOT/data/$cache" "hub:/data/$cache" 2>/dev/null || true
+      fi
+    done
     PUBLIC_IP=$(curl -s ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')
     echo ""
     echo "✓ Hub is live at: http://${PUBLIC_IP}/"

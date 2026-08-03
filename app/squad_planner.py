@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+import threading
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -8,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from app.main import ALLOWED_POSITIONS
 from app.label_utils import humanize_profile_name
+from app.paths import DATA_ROOT, ensure_data_dirs
 from app.scouting import (
     SCOUTING_DIR,
     SCOUTING_COMPETITION_TO_LEAGUE,
@@ -37,6 +42,113 @@ SQUAD_PLANNER_POSITION_LABELS: dict[str, tuple[str, str]] = {
     position: (short_label, label)
     for position, short_label, label in SQUAD_PLANNER_POSITIONS
 }
+
+SQUAD_PLANNER_STATE_PATH = DATA_ROOT / "squad-planner.json"
+_squad_state_lock = threading.Lock()
+
+
+class SquadPlannerStatePayload(BaseModel):
+    formation: str = "4-3-3"
+    activeTab: str = "current"
+    squads: dict[str, Any] = Field(default_factory=dict)
+    selectedPosition: str | None = None
+    savedAt: str | None = None
+
+
+def _empty_squad_state() -> dict[str, Any]:
+    return {
+        "formation": "4-3-3",
+        "activeTab": "current",
+        "squads": {"current": {}, "shadow": {}},
+        "selectedPosition": None,
+        "savedAt": None,
+    }
+
+
+def _strip_photo_fields(value: Any) -> Any:
+    if isinstance(value, dict):
+        cleaned = {}
+        for key, item in value.items():
+            if key == "photoDataUrl":
+                cleaned[key] = None
+            else:
+                cleaned[key] = _strip_photo_fields(item)
+        return cleaned
+    if isinstance(value, list):
+        return [_strip_photo_fields(item) for item in value]
+    return value
+
+
+def _count_squad_players(squads: Any) -> int:
+    if not isinstance(squads, dict):
+        return 0
+    total = 0
+    for positions in squads.values():
+        if not isinstance(positions, dict):
+            continue
+        for players in positions.values():
+            if isinstance(players, list):
+                total += len(players)
+    return total
+
+
+def load_squad_planner_state() -> dict[str, Any]:
+    ensure_data_dirs()
+    if not SQUAD_PLANNER_STATE_PATH.exists():
+        return _empty_squad_state()
+    try:
+        payload = json.loads(SQUAD_PLANNER_STATE_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return _empty_squad_state()
+    if not isinstance(payload, dict):
+        return _empty_squad_state()
+
+    squads = payload.get("squads")
+    if not isinstance(squads, dict):
+        # Legacy single-squad shape
+        legacy = payload.get("squad")
+        squads = {"current": legacy if isinstance(legacy, dict) else {}, "shadow": {}}
+
+    return {
+        "formation": str(payload.get("formation") or "4-3-3"),
+        "activeTab": (
+            payload.get("activeTab")
+            if payload.get("activeTab") in {"current", "shadow"}
+            else "current"
+        ),
+        "squads": {
+            "current": squads.get("current") if isinstance(squads.get("current"), dict) else {},
+            "shadow": squads.get("shadow") if isinstance(squads.get("shadow"), dict) else {},
+        },
+        "selectedPosition": payload.get("selectedPosition") or payload.get("activePosition"),
+        "savedAt": payload.get("savedAt"),
+        "playerCount": _count_squad_players(squads),
+    }
+
+
+def save_squad_planner_state(body: SquadPlannerStatePayload) -> dict[str, Any]:
+    ensure_data_dirs()
+    active_tab = body.activeTab if body.activeTab in {"current", "shadow"} else "current"
+    squads = body.squads if isinstance(body.squads, dict) else {}
+    payload = {
+        "formation": str(body.formation or "4-3-3").strip() or "4-3-3",
+        "activeTab": active_tab,
+        "squads": _strip_photo_fields(
+            {
+                "current": squads.get("current") if isinstance(squads.get("current"), dict) else {},
+                "shadow": squads.get("shadow") if isinstance(squads.get("shadow"), dict) else {},
+            }
+        ),
+        "selectedPosition": body.selectedPosition,
+        "savedAt": datetime.now(UTC).isoformat(),
+    }
+    with _squad_state_lock:
+        temp_path = SQUAD_PLANNER_STATE_PATH.with_suffix(".json.tmp")
+        temp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        temp_path.replace(SQUAD_PLANNER_STATE_PATH)
+    payload["playerCount"] = _count_squad_players(payload["squads"])
+    return payload
+
 
 SQUAD_PLANNER_FORMATIONS: dict[str, tuple[str, ...]] = {
     "4-3-3": (
@@ -571,6 +683,14 @@ def register_squad_planner_routes(app: FastAPI) -> None:
     @app.get("/api/squad-planner/meta")
     def squad_planner_meta_route() -> dict[str, Any]:
         return squad_planner_meta()
+
+    @app.get("/api/squad-planner/state")
+    def squad_planner_state_get() -> dict[str, Any]:
+        return load_squad_planner_state()
+
+    @app.put("/api/squad-planner/state")
+    def squad_planner_state_put(body: SquadPlannerStatePayload) -> dict[str, Any]:
+        return save_squad_planner_state(body)
 
     @app.post("/api/squad-planner/player")
     def squad_planner_player_route(body: SquadPlannerPlayerRequest) -> dict[str, Any]:

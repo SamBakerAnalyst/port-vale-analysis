@@ -1,0 +1,185 @@
+{
+  "formation": "4-3-3",
+  "activeTab": "current",
+  "squads": {
+    "current": {
+      "GOALKEEPER": [
+        {
+          "id": "1464:111341",
+          "playerKey": "jackson smith|111341",
+          "name": "Jackson Smith",
+          "club": "Grimsby Town",
+          "league": "League Two",
+          "season": "25/26",
+          "minutes": 2867,
+          "iterationId": 1464,
+          "impectPlayerId": 111341,
+          "profileScores": {
+            "PV - Ball Playing Goal Keeper": 90.3,
+            "PV - Box Goalkeeper": 37.5,
+            "PV - Shot Stopping Goal Keeper": 93.1,
+            "PV - SWEEPER KEEPER": 26.4
+          },
+          "photoDataUrl": null
+        },
+        {
+          "id": "1511:109163",
+          "playerKey": "mason terry|109163",
+          "name": "Mason Terry",
+          "club": "Braintree Town",
+          "league": "National League",
+          "season": "25/26",
+          "minutes": 3575,
+          "iterationId": 1511,
+          "impectPlayerId": 109163,
+          "profileScores": {
+            "PV - Ball Playing Goal Keeper": 59.3,
+            "PV - Box Goalkeeper": 12.8,
+            "PV - Shot Stopping Goal Keeper": 91.9,
+            "PV - SWEEPER KEEPER": 40.7
+          },
+          "photoDataUrl": null
+        }
+      ],
+      "RIGHT_WINGBACK_DEFENDER": [
+        {
+          "id": "1465:77595",
+          "playerKey": "kyle john|77595",
+          "name": "Kyle John",
+          "club": "FC Port Vale",
+          "league": "League One",
+          "season": "25/26",
+          "minutes": 1076,
+          "iterationId": 1465,
+          "impectPlayerId": 77595,
+          "profileScores": {
+            "PV - DEEP CREATOR (RB)": 75,
+            "PV - Defender (RB / RWB)": 91.7,
+            "PV - Offensive (RB/RWB)": 63.9
+          },
+          "photoDataUrl": null
+        },
+        {
+          "id": "1465:59430",
+          "playerKey": "jordan gabriel|59430",
+          "name": "Jordan Gabriel",
+          "club": "FC Port Vale",
+          "league": "League One",
+          "season": "25/26",
+          "minutes": 1723,
+          "iterationId": 1465,
+          "impectPlayerId": 59430,
+          "profileScores": {
+            "PV - DEEP CREATOR (RB)": 6.5,
+            "PV - Defender (RB / RWB)": 56.5,
+            "PV - Offensive (RB/RWB)": 13.9
+          },
+          "photoDataUrl": null
+        }
+      ],
+      "LEFT_WINGBACK_DEFENDER": [
+        {
+          "id": "1465:80000",
+          "playerKey": "jaheim headley|80000",
+          "name": "Jaheim Headley",
+          "club": "FC Port Vale",
+          "league": "League One",
+          "season": "25/26",
+          "minutes": 1423,
+          "iterationId": 1465,
+          "impectPlayerId": 80000,
+          "profileScores": {
+            "PV - DEEP CREATOR (LB/LWB)": 54.8,
+            "PV - Defensive (LB/LWB)": 84.9,
+            "PV - Offensive (LB/LWB)": 75.4
+          },
+          "photoDataUrl": null
+        },
+        {
+          "id": "1465:25812",
+          "playerKey": "liam gordon|25812",
+          "name": "Liam Gordon",
+          "club": "FC Port Vale",
+          "league": "League One",
+          "season": "25/26",
+          "minutes": 1544,
+          "iterationId": 1465,
+          "impectPlayerId": 25812,
+          "profileScores": {
+            "PV - DEEP CREATOR (LB/LWB)": 42.1,
+            "PV - Defensive (LB/LWB)": 50,
+            "PV - Offensive (LB/LWB)": 38.9
+          },
+          "photoDataUrl": null
+        }
+      ],
+      "CENTRAL_DEFENDER": [
+        {
+          "id": "1465:59106",
+          "playerKey": "connor hall|59106",
+          "name": "Connor Hall",
+          "club": "FC Port Vale",
+          "league": "League One",
+          "season": "25/26",
+          "minutes": 3312,
+          "iterationId": 1465,
+          "impectPlayerId": 59106,
+          "profileScores": {
+            "PV - AERIAL CB": 71.7,
+            "PV - BALL PROGRESSOR": 59.4,
+            "PV - CENTRAL DUELER": 57,
+            "PV - LEFT SIDE DUELER": 79.1,
+            "PV - RIGHT SIDE DUELER": 31.6
+          },
+          "photoDataUrl": null
+        },
+        {
+          "id": "1465:2609",
+          "playerKey": "cameron humphreys|2609",
+          "name": "Cameron Humphreys",
+          "club": "FC Port Vale",
+          "league": "League One",
+          "season": "25/26",
+          "minutes": 3395,
+          "iterationId": 1465,
+          "impectPlayerId": 2609,
+          "profileScores": {
+            "PV - AERIAL CB": 20.9,
+            "PV - BALL PROGRESSOR": 77.5,
+            "PV - CENTRAL DUELER": 17.6,
+            "PV - LEFT SIDE DUELER": 27.5,
+            "PV - RIGHT SIDE DUELER": 48
+          },
+          "photoDataUrl": null
+        },
+        {
+          "id": "1465:59479",
+          "playerKey": "jasper moon|59479",
+          "name": "Jasper Moon",
+          "club": "Burton Albion",
+          "league": "League One",
+          "season": "25/26",
+          "minutes": 1648,
+          "iterationId": 1465,
+          "impectPlayerId": 59479,
+          "profileScores": {
+            "PV - AERIAL CB": 45.5,
+            "PV - BALL PROGRESSOR": 41.4,
+            "PV - CENTRAL DUELER": 50.4,
+            "PV - LEFT SIDE DUELER": 29.1,
+            "PV - RIGHT SIDE DUELER": 27.5
+          },
+          "photoDataUrl": null
+        }
+      ],
+      "DEFENSE_MIDFIELD": [],
+      "CENTRAL_MIDFIELD": [],
+      "LEFT_WINGER": [],
+      "RIGHT_WINGER": [],
+      "CENTER_FORWARD": []
+    },
+    "shadow": {}
+  },
+  "selectedPosition": "CENTRAL_DEFENDER",
+  "savedAt": "2026-07-08T09:13:50.307Z"
+}

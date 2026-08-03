@@ -551,49 +551,103 @@ function migrateSavedPlayers(savedSquad) {
   return migrated;
 }
 
+function applySavedState(saved) {
+  if (!saved || typeof saved !== "object") return false;
+
+  if (saved.formation && state.meta?.formations?.some((item) => item.id === saved.formation)) {
+    state.formation = saved.formation;
+  }
+
+  if (saved.activeTab === "current" || saved.activeTab === "shadow") {
+    state.activeTab = saved.activeTab;
+  }
+
+  if (saved.squads?.current || saved.squads?.shadow) {
+    state.squads.current = migrateSavedPlayers(saved.squads.current);
+    state.squads.shadow = migrateSavedPlayers(saved.squads.shadow);
+  } else if (saved.squad) {
+    state.squads.current = migrateSavedPlayers(saved.squad);
+    state.squads.shadow = initSquadForFormation(state.formation);
+  } else {
+    return false;
+  }
+
+  if (saved.selectedPosition) {
+    state.selectedPosition = saved.selectedPosition;
+  }
+  return true;
+}
+
+function countPlayersInSquads(squads) {
+  if (!squads || typeof squads !== "object") return 0;
+  return Object.values(squads).reduce((total, positions) => {
+    if (!positions || typeof positions !== "object") return total;
+    return (
+      total +
+      Object.values(positions).reduce(
+        (sum, players) => sum + (Array.isArray(players) ? players.length : 0),
+        0
+      )
+    );
+  }, 0);
+}
+
 function loadFromStorage() {
   try {
     const keys = [STORAGE_KEY, ...LEGACY_STORAGE_KEYS];
     const raw = keys.map((key) => localStorage.getItem(key)).find(Boolean);
-    if (!raw) return;
-
-    const saved = JSON.parse(raw);
-
-    if (saved.formation && state.meta?.formations?.some((item) => item.id === saved.formation)) {
-      state.formation = saved.formation;
-    }
-
-    if (saved.activeTab === "current" || saved.activeTab === "shadow") {
-      state.activeTab = saved.activeTab;
-    }
-
-    if (saved.squads?.current || saved.squads?.shadow) {
-      state.squads.current = migrateSavedPlayers(saved.squads.current);
-      state.squads.shadow = migrateSavedPlayers(saved.squads.shadow);
-    } else if (saved.squad) {
-      state.squads.current = migrateSavedPlayers(saved.squad);
-      state.squads.shadow = initSquadForFormation(state.formation);
-    }
-
-    if (saved.selectedPosition) {
-      state.selectedPosition = saved.selectedPosition;
-    }
+    if (!raw) return false;
+    return applySavedState(JSON.parse(raw));
   } catch {
-    // ignore corrupt storage
+    return false;
   }
 }
 
+function buildPersistPayload() {
+  return {
+    formation: state.formation,
+    activeTab: state.activeTab,
+    squads: state.squads,
+    selectedPosition: state.selectedPosition,
+    savedAt: new Date().toISOString(),
+  };
+}
+
 function saveToStorage() {
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({
-      formation: state.formation,
-      activeTab: state.activeTab,
-      squads: state.squads,
-      selectedPosition: state.selectedPosition,
-      savedAt: new Date().toISOString(),
-    })
-  );
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(buildPersistPayload()));
+}
+
+async function saveToServer({ quiet = false } = {}) {
+  const payload = buildPersistPayload();
+  try {
+    const saved = await fetchJson("/api/squad-planner/state", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+    saveToStorage();
+    if (!quiet) {
+      const count = saved.playerCount ?? countPlayersInSquads(payload.squads);
+      setStatus(`Squad saved for everyone (${count} players).`, "success");
+    }
+    return saved;
+  } catch (error) {
+    saveToStorage();
+    if (!quiet) {
+      setStatus(
+        `Saved in this browser only — server save failed (${error.message}).`,
+        "warn"
+      );
+    }
+    throw error;
+  }
+}
+
+async function loadFromServer() {
+  try {
+    return await fetchJson("/api/squad-planner/state");
+  } catch {
+    return null;
+  }
 }
 
 function nextLabel(currentLabel) {
@@ -1362,12 +1416,35 @@ async function init() {
     state.meta = normalizeMeta(await fetchJson("/api/squad-planner/meta"));
     state.formation = state.meta.defaultFormation || "4-3-3";
     initSquadsFromMeta();
-    loadFromStorage();
+
+    const serverState = await loadFromServer();
+    const serverCount = countPlayersInSquads(serverState?.squads);
+    let loadedFromServer = false;
+    if (serverState && serverCount > 0) {
+      loadedFromServer = applySavedState(serverState);
+      saveToStorage();
+    } else {
+      const loadedLocal = loadFromStorage();
+      const localCount = countPlayersInSquads(state.squads);
+      if (loadedLocal && localCount > 0 && serverCount === 0) {
+        try {
+          await saveToServer({ quiet: true });
+          setStatus(`Synced ${localCount} local players to the shared squad.`, "success");
+        } catch {
+          // local-only fallback already handled
+        }
+      }
+    }
+
     populateFormationSelect();
     populatePositionSelect();
     updateTabUi();
     renderPitch();
-    setStatus("");
+    if (!loadedFromServer && countPlayersInSquads(state.squads) === 0) {
+      setStatus("");
+    } else if (loadedFromServer) {
+      setStatus("");
+    }
   } catch (error) {
     setStatus(error.message, "error");
   }
@@ -1405,8 +1482,7 @@ els.tabShadow.addEventListener("click", () => switchTab("shadow"));
 els.addPlayerBtn.addEventListener("click", addSelectedPlayer);
 els.clearBtn.addEventListener("click", clearActiveSquad);
 els.saveBtn.addEventListener("click", () => {
-  saveToStorage();
-  setStatus("Squad saved to this browser.", "success");
+  saveToServer().catch(() => {});
 });
 
 document.addEventListener("keydown", (event) => {
