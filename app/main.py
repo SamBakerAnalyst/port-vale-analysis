@@ -4589,14 +4589,39 @@ def _player_positions_payload(body: ImpectQuery) -> dict[str, Any]:
     return {"players": players_payload, "warnings": warnings}
 
 
+def _hub_build_id() -> str:
+    """Content-sensitive build stamp so browsers cannot keep a stale hub shell."""
+    roots = [
+        BASE_DIR / "standalone" / "hub.html",
+        BASE_DIR / "standalone" / "hub-home.js",
+        BASE_DIR / "standalone" / "apps.js",
+        BASE_DIR / "standalone" / "hub-launcher.js",
+        BASE_DIR / "app" / "auth.py",
+    ]
+    latest = 0
+    for path in roots:
+        try:
+            latest = max(latest, int(path.stat().st_mtime))
+        except OSError:
+            continue
+    return f"b{latest}" if latest else datetime.utcnow().strftime("b%Y%m%d%H%M")
+
+
 @app.get("/", response_class=HTMLResponse)
 def index() -> HTMLResponse:
     html_path = SCOUTING_DIR / "hub.html"
     if not html_path.exists():
         raise HTTPException(status_code=503, detail="Hub page not found at standalone/hub.html")
+    build = _hub_build_id()
+    html = html_path.read_text(encoding="utf-8").replace("__HUB_BUILD__", build)
     return HTMLResponse(
-        html_path.read_text(encoding="utf-8"),
-        headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"},
+        html,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "X-Hub-Build": build,
+        },
     )
 
 
@@ -4941,6 +4966,7 @@ from app.availability_tracker import register_availability_tracker_routes
 from app.scouting_address import register_scouting_address_routes
 from app.home_dashboard import register_home_dashboard_routes
 from app.who_to_scout import register_who_to_scout_routes
+from app.player_dossier import register_player_dossier_routes
 from app.schedule import register_schedule_routes
 
 register_post_match_routes(app)
@@ -4957,4 +4983,5 @@ register_availability_tracker_routes(app)
 register_scouting_address_routes(app)
 register_home_dashboard_routes(app)
 register_who_to_scout_routes(app)
+register_player_dossier_routes(app)
 register_schedule_routes(app)

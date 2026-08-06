@@ -421,6 +421,17 @@
     }
 
     .hub__restart-btn:disabled { opacity: 0.55; cursor: wait; }
+    .hub__build {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: #0c0f14;
+      background: var(--gold);
+      border-radius: 999px;
+      padding: 0.28rem 0.65rem;
+      white-space: nowrap;
+    }
 
     .hub__feedback-link {
       padding: 0;
@@ -1913,7 +1924,7 @@
     .feedback-modal__btn--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
     .feedback-modal__btn:disabled { opacity: 0.6; cursor: wait; }
   </style>
-  <link rel="stylesheet" href="/standalone/hub-launcher.css?v=20260729" />
+  <link rel="stylesheet" href="/standalone/hub-launcher.css?v=__HUB_BUILD__" />
 </head>
 <body>
   <div class="shell">
@@ -1960,6 +1971,7 @@
             <span class="hub__status-dot"></span>
             <span id="serverStatusText">Checking…</span>
           </div>
+          <span class="hub__build" id="hubBuildStamp" title="If this stamp is missing or old after refresh, you are on a cached page">Build __HUB_BUILD__</span>
           <button type="button" class="hub__restart-btn" id="restartServerBtn">Restart</button>
           <a class="hub__restart-btn" id="startServerLink" href="/standalone/restart.command" hidden>Start server</a>
           <div class="hub__clock" aria-live="polite">
@@ -1982,7 +1994,7 @@
         </div>
 
         <div class="home-panel" data-panel="home" role="tabpanel">
-          <p class="home-season" id="homeOverviewSeason">Port Vale · League One</p>
+          <p class="home-season" id="homeOverviewSeason">Port Vale · League Two</p>
           <div class="home-kpis">
             <article class="home-kpi" id="homeKpiOverviewPos" style="--kpi-accent:#f5c518">
               <p class="home-kpi__label">League position</p>
@@ -2074,7 +2086,7 @@
         </div>
 
         <div class="home-panel" data-panel="performance" role="tabpanel" hidden>
-          <p class="home-season" id="homeSeasonLabel">League One</p>
+          <p class="home-season" id="homeSeasonLabel">League Two</p>
           <div class="home-kpis">
             <article class="home-kpi" id="homeKpiPos" style="--kpi-accent:#f5c518">
               <p class="home-kpi__label">League position</p>
@@ -2216,7 +2228,7 @@
             </article>
             <article class="home-card home-card--wide">
               <div class="home-card__head">
-                <h2 class="home-card__title">Port Vale vs League One</h2>
+                <h2 class="home-card__title">Port Vale vs League Two</h2>
                 <span class="home-card__link" id="homeRecruitLeagueNote">Rank · avg</span>
               </div>
               <div id="homeRecruitVsLeague"><p class="home-empty">Loading league comparison…</p></div>
@@ -2379,10 +2391,10 @@
     </div>
   </div>
 
-  <script src="/standalone/hub-launcher.js?v=20260729"></script>
-  <script src="/standalone/apps.js?v=20260802-players-strategy"></script>
-  <script src="/standalone/hub-player-search.js?v=1"></script>
-  <script src="/standalone/hub-home.js?v=20260806-l2"></script>
+  <script src="/standalone/hub-launcher.js?v=__HUB_BUILD__"></script>
+  <script src="/standalone/apps.js?v=__HUB_BUILD__"></script>
+  <script src="/standalone/hub-player-search.js?v=__HUB_BUILD__"></script>
+  <script src="/standalone/hub-home.js?v=__HUB_BUILD__"></script>
   <script>
     const SCOUTING_SERVER = "http://127.0.0.1:8000";
     if (window.location.protocol === "file:") {
