@@ -2394,8 +2394,27 @@
         ? window.location.origin
         : SCOUTING_SERVER;
 
+    window.HubAuth = {
+      role: "admin",
+      groups: ["analysis", "recruitment", "scouts", "strategy"],
+      allow_all: true,
+      username: "",
+      display_name: "",
+    };
+
     function appUrl(href) {
       return href.startsWith("http") ? href : `${BASE}${href}`;
+    }
+
+    function allowedGroups() {
+      return new Set(window.HubAuth.groups || []);
+    }
+
+    function visibleApps() {
+      const groups = allowedGroups();
+      return (window.IMPECT_APPS || []).filter(
+        (app) => window.HubAuth.allow_all || groups.has(app.group)
+      );
     }
 
     function greeting() {
@@ -2418,9 +2437,79 @@
       });
     }
 
+    function applyRoleToUi() {
+      const isAdmin = window.HubAuth.allow_all || window.HubAuth.role === "admin";
+      const restartBtn = document.getElementById("restartServerBtn");
+      const startLink = document.getElementById("startServerLink");
+      if (restartBtn) restartBtn.hidden = !isAdmin;
+      if (startLink && !isAdmin) startLink.hidden = true;
+
+      const search = document.getElementById("hubPlayerSearchWrap");
+      if (search) search.hidden = !isAdmin;
+
+      document.querySelectorAll(".home-tab").forEach((btn) => {
+        const tab = btn.dataset.tab;
+        if (tab === "home") return;
+        btn.hidden = !isAdmin;
+      });
+
+      if (!isAdmin) {
+        // Soften home for analysis-only: hide league/recruit widgets they cannot load.
+        document.querySelectorAll(
+          "#homeDashboard .home-kpis, #homeDashboard .home-grid, #homeDashboard .home-live-grid"
+        ).forEach((el) => {
+          el.hidden = true;
+        });
+        document.querySelectorAll(".home-tab").forEach((tab) => {
+          if (tab.dataset.tab !== "home") tab.hidden = true;
+        });
+        let tools = document.getElementById("analysisOnlyTools");
+        if (!tools) {
+          tools = document.createElement("div");
+          tools.id = "analysisOnlyTools";
+          tools.innerHTML = `<p class="home-season" style="margin-top:0">Analysis tools</p>
+            <p class="home-empty" style="margin-bottom:1rem">Your account can open the analysis apps below. Recruitment, scouting and strategy tools stay locked.</p>
+            <div class="home-rank-grid" id="analysisOnlyToolsGrid"></div>`;
+          const homePanel = document.querySelector('#homeDashboard .home-panel[data-panel="home"]');
+          homePanel?.prepend(tools);
+        }
+        const grid = document.getElementById("analysisOnlyToolsGrid");
+        if (grid) {
+          grid.innerHTML = visibleApps()
+            .filter((app) => !app.comingSoon)
+            .map(
+              (app) => `<a class="home-rank-card" href="${appUrl(app.href)}" style="text-decoration:none;color:inherit;display:block;padding:1rem;border:1px solid var(--border);border-radius:12px;border-top:3px solid ${app.accent || "var(--accent)"}">
+                <strong style="display:block;margin-bottom:0.35rem">${app.icon || ""} ${app.title}</strong>
+                <span style="font-size:0.85rem;color:var(--text-muted)">${app.description || ""}</span>
+              </a>`
+            )
+            .join("");
+          grid.querySelectorAll("a").forEach((link) => {
+            link.addEventListener("click", (event) => {
+              event.preventDefault();
+              const href = link.getAttribute("href");
+              const app = visibleApps().find((row) => appUrl(row.href) === href);
+              if (app && window.HubLauncher) {
+                HubLauncher.openApp(app, href).catch((err) => window.alert(err.message || String(err)));
+              } else {
+                window.location.href = href;
+              }
+            });
+          });
+        }
+      }
+
+      if (new URLSearchParams(window.location.search).get("locked") === "1") {
+        window.alert("That tool is locked on your account. Analysis tools only.");
+        history.replaceState({}, "", "/");
+      }
+    }
+
     function renderRail() {
-      const apps = window.IMPECT_APPS || [];
-      const groups = window.IMPECT_APP_GROUPS || [];
+      const apps = visibleApps();
+      const groups = (window.IMPECT_APP_GROUPS || []).filter(
+        (group) => window.HubAuth.allow_all || allowedGroups().has(group.id)
+      );
       const root = document.getElementById("railGroups");
       root.innerHTML = "";
 
@@ -2502,15 +2591,42 @@
     document.title = "Port Vale Hub";
     updateClock();
     setInterval(updateClock, 30_000);
-    renderRail();
-    checkServer();
-    setInterval(checkServer, 30_000);
     document.getElementById("restartServerBtn").addEventListener("click", restartServer);
     document.getElementById("railHomeBtn").addEventListener("click", () => {
-      if (window.HubHome) HubHome.setTab("home");
+      if (window.HubHome && (window.HubAuth.allow_all || window.HubAuth.role === "admin")) {
+        HubHome.setTab("home");
+      }
       document.getElementById("homeDashboard").scrollIntoView({ behavior: "smooth", block: "start" });
     });
-    if (window.HubHome) HubHome.load();
+
+    async function bootHub() {
+      try {
+        const res = await fetch(`${BASE}/api/auth/me`, { cache: "no-store", signal: AbortSignal.timeout(8000) });
+        if (res.ok) {
+          const me = await res.json();
+          window.HubAuth = {
+            role: me.role || "admin",
+            groups: me.groups || ["analysis", "recruitment", "scouts", "strategy"],
+            allow_all: !!me.allow_all,
+            username: me.username || "",
+            display_name: me.display_name || me.username || "",
+          };
+          if (me.display_name) {
+            document.getElementById("greeting").textContent = `${greeting()} — ${me.display_name}`;
+          }
+        }
+      } catch (_) {
+        /* keep admin defaults when auth endpoint unavailable */
+      }
+      applyRoleToUi();
+      renderRail();
+      checkServer();
+      setInterval(checkServer, 30_000);
+      if (window.HubHome && (window.HubAuth.allow_all || window.HubAuth.role === "admin")) {
+        HubHome.load();
+      }
+    }
+    bootHub();
 
     (function initFeedback() {
       const modal = document.getElementById("feedbackModal");
