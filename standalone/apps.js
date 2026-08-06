@@ -57,6 +57,28 @@ window.IMPECT_APPS = [
     tags: ["Opponent", "Prep"],
   },
   {
+    id: "set-piece-pre-match",
+    group: "analysis",
+    title: "Set Piece Pre-Match",
+    description:
+      "Dedicated set-play prep — squad heights, first-contact maps, corner/FK KPIs, and aerial threats.",
+    href: "/set-piece-pre-match",
+    icon: "🚩",
+    accent: "#14b8a6",
+    tags: ["Opponent", "Set pieces"],
+  },
+  {
+    id: "player-cards",
+    group: "analysis",
+    title: "Player Cards",
+    description:
+      "Blank opponent squad cards for performance analysis — club site headshots, Impect height and foot, 26/27 fixtures.",
+    href: "/player-cards",
+    icon: "🪪",
+    accent: "#e52320",
+    tags: ["Opponent", "Squad", "Cards"],
+  },
+  {
     id: "xg-chance-analysis",
     group: "analysis",
     title: "xG Chance Analysis",
@@ -77,6 +99,17 @@ window.IMPECT_APPS = [
     icon: "📊",
     accent: "#34d399",
     tags: ["Match day", "Export"],
+  },
+  {
+    id: "schedule",
+    group: "analysis",
+    title: "Schedule",
+    description:
+      "First-team calendar — Port Vale fixtures from FotMob, training vs regen days, report times, and custom events.",
+    href: "/schedule",
+    icon: "📆",
+    accent: "#22c55e",
+    tags: ["Training", "Fixtures", "Calendar"],
   },
   {
     id: "player-comparison",
@@ -260,11 +293,9 @@ window.IMPECT_APPS = [
     title: "League Two Progress Report",
     description:
       "Track live promotion progress, point pace, and season targets against benchmarks.",
-    href: "http://127.0.0.1:8003/",
+    href: "/strategy-tracker",
     icon: "📉",
     accent: "#fbbf24",
     tags: ["League Two", "Progress"],
-    comingSoon: true,
-    note: "Coming soon — in-season progress dashboard in development.",
   },
 ];

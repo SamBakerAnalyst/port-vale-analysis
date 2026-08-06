@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <title>Player · Port Vale Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="/static/player-dossier.css?v=14" />
+</head>
+<body>
+  <div class="pd">
+    <header class="pd-top">
+      <a class="pd-back" href="/">← Hub</a>
+      <div class="pd-top__actions" id="pdActions" hidden>
+        <a class="pd-btn" id="pdChartsLink" href="#">Full charts</a>
+        <a class="pd-btn pd-btn--ghost" id="pdCompareLink" href="/studio">Compare</a>
+      </div>
+    </header>
+
+    <div id="pdStatus" class="pd-status">Loading player…</div>
+    <div id="pdError" class="pd-error" hidden></div>
+
+    <section class="pd-hero" id="pdHero" hidden>
+      <div class="pd-hero__photo-wrap">
+        <img class="pd-hero__photo" id="pdPhoto" alt="" />
+        <div class="pd-hero__photo-fallback" id="pdPhotoFallback" hidden></div>
+      </div>
+      <div class="pd-hero__body">
+        <p class="pd-hero__eyebrow" id="pdClubSeason"></p>
+        <h1 class="pd-hero__name" id="pdName"></h1>
+        <p class="pd-hero__meta" id="pdMeta"></p>
+        <div class="pd-hero__tags" id="pdTags"></div>
+        <div class="pd-ability" id="pdAbility" hidden></div>
+        <div class="pd-stats" id="pdBioStats"></div>
+        <div class="pd-hero-metrics" id="pdHeroMetrics"></div>
+        <div class="pd-positions" id="pdPositions"></div>
+      </div>
+    </section>
+
+    <section class="pd-keystats" id="pdKeyStatsCard" hidden>
+      <div class="pd-card__head">
+        <h2>Key stats</h2>
+        <span class="pd-card__sub">Impect · Transfermarkt · FBRef when available</span>
+      </div>
+      <div class="pd-keystats__grid" id="pdKeyStats"></div>
+    </section>
+
+    <section class="pd-fbref" id="pdFbrefCard" hidden>
+      <div class="pd-card__head">
+        <h2>FBRef snapshot</h2>
+        <a class="pd-card__sub" id="pdFbrefLink" href="#" target="_blank" rel="noopener">Open on FBRef →</a>
+      </div>
+      <div class="pd-keystats__grid" id="pdFbrefStats"></div>
+      <div class="pd-profile-legend" id="pdFbrefPips"></div>
+    </section>
+
+    <div class="pd-grid" id="pdGrid" hidden>
+      <article class="pd-card pd-card--radar">
+        <div class="pd-card__head">
+          <h2>PV profiles</h2>
+          <span class="pd-card__sub">Port Vale Impect profiles</span>
+        </div>
+        <div id="pdRadar" class="pd-radar"></div>
+        <div id="pdProfiles" class="pd-profile-legend"></div>
+      </article>
+
+      <article class="pd-card pd-card--file">
+        <div class="pd-file-block">
+          <div class="pd-card__head pd-card__head--actions">
+            <div>
+              <h2>Notes</h2>
+              <span class="pd-card__sub">Work updates · agent · chasing</span>
+            </div>
+            <button type="button" class="pd-btn pd-btn--small pd-btn--ghost" id="pdAddNoteBtn">Add notes</button>
+          </div>
+          <div id="pdNotes"><p class="pd-empty">No notes yet.</p></div>
+        </div>
+        <div class="pd-file-block">
+          <div class="pd-card__head pd-card__head--actions">
+            <div>
+              <h2>Scout reports</h2>
+              <span class="pd-card__sub">Full looks · CA / PA stars</span>
+            </div>
+            <button type="button" class="pd-btn pd-btn--small" id="pdAddReportBtn">Add report</button>
+          </div>
+          <div id="pdReports"><p class="pd-empty">No scout reports yet.</p></div>
+        </div>
+      </article>
+
+      <article class="pd-card">
+        <div class="pd-card__head">
+          <h2>Recent games</h2>
+          <span class="pd-card__sub">Form · minutes · Impect</span>
+        </div>
+        <div id="pdGames" class="pd-games-wrap"><p class="pd-empty">Loading recent games…</p></div>
+      </article>
+
+      <article class="pd-card">
+        <div class="pd-card__head">
+          <h2>Upcoming games</h2>
+          <span class="pd-card__sub" id="pdUpcomingSub">FotMob · next for this club</span>
+        </div>
+        <div id="pdUpcoming" class="pd-games-wrap"><p class="pd-empty">Loading fixtures…</p></div>
+      </article>
+
+      <article class="pd-card pd-card--wide">
+        <div class="pd-card__head">
+          <h2>Season history</h2>
+          <span class="pd-card__sub">Leagues &amp; clubs in our catalog</span>
+        </div>
+        <div id="pdSeasons"><p class="pd-empty">No seasons listed.</p></div>
+      </article>
+    </div>
+  </div>
+
+  <div class="pd-modal" id="pdNoteModal" hidden>
+    <div class="pd-modal__backdrop" data-close-note></div>
+    <div class="pd-modal__panel" role="dialog" aria-modal="true" aria-labelledby="pdNoteModalHeading">
+      <header class="pd-modal__head">
+        <h2 id="pdNoteModalHeading">Add notes</h2>
+        <button type="button" class="pd-modal__close" data-close-note aria-label="Close">×</button>
+      </header>
+      <form id="pdNoteForm" class="pd-note-form">
+        <input type="hidden" id="pdNoteKind" name="kind" value="note" />
+        <label class="pd-note-form__field">
+          <span>Title</span>
+          <input type="text" id="pdNoteTitleInput" name="title" placeholder="e.g. Agent call · transfer update" maxlength="120" />
+        </label>
+        <div class="pd-note-form__row">
+          <label class="pd-note-form__field">
+            <span id="pdNoteStaffLabel">Author</span>
+            <input type="text" id="pdNoteStaff" name="staff" placeholder="Your name" maxlength="80" />
+          </label>
+          <label class="pd-note-form__field" id="pdNotePositionWrap">
+            <span>Position</span>
+            <input type="text" id="pdNotePosition" name="position" placeholder="e.g. LW" maxlength="40" />
+          </label>
+        </div>
+        <div class="pd-note-form__row" id="pdNoteAbilityWrap">
+          <div class="pd-note-form__field">
+            <span>Current ability</span>
+            <div class="pd-star-picker" id="pdNoteCa" data-max="5" data-value="0" aria-label="Current ability"></div>
+          </div>
+          <div class="pd-note-form__field">
+            <span>Potential ability</span>
+            <div class="pd-star-picker" id="pdNotePa" data-max="5" data-value="0" aria-label="Potential ability"></div>
+          </div>
+        </div>
+        <label class="pd-note-form__field">
+          <span id="pdNoteBodyLabel">Notes</span>
+          <textarea id="pdNoteSummary" name="summary" rows="6" required placeholder="Work update, agent chat, chasing status…"></textarea>
+        </label>
+        <p class="pd-note-form__error" id="pdNoteError" hidden></p>
+        <div class="pd-note-form__actions">
+          <button type="button" class="pd-btn pd-btn--ghost" data-close-note>Cancel</button>
+          <button type="submit" class="pd-btn" id="pdNoteSave">Save notes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script defer src="/static/player-dossier.js?v=14"></script>
+</body>
+</html>

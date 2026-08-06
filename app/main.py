@@ -4968,6 +4968,9 @@ from app.home_dashboard import register_home_dashboard_routes
 from app.who_to_scout import register_who_to_scout_routes
 from app.player_dossier import register_player_dossier_routes
 from app.schedule import register_schedule_routes
+from app.set_piece_pre_match import register_set_piece_pre_match_routes
+from app.player_cards import register_player_cards_routes
+from app.strategy_tracker import register_strategy_tracker_routes
 
 register_post_match_routes(app)
 register_scouting_routes(app)
@@ -4985,3 +4988,6 @@ register_home_dashboard_routes(app)
 register_who_to_scout_routes(app)
 register_player_dossier_routes(app)
 register_schedule_routes(app)
+register_set_piece_pre_match_routes(app)
+register_player_cards_routes(app)
+register_strategy_tracker_routes(app)

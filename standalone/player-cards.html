@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Player Cards</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/player-cards.css?v=23" />
+</head>
+<body>
+  <div class="pc-app">
+    <header class="pc-toolbar">
+      <div class="pc-toolbar__left">
+        <p class="pc-toolbar__eyebrow">Analysis · <a href="/">← All apps</a></p>
+        <h1 class="pc-toolbar__title">Player Cards</h1>
+        <p class="pc-toolbar__subtitle">EFL Championship · League One · League Two — club headshots, height &amp; foot</p>
+      </div>
+      <div class="pc-toolbar__right">
+        <button type="button" class="pc-btn pc-btn--ghost" id="printBtn">Print landscape</button>
+        <button type="button" class="pc-btn" id="exportPdfBtn">Export PDF</button>
+        <button type="button" class="pc-btn pc-btn--ghost" id="refreshBtn">Refresh</button>
+      </div>
+    </header>
+
+    <section class="pc-controls">
+      <div class="pc-controls__group pc-controls__group--league">
+        <label class="pc-controls__label" for="leagueSelect">League</label>
+        <select id="leagueSelect" class="pc-select" aria-label="League">
+          <option value="Championship">Championship</option>
+          <option value="League One">League One</option>
+          <option value="League Two" selected>League Two</option>
+        </select>
+      </div>
+      <div class="pc-controls__group pc-controls__group--grow">
+        <label class="pc-controls__label" for="clubSelect">Club</label>
+        <select id="clubSelect" class="pc-select" aria-label="Club"></select>
+      </div>
+      <div class="pc-controls__toggles" aria-label="Card editing options">
+        <label class="pc-toggle" for="editCardsToggle">
+          <input type="checkbox" id="editCardsToggle" />
+          Edit cards
+        </label>
+        <span class="pc-controls__hint">Click any number / position to edit · foot cycles on click</span>
+      </div>
+      <div class="pc-controls__meta" id="clubMeta"></div>
+    </section>
+
+    <div id="statusBanner" class="pc-status hidden" role="status"></div>
+
+    <main id="cardsBoard" class="pc-board" aria-live="polite"></main>
+    <div id="exportRoot" class="pc-export-root" hidden aria-hidden="true"></div>
+  </div>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="/static/player-cards.js?v=23"></script>
+</body>
+</html>

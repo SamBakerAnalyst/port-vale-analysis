@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <title>Set Piece Pre-Match</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/set-piece-pre-match/assets/app.css?v=20260806-modes" />
+</head>
+<body>
+  <div class="sp-app" id="spApp">
+    <header class="sp-toolbar">
+      <div class="sp-toolbar__left">
+        <p class="sp-toolbar__eyebrow">Port Vale FC · Analysis · <a href="/">← All apps</a></p>
+        <h1 class="sp-toolbar__title">Set Piece Pre-Match</h1>
+      </div>
+      <div class="sp-toolbar__right">
+        <p class="sp-toolbar__export-status" id="exportStatus" role="status" aria-live="polite"></p>
+        <div class="sp-slide-nav sp-btn--deck-mode">
+          <button type="button" class="sp-btn sp-btn--ghost" id="prevSlideBtn" aria-label="Previous slide" disabled>←</button>
+          <span class="sp-slide-nav__count" id="slideCounter">—</span>
+          <button type="button" class="sp-btn sp-btn--ghost" id="nextSlideBtn" aria-label="Next slide" disabled>→</button>
+        </div>
+        <button type="button" class="sp-btn sp-btn--ghost sp-btn--deck-mode" id="refreshBtn" disabled>Refresh data</button>
+        <button type="button" class="sp-btn sp-btn--export sp-btn--deck-mode" id="pdfViewBtn" disabled title="Big slides tuned for PDF — same layout as WhatsApp export">PDF version</button>
+        <button type="button" class="sp-btn sp-btn--gold sp-btn--deck-mode" id="presentBtn" disabled title="Fullscreen presentation (P)">Present</button>
+        <button type="button" class="sp-btn sp-btn--ghost sp-btn--pdf-mode" id="pdfBackBtn">Back to deck</button>
+        <button type="button" class="sp-btn sp-btn--whatsapp" id="exportWhatsappPdfBtn" disabled title="Best for WhatsApp — full 1080p PDF of every slide">WhatsApp PDF</button>
+      </div>
+    </header>
+
+    <div class="sp-match-bar-wrap">
+      <div class="sp-season-bar">
+        <span class="sp-season-bar__label">Season</span>
+        <div id="seasonToggle" class="sp-season-toggle" role="group" aria-label="Season"></div>
+      </div>
+      <div id="matchBar" class="sp-match-bar" role="listbox" aria-label="Upcoming fixtures"></div>
+    </div>
+
+    <div id="statusBanner" class="sp-status hidden" role="status"></div>
+
+    <div class="sp-deck-shell">
+      <main id="deckViewport" class="sp-deck-viewport" aria-live="polite">
+        <div id="deck" class="sp-deck"></div>
+      </main>
+    </div>
+
+    <footer id="statusBar" class="sp-footer">Select a fixture to load set-piece prep.</footer>
+  </div>
+
+  <div id="exportOverlay" class="sp-export-overlay" aria-live="polite" aria-busy="true"></div>
+  <div class="sp-present-ui sp-present-count" id="presentCount"></div>
+  <button type="button" class="sp-present-ui sp-present-nav sp-present-nav--prev" id="presentPrev" aria-label="Previous slide">‹</button>
+  <button type="button" class="sp-present-ui sp-present-nav sp-present-nav--next" id="presentNext" aria-label="Next slide">›</button>
+  <div class="sp-present-ui sp-present-hint" id="presentHint">← Back · → Forward · Esc exit · P toggle</div>
+
+  <input type="hidden" id="iterationId" value="" />
+  <input type="hidden" id="opponentId" value="" />
+  <input type="hidden" id="matchId" value="" />
+
+  <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script defer src="/set-piece-pre-match/assets/app.js?v=20260806-modes"></script>
+</body>
+</html>

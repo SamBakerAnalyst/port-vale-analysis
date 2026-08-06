@@ -177,22 +177,30 @@
     setText("homeOverviewSeason", seasonLabel || COMPETITION);
     const pace = strategySnapshot?.pace || {};
     const upcoming = (matches || []).find((m) => !m.outcome);
-    const pos = pv?.position ?? "—";
-    const pts = pv?.points ?? "—";
-    setKpi("homeKpiOverviewPos", `#${pos}`, `${pts} pts · ${pv?.played ?? "—"} played`);
-    setKpi(
-      "homeKpiOverviewPpg",
-      fmt(pv?.ppg, 2),
-      `League ${fmt(averages?.ppg, 2)} · xPPG ${fmt(pace.xppg ?? pv?.xppg, 2)}`
-    );
-    const onTrack = pace.on_track_playoff;
-    setKpi(
-      "homeKpiOverviewPace",
-      onTrack == null ? "—" : onTrack ? "On track" : "Off pace",
-      pace.playoff_ppg != null
-        ? `Need ${fmt(pace.playoff_ppg, 2)} · ${signed(pace.pts_vs_playoff, 0)} pts`
-        : "Play-off line"
-    );
+    const seasonStarted = Number(pv?.played || 0) > 0 || Number(pace.played || 0) > 0;
+
+    if (!pv || !seasonStarted) {
+      setKpi("homeKpiOverviewPos", "TBC", "League Two 26/27 — table not live in Impect yet");
+      setKpi("homeKpiOverviewPpg", "—", "Waiting for first league games");
+      setKpi("homeKpiOverviewPace", "—", "Play-off line after matchday 1");
+    } else {
+      const pos = pv?.position ?? "—";
+      const pts = pv?.points ?? "—";
+      setKpi("homeKpiOverviewPos", `#${pos}`, `${pts} pts · ${pv?.played ?? "—"} played`);
+      setKpi(
+        "homeKpiOverviewPpg",
+        fmt(pv?.ppg, 2),
+        `League ${fmt(averages?.ppg, 2)} · xPPG ${fmt(pace.xppg ?? pv?.xppg, 2)}`
+      );
+      const onTrack = pace.on_track_playoff;
+      setKpi(
+        "homeKpiOverviewPace",
+        onTrack == null ? "—" : onTrack ? "On track" : "Off pace",
+        pace.playoff_ppg != null
+          ? `Need ${fmt(pace.playoff_ppg, 2)} · ${signed(pace.pts_vs_playoff, 0)} pts`
+          : "Play-off line"
+      );
+    }
     if (upcoming) {
       const days = daysUntil(matchDateKey(upcoming));
       const dayLabel =
@@ -203,7 +211,7 @@
         `${upcoming.isHome ? "Home" : "Away"} · ${dayLabel}`
       );
     } else {
-      setKpi("homeKpiOverviewNext", "—", "Season complete");
+      setKpi("homeKpiOverviewNext", "—", "No upcoming fixture yet");
     }
   }
 
