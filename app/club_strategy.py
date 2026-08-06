@@ -209,6 +209,7 @@ def _build_standings(iteration_id: int) -> list[dict[str, Any]]:
         }
         for squad_id, name in squads.items()
     }
+    form_by_squad: dict[int, list[str]] = {squad_id: [] for squad_id in squads}
 
     for match in _league_matches(iteration_id):
         home_id = int(match.get("homeSquadId") or 0)
@@ -235,6 +236,7 @@ def _build_standings(iteration_id: int) -> list[dict[str, Any]]:
                     "clean_sheets": 0,
                 },
             )
+            form_by_squad.setdefault(squad_id, [])
 
         table[home_id]["played"] += 1
         table[away_id]["played"] += 1
@@ -253,15 +255,21 @@ def _build_standings(iteration_id: int) -> list[dict[str, Any]]:
             table[home_id]["won"] += 1
             table[home_id]["points"] += 3
             table[away_id]["lost"] += 1
+            form_by_squad[home_id].append("W")
+            form_by_squad[away_id].append("L")
         elif away_goals > home_goals:
             table[away_id]["won"] += 1
             table[away_id]["points"] += 3
             table[home_id]["lost"] += 1
+            form_by_squad[away_id].append("W")
+            form_by_squad[home_id].append("L")
         else:
             table[home_id]["drawn"] += 1
             table[away_id]["drawn"] += 1
             table[home_id]["points"] += 1
             table[away_id]["points"] += 1
+            form_by_squad[home_id].append("D")
+            form_by_squad[away_id].append("D")
 
     rows: list[dict[str, Any]] = []
     for squad_id, row in table.items():
@@ -281,6 +289,8 @@ def _build_standings(iteration_id: int) -> list[dict[str, Any]]:
         ppg = round(points / played, 2)
         xppg = round(xppg_map.get(squad_id, 0.0), 2)
         xpoints = round(xppg * played, 1)
+        form = list(form_by_squad.get(squad_id) or [])[-5:]
+        form_pts = sum(3 if r == "W" else 1 if r == "D" else 0 for r in form)
         rows.append(
             {
                 **row,
@@ -298,6 +308,9 @@ def _build_standings(iteration_id: int) -> list[dict[str, Any]]:
                 "xppg_x46": round(xppg * 46, 2),
                 "xpoints": xpoints,
                 "xp_vs_actual": round(points - xpoints, 2),
+                "form": form,
+                "form_string": "".join(form),
+                "form_pts": form_pts,
                 "focus": _is_focus_squad(str(row["club"])),
             }
         )
@@ -766,11 +779,11 @@ def build_club_strategy_report(
     force_refresh: bool = False,
 ) -> dict[str, Any]:
     memory_key = iteration_id if not include_first_goal else iteration_id + 100000
+    disk_name = "report-v2" if not include_first_goal else "report-full-v2"
     if force_refresh:
         _report_cache.pop(memory_key, None)
         _first_goal_cache.pop(iteration_id, None)
-        disk_name = "report" if not include_first_goal else "report-full"
-        for name in (disk_name, "first-goal"):
+        for name in (disk_name, "report", "report-full", "first-goal"):
             path = _disk_cache_path(name, iteration_id)
             if path.exists():
                 path.unlink()
@@ -780,7 +793,6 @@ def build_club_strategy_report(
     if cached and now - cached[0] < CACHE_TTL_SECONDS:
         return cached[1]
 
-    disk_name = "report" if not include_first_goal else "report-full"
     disk_path = _disk_cache_path(disk_name, iteration_id)
     disk_payload = _read_disk_cache(disk_path)
     if disk_payload is not None:
@@ -887,11 +899,9 @@ def club_strategy_meta(competition: str = DEFAULT_COMPETITION) -> dict[str, Any]
         }
         for item in _competition_iterations(competition)[:4]
     ]
+    # Always prefer the newest listed season (e.g. 26/27). Falling back to the
+    # last season with matches made the hub show stale League One / wrong-league KPIs.
     default_iteration_id = seasons[0]["iteration_id"] if seasons else None
-    for season in seasons:
-        if _league_matches(int(season["iteration_id"]), competition):
-            default_iteration_id = int(season["iteration_id"])
-            break
     return {
         "competition": competition,
         "competitions": [{"id": name, "label": name} for name in COMPETITIONS],

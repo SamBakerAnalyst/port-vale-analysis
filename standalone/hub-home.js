@@ -3,7 +3,7 @@
  */
 (function initHubHome(global) {
   const COMPETITION = "League Two";
-  const FALLBACK_ITERATION = 2117;
+  const FALLBACK_ITERATION = 2120;
   const FALLBACK_SQUAD = 882;
   let activeTab = "home";
   let refreshTimer = null;
