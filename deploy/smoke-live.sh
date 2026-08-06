@@ -28,7 +28,8 @@ html="$(curl -s -b "$COOKIE_JAR" --max-time 20 "$BASE_URL/" || true)"
 if echo "$html" | grep -q 'hub-home.js'; then pass "hub HTML serves"; else bad "hub HTML missing hub-home.js"; fi
 if echo "$html" | grep -q 'homeDashboard\|homeKpiOverviewPos\|homeTodaySchedule'; then pass "hub HTML body"; else bad "hub HTML looks empty/wrong"; fi
 
-apps="$(curl -s --max-time 15 "$BASE_URL/standalone/apps.js" || true)"
+curl -s --max-time 15 "$BASE_URL/standalone/apps.js" -o /tmp/pv-smoke-apps.js || true
+apps_file=/tmp/pv-smoke-apps.js
 # Full staff sidebar — if any of these are missing, the left rail looks "old"/broken.
 REQUIRED_APPS=(
   "Pre-Match Handout"
@@ -57,21 +58,21 @@ REQUIRED_APPS=(
   "League Two Progress Report"
 )
 for need in "${REQUIRED_APPS[@]}"; do
-  if printf '%s' "$apps" | grep -Fq "$need"; then
+  if grep -Fq "$need" "$apps_file"; then
     pass "sidebar: $need"
   else
     bad "sidebar MISSING: $need — left rail incomplete"
   fi
 done
-if printf '%s' "$apps" | grep -Fq "comingSoon: true"; then
+if grep -Fq "comingSoon: true" "$apps_file"; then
   bad "apps.js still has comingSoon tools — Progress Report must be live"
 else
   pass "no comingSoon stubs in sidebar"
 fi
 
-home_js="$(curl -s --max-time 15 "$BASE_URL/standalone/hub-home.js" || true)"
-if printf '%s' "$home_js" | grep -Fq "Promise.allSettled"; then pass "hub-home paints widgets independently"; else bad "hub-home missing paint fix — Loading… can stick"; fi
-if printf '%s' "$home_js" | grep -Fq 'COMPETITION = "League Two"'; then pass "hub-home is League Two"; else bad "hub-home still League One — stale season"; fi
+curl -s --max-time 15 "$BASE_URL/standalone/hub-home.js" -o /tmp/pv-smoke-home.js || true
+if grep -Fq "Promise.allSettled" /tmp/pv-smoke-home.js; then pass "hub-home paints widgets independently"; else bad "hub-home missing paint fix — Loading… can stick"; fi
+if grep -Fq 'const COMPETITION = "League Two"' /tmp/pv-smoke-home.js; then pass "hub-home is League Two"; else bad "hub-home still League One — stale season"; fi
 
 for path in \
   "/api/home/fixtures" \
