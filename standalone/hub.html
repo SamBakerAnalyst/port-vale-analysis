@@ -2382,7 +2382,7 @@
   <script src="/standalone/hub-launcher.js?v=20260729"></script>
   <script src="/standalone/apps.js?v=20260802-players-strategy"></script>
   <script src="/standalone/hub-player-search.js?v=1"></script>
-  <script src="/standalone/hub-home.js?v=20260802-home-paint"></script>
+  <script src="/standalone/hub-home.js?v=20260806-l2"></script>
   <script>
     const SCOUTING_SERVER = "http://127.0.0.1:8000";
     if (window.location.protocol === "file:") {
@@ -2394,10 +2394,11 @@
         ? window.location.origin
         : SCOUTING_SERVER;
 
+    // Locked until /api/auth/me resolves — never flash full admin UI by default.
     window.HubAuth = {
-      role: "admin",
-      groups: ["analysis", "recruitment", "scouts", "strategy"],
-      allow_all: true,
+      role: "pending",
+      groups: [],
+      allow_all: false,
       username: "",
       display_name: "",
     };
@@ -2605,8 +2606,8 @@
         if (res.ok) {
           const me = await res.json();
           window.HubAuth = {
-            role: me.role || "admin",
-            groups: me.groups || ["analysis", "recruitment", "scouts", "strategy"],
+            role: me.role || "analysis",
+            groups: me.groups || ["analysis"],
             allow_all: !!me.allow_all,
             username: me.username || "",
             display_name: me.display_name || me.username || "",
@@ -2614,9 +2615,12 @@
           if (me.display_name) {
             document.getElementById("greeting").textContent = `${greeting()} — ${me.display_name}`;
           }
+        } else if (res.status === 401) {
+          window.location.href = "/login";
+          return;
         }
       } catch (_) {
-        /* keep admin defaults when auth endpoint unavailable */
+        /* keep locked defaults if auth endpoint unavailable */
       }
       applyRoleToUi();
       renderRail();

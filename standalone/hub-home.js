@@ -2,8 +2,8 @@
  * Port Vale Hub — home dashboard (tabs + live widgets + activity/changelog).
  */
 (function initHubHome(global) {
-  const COMPETITION = "League One";
-  const FALLBACK_ITERATION = 1465;
+  const COMPETITION = "League Two";
+  const FALLBACK_ITERATION = 2117;
   const FALLBACK_SQUAD = 882;
   let activeTab = "home";
   let refreshTimer = null;
