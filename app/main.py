@@ -4597,6 +4597,8 @@ def _hub_build_id() -> str:
         BASE_DIR / "standalone" / "apps.js",
         BASE_DIR / "standalone" / "hub-launcher.js",
         BASE_DIR / "app" / "auth.py",
+        BASE_DIR / "app" / "apps_manifest.py",
+        BASE_DIR / "app" / "register_apps.py",
     ]
     latest = 0
     for path in roots:
@@ -4952,42 +4954,7 @@ def export_chart_slides(body: PdfExportRequest) -> Response:
     )
 
 
-from app.post_match.routes import register_post_match_routes
-from app.pre_match import register_pre_match_routes
-from app.pre_match_handout import register_pre_match_handout_routes
-from app.scouting import register_scouting_routes, SCOUTING_DIR
-from app.squad_review import register_squad_review_routes
-from app.squad_planner import register_squad_planner_routes
-from app.squad_balance import register_squad_balance_routes
-from app.fixture_planner import register_fixture_planner_routes
-from app.xg_chance_analysis import register_xg_chance_analysis_routes
-from app.club_strategy import register_club_strategy_routes
-from app.availability_tracker import register_availability_tracker_routes
-from app.scouting_address import register_scouting_address_routes
-from app.home_dashboard import register_home_dashboard_routes
-from app.who_to_scout import register_who_to_scout_routes
-from app.player_dossier import register_player_dossier_routes
-from app.schedule import register_schedule_routes
-from app.set_piece_pre_match import register_set_piece_pre_match_routes
-from app.player_cards import register_player_cards_routes
-from app.strategy_tracker import register_strategy_tracker_routes
+from app.register_apps import register_all_app_routes
+from app.scouting import SCOUTING_DIR
 
-register_post_match_routes(app)
-register_scouting_routes(app)
-register_squad_review_routes(app)
-register_squad_planner_routes(app)
-register_squad_balance_routes(app)
-register_pre_match_routes(app)
-register_pre_match_handout_routes(app)
-register_fixture_planner_routes(app)
-register_xg_chance_analysis_routes(app)
-register_club_strategy_routes(app)
-register_availability_tracker_routes(app)
-register_scouting_address_routes(app)
-register_home_dashboard_routes(app)
-register_who_to_scout_routes(app)
-register_player_dossier_routes(app)
-register_schedule_routes(app)
-register_set_piece_pre_match_routes(app)
-register_player_cards_routes(app)
-register_strategy_tracker_routes(app)
+register_all_app_routes(app)

@@ -28,46 +28,78 @@ html="$(curl -s -b "$COOKIE_JAR" --max-time 20 "$BASE_URL/" || true)"
 if echo "$html" | grep -q 'hub-home.js'; then pass "hub HTML serves"; else bad "hub HTML missing hub-home.js"; fi
 if echo "$html" | grep -q 'homeDashboard\|homeKpiOverviewPos\|homeTodaySchedule'; then pass "hub HTML body"; else bad "hub HTML looks empty/wrong"; fi
 
-curl -s --max-time 15 "$BASE_URL/standalone/apps.js" -o /tmp/pv-smoke-apps.js || true
-apps_file=/tmp/pv-smoke-apps.js
-# Full staff sidebar — if any of these are missing, the left rail looks "old"/broken.
-REQUIRED_APPS=(
-  "Pre-Match Handout"
-  "Pre-Match Report"
-  "Set Piece Pre-Match"
-  "Player Cards"
-  "xG Chance Analysis"
-  "Post-Match Report"
-  "Schedule"
-  "Player Comparison Tool"
-  "Who To Scout"
-  "Player Search Dashboard"
-  "Squad Balance"
-  "Squad Planner"
-  "Fixture Planner"
-  "Played Fixtures"
-  "Scouting Address Tool"
-  "Generate Scout Summary"
-  "Scout Summary"
-  "Scouts Calendar"
-  "Squad Comparison"
-  "Squad Availability"
-  "Club Strategy"
-  "League Two Strategy Report"
-  "Players Strategy Report"
-  "League Two Progress Report"
+# Sidebar source of truth is GET /api/apps (from app/apps_manifest.py).
+curl -s -b "$COOKIE_JAR" --max-time 15 "$BASE_URL/api/apps" -o /tmp/pv-smoke-apps.json || true
+apps_file=/tmp/pv-smoke-apps.json
+if [[ ! -s "$apps_file" ]] || ! grep -q '"apps"' "$apps_file"; then
+  bad "/api/apps missing or empty — hub left rail cannot load"
+else
+  pass "/api/apps returns registry"
+fi
+
+# Prefer titles embedded in the API payload; fall back to the known full list.
+REQUIRED_APPS=()
+while IFS= read -r title; do
+  [[ -n "$title" ]] && REQUIRED_APPS+=("$title")
+done < <(python3 - <<'PY' 2>/dev/null || true
+import json, sys
+try:
+    data = json.load(open("/tmp/pv-smoke-apps.json"))
+    titles = data.get("titles") or [a.get("title") for a in data.get("apps") or []]
+    for t in titles:
+        if t:
+            print(t)
+except Exception:
+    sys.exit(1)
+PY
 )
+if [[ "${#REQUIRED_APPS[@]}" -eq 0 ]]; then
+  REQUIRED_APPS=(
+    "Pre-Match Handout"
+    "Pre-Match Report"
+    "Set Piece Pre-Match"
+    "Player Cards"
+    "xG Chance Analysis"
+    "Post-Match Report"
+    "Schedule"
+    "Player Comparison Tool"
+    "Who To Scout"
+    "Player Search Dashboard"
+    "Squad Balance"
+    "Squad Planner"
+    "Fixture Planner"
+    "Played Fixtures"
+    "Scouting Address Tool"
+    "Generate Scout Summary"
+    "Scout Summary"
+    "Scouts Calendar"
+    "Squad Comparison"
+    "Squad Availability"
+    "Club Strategy"
+    "League Two Strategy Report"
+    "Players Strategy Report"
+    "League Two Progress Report"
+  )
+fi
+
+MIN_SIDEBAR=20
+if [[ "${#REQUIRED_APPS[@]}" -lt "$MIN_SIDEBAR" ]]; then
+  bad "sidebar title count ${#REQUIRED_APPS[@]} < $MIN_SIDEBAR — registry incomplete"
+else
+  pass "sidebar title count ${#REQUIRED_APPS[@]}"
+fi
+
 for need in "${REQUIRED_APPS[@]}"; do
-  if grep -Fq "$need" "$apps_file"; then
+  if grep -Fq "\"$need\"" "$apps_file" || grep -Fq "$need" "$apps_file"; then
     pass "sidebar: $need"
   else
     bad "sidebar MISSING: $need — left rail incomplete"
   fi
 done
-if grep -Fq "comingSoon: true" "$apps_file"; then
-  bad "apps.js still has comingSoon tools — Progress Report must be live"
+if grep -Fq '"comingSoon": true' "$apps_file" || grep -Fq 'comingSoon: true' "$apps_file"; then
+  bad "/api/apps still has comingSoon tools — Progress Report must be live"
 else
-  pass "no comingSoon stubs in sidebar"
+  pass "no comingSoon stubs in sidebar registry"
 fi
 
 curl -s --max-time 15 "$BASE_URL/standalone/hub-home.js" -o /tmp/pv-smoke-home.js || true

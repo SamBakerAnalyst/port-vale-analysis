@@ -2424,10 +2424,11 @@
     }
 
     function visibleApps() {
+      // /api/apps already filters by role; keep a group safety net.
       const groups = allowedGroups();
-      return (window.IMPECT_APPS || []).filter(
-        (app) => window.HubAuth.allow_all || groups.has(app.group)
-      );
+      const apps = window.IMPECT_APPS || [];
+      if (!groups.size || window.HubAuth.allow_all) return apps;
+      return apps.filter((app) => groups.has(app.group));
     }
 
     function greeting() {
@@ -2634,6 +2635,21 @@
       } catch (_) {
         /* keep locked defaults if auth endpoint unavailable */
       }
+
+      try {
+        const appsRes = await fetch(`${BASE}/api/apps`, {
+          cache: "no-store",
+          signal: AbortSignal.timeout(8000),
+        });
+        if (appsRes.ok) {
+          const payload = await appsRes.json();
+          window.IMPECT_APP_GROUPS = payload.groups || [];
+          window.IMPECT_APPS = payload.apps || [];
+        }
+      } catch (_) {
+        /* fall back to standalone/apps.js if API unavailable */
+      }
+
       applyRoleToUi();
       renderRail();
       checkServer();

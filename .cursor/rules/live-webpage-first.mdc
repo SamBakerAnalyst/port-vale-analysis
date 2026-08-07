@@ -7,16 +7,31 @@ alwaysApply: true
 
 **Staff use http://178.128.161.215/** — existing DigitalOcean droplet. No App Platform.
 
+## Repo path
+
+- Edit **only** `~/impect-football-dashboard`.
+- **Refuse** Desktop / Downloads copies — they caused missing nav and “old version” after hard refresh.
+- Never rsync without also pushing to GitHub — that caused rollbacks.
+- No silent partial copies from Desktop onto the droplet.
+
+## App registry
+
+- Source of truth: `app/apps_manifest.py` (sidebar + auth prefixes + smoke titles).
+- Routes: `app/register_apps.py` — boot must fail if a manifest tool’s router is missing.
+- Hub left rail: `GET /api/apps` (not a divergent hand-edited `apps.js` list).
+- New tool = update manifest + register_apps; auth/smoke follow. Do not only edit HTML/JS.
+
 ## Definition of done
 
-1. Edit code in this repo
+1. Edit code in this repo (`~/impect-football-dashboard` only)
 2. **Commit** changes
 3. Run **`bash ~/impect-football-dashboard/deploy-live.sh`** (pushes GitHub + syncs droplet)
    - Or user double-clicks **`Deploy to Website.command`**
-4. Verify at http://178.128.161.215/ (hard refresh)
+4. **`deploy/smoke-live.sh` PASS** (sidebar titles from `/api/apps` + key pages)
+5. Verify at http://178.128.161.215/ (hard refresh)
 
 **Never** mark complete after only local changes.
-**Never** rsync without also pushing to GitHub — that caused rollbacks.
+**Never** mark complete if smoke fails or a sidebar title is missing from `/api/apps`.
 
 ## Do not
 
@@ -24,4 +39,4 @@ alwaysApply: true
 - Use DigitalOcean Console `update-live.sh` unless Mac deploy is broken
 - Invent a second deploy path
 
-See `deploy/HOW-WE-DEPLOY.md`.
+See `deploy/HOW-WE-DEPLOY.md` and `AGENTS.md`.

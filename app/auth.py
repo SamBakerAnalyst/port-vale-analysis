@@ -36,26 +36,40 @@ PUBLIC_PREFIXES = (
 )
 
 # Paths an analysis-only account may hit (prefix match, except "/" which is exact).
-ANALYSIS_ALLOWED_EXACT = frozenset({"/", "/hub", "/api/auth/me", "/api/auth/logout"})
-ANALYSIS_ALLOWED_PREFIXES = (
-    "/pre-match",
-    "/pre-match-handout",
-    "/set-piece-pre-match",
-    "/player-cards",
-    "/xg-chance-analysis",
-    "/post-match",
-    "/schedule",
-    "/api/pre-match",
-    "/api/pre-match-handout",
-    "/api/set-piece-pre-match",
-    "/api/player-cards",
-    "/api/xg-chance-analysis",
-    "/api/post-match",
-    "/api/schedule",
-    "/api/feedback",
-    "/static/",
-    "/standalone/",
+ANALYSIS_ALLOWED_EXACT = frozenset(
+    {"/", "/hub", "/api/auth/me", "/api/auth/logout", "/api/apps"}
 )
+
+
+def _analysis_allowed_prefixes() -> tuple[str, ...]:
+    """Derived from apps_manifest — do not hand-edit a parallel list."""
+    try:
+        from app.apps_manifest import analysis_path_prefixes
+
+        return analysis_path_prefixes()
+    except Exception:
+        # Boot-safe fallback if manifest import fails during early load.
+        return (
+            "/pre-match",
+            "/pre-match-handout",
+            "/set-piece-pre-match",
+            "/player-cards",
+            "/xg-chance-analysis",
+            "/post-match",
+            "/schedule",
+            "/api/pre-match",
+            "/api/pre-match-handout",
+            "/api/set-piece-pre-match",
+            "/api/player-cards",
+            "/api/xg-chance-analysis",
+            "/api/post-match",
+            "/api/schedule",
+            "/api/feedback",
+            "/api/apps",
+            "/static/",
+            "/standalone/",
+        )
+
 
 ROLE_GROUPS = {
     "admin": ("analysis", "recruitment", "scouts", "strategy"),
@@ -187,7 +201,10 @@ def _path_allowed_for_role(path: str, role: str) -> bool:
             return True
         # Analysis pages are routed via FastAPI paths, not raw HTML.
         return False
-    return any(path == prefix.rstrip("/") or path.startswith(prefix) for prefix in ANALYSIS_ALLOWED_PREFIXES)
+    return any(
+        path == prefix.rstrip("/") or path.startswith(prefix)
+        for prefix in _analysis_allowed_prefixes()
+    )
 
 
 class LoginRequest(BaseModel):
