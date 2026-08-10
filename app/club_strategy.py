@@ -754,7 +754,7 @@ def _disk_cache_path(name: str, iteration_id: int) -> Path:
     return DISK_CACHE_DIR / f"{name}-{iteration_id}.json"
 
 
-def _read_disk_cache(path: Path) -> dict[str, Any] | None:
+def _read_disk_cache(path: Path, *, allow_stale: bool = False) -> dict[str, Any] | None:
     if not path.exists():
         return None
     try:
@@ -762,7 +762,7 @@ def _read_disk_cache(path: Path) -> dict[str, Any] | None:
     except (OSError, json.JSONDecodeError):
         return None
     cached_at = float(payload.get("cached_at_epoch") or 0.0)
-    if time.time() - cached_at > CACHE_TTL_SECONDS:
+    if not allow_stale and time.time() - cached_at > CACHE_TTL_SECONDS:
         return None
     return payload
 

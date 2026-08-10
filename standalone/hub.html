@@ -2643,11 +2643,16 @@
         });
         if (appsRes.ok) {
           const payload = await appsRes.json();
-          window.IMPECT_APP_GROUPS = payload.groups || [];
-          window.IMPECT_APPS = payload.apps || [];
+          // Never wipe a good fallback with an empty payload.
+          if (Array.isArray(payload.groups) && payload.groups.length) {
+            window.IMPECT_APP_GROUPS = payload.groups;
+          }
+          if (Array.isArray(payload.apps) && payload.apps.length) {
+            window.IMPECT_APPS = payload.apps;
+          }
         }
       } catch (_) {
-        /* fall back to standalone/apps.js if API unavailable */
+        /* keep standalone/apps.js fallback if API unavailable */
       }
 
       applyRoleToUi();
