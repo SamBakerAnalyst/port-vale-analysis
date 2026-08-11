@@ -243,7 +243,7 @@ function unitValueText(metricKey, row) {
   if (metricKey === "duelRate") {
     return row?.duelRate == null ? "—" : `${fmtNum(row.duelRate, 1)}%`;
   }
-  return fmtNum(row?.defendersBypassed);
+  return fmtNum(row?.defendersBypassed, 1);
 }
 
 function unitSubText(metricKey, row) {
@@ -474,8 +474,8 @@ function dashHtml(block) {
   ].join("");
   const unitCards = `
     <div class="ba-unit-pair">
-      ${unitCard("Defenders bypassed", "defendersBypassed", "Impect packing by unit", stats, single)}
-      ${unitCard("Duel rate", "duelRate", "Won / attempted by unit", stats, single)}
+      ${unitCard("Defenders bypassed", "defendersBypassed", "Impect packing by unit · WB split 50/50 DEF and ATT", stats, single)}
+      ${unitCard("Duel rate", "duelRate", "Won / attempted by unit · WB split 50/50 DEF and ATT", stats, single)}
     </div>
   `;
 

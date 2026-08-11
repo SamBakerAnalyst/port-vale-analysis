@@ -49,18 +49,19 @@ BLOCK_COUNT = 9
 GAMES_PER_BLOCK = 5
 KPI_SHOT_XG = 82
 MATCH_KPI_CACHE_TTL = 6 * 3600
-MATCH_STATS_CACHE_VERSION = 3
+MATCH_STATS_CACHE_VERSION = 4
 PAYLOAD_CACHE_TTL = 45
 PLAYER_NAMES_TTL = 6 * 3600
 BENCHMARK_CACHE_TTL = 600
 UNIT_TOP7_TTL = 24 * 3600
+UNIT_TOP7_VERSION = 2
 UNIT_TOP7_SAMPLE_MATCHES = 24
 UNITS: tuple[str, ...] = ("DEF", "MID", "ATT")
 POSITION_TO_UNIT: dict[str, str | None] = {
     "GOALKEEPER": None,
     "CENTRAL_DEFENDER": "DEF",
-    "LEFT_WINGBACK_DEFENDER": "DEF",
-    "RIGHT_WINGBACK_DEFENDER": "DEF",
+    "LEFT_WINGBACK_DEFENDER": "WB",
+    "RIGHT_WINGBACK_DEFENDER": "WB",
     "DEFENSE_MIDFIELD": "MID",
     "CENTRAL_MIDFIELD": "MID",
     "ATTACKING_MIDFIELD": "ATT",
@@ -275,19 +276,40 @@ def _save_unit_top7_disk(payload: dict[str, Any]) -> None:
         temp_path.replace(UNIT_TOP7_PATH)
 
 
+def _normalize_position(position: Any) -> str:
+    return str(position or "").strip().upper().replace("-", "_").replace(" ", "_")
+
+
+def _is_wingback_position(position: Any) -> bool:
+    text = _normalize_position(position)
+    return bool(text) and ("WINGBACK" in text or "WING_BACK" in text)
+
+
 def _unit_for_position(position: Any) -> str | None:
-    text = str(position or "").strip().upper().replace("-", "_").replace(" ", "_")
+    text = _normalize_position(position)
+    if _is_wingback_position(text):
+        return "WB"
     if text in POSITION_TO_UNIT:
         return POSITION_TO_UNIT[text]
     if not text or "GOAL" in text:
         return None
     if "WINGER" in text or "FORWARD" in text or "STRIKER" in text:
         return "ATT"
-    if "DEFEND" in text or "WINGBACK" in text or "FULL_BACK" in text or "FULLBACK" in text:
+    if "DEFEND" in text or "FULL_BACK" in text or "FULLBACK" in text:
         return "DEF"
     if "MID" in text:
         return "MID"
     return None
+
+
+def _unit_shares_for_position(position: Any) -> list[tuple[str, float]]:
+    """Wing-backs count half as full-backs (DEF) and half as wingers (ATT)."""
+    if _is_wingback_position(position):
+        return [("DEF", 0.5), ("ATT", 0.5)]
+    unit = _unit_for_position(position)
+    if unit in UNITS:
+        return [(unit, 1.0)]
+    return []
 
 
 def _empty_unit_row() -> dict[str, Any]:
@@ -308,9 +330,9 @@ def _finalize_unit_row(row: dict[str, float]) -> dict[str, Any]:
     total = float(row.get("duelTotal") or 0)
     bypassed = float(row.get("defendersBypassed") or 0)
     return {
-        "defendersBypassed": int(round(bypassed)) if bypassed or total or won else None,
-        "duelWon": int(round(won)) if total or won else None,
-        "duelTotal": int(round(total)) if total or won else None,
+        "defendersBypassed": round(bypassed, 1) if bypassed or total or won else None,
+        "duelWon": round(won, 1) if total or won else None,
+        "duelTotal": round(total, 1) if total or won else None,
         "duelRate": round((won / total) * 100, 1) if total > 0 else None,
     }
 
@@ -324,15 +346,18 @@ def _units_from_players(players: list[dict[str, Any]], squad_id: int) -> dict[st
     for row in _consolidate_player_match_rows(
         [item for item in players if int(item.get("squadId") or 0) == int(squad_id)]
     ):
-        unit = _unit_for_position(row.get("position"))
-        if unit not in buckets:
+        shares = _unit_shares_for_position(row.get("position"))
+        if not shares:
             continue
         kpis = row.get("kpis") or {}
         won = _kpi_value(kpis, KPI_WON_GROUND_DUELS) + _kpi_value(kpis, KPI_WON_AERIAL_DUELS)
         lost = _kpi_value(kpis, KPI_LOST_GROUND_DUELS) + _kpi_value(kpis, KPI_LOST_AERIAL_DUELS)
-        buckets[unit]["defendersBypassed"] += _kpi_value(kpis, KPI_BYPASSED_DEFENDERS_RAW)
-        buckets[unit]["duelWon"] += won
-        buckets[unit]["duelTotal"] += won + lost
+        bypassed = _kpi_value(kpis, KPI_BYPASSED_DEFENDERS_RAW)
+        duel_total = won + lost
+        for unit, share in shares:
+            buckets[unit]["defendersBypassed"] += bypassed * share
+            buckets[unit]["duelWon"] += won * share
+            buckets[unit]["duelTotal"] += duel_total * share
         seen = True
     if not seen:
         return _empty_units()
@@ -927,6 +952,7 @@ def build_unit_benchmarks(
     pv_prev = disk.get("teamPrevious") if isinstance(disk.get("teamPrevious"), dict) else None
     fresh = (
         not force_refresh
+        and disk.get("v") == UNIT_TOP7_VERSION
         and disk.get("iterationId") == PREVIOUS_LEAGUE_TWO_ITERATION_ID
         and now - float(disk.get("fetchedAt") or 0) < UNIT_TOP7_TTL
         and isinstance(top7, dict)
@@ -937,6 +963,7 @@ def build_unit_benchmarks(
             top7, pv_prev = _build_unit_top7_from_sample(PREVIOUS_LEAGUE_TWO_ITERATION_ID)
             _save_unit_top7_disk(
                 {
+                    "v": UNIT_TOP7_VERSION,
                     "fetchedAt": now,
                     "iterationId": PREVIOUS_LEAGUE_TWO_ITERATION_ID,
                     "top7": top7,
@@ -1194,10 +1221,10 @@ def _aggregate_units(played: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         total = float(bucket["duelTotal"])
         result[unit] = {
             "defendersBypassed": (
-                int(round(bucket["defendersBypassed"])) if bucket["seenBypass"] else None
+                round(bucket["defendersBypassed"], 1) if bucket["seenBypass"] else None
             ),
-            "duelWon": int(round(won)) if bucket["seenDuel"] else None,
-            "duelTotal": int(round(total)) if bucket["seenDuel"] else None,
+            "duelWon": round(won, 1) if bucket["seenDuel"] else None,
+            "duelTotal": round(total, 1) if bucket["seenDuel"] else None,
             "duelRate": (
                 round((won / total) * 100, 1) if bucket["seenDuel"] and total > 0 else None
             ),
