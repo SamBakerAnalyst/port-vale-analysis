@@ -566,12 +566,51 @@ function sheetMasthead({ title, kicker, page, single, fixture, stats, block }) {
   `;
 }
 
-function metricStrip(stats, single) {
-  const facts = stats.facts || {};
+function xgVsHtml(stats, fixture) {
+  const vale = stats.xg;
+  const opp = stats.facts?.oppXg;
+  if (vale == null && opp == null) return "";
+  const v = Number(vale) || 0;
+  const o = Number(opp) || 0;
+  const total = v + o;
+  const valeShare = total > 0 ? (v / total) * 100 : 50;
+  const delta = v - o;
+  const valeAhead = delta > 0.004;
+  const oppAhead = delta < -0.004;
+  const bench = scaledBench("xg", stats, true);
+  const oppName = shortOpponent(fixture?.opponentName || "Opp");
+  const edge = total <= 0
+    ? "No shots"
+    : `${delta >= 0 ? "Vale" : oppName} +${fmtNum(Math.abs(delta), 2)}`;
+  return `
+    <article class="ba-xgvs">
+      <p class="ba-xgvs__label">Expected goals</p>
+      <div class="ba-xgvs__fight">
+        <div class="ba-xgvs__side ba-xgvs__side--vale ${valeAhead ? "is-ahead" : ""}">
+          <span class="ba-xgvs__who">Vale</span>
+          <span class="ba-xgvs__num">${escapeHtml(fmtNum(vale, 2))}</span>
+        </div>
+        <span class="ba-xgvs__badge">VS</span>
+        <div class="ba-xgvs__side ba-xgvs__side--opp ${oppAhead ? "is-ahead" : ""}">
+          <span class="ba-xgvs__who">${escapeHtml(oppName)}</span>
+          <span class="ba-xgvs__num">${escapeHtml(fmtNum(opp, 2))}</span>
+        </div>
+      </div>
+      <div class="ba-xgvs__bar" aria-hidden="true">
+        <span class="ba-xgvs__fill ba-xgvs__fill--vale" style="width:${valeShare}%"></span>
+      </div>
+      <div class="ba-xgvs__foot">
+        <span class="ba-xgvs__edge">${escapeHtml(edge)}</span>
+        ${bench?.team == null ? "" : `<span class="ba-xgvs__key ba-xgvs__key--avg">Vale avg ${escapeHtml(formatBench(bench.team, { digits: 2 }))}</span>`}
+        ${bench?.top7 == null ? "" : `<span class="ba-xgvs__key ba-xgvs__key--req">League req ${escapeHtml(formatBench(bench.top7, { digits: 2 }))}</span>`}
+      </div>
+    </article>
+  `;
+}
+
+function metricStrip(stats, single, fixture) {
   const items = single
     ? [
-        { label: "Our xG", key: "xg", digits: 2 },
-        { label: "Their xG", value: facts.oppXg, digits: 2, skipBench: true, invert: true },
         { label: "Attacking ball wins", key: "offensiveInterventions", digits: 0 },
         { label: "Regains vs defence", key: "ballWinsFromOppDefenders", digits: 0 },
         { label: "Defenders taken out", key: "defendersBypassed", digits: 0 },
@@ -585,8 +624,10 @@ function metricStrip(stats, single) {
         { label: "Duels won", key: "duelRate", digits: 1, rate: true },
         { label: "Goals against", key: "goalsAgainst", digits: 0, invert: true },
       ];
+  const vs = single ? xgVsHtml(stats, fixture) : "";
   return `
-    <div class="ba-strip">
+    <div class="ba-strip ${vs ? "ba-strip--vs" : ""}">
+      ${vs}
       ${items.map((item) => {
         const value = item.value != null ? item.value : stats[item.key];
         const bench = item.skipBench ? null : scaledBench(item.key, stats, single);
@@ -1044,7 +1085,7 @@ function dashHtml(block) {
       <article class="ba-sheet ba-sheet--team ${outcome ? `ba-sheet--${outcome}` : ""}" data-sheet="1">
         ${sheetMasthead({ ...mast, title: pageTitle, page: 1 })}
         <div class="ba-sheet__body">
-          ${metricStrip(stats, single)}
+          ${metricStrip(stats, single, fixture)}
           ${single ? `
             <div class="ba-charts">
               ${xgRaceHtml(stats.xgRace) || `<article class="ba-chart ba-race"><header class="ba-chart__head"><div><h4>Chance race</h4><p>Expected goals over time</p></div></header><p class="ba-chart__empty">No shot data</p></article>`}
