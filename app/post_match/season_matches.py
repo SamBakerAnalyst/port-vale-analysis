@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.post_match.config import POST_MATCH_COMPETITIONS, PORT_VALE_SQUAD_ID
+from app.post_match.config import PORT_VALE_SQUAD_ID
 from app.post_match.impect_client import extract_rows, impect_get, v5_path
 from app.post_match.report import _squad_details
 from app.post_match.squad_badges import enrich_squad
@@ -147,7 +147,13 @@ def build_combined_season_matches(
     competitions: list[dict[str, Any]] | None = None,
     include_upcoming: bool = True,
 ) -> dict[str, Any]:
-    comps = competitions if competitions is not None else POST_MATCH_COMPETITIONS
+    if competitions is not None:
+        comps = competitions
+    else:
+        try:
+            from app.post_match.config import POST_MATCH_COMPETITIONS as comps
+        except ImportError:
+            comps = []
     matches: list[dict[str, Any]] = []
     errors: list[str] = []
     loaded: list[dict[str, Any]] = []
