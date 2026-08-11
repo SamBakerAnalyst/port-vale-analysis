@@ -44,7 +44,12 @@ from app.post_match.field_tilt import (
     build_field_tilt,
 )
 from app.post_match.offensive_touches_zones import build_offensive_touches_zones
-from app.post_match.shots import _shot_outcome
+from app.post_match.shots import (
+    _format_shot_xg,
+    _player_initials,
+    _shot_outcome,
+    _shot_phase_bucket,
+)
 from app.post_match.phase_analysis import (
     PHASE_ORDER,
     _fetch_match_events,
@@ -69,7 +74,7 @@ BLOCK_COUNT = 9
 GAMES_PER_BLOCK = 5
 KPI_SHOT_XG = 82
 MATCH_KPI_CACHE_TTL = 6 * 3600
-MATCH_STATS_CACHE_VERSION = 8
+MATCH_STATS_CACHE_VERSION = 9
 PHASE_SHORT_LABELS = {
     "IN_POSSESSION": "In possession",
     "OUT_OF_POSSESSION": "Out of possession",
@@ -994,11 +999,21 @@ def _compact_shot_points(events: list[dict[str, Any]], xg_by_event: dict[int, fl
             continue
         event_id = int(event.get("id") or 0)
         outcome = _shot_outcome(event)
+        xg = round(float(xg_by_event.get(event_id) or 0), 3)
+        player = event.get("player") or {}
+        player_name = str(player.get("commonname") or player.get("name") or "").strip()
         points.append(
             {
                 "x": round(impect_x, 2),
                 "y": round(impect_y, 2),
-                "xg": round(float(xg_by_event.get(event_id) or 0), 3),
+                "xg": xg,
+                "xgDisplay": _format_shot_xg(xg),
+                "outcome": outcome,
+                "phase": _shot_phase_bucket(
+                    str(event.get("phase") or ""),
+                    str(event.get("action") or ""),
+                ),
+                "playerInitials": _player_initials(player_name),
                 "goal": outcome == "scored",
                 "on": outcome == "saved",
             }
@@ -1011,7 +1026,7 @@ def _compact_shot_maps(
     squad_id: int,
     opp_squad_id: int,
 ) -> dict[str, Any] | None:
-    if not squad_id or not opp_squad_id:
+    if not squad_id:
         return None
     events = _fetch_match_events(match_id)
     ekpi_payload = impect_get(v5_path(f"/matches/{match_id}/event-kpis"))["data"]
@@ -1025,14 +1040,10 @@ def _compact_shot_maps(
             if event_id:
                 xg_by_event[event_id] += float(row.get("value") or 0)
     vale = _compact_shot_points(events, xg_by_event, squad_id)
-    opp = _compact_shot_points(events, xg_by_event, opp_squad_id)
     return {
         "for": vale,
-        "against": opp,
         "forXg": round(sum(row["xg"] for row in vale), 2),
-        "againstXg": round(sum(row["xg"] for row in opp), 2),
         "forGoals": sum(1 for row in vale if row["goal"]),
-        "againstGoals": sum(1 for row in opp if row["goal"]),
     }
 
 
