@@ -144,7 +144,7 @@ APPS: list[dict[str, Any]] = [
         "title": "Blocks Analysis",
         "description": (
             "Nine blocks of five league games — result colours, editable Silver "
-            "targets, live block KPIs, and PNG export."
+            "targets, live block KPIs, and a 2-page A4 match report PDF."
         ),
         "href": "/blocks-analysis",
         "icon": "🧱",
@@ -424,6 +424,36 @@ APPS: list[dict[str, Any]] = [
         "tags": ["League Two", "Players", "Presentation"],
         "roles": ("admin",),
         "api_prefixes": ("/players-strategy",),
+        "router": "scouting",
+    },
+    {
+        "id": "players-strategy-staff",
+        "group": "strategy",
+        "title": "Staff Strategy Report",
+        "description": (
+            "Staff edition of Project Promotion — same benchmarks, fuller detail."
+        ),
+        "href": "/players-strategy-staff",
+        "icon": "📋",
+        "accent": "#f5c518",
+        "tags": ["League Two", "Staff", "Presentation"],
+        "roles": ("admin",),
+        "api_prefixes": ("/players-strategy-staff",),
+        "router": "scouting",
+    },
+    {
+        "id": "players-strategy-values",
+        "group": "strategy",
+        "title": "Values Report",
+        "description": (
+            "Our values and non-negotiables — culture first, before the numbers."
+        ),
+        "href": "/players-strategy-values",
+        "icon": "🧭",
+        "accent": "#f5c518",
+        "tags": ["League Two", "Values", "Presentation"],
+        "roles": ("admin",),
+        "api_prefixes": ("/players-strategy-values",),
         "router": "scouting",
     },
     {

@@ -12,7 +12,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from app.paths import BLOCKS_ANALYSIS_DATA_DIR
@@ -167,6 +167,22 @@ class BlockTargetUpdate(BaseModel):
     medal: str = "silver"
     points: int = Field(ge=0, le=18)
     clean_sheets: int = Field(alias="cleanSheets", ge=0, le=6)
+
+    model_config = {"populate_by_name": True}
+
+
+class BlocksExportPage(BaseModel):
+    image_data: str = Field(default="", alias="imageData")
+    width: int = 0
+    height: int = 0
+
+    model_config = {"populate_by_name": True}
+
+
+class BlocksExportRequest(BaseModel):
+    pages: list[BlocksExportPage] = Field(default_factory=list)
+    filename: str | None = None
+    document_title: str | None = None
 
     model_config = {"populate_by_name": True}
 
@@ -1444,3 +1460,23 @@ def register_blocks_analysis_routes(app: FastAPI) -> None:
         }
         saved = _save_targets(store)
         return {"ok": True, "targets": saved}
+
+    @app.post("/api/blocks-analysis/export-pdf")
+    def blocks_analysis_export_pdf(body: BlocksExportRequest) -> Response:
+        from app.handout_export import build_a4_landscape_pdf
+        from app.main import _safe_export_filename, _save_export_to_desktop
+
+        if not body.pages:
+            raise HTTPException(status_code=400, detail="No export pages provided.")
+        try:
+            pdf_bytes = build_a4_landscape_pdf(body)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        filename = _safe_export_filename(
+            body.filename or "port-vale-match-report.pdf"
+        )
+        headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+        saved_path = _save_export_to_desktop(pdf_bytes, filename)
+        if saved_path is not None:
+            headers["X-Saved-Desktop-Path"] = str(saved_path)
+        return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)

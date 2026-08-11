@@ -62,6 +62,42 @@ def build_handout_export_pdf(body: Any) -> bytes:
     return buffer.getvalue()
 
 
+class A4LandscapePDF(FPDF):
+    """A4 landscape — one full-bleed sheet per page."""
+
+    def __init__(self) -> None:
+        super().__init__(orientation="L", unit="mm", format="A4")
+        self.set_auto_page_break(auto=False)
+        self.set_margins(0, 0, 0)
+
+    def add_page_image(self, image_data: str) -> None:
+        self.add_page()
+        self.set_fill_color(243, 239, 230)
+        self.rect(0, 0, self.w, self.h, style="F")
+        self.image(
+            BytesIO(decode_image_data(image_data)),
+            x=0,
+            y=0,
+            w=self.w,
+            h=self.h,
+        )
+
+
+def build_a4_landscape_pdf(body: Any) -> bytes:
+    pages = getattr(body, "pages", None) or []
+    images = _iter_page_images(list(pages))
+    if not images:
+        raise ValueError("No export pages to render.")
+
+    pdf = A4LandscapePDF()
+    for image_data in images:
+        pdf.add_page_image(image_data)
+
+    buffer = BytesIO()
+    pdf.output(buffer)
+    return buffer.getvalue()
+
+
 def _new_a4_portrait_presentation() -> Presentation:
     prs = Presentation()
     prs.slide_width = Mm(A4_WIDTH_MM)

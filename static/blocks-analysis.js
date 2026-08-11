@@ -610,9 +610,11 @@ function standoutsHtml(players) {
       <article class="ba-star">
         <p class="ba-star__label">${escapeHtml(spec.label)}</p>
         <img class="ba-star__photo" src="${escapeHtml(playerPhotoUrl(player.name))}" alt="" onerror="this.removeAttribute('src')" />
-        <p class="ba-star__name">${escapeHtml(player.name)}</p>
-        <p class="ba-star__val">${escapeHtml(formatPlayerValue(player, spec))}</p>
-        ${player.unit ? `<p class="ba-star__unit">${escapeHtml(player.unit)}</p>` : ""}
+        <div class="ba-star__copy">
+          <p class="ba-star__name">${escapeHtml(player.name)}</p>
+          <p class="ba-star__val">${escapeHtml(formatPlayerValue(player, spec))}</p>
+          ${player.unit ? `<p class="ba-star__unit">${escapeHtml(player.unit)}</p>` : ""}
+        </div>
       </article>
     `;
   }).join("");
@@ -661,9 +663,12 @@ function dashHtml(block) {
     <section class="ba-report">
       <div class="ba-report__chrome ba-export-hide">
         <div class="ba-filter" role="group" aria-label="Filter block ${block.id} to one game">${pills}</div>
-        <button type="button" class="ba-btn ba-btn--print" data-print-report="${block.id}">Print 2-page A4</button>
+        <div class="ba-report__actions">
+          <button type="button" class="ba-btn" data-print-report="${block.id}">Print</button>
+          <button type="button" class="ba-btn ba-btn--print" data-pdf-report="${block.id}">Export PDF</button>
+        </div>
       </div>
-      <p class="ba-print-hint ba-export-hide">A4 portrait · tick Background graphics · Save as PDF</p>
+      <p class="ba-print-hint ba-export-hide">A4 landscape · two pages</p>
       <article class="ba-sheet ba-sheet--team ${outcome ? `ba-sheet--${outcome}` : ""}" data-sheet="1">
         ${sheetMasthead({ ...mast, title: pageTitle, page: 1 })}
         <div class="ba-sheet__body">
@@ -805,6 +810,104 @@ function slug(value) {
     .replace(/^-|-$/g, "");
 }
 
+const SHEET_EXPORT_WIDTH = 1123;
+const SHEET_EXPORT_HEIGHT = 794;
+const SHEET_EXPORT_SCALE = 2;
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function reportPdfName(blockId) {
+  const block = (state.payload?.blocks || []).find((row) => row.id === Number(blockId));
+  if (!block) return "port-vale-match-report.pdf";
+  const { single, fixture } = selectedStats(block);
+  if (single && fixture?.opponentName) {
+    return `Port-Vale-vs-${slug(shortOpponent(fixture.opponentName))}-match-report.pdf`;
+  }
+  return `Block-${blockId}-${slug(block.title || "report")}.pdf`;
+}
+
+async function exportReportPdf(blockId) {
+  const root = document.getElementById(`block-${blockId}`);
+  const sheets = [...(root?.querySelectorAll(".ba-sheet") || [])];
+  if (!sheets.length) throw new Error("Match report not found");
+  await loadScript("https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js");
+  if (typeof html2canvas !== "function") throw new Error("PDF export failed to load");
+  if (document.fonts?.ready) await document.fonts.ready;
+
+  document.body.classList.add("is-pdf-capturing");
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  const pages = [];
+  try {
+    for (const sheet of sheets) {
+      const canvas = await html2canvas(sheet, {
+        backgroundColor: "#f3efe6",
+        scale: SHEET_EXPORT_SCALE,
+        logging: false,
+        useCORS: true,
+        allowTaint: false,
+        width: SHEET_EXPORT_WIDTH,
+        height: SHEET_EXPORT_HEIGHT,
+        windowWidth: SHEET_EXPORT_WIDTH,
+        windowHeight: SHEET_EXPORT_HEIGHT,
+        scrollX: 0,
+        scrollY: 0,
+        onclone: (_doc, cloned) => {
+          cloned.classList.add("ba-sheet--pdf-capture");
+          cloned.style.width = `${SHEET_EXPORT_WIDTH}px`;
+          cloned.style.maxWidth = `${SHEET_EXPORT_WIDTH}px`;
+          cloned.style.height = `${SHEET_EXPORT_HEIGHT}px`;
+          cloned.style.minHeight = `${SHEET_EXPORT_HEIGHT}px`;
+          cloned.style.aspectRatio = "auto";
+          cloned.style.margin = "0";
+          cloned.style.border = "0";
+          cloned.style.borderRadius = "0";
+          cloned.style.boxShadow = "none";
+          cloned.style.overflow = "hidden";
+        },
+      });
+      const trimmed = document.createElement("canvas");
+      trimmed.width = Math.round(SHEET_EXPORT_WIDTH * SHEET_EXPORT_SCALE);
+      trimmed.height = Math.round(SHEET_EXPORT_HEIGHT * SHEET_EXPORT_SCALE);
+      const ctx = trimmed.getContext("2d");
+      ctx.fillStyle = "#f3efe6";
+      ctx.fillRect(0, 0, trimmed.width, trimmed.height);
+      ctx.drawImage(canvas, 0, 0, trimmed.width, trimmed.height);
+      pages.push({
+        imageData: trimmed.toDataURL("image/png"),
+        width: trimmed.width,
+        height: trimmed.height,
+      });
+    }
+  } finally {
+    document.body.classList.remove("is-pdf-capturing");
+  }
+
+  const filename = reportPdfName(blockId);
+  const response = await fetch("/api/blocks-analysis/export-pdf", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      pages,
+      filename,
+      document_title: "Port Vale Match Report",
+    }),
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(detail || "PDF export failed");
+  }
+  downloadBlob(await response.blob(), filename);
+}
+
 function printReport(blockId) {
   const block = document.getElementById(`block-${blockId}`);
   if (!block) return;
@@ -893,6 +996,20 @@ els.blocksRoot.addEventListener("click", async (event) => {
   const printBtn = event.target.closest("[data-print-report]");
   if (printBtn) {
     printReport(Number(printBtn.dataset.printReport));
+    return;
+  }
+  const pdfBtn = event.target.closest("[data-pdf-report]");
+  if (pdfBtn) {
+    pdfBtn.disabled = true;
+    setStatus("Building A4 landscape PDF…", "loading");
+    try {
+      await exportReportPdf(Number(pdfBtn.dataset.pdfReport));
+      setStatus("PDF downloaded.", "ok");
+    } catch (err) {
+      setStatus(err.message || "PDF export failed", "error");
+    } finally {
+      pdfBtn.disabled = false;
+    }
     return;
   }
   const exportBtn = event.target.closest("[data-export]");
