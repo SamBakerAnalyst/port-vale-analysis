@@ -133,8 +133,32 @@ function medalPills(block) {
   }).join("");
 }
 
+function progressPct(got, target) {
+  const t = Number(target) || 0;
+  const g = Number(got) || 0;
+  if (t <= 0) return g > 0 ? 100 : 0;
+  return Math.max(0, Math.min(100, (g / t) * 100));
+}
+
+function progressTrack(label, got, target) {
+  const pct = progressPct(got, target);
+  const hit = Number(target) > 0 && Number(got) >= Number(target);
+  return `
+    <div class="ba-track ${hit ? "is-hit" : ""}">
+      <div class="ba-track__head">
+        <span class="ba-track__label">${escapeHtml(label)}</span>
+        <span class="ba-track__nums"><b>${escapeHtml(fmtNum(got))}</b> / ${escapeHtml(fmtNum(target))}</span>
+      </div>
+      <div class="ba-track__bar" role="progressbar" aria-label="${escapeHtml(label)}" aria-valuenow="${escapeHtml(got)}" aria-valuemin="0" aria-valuemax="${escapeHtml(target)}">
+        <span class="ba-track__fill" style="width:${pct}%"></span>
+      </div>
+    </div>
+  `;
+}
+
 function posterHtml(block) {
   const target = block.target || {};
+  const totals = block.totals || {};
   const medal = target.medal || "silver";
   const csLabel = Number(target.cleanSheets) === 1 ? "clean sheet" : "clean sheets";
   return `
@@ -154,15 +178,22 @@ function posterHtml(block) {
         <div class="ba-aim-wrap">
           <p class="ba-aim-wrap__title">What are we aiming for?</p>
           <div class="ba-medal-pills ba-export-hide">${medalPills(block)}</div>
-          <div class="ba-aim ba-aim--${escapeHtml(medal)}">
-            <p class="ba-aim__label">${escapeHtml(target.label || "SILVER • AUTOMATIC")}</p>
-            <span class="ba-aim__points-print">${escapeHtml(target.points)}</span>
-            <input class="ba-aim__points ba-export-hide" type="number" min="0" max="18" step="1" value="${escapeHtml(target.points)}" data-block="${block.id}" aria-label="Points target" />
-            <p class="ba-aim__cs">
-              <span class="ba-aim__cs-print">${escapeHtml(target.cleanSheets)}</span>
-              <input class="ba-aim__cs-input ba-export-hide" type="number" min="0" max="6" step="1" value="${escapeHtml(target.cleanSheets)}" data-block="${block.id}" aria-label="Clean sheet target" />
-              ${csLabel}
-            </p>
+          <div class="ba-aim-row">
+            <div class="ba-aim ba-aim--${escapeHtml(medal)}">
+              <p class="ba-aim__stamp">Target</p>
+              <p class="ba-aim__label">${escapeHtml(target.label || "SILVER • AUTOMATIC")}</p>
+              <span class="ba-aim__points-print">${escapeHtml(target.points)}</span>
+              <input class="ba-aim__points ba-export-hide" type="number" min="0" max="18" step="1" value="${escapeHtml(target.points)}" data-block="${block.id}" aria-label="Points target" />
+              <p class="ba-aim__cs">
+                <span class="ba-aim__cs-print">${escapeHtml(target.cleanSheets)}</span>
+                <input class="ba-aim__cs-input ba-export-hide" type="number" min="0" max="6" step="1" value="${escapeHtml(target.cleanSheets)}" data-block="${block.id}" aria-label="Clean sheet target" />
+                ${csLabel}
+              </p>
+            </div>
+            <div class="ba-tracks">
+              ${progressTrack("Points", totals.points || 0, target.points)}
+              ${progressTrack("Clean sheets", totals.cleanSheets || 0, target.cleanSheets)}
+            </div>
           </div>
         </div>
       </div>
