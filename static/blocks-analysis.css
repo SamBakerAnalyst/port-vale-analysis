@@ -739,6 +739,11 @@ a:hover { text-decoration: underline; }
   color: #111;
 }
 
+.ba-filter__btn--demo {
+  border-color: #f5c518;
+  color: #f5c518;
+}
+
 .ba-kpis {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

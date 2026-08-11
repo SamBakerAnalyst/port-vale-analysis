@@ -78,6 +78,7 @@ function fmtNum(value, digits = 0) {
 
 function shortOpponent(name) {
   const text = String(name || "").replace(/\s+FC$/i, "").trim();
+  if (/wolverhampton/i.test(text)) return "Wolves";
   const parts = text.split(/\s+/);
   if (parts.length <= 2) return text;
   return parts.slice(0, 2).join(" ");
@@ -175,10 +176,14 @@ function posterHtml(block) {
   `;
 }
 
+function reportFixtures(block) {
+  return [...(block.fixtures || []), ...(block.demoFixtures || [])];
+}
+
 function selectedStats(block) {
   const filterId = state.filters[block.id];
   if (!filterId || filterId === "all") return { stats: block.totals, label: "All games in this block", single: false };
-  const fixture = (block.fixtures || []).find((row) => String(row.matchId) === String(filterId));
+  const fixture = reportFixtures(block).find((row) => String(row.matchId) === String(filterId));
   if (!fixture) return { stats: block.totals, label: "All games in this block", single: false };
   const stats = { ...(fixture.stats || {}) };
   stats.played = fixture.played ? 1 : 0;
@@ -472,6 +477,14 @@ function dashHtml(block) {
           return `<button type="button" class="ba-filter__btn ${active ? "is-active" : ""}" data-filter="${row.matchId}" data-block="${block.id}">${escapeHtml(row.slot)}. ${escapeHtml(shortOpponent(row.opponentName))}</button>`;
         })
     )
+    .concat(
+      (block.demoFixtures || [])
+        .filter((row) => row.matchId)
+        .map((row) => {
+          const active = String(filterId) === String(row.matchId);
+          return `<button type="button" class="ba-filter__btn ba-filter__btn--demo ${active ? "is-active" : ""}" data-filter="${row.matchId}" data-block="${block.id}">Demo · ${escapeHtml(shortOpponent(row.opponentName))}</button>`;
+        })
+    )
     .join("");
 
   const target = block.target || {};
@@ -498,7 +511,10 @@ function dashHtml(block) {
     </div>
   `;
   const payload = state.payload || {};
-  const kicker = `Block ${block.id} of 9 · ${payload.competition || "League Two"} ${payload.season || ""}`.trim();
+  const isDemo = Boolean(fixture?.demo);
+  const kicker = isDemo
+    ? `EFL Cup demo · ${payload.season || ""}`.trim()
+    : `Block ${block.id} of 9 · ${payload.competition || "League Two"} ${payload.season || ""}`.trim();
   const pageTitle = single ? "Match Report" : "Block Report";
   const header = { kicker, label, single, fixture };
   const boards = PLAYER_BOARDS.map((spec) => playerBoardHtml(spec, playersForView(block, single, fixture))).join("");
@@ -556,7 +572,10 @@ async function load(refresh = false) {
     const payload = await fetchJson(`/api/blocks-analysis${refresh ? "?refresh=true" : ""}`);
     state.payload = payload;
     (payload.blocks || []).forEach((block) => {
-      if (!state.filters[block.id]) state.filters[block.id] = "all";
+      if (state.filters[block.id]) return;
+      const leaguePlayed = (block.fixtures || []).some((row) => row.played);
+      const demo = (block.demoFixtures || []).find((row) => row.played && row.matchId);
+      state.filters[block.id] = (!leaguePlayed && demo) ? String(demo.matchId) : "all";
     });
     render();
     setStatus("");

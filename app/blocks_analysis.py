@@ -43,6 +43,8 @@ from app.scouting import SCOUTING_DIR
 BLOCKS_ITERATION_ID = 2120
 BLOCKS_SEASON_LABEL = "26/27"
 PREVIOUS_LEAGUE_TWO_ITERATION_ID = 1464  # 25/26 — top-7 requirement until 26/27 has games
+DEMO_CUP_ITERATION_ID = 2227  # EFL Cup 26/27
+DEMO_MATCH_ID = 285444  # Wolves 7 Aug — demo until League Two is played
 
 LONDON = ZoneInfo("Europe/London")
 BLOCK_COUNT = 9
@@ -82,7 +84,7 @@ UNIT_TOP7_PATH = DATA_DIR / "unit-top7.json"
 _store_lock = threading.Lock()
 _payload_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 _benchmark_cache: tuple[float, dict[str, Any]] | None = None
-_player_names_cache: tuple[float, int, dict[int, str]] | None = None
+_player_names_cache: dict[int, tuple[float, dict[int, str]]] = {}
 
 MEDAL_DEFAULTS: dict[str, dict[str, Any]] = {
     "gold": {
@@ -365,19 +367,21 @@ def _units_from_players(players: list[dict[str, Any]], squad_id: int) -> dict[st
 
 
 def _blocks_player_names(iteration_id: int = BLOCKS_ITERATION_ID) -> dict[int, str]:
-    global _player_names_cache
     now = time.time()
-    if (
-        _player_names_cache
-        and _player_names_cache[1] == iteration_id
-        and now - _player_names_cache[0] < PLAYER_NAMES_TTL
-    ):
-        return _player_names_cache[2]
+    cached = _player_names_cache.get(iteration_id)
+    if cached and now - cached[0] < PLAYER_NAMES_TTL:
+        return cached[1]
     try:
         names = _player_directory(iteration_id)
     except Exception:  # noqa: BLE001
         names = {}
-    _player_names_cache = (now, iteration_id, names)
+    _player_names_cache[iteration_id] = (now, names)
+    return names
+
+
+def _merged_player_names() -> dict[int, str]:
+    names = dict(_blocks_player_names(BLOCKS_ITERATION_ID))
+    names.update(_blocks_player_names(DEMO_CUP_ITERATION_ID))
     return names
 
 
@@ -730,7 +734,7 @@ def _load_match_kpis(
         to_fetch.append(match)
 
     if to_fetch:
-        names = _blocks_player_names(BLOCKS_ITERATION_ID)
+        names = _merged_player_names()
         workers = min(8, len(to_fetch))
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = {
@@ -1256,6 +1260,37 @@ def _target_payload(block_id: int, saved: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _load_demo_fixture(*, force_refresh: bool = False) -> dict[str, Any] | None:
+    """Wolves EFL Cup — preview the 2-page report before League Two starts."""
+    try:
+        matches = build_season_matches(
+            DEMO_CUP_ITERATION_ID,
+            PORT_VALE_SQUAD_ID,
+            include_upcoming=True,
+            competition_label="EFL Cup",
+            competition_short="Cup",
+            season_label=BLOCKS_SEASON_LABEL,
+        )
+    except Exception:  # noqa: BLE001
+        return None
+    match = next(
+        (row for row in matches if int(row.get("matchId") or 0) == DEMO_MATCH_ID),
+        None,
+    )
+    if match is None:
+        match = next((row for row in matches if row.get("outcome")), None)
+    if match is None:
+        return None
+    kpis = _load_match_kpis([match], force_refresh=force_refresh).get(int(match["matchId"]))
+    if not kpis or not kpis.get("players"):
+        return None
+    fixture = _serialize_fixture(match, slot=0, season_number=None, kpis=kpis)
+    fixture["demo"] = True
+    fixture["competitionShort"] = "CUP"
+    fixture["competitionLabel"] = "EFL Cup"
+    return fixture
+
+
 def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, Any]:
     cache_key = "default"
     now = time.time()
@@ -1319,6 +1354,7 @@ def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, A
                 "footer": copy["footer"],
                 "target": target,
                 "fixtures": fixtures,
+                "demoFixtures": [],
                 "totals": totals,
                 "status": (
                     "complete"
@@ -1338,6 +1374,13 @@ def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, A
             current_block_id = int(block["id"])
             break
         current_block_id = int(block["id"])
+
+    demo = _load_demo_fixture(force_refresh=force_refresh)
+    if demo:
+        for block in blocks:
+            if int(block["id"]) == current_block_id:
+                block["demoFixtures"] = [demo]
+                break
 
     payload = {
         "generatedAt": datetime.now(UTC).isoformat(),
