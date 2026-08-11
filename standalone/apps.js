@@ -365,14 +365,15 @@ window.IMPECT_APPS = [
   {
     "id": "league-two-progress",
     "group": "strategy",
-    "title": "League Two Progress Report",
-    "description": "Track live promotion progress, point pace, and season targets against benchmarks.",
+    "title": "Season Progress Report",
+    "description": "Live promotion pace for every key metric, goals by time, and season targets versus auto / play-off / champions.",
     "href": "/strategy-tracker",
     "icon": "📉",
     "accent": "#fbbf24",
     "tags": [
       "League Two",
-      "Progress"
+      "Progress",
+      "Pace"
     ]
   }
 ];

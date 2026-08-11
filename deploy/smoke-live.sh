@@ -79,7 +79,7 @@ if [[ "${#REQUIRED_APPS[@]}" -eq 0 ]]; then
     "Club Strategy"
     "League Two Strategy Report"
     "Players Strategy Report"
-    "League Two Progress Report"
+    "Season Progress Report"
   )
 fi
 

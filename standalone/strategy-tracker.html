@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>League Two Progress Report</title>
+  <title>Season Progress Report</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/strategy-tracker.css?v=1" />
+  <link rel="stylesheet" href="/static/strategy-tracker.css?v=2" />
 </head>
 <body>
   <div class="st-app">
@@ -16,11 +16,16 @@
         <img class="st-header__badge" src="/standalone/port-vale-badge.png?v=2" width="48" height="58" alt="Port Vale FC crest" />
         <div>
           <p class="st-header__eyebrow">Strategy · <a href="/">← All apps</a></p>
-          <h1 class="st-header__title">League Two Progress Report</h1>
+          <h1 class="st-header__title">Season Progress Report</h1>
           <p class="st-header__subtitle" id="pageSubtitle">Live pace vs promotion benchmarks</p>
         </div>
       </div>
       <div class="st-header__actions">
+        <div class="st-toggle" role="group" aria-label="Competition">
+          <button type="button" class="st-toggle__btn is-active" data-competition="">Auto</button>
+          <button type="button" class="st-toggle__btn" data-competition="League One">League One</button>
+          <button type="button" class="st-toggle__btn" data-competition="League Two">League Two</button>
+        </div>
         <div class="st-updated" id="lastUpdated" aria-live="polite">Loading…</div>
         <button type="button" class="st-btn" id="refreshBtn">Refresh</button>
         <a class="st-btn st-btn--ghost" href="/strategy">Staff report →</a>
@@ -57,10 +62,13 @@
 
     <section class="st-hero card">
       <div class="st-hero__head">
-        <h2>Points pace · season track</h2>
-        <p>Solid lines = projected finish at current PPG · dashed = Strategy Report season targets</p>
+        <div>
+          <h2 id="paceTitle">Points pace · season track</h2>
+          <p id="paceHint">Click a metric below — or the pills — to swap the line. Dashed = season targets.</p>
+        </div>
       </div>
-      <div class="st-chart-wrap" id="pointsChart" aria-label="Points pace chart"></div>
+      <div class="st-pills" id="metricPills" role="tablist" aria-label="Pace metrics"></div>
+      <div class="st-chart-wrap" id="pointsChart" aria-label="Season pace chart"></div>
       <div class="st-legend">
         <span class="st-legend__item st-legend__item--vale"><i></i>Port Vale actual</span>
         <span class="st-legend__item st-legend__item--proj"><i></i>Projected finish</span>
@@ -72,8 +80,50 @@
 
     <section class="st-metrics" id="metricsGrid"></section>
 
+    <section class="st-dash" id="goalsDash">
+      <div class="st-dash__head">
+        <h2>Goals by time</h2>
+        <p id="goalsHint">When Vale score and concede — 15-minute windows plus added time.</p>
+      </div>
+      <div class="st-dash__grid">
+        <article class="card st-timing">
+          <div class="st-chart-wrap st-chart-wrap--bars" id="timingChart" aria-label="Goals for and against by time"></div>
+          <div class="st-legend">
+            <span class="st-legend__item st-legend__item--vale"><i></i>Scored</span>
+            <span class="st-legend__item st-legend__item--against"><i></i>Conceded</span>
+          </div>
+        </article>
+        <div class="st-timing-side" id="timingSide"></div>
+      </div>
+    </section>
+
+    <section class="st-extras" id="extrasRow"></section>
+
+    <section class="card st-results" id="resultsCard">
+      <div class="st-dash__head">
+        <h2>Recent league results</h2>
+        <p>Running totals after each match — same series as the pace chart.</p>
+      </div>
+      <div class="st-table-wrap">
+        <table class="st-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Date</th>
+              <th>Opp</th>
+              <th></th>
+              <th>Score</th>
+              <th>Pts</th>
+              <th>GD</th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody"></tbody>
+        </table>
+      </div>
+    </section>
+
     <p class="st-footnote" id="sourceNote"></p>
   </div>
-  <script defer src="/static/strategy-tracker.js?v=1"></script>
+  <script defer src="/static/strategy-tracker.js?v=2"></script>
 </body>
 </html>

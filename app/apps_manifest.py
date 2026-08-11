@@ -429,15 +429,15 @@ APPS: list[dict[str, Any]] = [
     {
         "id": "league-two-progress",
         "group": "strategy",
-        "title": "League Two Progress Report",
+        "title": "Season Progress Report",
         "description": (
-            "Track live promotion progress, point pace, and season targets "
-            "against benchmarks."
+            "Live promotion pace for every key metric, goals by time, "
+            "and season targets versus auto / play-off / champions."
         ),
         "href": "/strategy-tracker",
         "icon": "📉",
         "accent": "#fbbf24",
-        "tags": ["League Two", "Progress"],
+        "tags": ["League Two", "Progress", "Pace"],
         "roles": ("admin",),
         "api_prefixes": ("/strategy-tracker", "/api/strategy-tracker"),
         "router": "strategy_tracker",

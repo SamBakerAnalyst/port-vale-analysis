@@ -8,6 +8,8 @@ const state = {
   firstGoalLoading: false,
   exporting: false,
   timingView: "periods",
+  sortKey: null,
+  sortDir: null,
 };
 
 const els = {
@@ -220,6 +222,8 @@ function renderTimingViewToggle() {
     btn.addEventListener("click", () => {
       if (state.timingView === option.id) return;
       state.timingView = option.id;
+      state.sortKey = null;
+      state.sortDir = null;
       renderTable();
     });
     els.timingViewToggle.appendChild(btn);
@@ -283,36 +287,6 @@ function timingColumns(prefix, view = "periods", invertHeat = false) {
     }
   }
   return cols;
-}
-
-function renderTimingTableHead(columns, view) {
-  if (view !== "full") {
-    return `<tr>${columns
-      .map((col) => {
-        const title = col.title ? ` title="${escapeHtml(col.title)}"` : "";
-        return `<th class="${col.fmt === "club" ? "club" : ""}"${title}>${col.label}</th>`;
-      })
-      .join("")}</tr>`;
-  }
-
-  const fixed = columns.filter((col) => !col.bucketGroup);
-  const fixedCells = fixed
-    .map((col) => {
-      const title = col.title ? ` title="${escapeHtml(col.title)}"` : "";
-      return `<th class="${col.fmt === "club" ? "club" : ""}" rowspan="2"${title}>${col.label}</th>`;
-    })
-    .join("");
-
-  const groupCells = TIMING_BUCKETS.map((bucket) => {
-    const label = TIMING_BUCKET_LABELS[bucket] || bucket;
-    return `<th colspan="3" class="timing-group">${label} min</th>`;
-  }).join("");
-
-  const subCells = TIMING_BUCKETS.map(
-    () => `<th class="timing-sub">Σ</th><th class="timing-sub">H</th><th class="timing-sub">A</th>`,
-  ).join("");
-
-  return `<tr class="timing-head__group">${fixedCells}${groupCells}</tr><tr class="timing-head__sub">${subCells}</tr>`;
 }
 
 function renderCompetitionToggle() {
@@ -400,6 +374,8 @@ function renderTabNav() {
     btn.addEventListener("click", () => {
       if (state.activeTab === tab.id) return;
       state.activeTab = tab.id;
+      state.sortKey = null;
+      state.sortDir = null;
       renderTabNav();
       if (needsFirstGoal() && !state.report?.first_goal) {
         renderTable();
@@ -437,6 +413,107 @@ function getNested(row, path) {
   return path.split(".").reduce((acc, key) => (acc == null ? undefined : acc[key]), row);
 }
 
+function cellValue(row, key) {
+  return key.includes(".") ? getNested(row, key) : row[key];
+}
+
+function compareSortValues(a, b, key, dir) {
+  const av = cellValue(a, key);
+  const bv = cellValue(b, key);
+  const aEmpty = av == null || av === "";
+  const bEmpty = bv == null || bv === "";
+  if (aEmpty && bEmpty) return 0;
+  if (aEmpty) return 1;
+  if (bEmpty) return -1;
+
+  let cmp;
+  if (typeof av === "number" || typeof bv === "number" || (!Number.isNaN(Number(av)) && !Number.isNaN(Number(bv)) && String(av).trim() !== "" && /^-?\d/.test(String(av)))) {
+    cmp = Number(av) - Number(bv);
+  } else {
+    cmp = String(av).localeCompare(String(bv), undefined, { sensitivity: "base", numeric: true });
+  }
+  if (cmp === 0) {
+    return String(a.club || "").localeCompare(String(b.club || ""), undefined, { sensitivity: "base" });
+  }
+  return dir === "asc" ? cmp : -cmp;
+}
+
+function sortedRows(rows, columns) {
+  if (!state.sortKey || !state.sortDir) return rows;
+  const col = columns.find((c) => c.key === state.sortKey);
+  if (!col) return rows;
+  return [...rows].sort((a, b) => compareSortValues(a, b, state.sortKey, state.sortDir));
+}
+
+function sortIndicator(key) {
+  if (state.sortKey !== key || !state.sortDir) return "";
+  return state.sortDir === "asc" ? " ▲" : " ▼";
+}
+
+function sortHeaderClass(key) {
+  const parts = ["sortable"];
+  if (state.sortKey === key && state.sortDir) parts.push("is-sorted", `is-sorted--${state.sortDir}`);
+  return parts.join(" ");
+}
+
+function bindSortHeaders(columns) {
+  els.tableHead.querySelectorAll("th[data-sort-key]").forEach((th) => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.sortKey;
+      if (!key) return;
+      if (state.sortKey === key) {
+        if (state.sortDir === "desc") state.sortDir = "asc";
+        else if (state.sortDir === "asc") {
+          state.sortKey = null;
+          state.sortDir = null;
+        } else state.sortDir = "desc";
+      } else {
+        const col = columns.find((c) => c.key === key);
+        const preferAsc = col?.fmt === "club" || col?.higherBetter === false;
+        state.sortKey = key;
+        state.sortDir = preferAsc ? "asc" : "desc";
+      }
+      renderTable();
+    });
+  });
+}
+
+function sortableTh(col, extraClass = "", attrs = "") {
+  const clubClass = col.fmt === "club" ? "club" : "";
+  const classes = [clubClass, sortHeaderClass(col.key)].filter(Boolean).join(" ");
+  const titleBits = [col.title || col.label, "Click to sort"].filter(Boolean);
+  const title = ` title="${escapeHtml(titleBits.join(" — "))}"`;
+  const groupClass = col.group ? ` data-group="${col.group}"` : "";
+  return `<th class="${classes}${extraClass ? ` ${extraClass}` : ""}" data-sort-key="${escapeHtml(col.key)}"${title}${groupClass}${attrs}>${col.label}${sortIndicator(col.key)}</th>`;
+}
+
+function renderTimingTableHead(columns, view) {
+  if (view !== "full") {
+    return `<tr>${columns.map((col) => sortableTh(col)).join("")}</tr>`;
+  }
+
+  const fixed = columns.filter((col) => !col.bucketGroup);
+  const bucketCols = columns.filter((col) => col.bucketGroup);
+  const fixedCells = fixed
+    .map((col) => sortableTh(col, "", ' rowspan="2"'))
+    .join("");
+
+  const groupCells = TIMING_BUCKETS.map((bucket) => {
+    const label = TIMING_BUCKET_LABELS[bucket] || bucket;
+    const suffix = ["45+", "90+", "unknown"].includes(bucket) ? "" : " min";
+    return `<th colspan="3" class="timing-group">${label}${suffix}</th>`;
+  }).join("");
+
+  const subCells = bucketCols
+    .map((col) => {
+      const label = col.bucketRole === "total" ? "Σ" : col.bucketRole === "home" ? "H" : "A";
+      return sortableTh({ ...col, label }, "timing-sub");
+    })
+    .join("");
+
+  return `<tr class="timing-head__group">${fixedCells}${groupCells}</tr><tr class="timing-head__sub">${subCells}</tr>`;
+}
+
 function renderTable() {
   const cfg = TAB_CONFIG[state.activeTab];
   els.panelTitle.textContent = cfg.title;
@@ -454,10 +531,16 @@ function renderTable() {
     ];
   }
 
-  const rows = rowsForActiveTab();
+  if (state.sortKey && !columns.some((col) => col.key === state.sortKey)) {
+    state.sortKey = null;
+    state.sortDir = null;
+  }
+
+  const baseRows = rowsForActiveTab();
+  const rows = sortedRows(baseRows, columns);
   const averages = averagesForActiveTab();
 
-  if (needsFirstGoal() && state.firstGoalLoading && !rows.length) {
+  if (needsFirstGoal() && state.firstGoalLoading && !baseRows.length) {
     const colCount = columns.length || 1;
     els.tableHead.innerHTML = `<tr>${columns
       .map((col) => `<th>${col.label}</th>`)
@@ -470,21 +553,16 @@ function renderTable() {
   if (cfg.timing) {
     els.tableHead.innerHTML = renderTimingTableHead(columns, state.timingView);
   } else {
-    els.tableHead.innerHTML = `<tr>${columns
-      .map((col) => {
-        const title = col.title ? ` title="${escapeHtml(col.title)}"` : "";
-        const groupClass = col.group ? ` data-group="${col.group}"` : "";
-        return `<th class="${col.fmt === "club" ? "club" : ""}"${title}${groupClass}>${col.label}</th>`;
-      })
-      .join("")}</tr>`;
+    els.tableHead.innerHTML = `<tr>${columns.map((col) => sortableTh(col)).join("")}</tr>`;
   }
+  bindSortHeaders(columns);
 
   const heatCols = columns.filter((col) => col.fmt !== "club" && col.heat !== false);
   const ranges = Object.fromEntries(
     heatCols.map((col) => {
       const values = rows
         .map((row) => {
-          const raw = col.key.includes(".") ? getNested(row, col.key) : row[col.key];
+          const raw = cellValue(row, col.key);
           return Number(raw);
         })
         .filter((n) => !Number.isNaN(n));
@@ -497,7 +575,7 @@ function renderTable() {
       const focusClass = row.focus ? "focus" : "";
       const cells = columns
         .map((col) => {
-          const raw = col.key.includes(".") ? getNested(row, col.key) : row[col.key];
+          const raw = cellValue(row, col.key);
           if (col.fmt === "club") {
             return `<td class="club">${escapeHtml(String(raw || ""))}</td>`;
           }

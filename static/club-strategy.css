@@ -277,6 +277,16 @@ a:hover { text-decoration: underline; }
   text-transform: none;
   letter-spacing: 0;
 }
+.data-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+.data-table th.sortable:hover {
+  color: var(--gold);
+}
+.data-table th.is-sorted {
+  color: var(--gold);
+}
 .data-table th[data-group="scored"] {
   border-top: 2px solid rgba(34, 197, 94, 0.45);
 }
