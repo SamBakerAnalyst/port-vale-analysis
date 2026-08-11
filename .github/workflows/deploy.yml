@@ -19,6 +19,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Block the Fixture Planner staff.split crash
+        run: bash deploy/check-fixture-planner.sh
+
       - name: Rsync and restart on droplet
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -48,9 +51,21 @@ jobs:
           for i in $(seq 1 30); do
             if curl -sf "http://${{ secrets.DEPLOY_HOST }}/health" >/dev/null; then
               echo "✓ Live site healthy"
-              exit 0
+              break
+            fi
+            if [[ "$i" -eq 30 ]]; then
+              echo "Health check failed"
+              exit 1
             fi
             sleep 5
           done
-          echo "Health check failed"
-          exit 1
+          curl -s --max-time 20 "http://${{ secrets.DEPLOY_HOST }}/static/fixture-planner.js" -o /tmp/fp.js
+          if grep -Fq 'assignment.staff.split' /tmp/fp.js; then
+            echo "Live fixture-planner.js still has assignment.staff.split — rolling back this deploy is required"
+            exit 1
+          fi
+          if ! grep -Fq 'function staffNames' /tmp/fp.js; then
+            echo "Live fixture-planner.js missing staffNames"
+            exit 1
+          fi
+          echo "✓ Live Fixture Planner JS is the staff-list build"

@@ -42,26 +42,45 @@ case "$ROOT" in
     ;;
 esac
 
+# Guard: never ship the staff.split crash (GitHub Actions used to restore it).
+bash "$ROOT/deploy/check-fixture-planner.sh"
+
 # Keep GitHub in sync so Actions / console updates can't overwrite with older code.
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   branch="$(git branch --show-current 2>/dev/null || echo main)"
   if [[ "$branch" != "main" ]]; then
     echo "WARNING: on branch '$branch' (expected main). Continuing anyway."
   fi
+  # Uncommitted Fixture Planner files get wiped the next time Actions deploys main.
+  PLANNER_FILES=(
+    static/fixture-planner.js
+    static/fixture-planner.css
+    standalone/fixture-planner.html
+    standalone/played-fixtures.html
+    app/fixture_planner.py
+  )
+  dirty_planner="$(git diff --name-only -- "${PLANNER_FILES[@]}" ; git diff --cached --name-only -- "${PLANNER_FILES[@]}")"
+  if [[ -n "${dirty_planner}" ]]; then
+    echo "ERROR: Fixture Planner changes are not committed:"
+    echo "$dirty_planner"
+    echo "Commit + push these first. GitHub Actions deploys main and will overwrite live."
+    exit 1
+  fi
   if ! git diff --quiet || ! git diff --cached --quiet; then
-    echo "NOTE: you have uncommitted changes — they WILL go live via rsync,"
-    echo "      but they are NOT on GitHub until you commit + push."
+    echo "NOTE: other uncommitted files will rsync now, but GitHub Actions may overwrite them later."
   fi
   echo ""
   echo "1/3 Pushing main to GitHub…"
   if git push origin main; then
     echo "   ✓ GitHub updated"
   else
-    echo "   ⚠ Git push failed — continuing with rsync so live still updates."
-    echo "     Fix GitHub auth later so deploys can't drift."
+    echo "ERROR: GitHub push failed. Refusing to rsync."
+    echo "Rsync-without-push is how the old staff.split crash came back on live."
+    exit 1
   fi
 else
-  echo "WARNING: not a git repo — skipping push"
+  echo "ERROR: not a git repo — refusing to deploy"
+  exit 1
 fi
 
 echo ""
