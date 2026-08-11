@@ -33,6 +33,8 @@ PUBLIC_PREFIXES = (
     "/standalone/port-vale-badge",
     "/standalone/stadiums.json",
     "/static/stadiums.json",
+    "/api/player-photo",
+    "/api/availability/photo",
 )
 
 # Paths an analysis-only account may hit (prefix match, except "/" which is exact).

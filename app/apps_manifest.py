@@ -505,7 +505,7 @@ def analysis_path_prefixes() -> tuple[str, ...]:
         for prefix in app.get("api_prefixes") or ():
             prefixes.append(str(prefix))
     # Shared assets + feedback always allowed for signed-in analysis users.
-    prefixes.extend(("/api/feedback", "/api/apps", "/static/", "/standalone/"))
+    prefixes.extend(("/api/feedback", "/api/apps", "/api/player-photo", "/static/", "/standalone/"))
     # Dedupe, longest-first so more specific prefixes win in mental model
     # (middleware uses startswith either way).
     uniq = sorted(set(prefixes), key=lambda p: (-len(p), p))

@@ -66,8 +66,8 @@ CLUB_SQUAD_PAGES: dict[str, str] = {
     "wimbledon": "https://www.afcwimbledon.co.uk/squad/70",
 }
 PHOTO_CACHE_TTL_SECONDS = 6 * 60 * 60
-PHOTO_STYLE = "cc_960x1280"
-PHOTO_STYLE_FALLBACKS = ("cc_640x852", "cc_320x424", "medium")
+PHOTO_STYLE = "cc_320x424"
+PHOTO_STYLE_FALLBACKS = ("cc_640x852", "medium", "cc_960x1280")
 
 
 def _club_page_key(club_name: str) -> str:
@@ -100,12 +100,33 @@ def _extract_player_image(row: str, *, cdn_host: str) -> str | None:
     cdn_pattern = re.escape(cdn_host)
     for style in (PHOTO_STYLE, *PHOTO_STYLE_FALLBACKS):
         match = re.search(
-            rf"(https://{cdn_pattern}/sites/default/files/styles/{style}/public/[^\"?]+(?:\?[^\"]+)?)",
+            rf"(https://{cdn_pattern}/sites/default/files/styles/{style}/public/[^\"?\s,]+(?:\?[^\"\s,]*)?)",
             row,
         )
         if match:
             return match.group(1).replace("&amp;", "&")
     return None
+
+
+def _normalize_photo_source_url(url: str) -> str:
+    """Clubcast sometimes embeds a full srcset; keep a single compact image URL."""
+    text = str(url or "").strip()
+    if not text:
+        return text
+    first = text.split(",")[0].strip().split()[0].strip()
+    for style in (PHOTO_STYLE, *PHOTO_STYLE_FALLBACKS):
+        match = re.search(
+            rf"(https://cdn\.[^/\s]+/sites/default/files/styles/{re.escape(style)}/public/[^\"?\s,]+(?:\?[^\"\s,]*)?)",
+            first,
+        )
+        if match:
+            return match.group(1).replace("&amp;", "&")
+    if "styles/cc_960x1280/" in first:
+        return first.replace("styles/cc_960x1280/", f"styles/{PHOTO_STYLE}/")
+    if "styles/cc_640x852/" in first:
+        return first.replace("styles/cc_640x852/", f"styles/{PHOTO_STYLE}/")
+    return first.replace("&amp;", "&")
+
 
 _photo_cache: dict[str, Any] = {"fetched_at": 0.0, "entries": []}
 
@@ -125,6 +146,11 @@ def _name_tokens(name: str) -> tuple[str, str]:
     return parts[0].casefold(), parts[-1].casefold()
 
 
+def _squad_html_cache_path(squad_url: str = SQUAD_PAGE_URL) -> Path:
+    safe = re.sub(r"[^a-z0-9]+", "-", squad_url.casefold()).strip("-")
+    return PLAYER_PHOTOS_DIR.parent / "cache" / f"squad-html-{safe}.html"
+
+
 def _fetch_squad_page(squad_url: str = SQUAD_PAGE_URL) -> str:
     response = requests.get(
         squad_url,
@@ -133,15 +159,60 @@ def _fetch_squad_page(squad_url: str = SQUAD_PAGE_URL) -> str:
             "User-Agent": (
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
+                "Chrome/126.0.0.0 Safari/537.36"
             ),
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "en-GB,en;q=0.9",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
         },
     )
     if response.status_code >= 400:
         raise RuntimeError(f"Squad page request failed ({response.status_code})")
     return response.text
+
+
+def _load_cached_squad_html(squad_url: str = SQUAD_PAGE_URL) -> str | None:
+    path = _squad_html_cache_path(squad_url)
+    if not path.is_file():
+        return None
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    return text if "views-row o-players__list-item" in text else None
+
+
+def _save_cached_squad_html(page_html: str, squad_url: str = SQUAD_PAGE_URL) -> None:
+    if "views-row o-players__list-item" not in page_html:
+        return
+    path = _squad_html_cache_path(squad_url)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(page_html, encoding="utf-8")
+    except OSError:
+        return
+
+
+def _fetch_squad_page_with_cache(squad_url: str = SQUAD_PAGE_URL) -> tuple[str, bool]:
+    """Prefer live club HTML; fall back to the last good scrape when the host is blocked."""
+    live_error: Exception | None = None
+    try:
+        page_html = _fetch_squad_page(squad_url)
+        if "views-row o-players__list-item" in page_html:
+            _save_cached_squad_html(page_html, squad_url)
+            return page_html, False
+    except Exception as exc:
+        live_error = exc
+        page_html = ""
+
+    cached = _load_cached_squad_html(squad_url)
+    if cached:
+        return cached, True
+
+    if live_error is not None:
+        raise live_error
+    return page_html, False
 
 
 def _parse_squad_photos(page_html: str, *, cdn_host: str) -> list[dict[str, str]]:
@@ -166,7 +237,7 @@ def _parse_squad_photos(page_html: str, *, cdn_host: str) -> list[dict[str, str]
             {
                 "key": _normalize_name_key(display_name),
                 "name": display_name,
-                "url": image_url,
+                "url": _normalize_photo_source_url(image_url),
             }
         )
 
@@ -290,8 +361,8 @@ def fetch_club_squad_roster_for(club_name: str) -> list[dict[str, Any]]:
     if not squad_url:
         return []
     try:
-        page_html = _fetch_squad_page(squad_url)
-    except requests.RequestException:
+        page_html, _from_cache = _fetch_squad_page_with_cache(squad_url)
+    except (requests.RequestException, RuntimeError):
         return []
     return _parse_club_squad_roster_page(page_html, squad_url=squad_url)
 
@@ -299,8 +370,8 @@ def fetch_club_squad_roster_for(club_name: str) -> list[dict[str, Any]]:
 def fetch_club_squad_roster(*, force: bool = False) -> list[dict[str, Any]]:
     del force  # always live-fetch; kept for call-site compatibility
     try:
-        page_html = _fetch_squad_page()
-    except requests.RequestException as exc:
+        page_html, _from_cache = _fetch_squad_page_with_cache()
+    except (requests.RequestException, RuntimeError) as exc:
         raise RuntimeError(f"Could not reach port-vale.co.uk ({exc})") from exc
 
     players = _parse_club_squad_roster_page(page_html, squad_url=SQUAD_PAGE_URL)
@@ -334,11 +405,23 @@ def _refresh_club_photo_cache(
     ):
         return cache["entries"]
 
-    page_html = _fetch_squad_page(squad_url)
+    try:
+        page_html, _from_cache = _fetch_squad_page_with_cache(squad_url)
+    except Exception:
+        if cache["entries"]:
+            return list(cache["entries"])
+        raise
+
     entries = _parse_squad_photos(page_html, cdn_host=_cdn_host_for_squad_url(squad_url))
+    if entries:
+        cache["fetched_at"] = now
+        cache["entries"] = entries
+        return entries
+    if cache["entries"]:
+        return list(cache["entries"])
     cache["fetched_at"] = now
-    cache["entries"] = entries
-    return entries
+    cache["entries"] = []
+    return []
 
 
 def _refresh_photo_cache(force: bool = False) -> list[dict[str, str]]:
@@ -497,7 +580,9 @@ def resolve_squad_photo_url(
     squad_url = club_squad_page_url(club_name) if club_name else SQUAD_PAGE_URL
     entries = _refresh_club_photo_cache(squad_url, force=force)
     entry = _match_club_photo_entry(name, entries)
-    return entry["url"] if entry else None
+    if not entry:
+        return None
+    return _normalize_photo_source_url(entry["url"])
 
 
 def local_photo_save_path(name: str) -> Path:
@@ -519,15 +604,42 @@ def save_local_player_photo(name: str, image_bytes: bytes) -> Path:
 
 
 def fetch_photo_bytes(url: str) -> tuple[bytes, str]:
-    response = requests.get(
-        url,
-        timeout=25,
-        headers={"User-Agent": "Mozilla/5.0 (Port Vale analysis dashboard)"},
-    )
-    if response.status_code >= 400:
-        raise RuntimeError(f"Photo request failed ({response.status_code})")
+    compact_url = _normalize_photo_source_url(url)
+    candidates = [compact_url]
+    if compact_url != url:
+        candidates.append(_normalize_photo_source_url(url.split(",")[0]))
 
-    content_type = response.headers.get("Content-Type", "image/jpeg").split(";")[0].strip()
-    if not content_type.startswith("image/"):
-        content_type = "image/jpeg"
-    return response.content, content_type
+    last_error: Exception | None = None
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        try:
+            response = requests.get(
+                candidate,
+                timeout=25,
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/126.0.0.0 Safari/537.36"
+                    ),
+                    "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+                    "Referer": "https://www.port-vale.co.uk/",
+                },
+            )
+            if response.status_code >= 400:
+                last_error = RuntimeError(f"Photo request failed ({response.status_code})")
+                continue
+            content_type = response.headers.get("Content-Type") or "image/jpeg"
+            if not content_type.startswith("image/"):
+                content_type = "image/jpeg"
+            if len(response.content) > 1_500_000 and candidate == compact_url:
+                last_error = RuntimeError("Photo too large")
+                continue
+            return response.content, content_type
+        except requests.RequestException as exc:
+            last_error = exc
+            continue
+    raise RuntimeError(f"Could not download player photo ({last_error})")
