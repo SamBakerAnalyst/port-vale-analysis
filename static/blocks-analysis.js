@@ -686,13 +686,13 @@ function xgRaceHtml(race) {
     `;
   }).join("");
   return `
-    <article class="ba-race">
-      <header class="ba-race__head">
+    <article class="ba-chart ba-race">
+      <header class="ba-chart__head">
         <div>
           <h4>xG race</h4>
           <p>Shot-based · ball = goal</p>
         </div>
-        <p class="ba-race__legend">
+        <p class="ba-chart__legend">
           <span class="ba-race__swatch ba-race__swatch--vale"></span>
           Vale ${escapeHtml(fmtNum(race.vale.totalXg, 2))}
           <span class="ba-race__swatch ba-race__swatch--opp"></span>
@@ -708,6 +708,111 @@ function xgRaceHtml(race) {
         ${goalDots(race.opp, "ba-race__goal ba-race__goal--opp")}
         ${goalDots(race.vale, "ba-race__goal ba-race__goal--vale")}
       </svg>
+    </article>
+  `;
+}
+
+function avgGamesLabel(count) {
+  const n = Number(count) || 0;
+  return n > 0 ? `avg last ${n}` : "avg —";
+}
+
+function fieldTiltHtml(tilt) {
+  if (!tilt) {
+    return `
+      <article class="ba-chart ba-tilt">
+        <header class="ba-chart__head">
+          <div>
+            <h4>Field tilt</h4>
+            <p>Final third + box share</p>
+          </div>
+        </header>
+        <p class="ba-chart__empty">No attacking-third data</p>
+      </article>
+    `;
+  }
+  const focus = Number(tilt.focusPercent);
+  const opp = Math.max(0, 100 - focus);
+  const avg = tilt.avgPercent == null ? null : Number(tilt.avgPercent);
+  const avgMark = avg == null ? "" : `<i class="ba-tilt__mark" style="left:${Math.min(100, Math.max(0, avg))}%" title="Average ${fmtNum(avg, 1)}%"></i>`;
+  const cols = (tilt.blocks || []).map((block) => {
+    const value = Math.min(100, Math.max(0, Number(block.focus) || 0));
+    const blockAvg = block.avg == null ? null : Math.min(100, Math.max(0, Number(block.avg)));
+    return `
+      <div class="ba-tilt__col">
+        <span class="ba-tilt__col-val">${escapeHtml(fmtNum(value, 0))}</span>
+        <div class="ba-tilt__col-track">
+          ${blockAvg == null ? "" : `<i class="ba-tilt__col-avg" style="bottom:${blockAvg}%"></i>`}
+          <span class="ba-tilt__col-fill" style="height:${value}%"></span>
+        </div>
+        <span class="ba-tilt__col-lab">${escapeHtml(block.label || "")}</span>
+      </div>
+    `;
+  }).join("");
+  return `
+    <article class="ba-chart ba-tilt">
+      <header class="ba-chart__head">
+        <div>
+          <h4>Field tilt</h4>
+          <p>Final third + box · ${escapeHtml(avgGamesLabel(tilt.avgGames))}</p>
+        </div>
+        <p class="ba-chart__legend">
+          Vale ${escapeHtml(fmtNum(focus, 1))}%
+          ${avg == null ? "" : `<span class="ba-chart__avg">avg ${escapeHtml(fmtNum(avg, 1))}%</span>`}
+        </p>
+      </header>
+      <div class="ba-tilt__overall">
+        <span>Vale</span>
+        <div class="ba-tilt__split">
+          <span class="ba-tilt__split-fill" style="width:${Math.min(100, Math.max(0, focus))}%"></span>
+          ${avgMark}
+        </div>
+        <span>Opp ${escapeHtml(fmtNum(opp, 0))}%</span>
+      </div>
+      <div class="ba-tilt__cols">${cols}</div>
+    </article>
+  `;
+}
+
+function phasesHtml(phases) {
+  if (!phases?.phases?.length) {
+    return `
+      <article class="ba-chart ba-phasebox">
+        <header class="ba-chart__head">
+          <div>
+            <h4>Time in phase</h4>
+            <p>Share of match time</p>
+          </div>
+        </header>
+        <p class="ba-chart__empty">No phase data</p>
+      </article>
+    `;
+  }
+  const rows = phases.phases.map((row) => {
+    const value = Math.min(100, Math.max(0, Number(row.percent) || 0));
+    const avg = row.avg == null ? null : Math.min(100, Math.max(0, Number(row.avg)));
+    return `
+      <div class="ba-phase">
+        <span class="ba-phase__name">${escapeHtml(row.label || row.id)}</span>
+        <div class="ba-phase__track">
+          <span class="ba-phase__fill ba-phase__fill--${escapeHtml(row.id)}" style="width:${value}%"></span>
+          ${avg == null ? "" : `<i class="ba-phase__avg" style="left:${avg}%"></i>`}
+        </div>
+        <span class="ba-phase__num">${escapeHtml(fmtNum(value, 0))}%</span>
+        <span class="ba-phase__bench">${avg == null ? "—" : `avg ${escapeHtml(fmtNum(avg, 0))}`}</span>
+      </div>
+    `;
+  }).join("");
+  return `
+    <article class="ba-chart ba-phasebox">
+      <header class="ba-chart__head">
+        <div>
+          <h4>Time in phase</h4>
+          <p>This match vs ${escapeHtml(avgGamesLabel(phases.avgGames))}</p>
+        </div>
+        <p class="ba-chart__legend"><span class="ba-phase__swatch"></span> tick = average</p>
+      </header>
+      <div class="ba-phasebox__rows">${rows}</div>
     </article>
   `;
 }
@@ -797,10 +902,16 @@ function dashHtml(block) {
       <article class="ba-sheet ba-sheet--team ${outcome ? `ba-sheet--${outcome}` : ""}" data-sheet="1">
         ${sheetMasthead({ ...mast, title: pageTitle, page: 1 })}
         <div class="ba-sheet__body">
+          ${single ? `
+            <div class="ba-charts">
+              ${xgRaceHtml(stats.xgRace) || `<article class="ba-chart ba-race"><header class="ba-chart__head"><div><h4>xG race</h4><p>Shot-based</p></div></header><p class="ba-chart__empty">No shot data</p></article>`}
+              ${fieldTiltHtml(stats.fieldTilt)}
+              ${phasesHtml(stats.phases)}
+            </div>
+          ` : ""}
           ${metricStrip(stats, single)}
           ${single ? factsHtml(stats.facts) : ""}
-          <div class="ba-sheet__main ${stats.xgRace ? "ba-sheet__main--race" : ""}">
-            ${stats.xgRace ? xgRaceHtml(stats.xgRace) : ""}
+          <div class="ba-sheet__main ${single ? "ba-sheet__main--compact" : ""}">
             ${unitPanelHtml("Defenders bypassed", "defendersBypassed", "Taken out of the game", stats, single)}
             ${unitPanelHtml("Duel rate", "duelRate", "Won / attempted", stats, single)}
           </div>

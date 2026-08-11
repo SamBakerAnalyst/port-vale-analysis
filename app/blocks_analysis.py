@@ -6,6 +6,7 @@ import json
 import re
 import threading
 import time
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from typing import Any
@@ -35,6 +36,20 @@ from app.post_match.report import (
     _flatten_squad_kpis,
     _player_directory,
 )
+from app.post_match.field_tilt import (
+    BLOCK_MINUTES,
+    _block_focus_tilts,
+    _iteration_match_lookup,
+    _overall_focus_tilt,
+    build_field_tilt,
+)
+from app.post_match.phase_analysis import (
+    PHASE_ORDER,
+    _fetch_match_events,
+    _phase_durations_from_events,
+    _recent_squad_match_ids,
+    build_game_by_phase,
+)
 from app.post_match.season_matches import build_season_matches
 from app.post_match.xg_race import build_xg_race
 from app.scouting import SCOUTING_DIR
@@ -52,13 +67,22 @@ BLOCK_COUNT = 9
 GAMES_PER_BLOCK = 5
 KPI_SHOT_XG = 82
 MATCH_KPI_CACHE_TTL = 6 * 3600
-MATCH_STATS_CACHE_VERSION = 5
+MATCH_STATS_CACHE_VERSION = 6
+PHASE_SHORT_LABELS = {
+    "IN_POSSESSION": "In possession",
+    "OUT_OF_POSSESSION": "Out of possession",
+    "ATTACKING_TRANSITION": "Att. transition",
+    "DEFENSIVE_TRANSITION": "Def. transition",
+    "SECOND_BALL": "Second ball",
+    "SET_PIECE": "Set piece",
+}
 PAYLOAD_CACHE_TTL = 45
 PLAYER_NAMES_TTL = 6 * 3600
 BENCHMARK_CACHE_TTL = 600
 UNIT_TOP7_TTL = 24 * 3600
 UNIT_TOP7_VERSION = 2
 UNIT_TOP7_SAMPLE_MATCHES = 24
+FORM_BASELINE_GAMES = 7
 UNITS: tuple[str, ...] = ("DEF", "MID", "ATT")
 POSITION_TO_UNIT: dict[str, str | None] = {
     "GOALKEEPER": None,
@@ -777,6 +801,168 @@ def _match_story(
     return compact, facts
 
 
+_FORM_LOCK = threading.Lock()
+_FORM_CACHE: tuple[float, dict[str, Any] | None, dict[str, Any] | None] | None = None
+
+
+def _compact_field_tilt(
+    tilt: dict[str, Any] | None,
+    baseline: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not tilt:
+        return None
+    avg_by_start: dict[int, float] = {}
+    if baseline:
+        for row in baseline.get("timeline") or []:
+            if row.get("focusTiltPercent") is None:
+                continue
+            avg_by_start[int(row.get("startMinute") or 0)] = round(
+                float(row["focusTiltPercent"]), 1
+            )
+    avg_overall = None
+    if baseline and baseline.get("focusTiltPercent") is not None:
+        avg_overall = round(float(baseline["focusTiltPercent"]), 1)
+    return {
+        "focusPercent": round(float(tilt.get("focusTiltPercent") or 50), 1),
+        "avgPercent": avg_overall,
+        "avgGames": int(baseline.get("gamesUsed") or 0) if baseline else 0,
+        "blocks": [
+            {
+                "label": f"{int(row.get('endMinute') or 0)}'",
+                "focus": round(float(row.get("focusTiltPercent") or 50), 1),
+                "avg": avg_by_start.get(int(row.get("startMinute") or 0)),
+            }
+            for row in (tilt.get("timeline") or [])
+        ],
+    }
+
+
+def _compact_phases(
+    game: dict[str, Any] | None,
+    baseline: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not game:
+        return None
+    by_id = {row.get("id"): row for row in (game.get("phases") or [])}
+    avg_by_id = {
+        row.get("id"): row.get("percent")
+        for row in ((baseline or {}).get("phases") or [])
+        if row.get("id")
+    }
+    return {
+        "avgGames": int(baseline.get("gamesUsed") or 0) if baseline else 0,
+        "phases": [
+            {
+                "id": key,
+                "label": PHASE_SHORT_LABELS.get(key, key),
+                "percent": round(float((by_id.get(key) or {}).get("percent") or 0), 1),
+                "avg": (
+                    round(float(avg_by_id[key]), 1)
+                    if avg_by_id.get(key) is not None
+                    else None
+                ),
+            }
+            for key in PHASE_ORDER
+        ],
+    }
+
+
+def _compute_vale_form(squad_id: int) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    for iteration_id in (BLOCKS_ITERATION_ID, PREVIOUS_LEAGUE_TWO_ITERATION_ID):
+        match_ids = _recent_squad_match_ids(
+            iteration_id,
+            squad_id,
+            before_match_id=None,
+            count=FORM_BASELINE_GAMES,
+        )
+        if not match_ids:
+            continue
+        lookup = _iteration_match_lookup(iteration_id)
+        phase_sums: dict[str, float] = defaultdict(float)
+        phase_counts: dict[str, int] = defaultdict(int)
+        tilt_sums: dict[int, float] = defaultdict(float)
+        tilt_counts: dict[int, int] = defaultdict(int)
+        overall_tilts: list[float] = []
+        used = 0
+        for match_id in match_ids:
+            row = lookup.get(match_id) or {}
+            home_id = int(row.get("homeSquadId") or 0)
+            away_id = int(row.get("awaySquadId") or 0)
+            try:
+                events = _fetch_match_events(match_id)
+            except Exception:  # noqa: BLE001
+                continue
+            if not events:
+                continue
+            durations = _phase_durations_from_events(events, squad_id)
+            total = sum(durations.values())
+            if total <= 0:
+                continue
+            used += 1
+            for key in PHASE_ORDER:
+                phase_sums[key] += (durations.get(key, 0.0) / total) * 100
+                phase_counts[key] += 1
+            if home_id and away_id:
+                overall_tilts.append(
+                    _overall_focus_tilt(events, home_id, away_id, squad_id)
+                )
+                for start, share in _block_focus_tilts(
+                    events, home_id, away_id, squad_id, BLOCK_MINUTES
+                ).items():
+                    tilt_sums[start] += share
+                    tilt_counts[start] += 1
+        if used == 0:
+            continue
+        phases = {
+            "gamesUsed": used,
+            "phases": [
+                {
+                    "id": key,
+                    "percent": round(phase_sums[key] / max(phase_counts[key], 1), 1),
+                }
+                for key in PHASE_ORDER
+            ],
+        }
+        tilt = {
+            "gamesUsed": used,
+            "focusTiltPercent": (
+                round(sum(overall_tilts) / len(overall_tilts), 1) if overall_tilts else None
+            ),
+            "timeline": [
+                {
+                    "startMinute": start,
+                    "endMinute": min(start + BLOCK_MINUTES, 90),
+                    "focusTiltPercent": (
+                        round(tilt_sums[start] / tilt_counts[start], 1)
+                        if tilt_counts[start]
+                        else None
+                    ),
+                }
+                for start in range(0, 90, BLOCK_MINUTES)
+            ],
+        }
+        return phases, tilt
+    return None, None
+
+
+def _vale_form_baselines(
+    squad_id: int,
+    *,
+    force: bool = False,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    global _FORM_CACHE
+    with _FORM_LOCK:
+        if (
+            not force
+            and _FORM_CACHE
+            and time.time() - _FORM_CACHE[0] < MATCH_KPI_CACHE_TTL
+        ):
+            return _FORM_CACHE[1], _FORM_CACHE[2]
+        phases, tilt = _compute_vale_form(squad_id)
+        _FORM_CACHE = (time.time(), phases, tilt)
+        return phases, tilt
+
+
 def _fetch_match_stats(
     match_id: int,
     squad_id: int = PORT_VALE_SQUAD_ID,
@@ -785,6 +971,8 @@ def _fetch_match_stats(
     away_squad_id: int = 0,
     home_name: str = "Home",
     away_name: str = "Away",
+    form_phases: dict[str, Any] | None = None,
+    form_tilt: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     kpis = _fetch_squad_kpis(match_id)
     stats = _extract_match_kpis(kpis) if kpis else _empty_kpi_stats()
@@ -809,6 +997,30 @@ def _fetch_match_stats(
     )
     stats["xgRace"] = race
     stats["facts"] = facts
+    stats["fieldTilt"] = None
+    stats["phases"] = None
+    if home_squad_id and away_squad_id:
+        try:
+            stats["fieldTilt"] = _compact_field_tilt(
+                build_field_tilt(
+                    match_id,
+                    home_squad_id,
+                    away_squad_id,
+                    squad_id,
+                    home_name,
+                    away_name,
+                ),
+                form_tilt,
+            )
+        except Exception:  # noqa: BLE001
+            stats["fieldTilt"] = None
+        try:
+            stats["phases"] = _compact_phases(
+                build_game_by_phase(match_id, squad_id),
+                form_phases,
+            )
+        except Exception:  # noqa: BLE001
+            stats["phases"] = None
     return stats
 
 
@@ -832,6 +1044,8 @@ def _empty_kpi_stats() -> dict[str, Any]:
         "players": [],
         "xgRace": None,
         "facts": None,
+        "fieldTilt": None,
+        "phases": None,
     }
 
 
@@ -868,6 +1082,9 @@ def _load_match_kpis(
 
     if to_fetch:
         names = _merged_player_names()
+        form_phases, form_tilt = _vale_form_baselines(
+            PORT_VALE_SQUAD_ID, force=force_refresh
+        )
         workers = min(8, len(to_fetch))
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = {
@@ -880,6 +1097,8 @@ def _load_match_kpis(
                     int((match.get("away") or {}).get("squadId") or 0),
                     str((match.get("home") or {}).get("name") or "Home"),
                     str((match.get("away") or {}).get("name") or "Away"),
+                    form_phases,
+                    form_tilt,
                 ): match
                 for match in to_fetch
             }
