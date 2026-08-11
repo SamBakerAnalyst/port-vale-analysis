@@ -219,29 +219,53 @@ function formatBenchValue(raw, spec) {
   return fmtNum(raw, digits);
 }
 
-function benchHtml(key, stats, single) {
+function scaledBench(key, stats, single) {
   const spec = state.payload?.benchmarks?.[key];
-  if (!spec) return "";
+  if (!spec) return null;
   const games = spec.rate ? 1 : (single ? 1 : Math.max(Number(stats.played) || 0, 5));
-  const team = spec.team == null ? null : spec.team * games;
-  const top7 = spec.top7 == null ? null : spec.top7 * games;
+  return {
+    team: spec.team == null ? null : spec.team * games,
+    top7: spec.top7 == null ? null : spec.top7 * games,
+    spec,
+  };
+}
+
+function meterTone(value, top7, higherBetter) {
+  if (value == null || top7 == null || Number.isNaN(Number(value)) || Number.isNaN(Number(top7))) return "";
+  const v = Number(value);
+  const t = Number(top7);
+  if (higherBetter) {
+    if (v >= t) return "hot";
+    if (v >= t * 0.8) return "warn";
+    return "cold";
+  }
+  if (v <= t) return "hot";
+  if (v <= t * 1.2) return "warn";
+  return "cold";
+}
+
+function meterHtml(value, top7, { higherBetter = true, rate = false, digits = 1 } = {}) {
+  if (value == null || top7 == null || Number.isNaN(Number(top7))) return "";
+  const ratio = higherBetter
+    ? Number(value) / Number(top7)
+    : Number(top7) / Math.max(Number(value), 0.0001);
+  const fill = Math.max(3, Math.min(100, (ratio / 1.25) * 100));
+  const mark = (1 / 1.25) * 100;
+  const tone = meterTone(value, top7, higherBetter);
   return `
-    <div class="ba-kpi__bench">
-      <span>Team avg <b>${formatBenchValue(team, spec)}</b></span>
-      <span>Top 7 req <b>${formatBenchValue(top7, spec)}</b></span>
+    <div class="ba-meter ba-meter--${tone}">
+      <span class="ba-meter__track">
+        <span class="ba-meter__fill" style="width:${fill}%"></span>
+        <span class="ba-meter__mark" style="left:${mark}%"></span>
+      </span>
+      <span class="ba-meter__req">Top 7 ${escapeHtml(rate ? `${fmtNum(top7, digits)}%` : fmtNum(top7, digits))}</span>
     </div>
   `;
 }
 
-function kpiCard(label, value, hint, tone, bench) {
-  return `
-    <article class="ba-kpi ${tone ? `ba-kpi--${tone}` : ""}">
-      <p class="ba-kpi__label">${escapeHtml(label)}</p>
-      <p class="ba-kpi__value">${escapeHtml(value)}</p>
-      ${bench || ""}
-      ${hint ? `<p class="ba-kpi__hint">${escapeHtml(hint)}</p>` : ""}
-    </article>
-  `;
+function formatMetric(value, { rate = false, digits = 0 } = {}) {
+  if (value == null || Number.isNaN(Number(value))) return "—";
+  return rate ? `${fmtNum(value, digits)}%` : fmtNum(value, digits);
 }
 
 function unitValueText(metricKey, row) {
@@ -258,51 +282,46 @@ function unitSubText(metricKey, row) {
   return "";
 }
 
-function unitBenchText(metricKey, unit, single, played) {
+function unitBenchValues(metricKey, unit, single, played) {
   const spec = state.payload?.benchmarks?.units?.[unit]?.[metricKey];
-  if (!spec) return { team: "—", top7: "—" };
+  if (!spec) return { team: null, top7: null, spec: null };
   const games = spec.rate ? 1 : (single ? 1 : Math.max(Number(played) || 0, 5));
-  const team = spec.team == null ? null : spec.team * games;
-  const top7 = spec.top7 == null ? null : spec.top7 * games;
   return {
-    team: formatBenchValue(team, spec),
-    top7: formatBenchValue(top7, spec),
+    team: spec.team == null ? null : spec.team * games,
+    top7: spec.top7 == null ? null : spec.top7 * games,
+    spec,
   };
 }
 
-function unitCard(title, metricKey, hint, stats, single) {
+function unitPanelHtml(title, metricKey, hint, stats, single) {
   const units = stats.units || {};
+  const rate = metricKey === "duelRate";
   const rows = ["DEF", "MID", "ATT"].map((unit) => {
     const row = units[unit] || {};
-    const bench = unitBenchText(metricKey, unit, single, stats.played);
+    const bench = unitBenchValues(metricKey, unit, single, stats.played);
+    const value = rate ? row.duelRate : row.defendersBypassed;
     const extra = unitSubText(metricKey, row);
+    const tone = meterTone(value, bench.top7, true);
     return `
-      <tr>
-        <th scope="row">${unit}</th>
-        <td>
-          <span class="ba-unit__val">${escapeHtml(unitValueText(metricKey, row))}</span>
-          ${extra ? `<span class="ba-unit__sub">${escapeHtml(extra)}</span>` : ""}
-        </td>
-        <td>${escapeHtml(bench.team)}</td>
-        <td>${escapeHtml(bench.top7)}</td>
-      </tr>
+      <div class="ba-unitrow">
+        <span class="ba-unitrow__unit">${unit}</span>
+        <div class="ba-unitrow__mid">
+          <div class="ba-unitrow__nums">
+            <span class="ba-unitrow__val ${tone ? `is-${tone}` : ""}">${escapeHtml(unitValueText(metricKey, row))}</span>
+            ${extra ? `<span class="ba-unitrow__sub">${escapeHtml(extra)}</span>` : ""}
+          </div>
+          ${meterHtml(value, bench.top7, { higherBetter: true, rate, digits: rate ? 1 : 1 })}
+        </div>
+      </div>
     `;
   }).join("");
   return `
-    <article class="ba-kpi ba-kpi--units">
-      <p class="ba-kpi__label">${escapeHtml(title)}</p>
-      <table class="ba-unit">
-        <thead>
-          <tr>
-            <th></th>
-            <th>Value</th>
-            <th>Team avg</th>
-            <th>Top 7 req</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <p class="ba-kpi__hint">${escapeHtml(hint)}</p>
+    <article class="ba-unitpanel">
+      <header class="ba-unitpanel__head">
+        <h4>${escapeHtml(title)}</h4>
+        <p>${escapeHtml(hint)}</p>
+      </header>
+      ${rows}
     </article>
   `;
 }
@@ -412,9 +431,9 @@ function playerBoardHtml(spec, players) {
           ? `<span class="ba-lead__sub">${escapeHtml(`${fmtNum(row.duelWon)} / ${fmtNum(row.duelTotal)}`)}</span>`
           : (row.unit ? `<span class="ba-lead__sub">${escapeHtml(row.unit)}</span>` : "");
         return `
-          <li class="ba-lead__row">
+          <li class="ba-lead__row ${index === 0 ? "is-first" : ""}">
             <span class="ba-lead__rank">${index + 1}</span>
-            <img class="ba-lead__photo" src="${escapeHtml(playerPhotoUrl(row.name))}" alt="" onerror="this.removeAttribute('src'); this.style.visibility='hidden'" />
+            <img class="ba-lead__photo" src="${escapeHtml(playerPhotoUrl(row.name))}" alt="" onerror="this.removeAttribute('src')" />
             <span class="ba-lead__name">${escapeHtml(row.name)}</span>
             ${extra}
             <span class="ba-lead__val">${escapeHtml(formatPlayerValue(row, spec))}</span>
@@ -424,50 +443,154 @@ function playerBoardHtml(spec, players) {
     : `<li class="ba-lead__empty">No player data yet</li>`;
   return `
     <article class="ba-lead">
-      <p class="ba-kpi__label">${escapeHtml(spec.label)}</p>
+      <p class="ba-lead__label">${escapeHtml(spec.label)}</p>
       <ol class="ba-lead__list">${items}</ol>
-      <p class="ba-kpi__hint">${escapeHtml(spec.hint)}</p>
     </article>
   `;
 }
 
-function sheetHeader({ title, kicker, label, page, single, fixture }) {
-  let match = `<p class="ba-sheet__meta">${escapeHtml(label)}</p>`;
+function outcomeLabel(outcome) {
+  if (outcome === "win") return "Win";
+  if (outcome === "draw") return "Draw";
+  if (outcome === "loss") return "Loss";
+  return "Upcoming";
+}
+
+function clubBadge(src, initials, alt) {
+  if (src) {
+    return `<img class="ba-sheet__club-badge" src="${escapeHtml(src)}" alt="${escapeHtml(alt || "")}" crossorigin="anonymous" />`;
+  }
+  return `<span class="ba-sheet__club-init">${escapeHtml(initials || "?")}</span>`;
+}
+
+function sheetMasthead({ title, kicker, page, single, fixture, stats, block }) {
+  let center = "";
   if (single && fixture) {
-    const badge = fixture.badgeUrl
-      ? `<img class="ba-sheet__badge" src="${escapeHtml(fixture.badgeUrl)}" alt="" crossorigin="anonymous" />`
-      : "";
-    const ha = fixture.isHome == null ? "" : (fixture.isHome ? "Home" : "Away");
-    const score = fixture.played ? scoreLine(fixture) : (fixture.dateLabel || "Not played");
-    match = `
-      <div class="ba-sheet__match">
-        ${badge}
-        <div>
-          <p class="ba-sheet__opp">${escapeHtml(fixture.opponentName || "TBC")}</p>
-          <p class="ba-sheet__meta">${escapeHtml([ha, score].filter(Boolean).join(" · "))}</p>
+    const gf = fixture.played ? fmtNum(stats.goals) : "–";
+    const ga = fixture.played ? fmtNum(stats.goalsAgainst) : "–";
+    const outcome = fixture.outcome || "tbc";
+    center = `
+      <div class="ba-sheet__scoreboard">
+        <div class="ba-sheet__club">
+          ${clubBadge("/standalone/port-vale-badge.png?v=2", "PV", "Port Vale")}
+          <span class="ba-sheet__club-name">Port Vale</span>
+        </div>
+        <div class="ba-sheet__score">
+          <div class="ba-sheet__score-row">
+            <span class="ba-sheet__goals">${escapeHtml(gf)}</span>
+            <span class="ba-sheet__score-sep">–</span>
+            <span class="ba-sheet__goals">${escapeHtml(ga)}</span>
+          </div>
+          <span class="ba-sheet__result ba-sheet__result--${escapeHtml(outcome)}">${escapeHtml(outcomeLabel(outcome))}</span>
+        </div>
+        <div class="ba-sheet__club ba-sheet__club--opp">
+          ${clubBadge(fixture.badgeUrl, fixture.opponentInitials, fixture.opponentName)}
+          <span class="ba-sheet__club-name">${escapeHtml(shortOpponent(fixture.opponentName))}</span>
+        </div>
+      </div>
+    `;
+  } else {
+    center = `
+      <div class="ba-sheet__scoreboard ba-sheet__scoreboard--block">
+        <div class="ba-sheet__score">
+          <div class="ba-sheet__score-row">
+            <span class="ba-sheet__goals">${escapeHtml(fmtNum(stats.points))}</span>
+            <span class="ba-sheet__score-sep">/</span>
+            <span class="ba-sheet__goals ba-sheet__goals--muted">${escapeHtml(fmtNum(block?.target?.points))}</span>
+          </div>
+          <span class="ba-sheet__result">${escapeHtml(fmtNum(stats.played))} played · ${escapeHtml(fmtNum(stats.goals))}–${escapeHtml(fmtNum(stats.goalsAgainst))}</span>
         </div>
       </div>
     `;
   }
+
+  const meta = [];
+  if (single && fixture) {
+    if (fixture.dateLabel) meta.push(fixture.dateLabel);
+    if (fixture.isHome != null) meta.push(fixture.isHome ? "Home" : "Away");
+    if (fixture.demo) meta.push("Cup demo · not in league totals");
+  }
+
   return `
-    <header class="ba-sheet__head">
+    <header class="ba-sheet__mast">
       <div class="ba-sheet__brand">
-        <img class="ba-sheet__crest" src="/standalone/port-vale-badge.png?v=2" alt="Port Vale" />
-        <div>
-          <p class="ba-sheet__kicker">${escapeHtml(kicker)}</p>
-          <h3 class="ba-sheet__title">${escapeHtml(title)}</h3>
-        </div>
+        <p class="ba-sheet__kicker">${escapeHtml(kicker)}</p>
+        <h3 class="ba-sheet__title">${escapeHtml(title)}</h3>
+        ${meta.filter(Boolean).length ? `<p class="ba-sheet__meta">${escapeHtml(meta.filter(Boolean).join("  ·  "))}</p>` : ""}
       </div>
-      ${match}
-      <p class="ba-sheet__page">${page} / 2</p>
+      ${center}
+      <p class="ba-sheet__page"><b>${page}</b><span>/2</span></p>
     </header>
   `;
 }
 
+function metricStrip(stats, single) {
+  const items = [
+    { label: "Team xG", key: "xg", digits: 2 },
+    { label: "Offensive int.", key: "offensiveInterventions", digits: 0 },
+    { label: "Wins vs DEF", key: "ballWinsFromOppDefenders", digits: 0 },
+    { label: "Defenders bypassed", key: "defendersBypassed", digits: 0 },
+    { label: "Duel rate", key: "duelRate", digits: 1, rate: true },
+    { label: "Goals against", key: "goalsAgainst", digits: 0, invert: true },
+  ];
+  return `
+    <div class="ba-strip">
+      ${items.map((item) => {
+        const bench = scaledBench(item.key, stats, single);
+        const value = stats[item.key];
+        const higherBetter = item.invert ? false : (bench?.spec?.higherBetter !== false);
+        const tone = meterTone(value, bench?.top7, higherBetter);
+        return `
+          <article class="ba-strip__cell">
+            <p class="ba-strip__label">${escapeHtml(item.label)}</p>
+            <p class="ba-strip__value ${tone ? `is-${tone}` : ""}">${escapeHtml(formatMetric(value, item))}</p>
+            ${meterHtml(value, bench?.top7, {
+              higherBetter,
+              rate: Boolean(item.rate || bench?.spec?.rate),
+              digits: item.digits,
+            })}
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function playerStandouts(players) {
+  const specs = [
+    { key: "xg", label: "Highest xG", digits: 2 },
+    { key: "defendersBypassed", label: "Most packing", digits: 0 },
+    { key: "duelRate", label: "Best duel rate", digits: 1, rate: true, minDuels: 3 },
+  ];
+  const used = new Set();
+  return specs.map((spec) => {
+    const player = topPlayers(players.filter((row) => !used.has(row.playerId)), spec)[0] || null;
+    if (player) used.add(player.playerId);
+    return { spec, player };
+  });
+}
+
+function standoutsHtml(players) {
+  const cards = playerStandouts(players).map(({ spec, player }) => {
+    if (!player) {
+      return `<article class="ba-star ba-star--empty"><p class="ba-star__label">${escapeHtml(spec.label)}</p><p class="ba-star__empty">—</p></article>`;
+    }
+    return `
+      <article class="ba-star">
+        <p class="ba-star__label">${escapeHtml(spec.label)}</p>
+        <img class="ba-star__photo" src="${escapeHtml(playerPhotoUrl(player.name))}" alt="" onerror="this.removeAttribute('src')" />
+        <p class="ba-star__name">${escapeHtml(player.name)}</p>
+        <p class="ba-star__val">${escapeHtml(formatPlayerValue(player, spec))}</p>
+        ${player.unit ? `<p class="ba-star__unit">${escapeHtml(player.unit)}</p>` : ""}
+      </article>
+    `;
+  }).join("");
+  return `<div class="ba-stars">${cards}</div>`;
+}
+
 function dashHtml(block) {
-  const { stats, label, single, fixture } = selectedStats(block);
+  const { stats, single, fixture } = selectedStats(block);
   const filterId = state.filters[block.id] || "all";
-  const scheduled = (block.fixtures || []).filter((row) => row.matchId).length;
   const pills = [`<button type="button" class="ba-filter__btn ${filterId === "all" ? "is-active" : ""}" data-filter="all" data-block="${block.id}">All games</button>`]
     .concat(
       (block.fixtures || [])
@@ -487,52 +610,47 @@ function dashHtml(block) {
     )
     .join("");
 
-  const target = block.target || {};
-  const pointsHint = single
-    ? (stats.played ? "This match" : "Kick-off pending")
-    : `Target ${target.points} · ${stats.played || 0} played`;
-  const csHint = single
-    ? (stats.cleanSheets ? "Clean sheet" : stats.played ? "Conceded" : "—")
-    : `Target ${target.cleanSheets}`;
-
-  const cards = [
-    kpiCard("Points", fmtNum(stats.points), pointsHint, kpiTone("points", stats, target, single, scheduled)),
-    kpiCard("Goals", fmtNum(stats.goals), single ? "For" : "Scored in block"),
-    kpiCard("Goals against", fmtNum(stats.goalsAgainst), single ? "Against" : "Conceded in block", "", benchHtml("goalsAgainst", stats, single)),
-    kpiCard("Clean sheets", fmtNum(stats.cleanSheets), csHint, kpiTone("cleanSheets", stats, target, single, scheduled), benchHtml("cleanSheets", stats, single)),
-    kpiCard("Offensive interventions", fmtNum(stats.offensiveInterventions), "Ball wins by action", "", benchHtml("offensiveInterventions", stats, single)),
-    kpiCard("Ball wins vs defenders", fmtNum(stats.ballWinsFromOppDefenders), "Removed opposition defenders", "", benchHtml("ballWinsFromOppDefenders", stats, single)),
-    kpiCard("Team xG", fmtNum(stats.xg, 2), "Shot xG", "", benchHtml("xg", stats, single)),
-  ].join("");
-  const unitCards = `
-    <div class="ba-unit-pair">
-      ${unitCard("Defenders bypassed", "defendersBypassed", "Impect packing · WB 50/50 DEF and ATT", stats, single)}
-      ${unitCard("Duel rate", "duelRate", "Won / attempted · WB 50/50 DEF and ATT", stats, single)}
-    </div>
-  `;
   const payload = state.payload || {};
   const isDemo = Boolean(fixture?.demo);
   const kicker = isDemo
-    ? `EFL Cup demo · ${payload.season || ""}`.trim()
+    ? `EFL Cup · ${payload.season || ""}`.trim()
     : `Block ${block.id} of 9 · ${payload.competition || "League Two"} ${payload.season || ""}`.trim();
   const pageTitle = single ? "Match Report" : "Block Report";
-  const header = { kicker, label, single, fixture };
-  const boards = PLAYER_BOARDS.map((spec) => playerBoardHtml(spec, playersForView(block, single, fixture))).join("");
+  const mast = { kicker, single, fixture, stats, block };
+  const players = playersForView(block, single, fixture);
+  const boards = (single ? PLAYER_BOARDS.filter((spec) => spec.key !== "ppg") : PLAYER_BOARDS)
+    .map((spec) => playerBoardHtml(spec, players))
+    .join("");
+  const outcome = (single && fixture?.outcome) || "";
+  const foot = single
+    ? "Top 5 outfield · bars vs League Two top 7 per game · wing-backs 50/50 DEF and ATT"
+    : "Top 5 outfield across the block · bars vs League Two top 7 · wing-backs 50/50 DEF and ATT";
 
   return `
     <section class="ba-report">
       <div class="ba-report__chrome ba-export-hide">
         <div class="ba-filter" role="group" aria-label="Filter block ${block.id} to one game">${pills}</div>
-        <button type="button" class="ba-btn" data-print-report="${block.id}">Print 2-page report</button>
+        <button type="button" class="ba-btn ba-btn--print" data-print-report="${block.id}">Print 2-page A4</button>
       </div>
-      <article class="ba-sheet" data-sheet="1">
-        ${sheetHeader({ ...header, title: pageTitle, page: 1 })}
-        <div class="ba-kpis">${cards}${unitCards}</div>
+      <p class="ba-print-hint ba-export-hide">A4 portrait · tick Background graphics · Save as PDF</p>
+      <article class="ba-sheet ba-sheet--team ${outcome ? `ba-sheet--${outcome}` : ""}" data-sheet="1">
+        ${sheetMasthead({ ...mast, title: pageTitle, page: 1 })}
+        <div class="ba-sheet__body">
+          ${metricStrip(stats, single)}
+          <div class="ba-sheet__units">
+            ${unitPanelHtml("Defenders bypassed", "defendersBypassed", "Impect packing", stats, single)}
+            ${unitPanelHtml("Duel rate", "duelRate", "Won / attempted", stats, single)}
+          </div>
+        </div>
+        <footer class="ba-sheet__bar"><span>Port Vale Analysis</span><span>${escapeHtml(foot)}</span></footer>
       </article>
-      <article class="ba-sheet" data-sheet="2">
-        ${sheetHeader({ ...header, title: "Players Report", page: 2 })}
-        <div class="ba-players__grid">${boards}</div>
-        <p class="ba-sheet__foot">Top 5 outfield · live after full time</p>
+      <article class="ba-sheet ba-sheet--players ${outcome ? `ba-sheet--${outcome}` : ""}" data-sheet="2">
+        ${sheetMasthead({ ...mast, title: "Players", page: 2 })}
+        <div class="ba-sheet__body">
+          ${single && players.length ? standoutsHtml(players) : ""}
+          <div class="ba-players__grid ${single ? "ba-players__grid--six" : ""}">${boards}</div>
+        </div>
+        <footer class="ba-sheet__bar"><span>Port Vale Analysis</span><span>Live after full time</span></footer>
       </article>
     </section>
   `;
@@ -668,8 +786,10 @@ function printReport(blockId) {
     window.removeEventListener("afterprint", tidy);
   };
   window.addEventListener("afterprint", tidy);
-  window.print();
-  setTimeout(tidy, 1500);
+  requestAnimationFrame(() => {
+    window.print();
+    setTimeout(tidy, 2000);
+  });
 }
 
 async function exportPoster(blockId) {
