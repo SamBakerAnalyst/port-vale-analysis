@@ -43,6 +43,7 @@ FIXTURE_PLANNER_DATA_DIR = CACHE_ROOT / "impect-fixture-planner"
 CLUB_STRATEGY_CACHE_DIR = CACHE_ROOT / "impect-club-strategy"
 SCHEDULE_DATA_DIR = CACHE_ROOT / "impect-schedule"
 SET_PIECE_CACHE_DIR = CACHE_ROOT / "impect-set-piece"
+BLOCKS_ANALYSIS_DATA_DIR = CACHE_ROOT / "impect-blocks-analysis"
 
 # Optional legacy pre-match standalone (port 8002) — not bundled in hub
 PRE_MATCH_STANDALONE_DIR = Path(
@@ -61,6 +62,7 @@ def ensure_data_dirs() -> None:
         CLUB_STRATEGY_CACHE_DIR,
         SCHEDULE_DATA_DIR,
         SET_PIECE_CACHE_DIR,
+        BLOCKS_ANALYSIS_DATA_DIR,
         STATIC_DIR / "player-photos",
         STATIC_DIR / "post-match-badges",
         DATA_ROOT / "feedback-screenshots",

@@ -120,6 +120,20 @@ window.IMPECT_APPS = [
     ]
   },
   {
+    "id": "blocks-analysis",
+    "group": "analysis",
+    "title": "Blocks Analysis",
+    "description": "Nine blocks of five league games — result colours, editable Silver targets, live block KPIs, and PNG export.",
+    "href": "/blocks-analysis",
+    "icon": "🧱",
+    "accent": "#f5c518",
+    "tags": [
+      "League Two",
+      "Blocks",
+      "Live"
+    ]
+  },
+  {
     "id": "schedule",
     "group": "analysis",
     "title": "Schedule",

@@ -19,6 +19,7 @@ from app.auth import current_role, is_authenticated, auth_enabled
 
 def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
     from app.availability_tracker import register_availability_tracker_routes
+    from app.blocks_analysis import register_blocks_analysis_routes
     from app.club_strategy import register_club_strategy_routes
     from app.fixture_planner import register_fixture_planner_routes
     from app.player_cards import register_player_cards_routes
@@ -43,6 +44,7 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
         "set_piece_pre_match": register_set_piece_pre_match_routes,
         "player_cards": register_player_cards_routes,
         "xg_chance_analysis": register_xg_chance_analysis_routes,
+        "blocks_analysis": register_blocks_analysis_routes,
         "schedule": register_schedule_routes,
         "scouting": register_scouting_routes,
         "squad_review": register_squad_review_routes,

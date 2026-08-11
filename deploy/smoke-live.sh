@@ -61,6 +61,7 @@ if [[ "${#REQUIRED_APPS[@]}" -eq 0 ]]; then
     "Player Cards"
     "xG Chance Analysis"
     "Post-Match Report"
+    "Blocks Analysis"
     "Schedule"
     "Player Comparison Tool"
     "Who To Scout"
@@ -125,6 +126,7 @@ done
 for path in \
   "/set-piece-pre-match" \
   "/player-cards" \
+  "/blocks-analysis" \
   "/schedule" \
   "/strategy-tracker" \
   "/players-strategy" \
