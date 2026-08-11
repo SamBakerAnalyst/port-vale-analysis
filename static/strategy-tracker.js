@@ -18,8 +18,15 @@
     paceTitle: document.getElementById("paceTitle"),
     paceHint: document.getElementById("paceHint"),
     pills: document.getElementById("metricPills"),
+    stylePills: document.getElementById("stylePills"),
     chart: document.getElementById("pointsChart"),
     metrics: document.getElementById("metricsGrid"),
+    styleGrid: document.getElementById("styleGrid"),
+    playersHint: document.getElementById("playersHint"),
+    playersHead: document.getElementById("playersHead"),
+    playersBody: document.getElementById("playersBody"),
+    minMinutes: document.getElementById("minMinutes"),
+    legend: document.querySelector(".st-legend"),
     timingChart: document.getElementById("timingChart"),
     timingSide: document.getElementById("timingSide"),
     goalsHint: document.getElementById("goalsHint"),
@@ -28,10 +35,27 @@
     source: document.getElementById("sourceNote"),
   };
 
+  const PLAYER_COLS = [
+    { key: "name", label: "Player", sort: "name" },
+    { key: "position_short", label: "Pos", sort: "position_short" },
+    { key: "minutes", label: "Mins", sort: "minutes", digits: 0 },
+    { key: "appearances", label: "Apps", sort: "appearances", digits: 0 },
+    { key: "defenders_bypassed", label: "Def byp", sort: "defenders_bypassed", digits: 0, p90: true },
+    { key: "ball_progression", label: "Prog", sort: "ball_progression", digits: 0, p90: true },
+    { key: "xg_for", label: "xG", sort: "xg_for", digits: 1, p90: true },
+    { key: "duel_rate", label: "Duel %", sort: "duel_rate", digits: 1 },
+    { key: "offensive_interventions", label: "OI", sort: "offensive_interventions", digits: 0, p90: true },
+    { key: "defensive_interventions", label: "DI", sort: "defensive_interventions", digits: 0, p90: true },
+    { key: "ball_wins_defenders", label: "Vs DEF", sort: "ball_wins_defenders", digits: 0, p90: true },
+    { key: "altered_threat", label: "PXT", sort: "altered_threat", digits: 1, p90: true },
+    { key: "packing_xg", label: "PxG", sort: "packing_xg", digits: 1, p90: true },
+  ];
+
   const state = {
     data: null,
     metric: hashMetric(),
     competition: new URLSearchParams(location.search).get("competition") || "",
+    playerSort: { key: "minutes", dir: "desc" },
   };
 
   function hashMetric() {
@@ -49,11 +73,12 @@
     els.status.textContent = message;
   }
 
-  function statusLabel(status) {
-    if (status === "ahead") return "Ahead of auto";
-    if (status === "behind") return "Behind auto";
+  function statusLabel(status, benchmarkSet) {
+    const pack = benchmarkSet === "league_pack";
+    if (status === "ahead") return pack ? "Ahead of top 7" : "Ahead of auto";
+    if (status === "behind") return pack ? "Behind top 7" : "Behind auto";
     if (status === "awaiting") return "Kick-off ready";
-    return "On track vs auto";
+    return pack ? "On track vs top 7" : "On track vs auto";
   }
 
   function statusClass(status) {
@@ -76,8 +101,18 @@
     return `${sign}${n.toFixed(digits)}`;
   }
 
+  function allMetrics(data) {
+    return [...(data.metrics || []), ...(data.style_metrics || [])];
+  }
+
   function metricById(data, id) {
-    return (data.metrics || []).find((row) => row.id === id) || data.metrics?.[0] || null;
+    const rows = allMetrics(data);
+    return rows.find((row) => row.id === id) || rows[0] || null;
+  }
+
+  function pillHtml(metric) {
+    const active = metric.id === state.metric ? " is-active" : "";
+    return `<button type="button" class="st-pill${active}" data-metric="${metric.id}" role="tab" aria-selected="${metric.id === state.metric}">${metric.label}</button>`;
   }
 
   function syncUrl() {
@@ -103,7 +138,7 @@
   function renderSummary(data) {
     const s = data.summary || {};
     const status = s.status || "on_track";
-    els.badge.textContent = statusLabel(status);
+    els.badge.textContent = statusLabel(status, "promotion");
     els.badge.className = `st-summary__badge is-${statusClass(status)}`;
     const competition = data.competition || "League";
     const club = data.club || "Port Vale";
@@ -127,12 +162,10 @@
   }
 
   function renderPills(data) {
-    els.pills.innerHTML = (data.metrics || [])
-      .map((metric) => {
-        const active = metric.id === state.metric ? " is-active" : "";
-        return `<button type="button" class="st-pill${active}" data-metric="${metric.id}" role="tab" aria-selected="${metric.id === state.metric}">${metric.label}</button>`;
-      })
-      .join("");
+    els.pills.innerHTML = (data.metrics || []).map(pillHtml).join("");
+    if (els.stylePills) {
+      els.stylePills.innerHTML = (data.style_metrics || []).map(pillHtml).join("");
+    }
   }
 
   function renderPaceChart(data) {
@@ -143,17 +176,30 @@
     }
     const series = data.series || data.points_series || [];
     const bench = metric.benchmarks || {};
+    const labels = metric.benchmark_labels || { playoff: "PO", auto: "Auto", champion: "Champ" };
+    const rateChart = metric.chart === "running_rate";
     const played = data.played || 0;
     const key = metric.id;
     const values = series.map((row) => Number(row[key] ?? 0));
     const current = values.length ? values[values.length - 1] : Number(metric.current || 0);
-    const projected = metric.project && played > 0 ? (current / played) * SEASON_GAMES : null;
+    const projected = !rateChart && metric.project && played > 0 ? (current / played) * SEASON_GAMES : null;
 
     els.paceTitle.textContent = `${metric.label} pace · season track`;
-    const lowerNote = metric.lower_is_better ? " Lower is better — finishing below the auto line is good." : "";
+    const packNote = metric.benchmark_set === "league_pack"
+      ? " Dashed = this season’s league / top-7 / top-3."
+      : " Dashed = season targets.";
+    const lowerNote = metric.lower_is_better ? " Lower is better — finishing below the target line is good." : "";
     els.paceHint.textContent = data.kickoff_ready
-      ? `No league games yet. Target lines are the ${data.competition || "league"} season averages.${lowerNote}`
-      : `${metric.hint || "Cumulative pace through the season."} Dashed = season targets.${lowerNote}`;
+      ? `No league games yet. Target lines are ready for kick-off.${lowerNote}`
+      : `${metric.hint || "Cumulative pace through the season."}${packNote}${lowerNote}`;
+    if (els.legend) {
+      els.legend.innerHTML = `
+        <span class="st-legend__item st-legend__item--vale"><i></i>Port Vale actual</span>
+        ${rateChart ? "" : `<span class="st-legend__item st-legend__item--proj"><i></i>Projected finish</span>`}
+        <span class="st-legend__item st-legend__item--champ"><i></i>${labels.champion}</span>
+        <span class="st-legend__item st-legend__item--auto"><i></i>${labels.auto}</span>
+        <span class="st-legend__item st-legend__item--po"><i></i>${labels.playoff}</span>`;
+    }
 
     const W = 1000;
     const H = 320;
@@ -163,7 +209,10 @@
 
     let yMin = Math.min(0, ...values, projected ?? 0, bench.champion || 0, bench.auto || 0, bench.playoff || 0);
     let yMax = Math.max(1, ...values, projected ?? 0, bench.champion || 0, bench.auto || 0, bench.playoff || 0, current);
-    if (metric.lower_is_better) {
+    if (rateChart) {
+      yMin = 0;
+      yMax = Math.max(yMax, 40, metric.unit === "%" ? 100 : yMax);
+    } else if (metric.lower_is_better) {
       yMin = 0;
     }
     if (yMin === yMax) yMax = yMin + 1;
@@ -188,12 +237,17 @@
 
     function targetLine(value, color) {
       if (value == null) return "";
+      if (rateChart) {
+        return `<line x1="${x(0)}" y1="${y(value)}" x2="${x(SEASON_GAMES)}" y2="${y(value)}" stroke="${color}" stroke-width="2" stroke-dasharray="6 5" opacity="0.9" />`;
+      }
       return `<line x1="${x(0)}" y1="${y(0)}" x2="${x(SEASON_GAMES)}" y2="${y(value)}" stroke="${color}" stroke-width="2" stroke-dasharray="6 5" opacity="0.9" />`;
     }
 
     let valePath = "";
     if (series.length) {
-      const pts = [`${x(0)},${y(0)}`].concat(series.map((row) => `${x(row.played)},${y(Number(row[key] ?? 0))}`));
+      const pts = (rateChart ? [] : [`${x(0)},${y(0)}`]).concat(
+        series.map((row) => `${x(row.played)},${y(Number(row[key] ?? 0))}`),
+      );
       valePath = `<polyline fill="none" stroke="#f5c518" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" points="${pts.join(" ")}" />`;
     }
 
@@ -227,56 +281,112 @@
       </svg>`;
   }
 
+  function metricCardHtml(metric) {
+    const bench = metric.benchmarks || {};
+    const digits = metric.digits != null ? metric.digits : metric.project ? 1 : 0;
+    const compare = Number(metric.compare ?? metric.current ?? 0);
+    const max = Math.max(
+      Math.abs(compare),
+      Math.abs(bench.champion || 0),
+      Math.abs(bench.auto || 0),
+      Math.abs(bench.playoff || 0),
+      1,
+    ) * 1.12;
+    const pct = (value) => {
+      const n = Number(value);
+      if (metric.lower_is_better) return Math.max(0, Math.min(100, (n / max) * 100));
+      if (n < 0) return Math.max(0, Math.min(100, ((n - (-max)) / (max * 2)) * 100));
+      return Math.max(0, Math.min(100, (n / max) * 100));
+    };
+    const fill = pct(compare);
+    const delta = metric.delta_vs_auto;
+    const compareLabel = metric.project ? "Season proj." : "Current";
+    const active = metric.id === state.metric ? " is-active" : "";
+    const versus = metric.benchmark_set === "league_pack" ? "vs top-7 pace" : "vs auto-promotion average";
+    const deltaCopy =
+      metric.status === "awaiting"
+        ? "Line unlocks after the first league match"
+        : `<strong>${signed(delta)}</strong> ${versus}`;
+    const nowDigits = metric.chart === "running_rate" || digits > 0 ? Math.max(digits, 1) : 0;
+    return `
+      <button type="button" class="st-metric${active}" data-metric="${metric.id}">
+        <div class="st-metric__head">
+          <h3 class="st-metric__title">${metric.label}</h3>
+          <span class="st-metric__status is-${statusClass(metric.status)}">${statusLabel(metric.status, metric.benchmark_set)}</span>
+        </div>
+        <div class="st-metric__values">
+          <span>Now <strong>${fmt(metric.current, nowDigits)}</strong></span>
+          <span>${compareLabel} <strong>${fmt(compare, metric.project ? 1 : nowDigits)}</strong></span>
+        </div>
+        <div class="st-rail" aria-hidden="true">
+          <div class="st-rail__fill" style="width:${fill}%"></div>
+          <span class="st-rail__mark st-rail__mark--playoff" style="left:${pct(bench.playoff)}%"></span>
+          <span class="st-rail__mark st-rail__mark--auto" style="left:${pct(bench.auto)}%"></span>
+          <span class="st-rail__mark st-rail__mark--champ" style="left:${pct(bench.champion)}%"></span>
+        </div>
+        <div class="st-rail__labels">
+          <span>${(metric.benchmark_labels || {}).playoff || "PO"} ${fmt(bench.playoff, 1)}</span>
+          <span>${(metric.benchmark_labels || {}).auto || "Auto"} ${fmt(bench.auto, 1)}</span>
+          <span>${(metric.benchmark_labels || {}).champion || "Champ"} ${fmt(bench.champion, 1)}</span>
+        </div>
+        <p class="st-rail__delta">${deltaCopy}</p>
+        <span class="st-metric__link">Open ${metric.label.toLowerCase()} line →</span>
+      </button>`;
+  }
+
   function renderMetrics(data) {
-    els.metrics.innerHTML = (data.metrics || []).map((metric) => {
-      const bench = metric.benchmarks || {};
-      const compare = Number(metric.compare ?? metric.current ?? 0);
-      const max = Math.max(
-        Math.abs(compare),
-        Math.abs(bench.champion || 0),
-        Math.abs(bench.auto || 0),
-        Math.abs(bench.playoff || 0),
-        1,
-      ) * 1.12;
-      const pct = (value) => {
-        const n = Number(value);
-        if (metric.lower_is_better) return Math.max(0, Math.min(100, (n / max) * 100));
-        if (n < 0) return Math.max(0, Math.min(100, ((n - (-max)) / (max * 2)) * 100));
-        return Math.max(0, Math.min(100, (n / max) * 100));
-      };
-      const fill = pct(compare);
-      const delta = metric.delta_vs_auto;
-      const compareLabel = metric.project ? "Season proj." : "Current";
-      const active = metric.id === state.metric ? " is-active" : "";
-      const deltaCopy =
-        metric.status === "awaiting"
-          ? "Line unlocks after the first league match"
-          : `<strong>${signed(delta)}</strong> vs auto-promotion average`;
-      return `
-        <button type="button" class="st-metric${active}" data-metric="${metric.id}">
-          <div class="st-metric__head">
-            <h3 class="st-metric__title">${metric.label}</h3>
-            <span class="st-metric__status is-${statusClass(metric.status)}">${statusLabel(metric.status)}</span>
-          </div>
-          <div class="st-metric__values">
-            <span>Now <strong>${fmt(metric.current)}</strong></span>
-            <span>${compareLabel} <strong>${fmt(compare, metric.project ? 1 : 0)}</strong></span>
-          </div>
-          <div class="st-rail" aria-hidden="true">
-            <div class="st-rail__fill" style="width:${fill}%"></div>
-            <span class="st-rail__mark st-rail__mark--playoff" style="left:${pct(bench.playoff)}%"></span>
-            <span class="st-rail__mark st-rail__mark--auto" style="left:${pct(bench.auto)}%"></span>
-            <span class="st-rail__mark st-rail__mark--champ" style="left:${pct(bench.champion)}%"></span>
-          </div>
-          <div class="st-rail__labels">
-            <span>PO ${fmt(bench.playoff, 1)}</span>
-            <span>Auto ${fmt(bench.auto, 1)}</span>
-            <span>Champ ${fmt(bench.champion, 1)}</span>
-          </div>
-          <p class="st-rail__delta">${deltaCopy}</p>
-          <span class="st-metric__link">Open ${metric.label.toLowerCase()} line →</span>
-        </button>`;
+    els.metrics.innerHTML = (data.metrics || []).map(metricCardHtml).join("");
+    if (els.styleGrid) {
+      els.styleGrid.innerHTML = (data.style_metrics || []).map(metricCardHtml).join("");
+    }
+  }
+
+  function renderPlayers(data) {
+    if (!els.playersBody || !els.playersHead) return;
+    const minOn = Boolean(els.minMinutes?.checked);
+    let rows = [...(data.players || [])];
+    if (minOn) rows = rows.filter((row) => Number(row.minutes || 0) >= 90);
+    const sortKey = state.playerSort.key;
+    const dir = state.playerSort.dir === "asc" ? 1 : -1;
+    rows.sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      if (typeof av === "string" || typeof bv === "string") {
+        return dir * String(av || "").localeCompare(String(bv || ""), "en", { sensitivity: "base" });
+      }
+      return dir * ((Number(av) || 0) - (Number(bv) || 0));
+    });
+    els.playersHead.innerHTML = `<tr>${PLAYER_COLS.map((col) => {
+      const active = col.sort === sortKey ? ` aria-sort="${state.playerSort.dir === "asc" ? "ascending" : "descending"}"` : "";
+      const mark = col.sort === sortKey ? (state.playerSort.dir === "asc" ? " ▲" : " ▼") : "";
+      return `<th data-sort="${col.sort}"${active}>${col.label}${mark}</th>`;
+    }).join("")}</tr>`;
+    if (!rows.length) {
+      const msg = data.kickoff_ready
+        ? "Player board unlocks after the first league match."
+        : minOn
+          ? "No players over 90 minutes yet — uncheck the filter."
+          : "No player KPI rows in Impect for these matches.";
+      els.playersBody.innerHTML = `<tr><td colspan="${PLAYER_COLS.length}" class="st-muted">${msg}</td></tr>`;
+      if (els.playersHint) {
+        els.playersHint.textContent = "Season totals and per 90. Click a heading to sort.";
+      }
+      return;
+    }
+    els.playersBody.innerHTML = rows.map((row) => {
+      return `<tr>${PLAYER_COLS.map((col) => {
+        if (col.key === "name") return `<td class="st-player-name">${row.name || "—"}</td>`;
+        if (col.key === "position_short") return `<td>${row.position_short || "—"}</td>`;
+        const value = row[col.key];
+        const extra = col.p90 && row[`${col.key}_p90`] != null
+          ? `<span class="st-p90">${fmt(row[`${col.key}_p90`], col.digits || 1)}/90</span>`
+          : "";
+        return `<td>${fmt(value, col.digits || 0)}${extra}</td>`;
+      }).join("")}</tr>`;
     }).join("");
+    if (els.playersHint) {
+      els.playersHint.textContent = `${rows.length} player${rows.length === 1 ? "" : "s"} · click headings to sort · gold /90 is per 90 minutes`;
+    }
   }
 
   function renderTiming(data) {
@@ -447,6 +557,7 @@
     renderPills(data);
     renderPaceChart(data);
     renderMetrics(data);
+    renderPlayers(data);
     renderTiming(data);
     renderExtras(data);
     renderResults(data);
@@ -486,15 +597,31 @@
   }
 
   els.refresh.addEventListener("click", () => load(true));
-  els.pills.addEventListener("click", (event) => {
-    const btn = event.target.closest("[data-metric]");
-    if (btn) selectMetric(btn.getAttribute("data-metric"));
-  });
-  els.metrics.addEventListener("click", (event) => {
+  function onMetricClick(event) {
     const btn = event.target.closest("[data-metric]");
     if (!btn) return;
     selectMetric(btn.getAttribute("data-metric"));
-    els.chart.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (event.currentTarget === els.metrics || event.currentTarget === els.styleGrid) {
+      els.chart.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }
+  els.pills.addEventListener("click", onMetricClick);
+  els.stylePills?.addEventListener("click", onMetricClick);
+  els.metrics.addEventListener("click", onMetricClick);
+  els.styleGrid?.addEventListener("click", onMetricClick);
+  els.playersHead?.addEventListener("click", (event) => {
+    const th = event.target.closest("[data-sort]");
+    if (!th || !state.data) return;
+    const key = th.getAttribute("data-sort");
+    if (state.playerSort.key === key) {
+      state.playerSort.dir = state.playerSort.dir === "desc" ? "asc" : "desc";
+    } else {
+      state.playerSort = { key, dir: key === "name" || key === "position_short" ? "asc" : "desc" };
+    }
+    renderPlayers(state.data);
+  });
+  els.minMinutes?.addEventListener("change", () => {
+    if (state.data) renderPlayers(state.data);
   });
   document.querySelector(".st-toggle")?.addEventListener("click", (event) => {
     const btn = event.target.closest("[data-competition]");

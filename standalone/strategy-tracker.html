@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/strategy-tracker.css?v=2" />
+  <link rel="stylesheet" href="/static/strategy-tracker.css?v=3" />
 </head>
 <body>
   <div class="st-app">
@@ -67,7 +67,8 @@
           <p id="paceHint">Click a metric below — or the pills — to swap the line. Dashed = season targets.</p>
         </div>
       </div>
-      <div class="st-pills" id="metricPills" role="tablist" aria-label="Pace metrics"></div>
+      <div class="st-pills" id="metricPills" role="tablist" aria-label="Outcome pace metrics"></div>
+      <div class="st-pills st-pills--style" id="stylePills" role="tablist" aria-label="Impect style metrics"></div>
       <div class="st-chart-wrap" id="pointsChart" aria-label="Season pace chart"></div>
       <div class="st-legend">
         <span class="st-legend__item st-legend__item--vale"><i></i>Port Vale actual</span>
@@ -79,6 +80,33 @@
     </section>
 
     <section class="st-metrics" id="metricsGrid"></section>
+
+    <section class="st-style">
+      <div class="st-dash__head">
+        <h2>Impect style stats</h2>
+        <p>Underlying numbers with the strongest link to winning. Lines vs this season’s league / top-7 / top-3 rates — click a card to open it.</p>
+      </div>
+      <section class="st-metrics" id="styleGrid"></section>
+    </section>
+
+    <section class="card st-players" id="playersCard">
+      <div class="st-dash__head">
+        <div>
+          <h2>Player board</h2>
+          <p id="playersHint">Season totals and per 90. Click a heading to sort.</p>
+        </div>
+        <label class="st-min">
+          <input type="checkbox" id="minMinutes" checked />
+          90+ minutes
+        </label>
+      </div>
+      <div class="st-table-wrap">
+        <table class="st-table st-table--players" id="playersTable">
+          <thead id="playersHead"></thead>
+          <tbody id="playersBody"></tbody>
+        </table>
+      </div>
+    </section>
 
     <section class="st-dash" id="goalsDash">
       <div class="st-dash__head">
@@ -124,6 +152,6 @@
 
     <p class="st-footnote" id="sourceNote"></p>
   </div>
-  <script defer src="/static/strategy-tracker.js?v=2"></script>
+  <script defer src="/static/strategy-tracker.js?v=3"></script>
 </body>
 </html>

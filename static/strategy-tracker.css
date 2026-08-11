@@ -224,7 +224,12 @@ a:hover { text-decoration: underline; }
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
+  margin-bottom: 0.55rem;
+}
+.st-pills--style {
   margin-bottom: 0.85rem;
+  padding-top: 0.35rem;
+  border-top: 1px dashed var(--border);
 }
 .st-pill {
   appearance: none;
@@ -521,6 +526,41 @@ a:hover { text-decoration: underline; }
 .st-form__dot.is-W { background: rgba(52,211,153,.2); color: var(--ahead); }
 .st-form__dot.is-D { background: rgba(148,163,184,.2); color: var(--playoff); }
 .st-form__dot.is-L { background: rgba(248,113,113,.2); color: var(--behind); }
+
+.st-style { margin-bottom: 1.15rem; }
+.st-players {
+  padding: 0.9rem 1rem 0.5rem;
+  margin-bottom: 1.15rem;
+}
+.st-players .st-dash__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+.st-min {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+  margin-top: 0.2rem;
+}
+.st-table--players th {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.st-table--players th:hover { color: var(--vale); }
+.st-table--players td { white-space: nowrap; vertical-align: baseline; }
+.st-player-name { font-weight: 600; color: var(--text); }
+.st-p90 {
+  display: block;
+  font-size: 0.68rem;
+  color: var(--vale);
+  font-weight: 600;
+}
 
 .st-results { padding: 0.9rem 1rem 0.4rem; margin-bottom: 0.75rem; }
 .st-table-wrap { overflow-x: auto; }

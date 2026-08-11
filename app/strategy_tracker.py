@@ -137,7 +137,177 @@ _cache: dict[int, tuple[float, dict[str, Any]]] = {}
 CACHE_TTL_SECONDS = 900
 TRACKER_CACHE_DIR = CACHE_ROOT / "strategy-tracker"
 TRACKER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-TRACKER_CACHE_VERSION = 2
+TRACKER_CACHE_VERSION = 3
+
+# Match-level Impect KPIs (same IDs as post-match / Blocks Analysis).
+KPI_BYPASSED_OPPONENTS = 1399
+KPI_BYPASSED_DEFENDERS = 1400
+KPI_SUFFERED_BYPASSED_DEFENDERS = 40
+KPI_SHOT_XG = 82
+KPI_CONCEDED_SHOT_XG = 1463
+KPI_PACKING_XG = 83
+KPI_DEFENSIVE_INTERVENTIONS = 23  # BALL_WIN_ADDED_TEAMMATES
+KPI_OFFENSIVE_INTERVENTIONS = 24  # BALL_WIN_REMOVED_OPPONENTS
+KPI_BALL_WINS_DEFENDERS = 25
+KPI_ALTERED_THREAT = 1404  # PXT_PASS
+KPI_WON_GROUND_DUELS = 94
+KPI_LOST_GROUND_DUELS = 95
+KPI_WON_AERIAL_DUELS = 96
+KPI_LOST_AERIAL_DUELS = 97
+OFFENSIVE_INTERVENTION_ACTIONS = (963, 964, 965, 966)
+
+IMPECT_MATCH_CACHE_TTL = 6 * 3600
+IMPECT_VOLUME_KEYS = (
+    "defenders_bypassed",
+    "ball_progression",
+    "xg_for",
+    "xg_against",
+    "offensive_interventions",
+    "defensive_interventions",
+    "ball_wins_defenders",
+    "altered_threat",
+    "packing_xg",
+    "defenders_bypassed_against",
+)
+
+POSITION_SHORT = {
+    "GOALKEEPER": "GK",
+    "CENTRAL_DEFENDER": "CB",
+    "LEFT_WINGBACK_DEFENDER": "LB",
+    "RIGHT_WINGBACK_DEFENDER": "RB",
+    "DEFENSE_MIDFIELD": "DM",
+    "CENTRAL_MIDFIELD": "CM",
+    "ATTACKING_MIDFIELD": "AM",
+    "LEFT_WINGER": "LW",
+    "RIGHT_WINGER": "RW",
+    "CENTER_FORWARD": "ST",
+    "SECOND_STRIKER": "SS",
+}
+
+STYLE_METRIC_META: dict[str, dict[str, Any]] = {
+    "defenders_bypassed": {
+        "label": "Defenders bypassed",
+        "unit": "def",
+        "lower_is_better": False,
+        "project": True,
+        "chart": "cumulative",
+        "digits": 0,
+        "player": True,
+        "hint": "Packing — breaking opposition defensive lines. Strong link to chance quality.",
+    },
+    "ball_progression": {
+        "label": "Ball progression",
+        "unit": "opp",
+        "lower_is_better": False,
+        "project": True,
+        "chart": "cumulative",
+        "digits": 0,
+        "player": True,
+        "hint": "Opponents bypassed on the ball (Impect ball progression).",
+    },
+    "xg_for": {
+        "label": "xG",
+        "unit": "xG",
+        "lower_is_better": False,
+        "project": True,
+        "chart": "cumulative",
+        "digits": 1,
+        "player": True,
+        "hint": "Shot xG created — the cleanest attacking quality signal.",
+    },
+    "xg_against": {
+        "label": "xG against",
+        "unit": "xGA",
+        "lower_is_better": True,
+        "project": True,
+        "chart": "cumulative",
+        "digits": 1,
+        "player": False,
+        "hint": "Shot xG conceded — lower is better.",
+    },
+    "xg_diff": {
+        "label": "xG difference",
+        "unit": "xGD",
+        "lower_is_better": False,
+        "project": True,
+        "chart": "cumulative",
+        "digits": 1,
+        "player": False,
+        "hint": "xG minus xGA. Highest correlation with points among underlying metrics.",
+    },
+    "duel_rate": {
+        "label": "Duel rate",
+        "unit": "%",
+        "lower_is_better": False,
+        "project": False,
+        "chart": "running_rate",
+        "digits": 1,
+        "player": True,
+        "hint": "Ground + aerial duels won. Season-to-date win rate.",
+    },
+    "offensive_interventions": {
+        "label": "Offensive interventions",
+        "unit": "OI",
+        "lower_is_better": False,
+        "project": True,
+        "chart": "cumulative",
+        "digits": 0,
+        "player": True,
+        "hint": "Opponents removed on ball wins (Impect offensive interventions).",
+    },
+    "defensive_interventions": {
+        "label": "Defensive interventions",
+        "unit": "DI",
+        "lower_is_better": False,
+        "project": True,
+        "chart": "cumulative",
+        "digits": 0,
+        "player": True,
+        "hint": "Teammates packed in on ball wins (Impect defensive interventions).",
+    },
+    "ball_wins_defenders": {
+        "label": "Ball wins from defenders",
+        "unit": "wins",
+        "lower_is_better": False,
+        "project": True,
+        "chart": "cumulative",
+        "digits": 0,
+        "player": True,
+        "hint": "Regains that take out opposition defenders — high-value turnovers.",
+    },
+    "altered_threat": {
+        "label": "Altered threat",
+        "unit": "PXT",
+        "lower_is_better": False,
+        "project": True,
+        "chart": "cumulative",
+        "digits": 1,
+        "player": True,
+        "hint": "Packing expected threat on the pass (PXT). Chance creation before the shot.",
+    },
+    "packing_xg": {
+        "label": "Packing xG",
+        "unit": "PxG",
+        "lower_is_better": False,
+        "project": True,
+        "chart": "cumulative",
+        "digits": 1,
+        "player": True,
+        "hint": "xG weighted by packing — threat that actually broke lines.",
+    },
+    "defenders_bypassed_against": {
+        "label": "Defenders bypassed against",
+        "unit": "def",
+        "lower_is_better": True,
+        "project": True,
+        "chart": "cumulative",
+        "digits": 0,
+        "player": False,
+        "hint": "How often Vale’s defensive line is broken. Lower is better.",
+    },
+}
+
+STYLE_METRIC_KEYS = tuple(STYLE_METRIC_META.keys())
 
 # Completed seasons verified against Strategy Report / prior smoke tests.
 # Used only when live match lists are unavailable (e.g. Impect 429).
@@ -272,6 +442,340 @@ def _add_goal_to_side(side: dict[str, Any], *, bucket: str, half: str, is_home: 
     side["buckets"][key][venue] += 1
 
 
+def _kpi(kpis: dict[int, float], kpi_id: int) -> float:
+    return float(kpis.get(kpi_id) or 0.0)
+
+
+def _style_from_kpis(kpis: dict[int, float]) -> dict[str, float]:
+    won = _kpi(kpis, KPI_WON_GROUND_DUELS) + _kpi(kpis, KPI_WON_AERIAL_DUELS)
+    lost = _kpi(kpis, KPI_LOST_GROUND_DUELS) + _kpi(kpis, KPI_LOST_AERIAL_DUELS)
+    total = won + lost
+    offensive = _kpi(kpis, KPI_OFFENSIVE_INTERVENTIONS)
+    if offensive <= 0:
+        offensive = sum(_kpi(kpis, kpi_id) for kpi_id in OFFENSIVE_INTERVENTION_ACTIONS)
+    xg_for = _kpi(kpis, KPI_SHOT_XG)
+    xg_against = _kpi(kpis, KPI_CONCEDED_SHOT_XG)
+    altered = _kpi(kpis, KPI_ALTERED_THREAT)
+    return {
+        "defenders_bypassed": _kpi(kpis, KPI_BYPASSED_DEFENDERS),
+        "ball_progression": _kpi(kpis, KPI_BYPASSED_OPPONENTS),
+        "xg_for": xg_for,
+        "xg_against": xg_against,
+        "xg_diff": round(xg_for - xg_against, 3),
+        "duel_won": won,
+        "duel_total": total,
+        "duel_rate": (100.0 * won / total) if total else 0.0,
+        "offensive_interventions": offensive,
+        "defensive_interventions": _kpi(kpis, KPI_DEFENSIVE_INTERVENTIONS),
+        "ball_wins_defenders": _kpi(kpis, KPI_BALL_WINS_DEFENDERS),
+        "altered_threat": altered,
+        "packing_xg": _kpi(kpis, KPI_PACKING_XG),
+        "defenders_bypassed_against": _kpi(kpis, KPI_SUFFERED_BYPASSED_DEFENDERS),
+    }
+
+
+def _impect_match_cache_path(match_id: int) -> Path:
+    folder = TRACKER_CACHE_DIR / "impect-matches"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder / f"{match_id}.json"
+
+
+def _read_impect_match_cache(match_id: int) -> dict[str, Any] | None:
+    path = _impect_match_cache_path(match_id)
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    cached_at = float(payload.get("cached_at_epoch") or 0.0)
+    if time.time() - cached_at > IMPECT_MATCH_CACHE_TTL:
+        return None
+    return payload.get("body")
+
+
+def _write_impect_match_cache(match_id: int, body: dict[str, Any]) -> None:
+    path = _impect_match_cache_path(match_id)
+    path.write_text(
+        json.dumps({"cached_at_epoch": time.time(), "body": body}),
+        encoding="utf-8",
+    )
+
+
+def _fetch_match_impect(match_id: int, squad_id: int, *, force_refresh: bool = False) -> dict[str, Any]:
+    if not force_refresh:
+        cached = _read_impect_match_cache(match_id)
+        if cached is not None:
+            return cached
+    from app.post_match.impect_client import impect_get, v5_path
+    from app.post_match.report import (
+        _combine_stint_kpi_values,
+        _flatten_player_kpis,
+        _flatten_squad_kpis,
+    )
+
+    squad_lookup = _flatten_squad_kpis(impect_get(v5_path(f"/matches/{match_id}/squad-kpis"))["data"])
+    team = _style_from_kpis(squad_lookup.get(squad_id) or {})
+    players_raw = _flatten_player_kpis(
+        impect_get(v5_path(f"/matches/{match_id}/player-kpis"))["data"],
+        {},
+    )
+    by_player: dict[int, dict[str, Any]] = {}
+    for row in players_raw:
+        if int(row.get("squadId") or 0) != squad_id:
+            continue
+        player_id = int(row.get("playerId") or 0)
+        if player_id <= 0:
+            continue
+        bucket = by_player.setdefault(
+            player_id,
+            {
+                "player_id": player_id,
+                "name": row.get("name") or f"Player {player_id}",
+                "position": row.get("position"),
+                "minutes": 0.0,
+                "kpi_lists": {key: [] for key in (*IMPECT_VOLUME_KEYS, "duel_won", "duel_total")},
+            },
+        )
+        bucket["minutes"] += float(row.get("minutes") or 0.0)
+        if row.get("position"):
+            bucket["position"] = row.get("position")
+        extracted = _style_from_kpis(row.get("kpis") or {})
+        for key in (*IMPECT_VOLUME_KEYS, "duel_won", "duel_total"):
+            bucket["kpi_lists"][key].append(float(extracted.get(key) or 0.0))
+
+    players: list[dict[str, Any]] = []
+    for bucket in by_player.values():
+        merged = {
+            key: _combine_stint_kpi_values(values)
+            for key, values in bucket["kpi_lists"].items()
+        }
+        duel_total = merged.get("duel_total") or 0.0
+        players.append(
+            {
+                "player_id": bucket["player_id"],
+                "name": bucket["name"],
+                "position": bucket["position"],
+                "minutes": round(bucket["minutes"], 1),
+                **{key: merged.get(key) or 0.0 for key in IMPECT_VOLUME_KEYS},
+                "duel_won": merged.get("duel_won") or 0.0,
+                "duel_total": duel_total,
+                "duel_rate": (100.0 * (merged.get("duel_won") or 0.0) / duel_total) if duel_total else 0.0,
+            }
+        )
+    body = {"team": team, "players": players}
+    _write_impect_match_cache(match_id, body)
+    return body
+
+
+def _pack_average(values: list[float], count: int, *, lower_is_better: bool) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values, reverse=not lower_is_better)
+    take = ordered[: max(1, min(count, len(ordered)))]
+    return round(sum(take) / len(take), 3)
+
+
+def _league_style_rates(iteration_id: int) -> dict[str, dict[str, float]]:
+    from app.post_match.impect_client import extract_rows, impect_get, v5_path
+
+    rows = extract_rows(impect_get(v5_path(f"/iterations/{iteration_id}/squad-kpis"))["data"])
+    per_squad: dict[int, dict[str, float]] = {}
+    for row in rows:
+        squad_id = int(row.get("squadId") or 0)
+        if not squad_id:
+            continue
+        kpis: dict[int, float] = {}
+        for item in row.get("kpis") or []:
+            kpi_id = item.get("kpiId")
+            value = item.get("value")
+            if kpi_id is None or value is None:
+                continue
+            kpis[int(kpi_id)] = float(value)
+        per_squad[squad_id] = _style_from_kpis(kpis)
+
+    out: dict[str, dict[str, float]] = {}
+    for key, meta in STYLE_METRIC_META.items():
+        values = [float(stats.get(key) or 0.0) for stats in per_squad.values()]
+        if not values:
+            continue
+        lower = bool(meta["lower_is_better"])
+        league = round(sum(values) / len(values), 3)
+        top7 = _pack_average(values, 7, lower_is_better=lower)
+        top3 = _pack_average(values, 3, lower_is_better=lower)
+        out[key] = {
+            "league": league,
+            "top7": top7 if top7 is not None else league,
+            "top3": top3 if top3 is not None else league,
+        }
+    return out
+
+
+def _position_short(position: Any) -> str:
+    raw = str(position or "").strip()
+    if not raw:
+        return "—"
+    return POSITION_SHORT.get(raw, raw.replace("_", " ").title()[:3])
+
+
+def _empty_style_snapshot() -> dict[str, float]:
+    snap = {key: 0.0 for key in IMPECT_VOLUME_KEYS}
+    snap.update({"duel_won": 0.0, "duel_total": 0.0, "duel_rate": 0.0, "xg_diff": 0.0})
+    return snap
+
+
+def _vale_impect_bundle(
+    vale_matches: list[dict[str, Any]],
+    squad_id: int,
+    iteration_id: int,
+    *,
+    force_refresh: bool = False,
+) -> dict[str, Any]:
+    by_match: dict[int, dict[str, float]] = {}
+    player_acc: dict[int, dict[str, Any]] = {}
+    match_ids = [int(match["id"]) for match in vale_matches if match.get("id") is not None]
+    if match_ids:
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            futures = {
+                pool.submit(_fetch_match_impect, match_id, squad_id, force_refresh=force_refresh): match_id
+                for match_id in match_ids
+            }
+            for future in as_completed(futures):
+                match_id = futures[future]
+                try:
+                    payload = future.result()
+                except Exception:
+                    payload = {"team": _empty_style_snapshot(), "players": []}
+                by_match[match_id] = payload.get("team") or _empty_style_snapshot()
+                for player in payload.get("players") or []:
+                    player_id = int(player.get("player_id") or 0)
+                    if player_id <= 0:
+                        continue
+                    acc = player_acc.setdefault(
+                        player_id,
+                        {
+                            "player_id": player_id,
+                            "name": player.get("name") or f"Player {player_id}",
+                            "position": player.get("position"),
+                            "minutes": 0.0,
+                            "appearances": 0,
+                            **{key: 0.0 for key in IMPECT_VOLUME_KEYS},
+                            "duel_won": 0.0,
+                            "duel_total": 0.0,
+                        },
+                    )
+                    acc["minutes"] += float(player.get("minutes") or 0.0)
+                    if float(player.get("minutes") or 0.0) > 0:
+                        acc["appearances"] += 1
+                    if player.get("position"):
+                        acc["position"] = player.get("position")
+                    if player.get("name") and not str(acc["name"]).startswith("Player "):
+                        pass
+                    elif player.get("name"):
+                        acc["name"] = player["name"]
+                    for key in IMPECT_VOLUME_KEYS:
+                        acc[key] += float(player.get(key) or 0.0)
+                    acc["duel_won"] += float(player.get("duel_won") or 0.0)
+                    acc["duel_total"] += float(player.get("duel_total") or 0.0)
+
+    names: dict[int, str] = {}
+    try:
+        from app.post_match.report import _player_directory
+
+        names = _player_directory(iteration_id)
+    except Exception:
+        names = {}
+
+    players: list[dict[str, Any]] = []
+    for acc in player_acc.values():
+        minutes = float(acc["minutes"] or 0.0)
+        p90 = (90.0 / minutes) if minutes >= 1 else 0.0
+        duel_total = float(acc["duel_total"] or 0.0)
+        name = names.get(int(acc["player_id"])) or acc["name"]
+        row = {
+            "player_id": acc["player_id"],
+            "name": name,
+            "position": acc.get("position"),
+            "position_short": _position_short(acc.get("position")),
+            "minutes": round(minutes, 1),
+            "appearances": int(acc["appearances"]),
+            "duel_rate": round(100.0 * float(acc["duel_won"] or 0.0) / duel_total, 1) if duel_total else None,
+        }
+        for key in IMPECT_VOLUME_KEYS:
+            total = round(float(acc[key] or 0.0), 2)
+            row[key] = total
+            row[f"{key}_p90"] = round(total * p90, 2) if p90 else 0.0
+        players.append(row)
+    players.sort(key=lambda item: (-float(item["minutes"]), str(item["name"])))
+
+    league: dict[str, dict[str, float]] = {}
+    try:
+        league = _league_style_rates(iteration_id)
+    except Exception:
+        league = {}
+
+    return {"by_match": by_match, "players": players, "league": league}
+
+
+def _style_metric_card(
+    key: str,
+    current: float,
+    played: int,
+    league: dict[str, dict[str, float]],
+) -> dict[str, Any]:
+    meta = STYLE_METRIC_META[key]
+    digits = int(meta.get("digits") or 0)
+    pack = league.get(key) or {}
+    per_game = (current / played) if played else 0.0
+    is_rate = meta.get("chart") == "running_rate"
+    if is_rate:
+        projected = None
+        compare = round(current, digits)
+        bench = {
+            "playoff": pack.get("league"),
+            "auto": pack.get("top7"),
+            "champion": pack.get("top3"),
+        }
+    else:
+        projected = _project(current, played)
+        compare = projected if projected is not None else round(current, digits)
+        multiplier = LEAGUE_MATCH_LIMIT if played else 1
+        bench = {
+            "playoff": round(float(pack["league"]) * multiplier, digits) if pack.get("league") is not None else None,
+            "auto": round(float(pack["top7"]) * multiplier, digits) if pack.get("top7") is not None else None,
+            "champion": round(float(pack["top3"]) * multiplier, digits) if pack.get("top3") is not None else None,
+        }
+    auto = bench.get("auto")
+    if played <= 0 or auto is None:
+        status = "awaiting"
+        delta = None
+    else:
+        status = _status(float(compare), float(auto), lower_is_better=meta["lower_is_better"])
+        delta = round(float(compare) - float(auto), 1)
+    return {
+        "id": key,
+        "label": meta["label"],
+        "unit": meta["unit"],
+        "hint": meta.get("hint") or "",
+        "group": "impect",
+        "benchmark_set": "league_pack",
+        "benchmark_labels": {"playoff": "League", "auto": "Top 7", "champion": "Top 3"},
+        "lower_is_better": meta["lower_is_better"],
+        "project": meta["project"],
+        "chart": meta.get("chart") or "cumulative",
+        "digits": digits,
+        "has_line": True,
+        "has_player": bool(meta.get("player")),
+        "current": round(current, digits if digits else 1) if digits else round(current),
+        "per_game": round(per_game, 2),
+        "projected": projected,
+        "compare": compare,
+        "benchmarks": bench,
+        "status": status,
+        "delta_vs_auto": delta,
+    }
+
+
 def _vale_goal_times(
     vale_matches: list[dict[str, Any]],
     squad_id: int,
@@ -353,6 +857,8 @@ def _vale_match_progress(
     *,
     competition: str,
     include_goal_times: bool = True,
+    include_impect: bool = True,
+    force_refresh: bool = False,
 ) -> dict[str, Any]:
     matches = _league_matches(iteration_id, competition)
     squads: dict[int, str] = {}
@@ -374,6 +880,7 @@ def _vale_match_progress(
         if squad_id not in (home_id, away_id):
             continue
         vale_matches.append(match)
+        match_id = int(match.get("id") or 0)
         goals = match.get("goals") or {}
         home_goals = int((goals.get("home") or {}).get("fullTime") or 0)
         away_goals = int((goals.get("away") or {}).get("fullTime") or 0)
@@ -420,6 +927,7 @@ def _vale_match_progress(
                 "clean_sheets": clean_sheets,
                 "back_to_backs": streaks["back_to_backs"],
                 "max_win_streak": streaks["max_win_streak"],
+                "match_id": match_id,
             }
         )
 
@@ -436,6 +944,32 @@ def _vale_match_progress(
             "bucket_order": [label for label in TIME_BUCKETS if label != "unknown"],
         }
     )
+    impect = (
+        _vale_impect_bundle(
+            vale_matches,
+            squad_id,
+            iteration_id,
+            force_refresh=force_refresh,
+        )
+        if include_impect and vale_matches
+        else {"by_match": {}, "players": [], "league": {}}
+    )
+    running = {key: 0.0 for key in IMPECT_VOLUME_KEYS}
+    duel_won = duel_total = 0.0
+    by_match = impect.get("by_match") or {}
+    for row in series:
+        snap = by_match.get(int(row.get("match_id") or 0)) or _empty_style_snapshot()
+        for key in IMPECT_VOLUME_KEYS:
+            running[key] += float(snap.get(key) or 0.0)
+            row[key] = round(running[key], 2)
+        duel_won += float(snap.get("duel_won") or 0.0)
+        duel_total += float(snap.get("duel_total") or 0.0)
+        row["duel_rate"] = round((100.0 * duel_won / duel_total), 1) if duel_total else 0.0
+        row["xg_diff"] = round(running["xg_for"] - running["xg_against"], 2)
+        row["duel_won"] = round(duel_won, 1)
+        row["duel_total"] = round(duel_total, 1)
+    style_totals = {**running, "duel_rate": (100.0 * duel_won / duel_total) if duel_total else 0.0}
+    style_totals["xg_diff"] = running["xg_for"] - running["xg_against"]
     return {
         "played": played,
         "points": points,
@@ -452,6 +986,9 @@ def _vale_match_progress(
         "form": results[-6:],
         "series": series,
         "goal_times": goal_times,
+        "style_totals": style_totals,
+        "players": impect.get("players") or [],
+        "style_league": impect.get("league") or {},
     }
 
 
@@ -513,6 +1050,11 @@ def _metric_card(
         "lower_is_better": meta["lower_is_better"],
         "project": meta["project"],
         "has_line": True,
+        "group": "outcome",
+        "benchmark_set": "promotion",
+        "benchmark_labels": {"playoff": "PO", "auto": "Auto", "champion": "Champ"},
+        "chart": "cumulative",
+        "digits": 0,
         "current": current,
         "projected": projected,
         "compare": compare,
@@ -623,6 +1165,8 @@ def _assemble_tracker(
             squad_id,
             competition=competition,
             include_goal_times=True,
+            include_impect=True,
+            force_refresh=force_refresh,
         )
     except HTTPException as exc:
         if exc.status_code != 429:
@@ -662,6 +1206,9 @@ def _assemble_tracker(
                 "bucket_labels": dict(TIME_BUCKET_LABELS),
                 "bucket_order": [label for label in TIME_BUCKETS if label != "unknown"],
             },
+            "style_totals": _empty_style_snapshot(),
+            "players": [],
+            "style_league": {},
         }
     played = int(progress["played"] or vale_row.get("played") or 0)
 
@@ -681,6 +1228,12 @@ def _assemble_tracker(
         _metric_card(key, float(progress.get(key) or 0), played, competition=competition)
         for key in metric_keys
     ]
+    style_totals = progress.get("style_totals") or _empty_style_snapshot()
+    style_league = progress.get("style_league") or {}
+    style_metrics = [
+        _style_metric_card(key, float(style_totals.get(key) or 0), played, style_league)
+        for key in STYLE_METRIC_KEYS
+    ]
 
     points_metric = next(m for m in metrics if m["id"] == "points")
     goal_times = progress.get("goal_times") or {
@@ -695,8 +1248,11 @@ def _assemble_tracker(
         "Live Impect league matches · League Two benchmarks from the Strategy Report "
         "(champ / auto / play-off multi-season averages)"
         if competition == "League Two"
-        else "Live Impect league matches · League One benchmarks from recent EFL seasons "
+        else         "Live Impect league matches · League One benchmarks from recent EFL seasons "
         "(1st / auto 2nd–3rd / play-off 4th–7th averages)"
+    )
+    source = (
+        f"{source} · style stats vs this season’s league / top-7 / top-3 per-match rates"
     )
     return {
         "generated_at": datetime.now(UTC).isoformat(),
@@ -722,6 +1278,8 @@ def _assemble_tracker(
         },
         "benchmarks": benches,
         "metrics": metrics,
+        "style_metrics": style_metrics,
+        "players": progress.get("players") or [],
         "series": progress.get("series") or [],
         "points_series": progress.get("series") or [],
         "goal_times": goal_times,
