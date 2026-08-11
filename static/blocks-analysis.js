@@ -363,7 +363,7 @@ const PLAYER_BOARDS = [
   { key: "offensiveInterventions", label: "Offensive interventions", hint: "Ball wins by action", digits: 0 },
   { key: "defensiveInterventions", label: "Defensive interventions", hint: "Teammates added by ball wins", digits: 0 },
   { key: "regainsFromDefenders", label: "Regains from defenders", hint: "Removed opposition defenders", digits: 0 },
-  { key: "defendersBypassed", label: "Defenders bypassed", hint: "Impect packing", digits: 0 },
+  { key: "defendersBypassed", label: "Defenders bypassed", hint: "Taken out of the game", digits: 0 },
   { key: "duelRate", label: "Duel rate", hint: "Won / attempted", digits: 1, rate: true, minDuels: 3 },
 ];
 
@@ -715,7 +715,7 @@ function xgRaceHtml(race) {
 function playerStandouts(players) {
   const specs = [
     { key: "xg", label: "Highest xG", digits: 2 },
-    { key: "defendersBypassed", label: "Most packing", digits: 0 },
+    { key: "defendersBypassed", label: "Most defenders bypassed", digits: 0 },
     { key: "duelRate", label: "Best duel rate", digits: 1, rate: true, minDuels: 3 },
   ];
   const used = new Set();
@@ -801,7 +801,7 @@ function dashHtml(block) {
           ${single ? factsHtml(stats.facts) : ""}
           <div class="ba-sheet__main ${stats.xgRace ? "ba-sheet__main--race" : ""}">
             ${stats.xgRace ? xgRaceHtml(stats.xgRace) : ""}
-            ${unitPanelHtml("Defenders bypassed", "defendersBypassed", "Impect packing", stats, single)}
+            ${unitPanelHtml("Defenders bypassed", "defendersBypassed", "Taken out of the game", stats, single)}
             ${unitPanelHtml("Duel rate", "duelRate", "Won / attempted", stats, single)}
           </div>
         </div>
