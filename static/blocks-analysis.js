@@ -1051,16 +1051,6 @@ function shotXgGoldStroke(xg, maxXg) {
   };
 }
 
-function shotLegendShapeSvg(shape, fill = "#d1d5db") {
-  if (shape === "diamond") {
-    return `<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2.2" y="2.2" width="7.6" height="7.6" fill="${fill}" stroke="#111" stroke-width="0.8" transform="rotate(45 6 6)"/></svg>`;
-  }
-  if (shape === "square") {
-    return `<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2" y="2" width="8" height="8" rx="0.8" fill="${fill}" stroke="#111" stroke-width="0.8"/></svg>`;
-  }
-  return `<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.8" fill="${fill}" stroke="#111" stroke-width="0.8"/></svg>`;
-}
-
 function renderShotMarker(x, y, outcome, phase, initials, xgDisplay, xgValue, maxXg) {
   const colors = {
     scored: "#22c55e",
@@ -1161,19 +1151,6 @@ function shotPitchHtml(title, points, totalXg, goals) {
           <circle cx="${cx}" cy="${pitchY + (11 / 35) * drawH}" r="1.6" fill="#fff" />
           <g class="ba-shotmap__dots">${markers}</g>
         </svg>
-      </div>
-      <div class="ba-shotmap__legend">
-        <p>
-          <span><i class="ba-shotmap__shape">${shotLegendShapeSvg("circle", "#22c55e")}</i>Goal</span>
-          <span><i class="ba-shotmap__shape">${shotLegendShapeSvg("circle", "#facc15")}</i>Saved</span>
-          <span><i class="ba-shotmap__shape">${shotLegendShapeSvg("circle", "#ef4444")}</i>Off / blocked</span>
-        </p>
-        <p>
-          <span><i class="ba-shotmap__shape">${shotLegendShapeSvg("circle")}</i>Possession</span>
-          <span><i class="ba-shotmap__shape">${shotLegendShapeSvg("diamond")}</i>Transition</span>
-          <span><i class="ba-shotmap__shape">${shotLegendShapeSvg("square")}</i>Set play</span>
-          <span><i class="ba-shotmap__shape ba-shotmap__shape--xg">${shotLegendShapeSvg("circle", "#fff")}</i>Gold ring = higher xG</span>
-        </p>
       </div>
     </article>
   `;
