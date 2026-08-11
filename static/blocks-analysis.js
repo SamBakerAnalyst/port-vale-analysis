@@ -280,6 +280,12 @@ function formatBench(value, { rate = false, digits = 1 } = {}) {
   return rate ? `${fmtNum(value, digits)}%` : fmtNum(value, digits);
 }
 
+function meterFlagAlign(pct) {
+  if (pct >= 78) return "is-end";
+  if (pct <= 18) return "is-start";
+  return "";
+}
+
 function meterHtml(value, bench, { higherBetter = true, rate = false, digits = 1 } = {}) {
   const team = bench?.team;
   const top7 = bench?.top7;
@@ -288,19 +294,29 @@ function meterHtml(value, bench, { higherBetter = true, rate = false, digits = 1
   if (team != null) nums.push(Number(team));
   if (top7 != null) nums.push(Number(top7));
   const max = Math.max(...nums, 0.01) * 1.18;
-  const pct = (n) => Math.max(0, Math.min(100, (Number(n) / max) * 100));
+  const pct = (n) => Math.max(1.5, Math.min(98.5, (Number(n) / max) * 100));
   const tone = meterTone(value, top7 ?? team, higherBetter);
+  const reqPct = top7 == null ? null : pct(top7);
+  const avgPct = team == null ? null : pct(team);
+  const reqLabel = top7 == null ? "" : escapeHtml(formatBench(top7, { rate, digits }));
+  const avgLabel = team == null ? "" : escapeHtml(formatBench(team, { rate, digits }));
   return `
     <div class="ba-meter ba-meter--${tone}">
+      ${reqPct == null ? `<div class="ba-meter__rail"></div>` : `
+        <div class="ba-meter__rail ba-meter__rail--req">
+          <span class="ba-meter__flag ba-meter__flag--req ${meterFlagAlign(reqPct)}" style="left:${reqPct}%">Req ${reqLabel}</span>
+        </div>
+      `}
       <span class="ba-meter__track">
         <span class="ba-meter__fill" style="width:${pct(value)}%"></span>
-        ${team == null ? "" : `<span class="ba-meter__mark ba-meter__mark--avg" style="left:${pct(team)}%" title="Vale average"></span>`}
-        ${top7 == null ? "" : `<span class="ba-meter__mark ba-meter__mark--req" style="left:${pct(top7)}%" title="League requirement"></span>`}
+        ${avgPct == null ? "" : `<i class="ba-meter__tick ba-meter__tick--avg" style="left:${avgPct}%"></i>`}
+        ${reqPct == null ? "" : `<i class="ba-meter__tick ba-meter__tick--req" style="left:${reqPct}%"></i>`}
       </span>
-      <div class="ba-meter__keys">
-        ${team == null ? "" : `<span class="ba-meter__key ba-meter__key--avg">Vale avg ${escapeHtml(formatBench(team, { rate, digits }))}</span>`}
-        ${top7 == null ? "" : `<span class="ba-meter__key ba-meter__key--req">League req ${escapeHtml(formatBench(top7, { rate, digits }))}</span>`}
-      </div>
+      ${avgPct == null ? `<div class="ba-meter__rail"></div>` : `
+        <div class="ba-meter__rail ba-meter__rail--avg">
+          <span class="ba-meter__flag ba-meter__flag--avg ${meterFlagAlign(avgPct)}" style="left:${avgPct}%">Avg ${avgLabel}</span>
+        </div>
+      `}
     </div>
   `;
 }
@@ -371,10 +387,10 @@ function unitPanelHtml(title, metricKey, hint, stats, single) {
 const PLAYER_BOARDS = [
   { key: "ppg", label: "Points per game", hint: "Team points when they played", digits: 2 },
   { key: "xg", label: "Expected goals", hint: "Shot xG created", digits: 2 },
-  { key: "offensiveInterventions", label: "Attacking ball wins", hint: "Turnovers in attacking areas", digits: 0 },
+  { key: "offensiveInterventions", label: "Aggressive regains", hint: "Turnovers in attacking areas", digits: 0 },
   { key: "defensiveInterventions", label: "Defensive ball wins", hint: "Teammates added by winning it", digits: 0 },
-  { key: "regainsFromDefenders", label: "Regains vs their defence", hint: "Won it against opposition defenders", digits: 0 },
-  { key: "defendersBypassed", label: "Defenders taken out", hint: "Opponents taken out of the game", digits: 0 },
+  { key: "regainsFromDefenders", label: "Regains from opp defenders", hint: "Won it against opposition defenders", digits: 0 },
+  { key: "defendersBypassed", label: "Backline beaten", hint: "Opponents taken out of the game", digits: 0 },
   { key: "duelRate", label: "Duels won", hint: "Won of attempted", digits: 1, rate: true, minDuels: 3 },
 ];
 
@@ -602,7 +618,7 @@ function xgVsHtml(stats, fixture) {
       <div class="ba-xgvs__foot">
         <span class="ba-xgvs__edge">${escapeHtml(edge)}</span>
         ${bench?.team == null ? "" : `<span class="ba-xgvs__key ba-xgvs__key--avg">Vale avg ${escapeHtml(formatBench(bench.team, { digits: 2 }))}</span>`}
-        ${bench?.top7 == null ? "" : `<span class="ba-xgvs__key ba-xgvs__key--req">League req ${escapeHtml(formatBench(bench.top7, { digits: 2 }))}</span>`}
+        ${bench?.top7 == null ? "" : `<span class="ba-xgvs__key ba-xgvs__key--req">Req ${escapeHtml(formatBench(bench.top7, { digits: 2 }))}</span>`}
       </div>
     </article>
   `;
@@ -611,16 +627,16 @@ function xgVsHtml(stats, fixture) {
 function metricStrip(stats, single, fixture) {
   const items = single
     ? [
-        { label: "Attacking ball wins", key: "offensiveInterventions", digits: 0 },
-        { label: "Regains vs defence", key: "ballWinsFromOppDefenders", digits: 0 },
-        { label: "Defenders taken out", key: "defendersBypassed", digits: 0 },
+        { label: "Aggressive regains", key: "offensiveInterventions", digits: 0 },
+        { label: "Regains from opp defenders", key: "ballWinsFromOppDefenders", digits: 0 },
+        { label: "Backline beaten", key: "defendersBypassed", digits: 0 },
         { label: "Duels won", key: "duelRate", digits: 1, rate: true },
       ]
     : [
         { label: "Our xG", key: "xg", digits: 2 },
-        { label: "Attacking ball wins", key: "offensiveInterventions", digits: 0 },
-        { label: "Regains vs defence", key: "ballWinsFromOppDefenders", digits: 0 },
-        { label: "Defenders taken out", key: "defendersBypassed", digits: 0 },
+        { label: "Aggressive regains", key: "offensiveInterventions", digits: 0 },
+        { label: "Regains from opp defenders", key: "ballWinsFromOppDefenders", digits: 0 },
+        { label: "Backline beaten", key: "defendersBypassed", digits: 0 },
         { label: "Duels won", key: "duelRate", digits: 1, rate: true },
         { label: "Goals against", key: "goalsAgainst", digits: 0, invert: true },
       ];
@@ -982,7 +998,7 @@ function behindHtml(data) {
 function playerStandouts(players) {
   const specs = [
     { key: "xg", label: "Highest expected goals", digits: 2 },
-    { key: "defendersBypassed", label: "Most defenders taken out", digits: 0 },
+    { key: "defendersBypassed", label: "Most backline beaten", digits: 0 },
     { key: "duelRate", label: "Best duel success", digits: 1, rate: true, minDuels: 3 },
   ];
   const used = new Set();
@@ -1048,8 +1064,8 @@ function dashHtml(block) {
     .join("");
   const outcome = (single && fixture?.outcome) || "";
   const foot = single
-    ? "Gold tick = Vale average · black tick = league requirement (top 7) · wing-backs 50/50 DEF and ATT"
-    : "Gold tick = Vale average · black tick = league requirement (top 7) · wing-backs 50/50 DEF and ATT";
+    ? "Req = league requirement (top 7) · Avg = Vale average · wing-backs 50/50 DEF and ATT"
+    : "Req = league requirement (top 7) · Avg = Vale average · wing-backs 50/50 DEF and ATT";
 
   return `
     <section class="ba-report">
@@ -1074,7 +1090,7 @@ function dashHtml(block) {
             </div>
           ` : ""}
           <div class="ba-sheet__main ${single ? "ba-sheet__main--compact" : ""}">
-            ${unitPanelHtml("Defenders taken out", "defendersBypassed", "Opponents removed from the play", stats, single)}
+            ${unitPanelHtml("Backline beaten", "defendersBypassed", "Opponents taken out of the play", stats, single)}
             ${unitPanelHtml("Duels won", "duelRate", "Success rate by unit", stats, single)}
           </div>
         </div>
