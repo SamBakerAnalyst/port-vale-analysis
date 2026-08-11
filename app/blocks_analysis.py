@@ -19,6 +19,7 @@ from app.paths import BLOCKS_ANALYSIS_DATA_DIR
 from app.post_match.ball_progression import _top7_average
 from app.post_match.config import PORT_VALE_SQUAD_ID
 from app.post_match.duels import (
+    KPI_BALL_WIN_ADDED_TEAMMATES,
     KPI_BALL_WIN_REMOVED_OPPONENTS_DEFENDERS,
     KPI_LOST_AERIAL_DUELS,
     KPI_LOST_GROUND_DUELS,
@@ -32,6 +33,7 @@ from app.post_match.report import (
     _consolidate_player_match_rows,
     _flatten_player_kpis,
     _flatten_squad_kpis,
+    _player_directory,
 )
 from app.post_match.season_matches import build_season_matches
 from app.scouting import SCOUTING_DIR
@@ -47,8 +49,9 @@ BLOCK_COUNT = 9
 GAMES_PER_BLOCK = 5
 KPI_SHOT_XG = 82
 MATCH_KPI_CACHE_TTL = 6 * 3600
-MATCH_STATS_CACHE_VERSION = 2
+MATCH_STATS_CACHE_VERSION = 3
 PAYLOAD_CACHE_TTL = 45
+PLAYER_NAMES_TTL = 6 * 3600
 BENCHMARK_CACHE_TTL = 600
 UNIT_TOP7_TTL = 24 * 3600
 UNIT_TOP7_SAMPLE_MATCHES = 24
@@ -78,6 +81,7 @@ UNIT_TOP7_PATH = DATA_DIR / "unit-top7.json"
 _store_lock = threading.Lock()
 _payload_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 _benchmark_cache: tuple[float, dict[str, Any]] | None = None
+_player_names_cache: tuple[float, int, dict[int, str]] | None = None
 
 MEDAL_DEFAULTS: dict[str, dict[str, Any]] = {
     "gold": {
@@ -335,6 +339,71 @@ def _units_from_players(players: list[dict[str, Any]], squad_id: int) -> dict[st
     return {unit: _finalize_unit_row(values) for unit, values in buckets.items()}
 
 
+def _blocks_player_names(iteration_id: int = BLOCKS_ITERATION_ID) -> dict[int, str]:
+    global _player_names_cache
+    now = time.time()
+    if (
+        _player_names_cache
+        and _player_names_cache[1] == iteration_id
+        and now - _player_names_cache[0] < PLAYER_NAMES_TTL
+    ):
+        return _player_names_cache[2]
+    try:
+        names = _player_directory(iteration_id)
+    except Exception:  # noqa: BLE001
+        names = {}
+    _player_names_cache = (now, iteration_id, names)
+    return names
+
+
+def _player_match_report(
+    players: list[dict[str, Any]],
+    squad_id: int,
+    player_names: dict[int, str],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for row in _consolidate_player_match_rows(
+        [item for item in players if int(item.get("squadId") or 0) == int(squad_id)]
+    ):
+        minutes = float(row.get("minutes") or 0)
+        if minutes <= 0:
+            continue
+        kpis = row.get("kpis") or {}
+        won = _kpi_value(kpis, KPI_WON_GROUND_DUELS) + _kpi_value(kpis, KPI_WON_AERIAL_DUELS)
+        lost = _kpi_value(kpis, KPI_LOST_GROUND_DUELS) + _kpi_value(kpis, KPI_LOST_AERIAL_DUELS)
+        total = won + lost
+        player_id = int(row["playerId"])
+        name = (
+            player_names.get(player_id)
+            or str(row.get("name") or "").strip()
+            or f"Player {player_id}"
+        )
+        rows.append(
+            {
+                "playerId": player_id,
+                "name": name,
+                "unit": _unit_for_position(row.get("position")),
+                "minutes": round(minutes, 1),
+                "xg": round(_kpi_value(kpis, KPI_SHOT_XG), 2),
+                "offensiveInterventions": int(
+                    round(
+                        sum(_kpi_value(kpis, kpi_id) for kpi_id in OFFENSIVE_INTERVENTION_ACTION_KPIS)
+                    )
+                ),
+                "defensiveInterventions": int(round(_kpi_value(kpis, KPI_BALL_WIN_ADDED_TEAMMATES))),
+                "regainsFromDefenders": int(
+                    round(_kpi_value(kpis, KPI_BALL_WIN_REMOVED_OPPONENTS_DEFENDERS))
+                ),
+                "defendersBypassed": int(round(_kpi_value(kpis, KPI_BYPASSED_DEFENDERS_RAW))),
+                "duelWon": int(round(won)),
+                "duelTotal": int(round(total)),
+                "duelRate": round((won / total) * 100, 1) if total > 0 else None,
+            }
+        )
+    rows.sort(key=lambda item: (-float(item["minutes"]), str(item["name"])))
+    return rows
+
+
 def _kpi_value(kpis: dict[int, float], kpi_id: int) -> float:
     raw = kpis.get(kpi_id)
     if raw is None:
@@ -562,17 +631,24 @@ def _fetch_squad_kpis(match_id: int) -> dict[int, float]:
     return lookup.get(PORT_VALE_SQUAD_ID) or {}
 
 
-def _fetch_match_stats(match_id: int, squad_id: int = PORT_VALE_SQUAD_ID) -> dict[str, Any]:
+def _fetch_match_stats(
+    match_id: int,
+    squad_id: int = PORT_VALE_SQUAD_ID,
+    player_names: dict[int, str] | None = None,
+) -> dict[str, Any]:
     kpis = _fetch_squad_kpis(match_id)
     stats = _extract_match_kpis(kpis) if kpis else _empty_kpi_stats()
+    names = player_names or {}
     try:
         players = _flatten_player_kpis(
             impect_get(v5_path(f"/matches/{match_id}/player-kpis"))["data"],
-            {},
+            names,
         )
         stats["units"] = _units_from_players(players, squad_id)
+        stats["players"] = _player_match_report(players, squad_id, names)
     except Exception:  # noqa: BLE001
         stats["units"] = _empty_units()
+        stats["players"] = []
     return stats
 
 
@@ -593,6 +669,7 @@ def _empty_kpi_stats() -> dict[str, Any]:
         "ballWinsFromOppDefenders": None,
         "xg": None,
         "units": _empty_units(),
+        "players": [],
     }
 
 
@@ -621,16 +698,23 @@ def _load_match_kpis(
             and now - float(cached.get("fetchedAt") or 0) < MATCH_KPI_CACHE_TTL
             and cached.get("stats")
             and isinstance((cached.get("stats") or {}).get("units"), dict)
+            and isinstance((cached.get("stats") or {}).get("players"), list)
         ):
             result[match_id] = cached["stats"]
             continue
         to_fetch.append(match)
 
     if to_fetch:
+        names = _blocks_player_names(BLOCKS_ITERATION_ID)
         workers = min(8, len(to_fetch))
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = {
-                pool.submit(_fetch_match_stats, int(match["matchId"])): match
+                pool.submit(
+                    _fetch_match_stats,
+                    int(match["matchId"]),
+                    PORT_VALE_SQUAD_ID,
+                    names,
+                ): match
                 for match in to_fetch
             }
             for future in as_completed(futures):

@@ -302,8 +302,146 @@ function unitCard(title, metricKey, hint, stats, single) {
   `;
 }
 
+const PLAYER_BOARDS = [
+  { key: "ppg", label: "Points per game", hint: "Team pts when they played", digits: 2 },
+  { key: "xg", label: "Player xG", hint: "Shot xG", digits: 2 },
+  { key: "offensiveInterventions", label: "Offensive interventions", hint: "Ball wins by action", digits: 0 },
+  { key: "defensiveInterventions", label: "Defensive interventions", hint: "Teammates added by ball wins", digits: 0 },
+  { key: "regainsFromDefenders", label: "Regains from defenders", hint: "Removed opposition defenders", digits: 0 },
+  { key: "defendersBypassed", label: "Defenders bypassed", hint: "Impect packing", digits: 0 },
+  { key: "duelRate", label: "Duel rate", hint: "Won / attempted", digits: 1, rate: true, minDuels: 3 },
+];
+
+function aggregatePlayers(fixtures) {
+  const byId = {};
+  (fixtures || []).filter((row) => row.played).forEach((fixture) => {
+    const teamPoints = Number(fixture.stats?.points) || 0;
+    (fixture.stats?.players || []).forEach((player) => {
+      const id = player.playerId;
+      if (!id) return;
+      const row = byId[id] || {
+        playerId: id,
+        name: player.name,
+        unit: player.unit || "",
+        appearances: 0,
+        minutes: 0,
+        points: 0,
+        xg: 0,
+        offensiveInterventions: 0,
+        defensiveInterventions: 0,
+        regainsFromDefenders: 0,
+        defendersBypassed: 0,
+        duelWon: 0,
+        duelTotal: 0,
+      };
+      row.name = player.name || row.name;
+      row.unit = player.unit || row.unit;
+      row.appearances += 1;
+      row.minutes += Number(player.minutes) || 0;
+      row.points += teamPoints;
+      row.xg += Number(player.xg) || 0;
+      row.offensiveInterventions += Number(player.offensiveInterventions) || 0;
+      row.defensiveInterventions += Number(player.defensiveInterventions) || 0;
+      row.regainsFromDefenders += Number(player.regainsFromDefenders) || 0;
+      row.defendersBypassed += Number(player.defendersBypassed) || 0;
+      row.duelWon += Number(player.duelWon) || 0;
+      row.duelTotal += Number(player.duelTotal) || 0;
+      byId[id] = row;
+    });
+  });
+  return Object.values(byId).map((row) => {
+    row.ppg = row.appearances ? row.points / row.appearances : null;
+    row.xg = Math.round(row.xg * 100) / 100;
+    row.duelRate = row.duelTotal > 0 ? Math.round((row.duelWon / row.duelTotal) * 1000) / 10 : null;
+    return row;
+  });
+}
+
+function playersForView(block, single, fixture) {
+  if (single) {
+    if (!fixture?.played) return [];
+    const teamPoints = Number(fixture.stats?.points) || 0;
+    return (fixture.stats?.players || []).map((player) => ({
+      ...player,
+      appearances: 1,
+      points: teamPoints,
+      ppg: teamPoints,
+    }));
+  }
+  return aggregatePlayers(block.fixtures);
+}
+
+function topPlayers(players, spec) {
+  const minDuels = spec.minDuels || 0;
+  return [...players]
+    .filter((row) => {
+      const value = row[spec.key];
+      if (value == null || Number.isNaN(Number(value))) return false;
+      if (minDuels && Number(row.duelTotal || 0) < minDuels) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      const diff = Number(b[spec.key]) - Number(a[spec.key]);
+      if (diff) return diff;
+      return (Number(b.minutes) || 0) - (Number(a.minutes) || 0);
+    })
+    .slice(0, 5);
+}
+
+function playerPhotoUrl(name) {
+  return `/api/player-photo?name=${encodeURIComponent(name || "")}`;
+}
+
+function formatPlayerValue(row, spec) {
+  const value = row[spec.key];
+  if (value == null || Number.isNaN(Number(value))) return "—";
+  if (spec.rate) return `${fmtNum(value, spec.digits)}%`;
+  return fmtNum(value, spec.digits);
+}
+
+function playerBoardHtml(spec, players) {
+  const rows = topPlayers(players, spec);
+  const items = rows.length
+    ? rows.map((row, index) => {
+        const extra = spec.key === "duelRate" && row.duelTotal
+          ? `<span class="ba-lead__sub">${escapeHtml(`${fmtNum(row.duelWon)} / ${fmtNum(row.duelTotal)}`)}</span>`
+          : (row.unit ? `<span class="ba-lead__sub">${escapeHtml(row.unit)}</span>` : "");
+        return `
+          <li class="ba-lead__row">
+            <span class="ba-lead__rank">${index + 1}</span>
+            <img class="ba-lead__photo" src="${escapeHtml(playerPhotoUrl(row.name))}" alt="" onerror="this.removeAttribute('src'); this.style.visibility='hidden'" />
+            <span class="ba-lead__name">${escapeHtml(row.name)}</span>
+            ${extra}
+            <span class="ba-lead__val">${escapeHtml(formatPlayerValue(row, spec))}</span>
+          </li>
+        `;
+      }).join("")
+    : `<li class="ba-lead__empty">No player data yet</li>`;
+  return `
+    <article class="ba-lead">
+      <p class="ba-kpi__label">${escapeHtml(spec.label)}</p>
+      <ol class="ba-lead__list">${items}</ol>
+      <p class="ba-kpi__hint">${escapeHtml(spec.hint)}</p>
+    </article>
+  `;
+}
+
+function playersHtml(block, label, single, fixture) {
+  const players = playersForView(block, single, fixture);
+  const boards = PLAYER_BOARDS.map((spec) => playerBoardHtml(spec, players)).join("");
+  return `
+    <section class="ba-players">
+      <div class="ba-players__head">
+        <h3 class="ba-dash__title">Players Report</h3>
+        <p class="ba-dash__sub">Top 5 · ${escapeHtml(label)} · outfield players</p>
+      </div>
+      <div class="ba-players__grid">${boards}</div>
+    </section>
+  `;
+}
+
 function dashHtml(block) {
-  const { stats, label, single } = selectedStats(block);
+  const { stats, label, single, fixture } = selectedStats(block);
   const filterId = state.filters[block.id] || "all";
   const scheduled = (block.fixtures || []).filter((row) => row.matchId).length;
   const pills = [`<button type="button" class="ba-filter__btn ${filterId === "all" ? "is-active" : ""}" data-filter="all" data-block="${block.id}">All games</button>`]
@@ -351,6 +489,7 @@ function dashHtml(block) {
         <div class="ba-filter" role="group" aria-label="Filter block ${block.id} to one game">${pills}</div>
       </div>
       <div class="ba-kpis">${cards}${unitCards}</div>
+      ${playersHtml(block, label, single, fixture)}
     </section>
   `;
 }
