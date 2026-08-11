@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/strategy-tracker.css?v=3" />
+  <link rel="stylesheet" href="/static/strategy-tracker.css?v=4" />
 </head>
 <body>
   <div class="st-app">
@@ -64,11 +64,10 @@
       <div class="st-hero__head">
         <div>
           <h2 id="paceTitle">Points pace · season track</h2>
-          <p id="paceHint">Click a metric below — or the pills — to swap the line. Dashed = season targets.</p>
+          <p id="paceHint">Click a metric below to swap the line. Dashed = season targets.</p>
         </div>
       </div>
       <div class="st-pills" id="metricPills" role="tablist" aria-label="Outcome pace metrics"></div>
-      <div class="st-pills st-pills--style" id="stylePills" role="tablist" aria-label="Impect style metrics"></div>
       <div class="st-chart-wrap" id="pointsChart" aria-label="Season pace chart"></div>
       <div class="st-legend">
         <span class="st-legend__item st-legend__item--vale"><i></i>Port Vale actual</span>
@@ -84,9 +83,9 @@
     <section class="st-style">
       <div class="st-dash__head">
         <h2>Impect style stats</h2>
-        <p>Underlying numbers with the strongest link to winning. Lines vs this season’s league / top-7 / top-3 rates — click a card to open it.</p>
+        <p>Per-game numbers vs this season’s league and promotion pack. Green = better than the top 7.</p>
       </div>
-      <section class="st-metrics" id="styleGrid"></section>
+      <div id="styleGrid"></div>
     </section>
 
     <section class="card st-players" id="playersCard">
@@ -152,6 +151,6 @@
 
     <p class="st-footnote" id="sourceNote"></p>
   </div>
-  <script defer src="/static/strategy-tracker.js?v=3"></script>
+  <script defer src="/static/strategy-tracker.js?v=4"></script>
 </body>
 </html>

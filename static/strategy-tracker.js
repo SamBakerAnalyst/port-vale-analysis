@@ -18,7 +18,6 @@
     paceTitle: document.getElementById("paceTitle"),
     paceHint: document.getElementById("paceHint"),
     pills: document.getElementById("metricPills"),
-    stylePills: document.getElementById("stylePills"),
     chart: document.getElementById("pointsChart"),
     metrics: document.getElementById("metricsGrid"),
     styleGrid: document.getElementById("styleGrid"),
@@ -101,12 +100,8 @@
     return `${sign}${n.toFixed(digits)}`;
   }
 
-  function allMetrics(data) {
-    return [...(data.metrics || []), ...(data.style_metrics || [])];
-  }
-
   function metricById(data, id) {
-    const rows = allMetrics(data);
+    const rows = data.metrics || [];
     return rows.find((row) => row.id === id) || rows[0] || null;
   }
 
@@ -163,9 +158,6 @@
 
   function renderPills(data) {
     els.pills.innerHTML = (data.metrics || []).map(pillHtml).join("");
-    if (els.stylePills) {
-      els.stylePills.innerHTML = (data.style_metrics || []).map(pillHtml).join("");
-    }
   }
 
   function renderPaceChart(data) {
@@ -336,9 +328,91 @@
 
   function renderMetrics(data) {
     els.metrics.innerHTML = (data.metrics || []).map(metricCardHtml).join("");
-    if (els.styleGrid) {
-      els.styleGrid.innerHTML = (data.style_metrics || []).map(metricCardHtml).join("");
+    renderStyleTiles(data);
+  }
+
+  const STYLE_GROUPS = [
+    {
+      id: "attack",
+      label: "Attack",
+      ids: ["defenders_bypassed", "ball_progression", "xg_for", "xg_diff", "offensive_interventions", "altered_threat", "packing_xg"],
+    },
+    {
+      id: "defend",
+      label: "Defend",
+      ids: ["xg_against", "duel_rate", "defensive_interventions", "ball_wins_defenders", "defenders_bypassed_against"],
+    },
+  ];
+
+  function styleTileHtml(metric) {
+    const bench = metric.benchmarks || {};
+    const digits = metric.digits != null ? metric.digits : 1;
+    const rate = metric.chart === "running_rate";
+    const valePg = rate ? Number(metric.current || 0) : Number(metric.per_game || 0);
+    const scale = rate || !metric.project ? 1 : SEASON_GAMES;
+    const league = bench.playoff == null ? null : Number(bench.playoff) / scale;
+    const top7 = bench.auto == null ? null : Number(bench.auto) / scale;
+    const top3 = bench.champion == null ? null : Number(bench.champion) / scale;
+    const max = Math.max(
+      Math.abs(valePg) || 0,
+      Math.abs(league || 0),
+      Math.abs(top7 || 0),
+      Math.abs(top3 || 0),
+      0.01,
+    ) * 1.15;
+    const width = (value) => {
+      if (value == null || Number.isNaN(Number(value))) return 0;
+      return Math.max(2, Math.min(100, (Math.abs(Number(value)) / max) * 100));
+    };
+    const awaiting = metric.status === "awaiting";
+    const tone = statusClass(metric.status);
+    const delta = metric.delta_vs_auto;
+    const deltaCopy = awaiting
+      ? "Waiting for kick-off"
+      : `${signed(delta)} vs top 7`;
+    const big = rate
+      ? fmt(metric.current, 1)
+      : fmt(metric.current, digits);
+    const sub = awaiting
+      ? "No league games yet"
+      : rate
+        ? "Season-to-date win rate"
+        : `${fmt(valePg, 2)} per game`;
+    function bar(label, value, kind) {
+      if (value == null || Number.isNaN(Number(value))) {
+        return `<div class="st-tile__bar is-${kind}"><span>${label}</span><div class="st-tile__track"></div><b>—</b></div>`;
+      }
+      return `<div class="st-tile__bar is-${kind}"><span>${label}</span><div class="st-tile__track"><i style="width:${width(value)}%"></i></div><b>${fmt(value, digits || 1)}</b></div>`;
     }
+    return `
+      <article class="st-tile is-${tone}">
+        <div class="st-tile__top">
+          <h3>${metric.label}</h3>
+          <span class="st-tile__badge">${statusLabel(metric.status, "league_pack")}</span>
+        </div>
+        <p class="st-tile__value">${awaiting ? "—" : big}${rate && !awaiting ? "<small>%</small>" : ""}</p>
+        <p class="st-tile__sub">${sub}</p>
+        <div class="st-tile__bars">
+          ${bar("Vale", awaiting ? null : valePg, "vale")}
+          ${bar("Top 7", top7, "top7")}
+          ${bar("League", league, "league")}
+        </div>
+        <p class="st-tile__delta">${deltaCopy}</p>
+      </article>`;
+  }
+
+  function renderStyleTiles(data) {
+    if (!els.styleGrid) return;
+    const byId = Object.fromEntries((data.style_metrics || []).map((row) => [row.id, row]));
+    els.styleGrid.innerHTML = STYLE_GROUPS.map((group) => {
+      const tiles = group.ids.map((id) => byId[id]).filter(Boolean);
+      if (!tiles.length) return "";
+      return `
+        <div class="st-style-group">
+          <h3>${group.label}</h3>
+          <div class="st-tiles">${tiles.map(styleTileHtml).join("")}</div>
+        </div>`;
+    }).join("");
   }
 
   function renderPlayers(data) {
@@ -601,14 +675,12 @@
     const btn = event.target.closest("[data-metric]");
     if (!btn) return;
     selectMetric(btn.getAttribute("data-metric"));
-    if (event.currentTarget === els.metrics || event.currentTarget === els.styleGrid) {
+    if (event.currentTarget === els.metrics) {
       els.chart.scrollIntoView({ behavior: "smooth", block: "center" });
     }
   }
   els.pills.addEventListener("click", onMetricClick);
-  els.stylePills?.addEventListener("click", onMetricClick);
   els.metrics.addEventListener("click", onMetricClick);
-  els.styleGrid?.addEventListener("click", onMetricClick);
   els.playersHead?.addEventListener("click", (event) => {
     const th = event.target.closest("[data-sort]");
     if (!th || !state.data) return;

@@ -226,11 +226,115 @@ a:hover { text-decoration: underline; }
   gap: 0.4rem;
   margin-bottom: 0.55rem;
 }
-.st-pills--style {
-  margin-bottom: 0.85rem;
-  padding-top: 0.35rem;
-  border-top: 1px dashed var(--border);
+.st-style { margin-bottom: 1.15rem; }
+.st-style-group { margin-bottom: 0.85rem; }
+.st-style-group h3 {
+  margin: 0 0 0.55rem;
+  font-family: var(--display);
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
+.st-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.7rem;
+}
+.st-tile {
+  padding: 0.9rem 1rem 0.85rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.st-tile.is-ahead { border-color: rgba(52,211,153,.35); }
+.st-tile.is-behind { border-color: rgba(248,113,113,.35); }
+.st-tile.is-awaiting { border-color: var(--border); }
+.st-tile__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+.st-tile__top h3 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 0.92rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.st-tile__badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--track);
+}
+.st-tile.is-ahead .st-tile__badge { color: var(--ahead); }
+.st-tile.is-behind .st-tile__badge { color: var(--behind); }
+.st-tile.is-awaiting .st-tile__badge { color: var(--auto); }
+.st-tile__value {
+  margin: 0.35rem 0 0;
+  font-family: var(--display);
+  font-size: 2.35rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+.st-tile__value small {
+  font-size: 1.1rem;
+  margin-left: 0.1rem;
+  color: var(--muted);
+}
+.st-tile.is-ahead .st-tile__value { color: var(--ahead); }
+.st-tile.is-behind .st-tile__value { color: var(--behind); }
+.st-tile__sub {
+  margin: 0.25rem 0 0.7rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.st-tile__bars { display: grid; gap: 0.32rem; }
+.st-tile__bar {
+  display: grid;
+  grid-template-columns: 3.2rem 1fr 2.4rem;
+  gap: 0.4rem;
+  align-items: center;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.st-tile__track {
+  height: 0.48rem;
+  border-radius: 999px;
+  background: rgba(255,255,255,.08);
+  overflow: hidden;
+}
+.st-tile__track i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--vale);
+}
+.st-tile__bar.is-vale .st-tile__track i { background: var(--vale); }
+.st-tile__bar.is-top7 .st-tile__track i { background: var(--auto); }
+.st-tile__bar.is-league .st-tile__track i { background: var(--playoff); }
+.st-tile__bar b {
+  font-family: var(--display);
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text);
+  text-align: right;
+}
+.st-tile__delta {
+  margin: 0.55rem 0 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.st-tile.is-ahead .st-tile__delta { color: var(--ahead); }
+.st-tile.is-behind .st-tile__delta { color: var(--behind); }
 .st-pill {
   appearance: none;
   border: 1px solid var(--border);
@@ -527,7 +631,6 @@ a:hover { text-decoration: underline; }
 .st-form__dot.is-D { background: rgba(148,163,184,.2); color: var(--playoff); }
 .st-form__dot.is-L { background: rgba(248,113,113,.2); color: var(--behind); }
 
-.st-style { margin-bottom: 1.15rem; }
 .st-players {
   padding: 0.9rem 1rem 0.5rem;
   margin-bottom: 1.15rem;
