@@ -1605,45 +1605,74 @@ a:hover { text-decoration: underline; }
 .ba-race__goal--vale { fill: #f5c518; stroke: #111; stroke-width: 1.4; }
 .ba-race__goal--opp { fill: #b42318; stroke: #111; stroke-width: 1.4; }
 
-.ba-tilt__overall {
+.ba-tilt {
+  --opp-fill: #9a1f1f;
+  --opp-ink: #fff;
+}
+
+.ba-tilt__body {
+  flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: .35rem;
-  align-items: center;
+  grid-template-columns: 2.55rem minmax(0, 1fr);
+  gap: .4rem;
+  align-items: stretch;
+}
+
+.ba-tilt__meter {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: .16rem;
+}
+
+.ba-tilt__meter-lab {
   font-family: var(--display);
-  font-size: .62rem;
+  font-size: .52rem;
   font-weight: 800;
-  letter-spacing: .06em;
+  letter-spacing: .04em;
   text-transform: uppercase;
-  flex-shrink: 0;
+  line-height: 1.05;
+  text-align: center;
 }
 
-.ba-tilt__split {
+.ba-tilt__meter-lab--opp {
+  color: var(--opp-fill);
+}
+
+.ba-tilt__meter-track {
   position: relative;
-  height: 10px;
-  background: #e6e1d6;
-  border-radius: 99px;
-  overflow: visible;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 2px;
+  border: 1px solid #111;
 }
 
-.ba-tilt__split-fill {
-  display: block;
-  height: 100%;
+.ba-tilt__meter-opp,
+.ba-tilt__col-opp {
+  background: var(--opp-fill);
+}
+
+.ba-tilt__meter-vale,
+.ba-tilt__col-fill {
   background: #111;
-  border-radius: 99px;
 }
 
-.ba-tilt__mark {
+.ba-tilt__meter-avg {
   position: absolute;
-  top: -4px;
-  width: 2px;
-  height: 18px;
-  background: #c9a227;
-  transform: translateX(-1px);
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #f5c518;
+  z-index: 1;
+  transform: translateY(50%);
 }
 
 .ba-tilt__cols {
-  flex: 1;
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -1671,17 +1700,16 @@ a:hover { text-decoration: underline; }
   flex: 1;
   width: 100%;
   min-height: 48px;
-  background: #ece7dc;
-  border-radius: 2px 2px 0 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
+  border-radius: 2px 2px 0 0;
+  border: 1px solid rgba(17, 17, 17, .35);
 }
 
+.ba-tilt__col-opp,
 .ba-tilt__col-fill {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: #111;
+  min-height: 0;
 }
 
 .ba-tilt__col-avg {
@@ -1689,7 +1717,7 @@ a:hover { text-decoration: underline; }
   left: 0;
   right: 0;
   height: 2px;
-  background: #c9a227;
+  background: #f5c518;
   z-index: 1;
 }
 
@@ -1698,6 +1726,16 @@ a:hover { text-decoration: underline; }
   font-size: .5rem;
   font-weight: 700;
   letter-spacing: .04em;
+}
+
+.ba-tilt__meter-track.is-light,
+.ba-tilt__col-track.is-light {
+  border-color: #111;
+}
+
+.ba-tilt__meter-track.is-light .ba-tilt__meter-opp,
+.ba-tilt__col-track.is-light .ba-tilt__col-opp {
+  box-shadow: inset 0 0 0 1px rgba(17, 17, 17, .35);
 }
 
 .ba-phasebox__rows {

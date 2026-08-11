@@ -752,7 +752,53 @@ function avgGamesLabel(count) {
   return n > 0 ? `avg last ${n}` : "avg —";
 }
 
-function fieldTiltHtml(tilt) {
+function opponentBarColour(name) {
+  const text = String(name || "").toLowerCase();
+  const rows = [
+    ["wolverhampton", "#FDB913", "#111"],
+    ["wolves", "#FDB913", "#111"],
+    ["walsall", "#E31C23", "#fff"],
+    ["bradford", "#A3192F", "#fff"],
+    ["notts", "#FFFFFF", "#111"],
+    ["swindon", "#E20E0E", "#fff"],
+    ["salford", "#E31C23", "#fff"],
+    ["colchester", "#0055A4", "#fff"],
+    ["tranmere", "#FFFFFF", "#111"],
+    ["chesterfield", "#0033A0", "#fff"],
+    ["bromley", "#FFFFFF", "#111"],
+    ["grimsby", "#000040", "#fff"],
+    ["crewe", "#E31C23", "#fff"],
+    ["newport", "#F5C518", "#111"],
+    ["cheltenham", "#D0103A", "#fff"],
+    ["gillingham", "#0000A0", "#fff"],
+    ["barrow", "#FFFFFF", "#111"],
+    ["harrogate", "#F5C518", "#111"],
+    ["accrington", "#E31C23", "#fff"],
+    ["fleetwood", "#E31C23", "#fff"],
+    ["barnet", "#000080", "#F5C518"],
+    ["oldham", "#0033A0", "#fff"],
+    ["carlisle", "#0033A0", "#fff"],
+    ["morecambe", "#E31C23", "#fff"],
+    ["mk dons", "#FFFFFF", "#111"],
+    ["milton keynes", "#FFFFFF", "#111"],
+    ["rotherham", "#E30613", "#fff"],
+    ["lincoln", "#E4002B", "#fff"],
+    ["bolton", "#FFFFFF", "#003087"],
+    ["peterborough", "#0057B8", "#fff"],
+    ["wycombe", "#009FE3", "#fff"],
+  ];
+  for (const [key, fill, ink] of rows) {
+    if (text.includes(key)) {
+      const light = Number.parseInt(fill.slice(1, 3), 16) * 0.299
+        + Number.parseInt(fill.slice(3, 5), 16) * 0.587
+        + Number.parseInt(fill.slice(5, 7), 16) * 0.114 > 170;
+      return { fill, ink, light };
+    }
+  }
+  return { fill: "#9a1f1f", ink: "#fff", light: false };
+}
+
+function fieldTiltHtml(tilt, fixture) {
   if (!tilt) {
     return `
       <article class="ba-chart ba-tilt">
@@ -766,26 +812,32 @@ function fieldTiltHtml(tilt) {
       </article>
     `;
   }
-  const focus = Number(tilt.focusPercent);
+  const focus = Math.min(100, Math.max(0, Number(tilt.focusPercent) || 0));
   const opp = Math.max(0, 100 - focus);
   const avg = tilt.avgPercent == null ? null : Number(tilt.avgPercent);
-  const avgMark = avg == null ? "" : `<i class="ba-tilt__mark" style="left:${Math.min(100, Math.max(0, avg))}%" title="Average ${fmtNum(avg, 1)}%"></i>`;
+  const oppName = shortOpponent(fixture?.opponentName || "Opp");
+  const colour = opponentBarColour(fixture?.opponentName);
+  const light = colour.light ? " is-light" : "";
   const cols = (tilt.blocks || []).map((block) => {
     const value = Math.min(100, Math.max(0, Number(block.focus) || 0));
     const blockAvg = block.avg == null ? null : Math.min(100, Math.max(0, Number(block.avg)));
     return `
       <div class="ba-tilt__col">
         <span class="ba-tilt__col-val">${escapeHtml(fmtNum(value, 0))}</span>
-        <div class="ba-tilt__col-track">
+        <div class="ba-tilt__col-track${light}">
           ${blockAvg == null ? "" : `<i class="ba-tilt__col-avg" style="bottom:${blockAvg}%"></i>`}
-          <span class="ba-tilt__col-fill" style="height:${value}%"></span>
+          <span class="ba-tilt__col-opp" style="flex:${Math.max(100 - value, 0.01)} 0 0"></span>
+          <span class="ba-tilt__col-fill" style="flex:${Math.max(value, 0.01)} 0 0"></span>
         </div>
         <span class="ba-tilt__col-lab">${escapeHtml(block.label || "")}</span>
       </div>
     `;
   }).join("");
+  const avgMark = avg == null
+    ? ""
+    : `<i class="ba-tilt__meter-avg" style="bottom:${Math.min(100, Math.max(0, avg))}%" title="Average ${fmtNum(avg, 1)}%"></i>`;
   return `
-    <article class="ba-chart ba-tilt">
+    <article class="ba-chart ba-tilt" style="--opp-fill:${colour.fill};--opp-ink:${colour.ink}">
       <header class="ba-chart__head">
         <div>
           <h4>Territory</h4>
@@ -796,15 +848,18 @@ function fieldTiltHtml(tilt) {
           ${avg == null ? "" : `<span class="ba-chart__avg">avg ${escapeHtml(fmtNum(avg, 1))}%</span>`}
         </p>
       </header>
-      <div class="ba-tilt__overall">
-        <span>Vale</span>
-        <div class="ba-tilt__split">
-          <span class="ba-tilt__split-fill" style="width:${Math.min(100, Math.max(0, focus))}%"></span>
-          ${avgMark}
+      <div class="ba-tilt__body">
+        <div class="ba-tilt__meter">
+          <span class="ba-tilt__meter-lab ba-tilt__meter-lab--opp">${escapeHtml(oppName)} ${escapeHtml(fmtNum(opp, 0))}%</span>
+          <div class="ba-tilt__meter-track${light}">
+            <span class="ba-tilt__meter-opp" style="flex:${Math.max(opp, 0.01)} 0 0"></span>
+            <span class="ba-tilt__meter-vale" style="flex:${Math.max(focus, 0.01)} 0 0"></span>
+            ${avgMark}
+          </div>
+          <span class="ba-tilt__meter-lab">Vale</span>
         </div>
-        <span>Opp ${escapeHtml(fmtNum(opp, 0))}%</span>
+        <div class="ba-tilt__cols">${cols}</div>
       </div>
-      <div class="ba-tilt__cols">${cols}</div>
     </article>
   `;
 }
@@ -1175,7 +1230,7 @@ function dashHtml(block) {
           ${single ? `
             <div class="ba-charts">
               ${xgRaceHtml(stats.xgRace) || `<article class="ba-chart ba-race"><header class="ba-chart__head"><div><h4>Chance race</h4><p>Expected goals over time</p></div></header><p class="ba-chart__empty">No shot data</p></article>`}
-              ${fieldTiltHtml(stats.fieldTilt)}
+              ${fieldTiltHtml(stats.fieldTilt, fixture)}
               ${behindHtml(stats.inBehind)}
             </div>
           ` : ""}
