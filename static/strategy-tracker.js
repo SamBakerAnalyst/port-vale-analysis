@@ -719,23 +719,86 @@
       .replace(/"/g, "&quot;");
   }
 
-  function slideHead(data, title) {
-    return `<header class="st-slide__head"><span>Port Vale F.C.</span><span>${esc(data.competition || "")}  |  ${esc(data.season || "")}</span></header>
+  function slideHead(data, title, kicker) {
+    return `<header class="st-slide__head"><span>${esc(kicker || "Port Vale F.C.")}</span><span>${esc(data.competition || "")}  |  ${esc(data.season || "")}</span></header>
       <h2 class="st-slide__title">${esc(title)}</h2>`;
   }
 
-  function deckCardHtml(metric) {
+  function barRowHtml(label, value, kind, digits, maxAbs) {
+    const missing = value == null || Number.isNaN(Number(value));
+    const n = missing ? 0 : Math.abs(Number(value));
+    const pct = !missing && maxAbs > 0 ? Math.max(2, Math.min(100, (n / maxAbs) * 100)) : 0;
+    return `<div class="st-deck-bar is-${kind}">
+      <span class="st-deck-bar__label">${esc(label)}</span>
+      <div class="st-deck-bar__track">${pct ? `<i style="width:${pct}%"></i>` : ""}</div>
+      <b class="st-deck-bar__val">${missing ? "—" : fmt(value, digits)}</b>
+    </div>`;
+  }
+
+  function outcomeBarSlide(data, metric) {
+    const bench = metric.benchmarks || {};
+    const labels = metric.benchmark_labels || { playoff: "Play-off", auto: "Auto", champion: "Champions" };
     const digits = metric.digits != null ? metric.digits : 0;
     const nowDigits = metric.chart === "running_rate" || digits > 0 ? Math.max(digits, 1) : 0;
-    const tone = statusClass(metric.status);
-    const copy = metric.status === "awaiting"
-      ? "Waiting for kick-off"
-      : `${signed(metric.delta_vs_auto)} vs target`;
-    return `<article class="st-deck-card is-${tone}">
-      <h3>${esc(metric.label)}</h3>
-      <b>${fmt(metric.current, nowDigits)}</b>
-      <em>${statusLabel(metric.status, metric.benchmark_set)}</em>
-      <p>${copy}</p>
+    const awaiting = metric.status === "awaiting";
+    const rows = [
+      { label: "Port Vale now", value: awaiting ? null : metric.current, kind: "vale", digits: nowDigits },
+    ];
+    if (metric.project) {
+      rows.push({ label: "Season proj.", value: awaiting ? null : metric.compare, kind: "proj", digits: 1 });
+    }
+    rows.push(
+      { label: labels.playoff || "Play-off", value: bench.playoff, kind: "playoff", digits: 1 },
+      { label: labels.auto || "Auto", value: bench.auto, kind: "auto", digits: 1 },
+      { label: labels.champion || "Champions", value: bench.champion, kind: "champ", digits: 1 },
+    );
+    const maxAbs = Math.max(0.01, ...rows.map((row) => Math.abs(Number(row.value) || 0))) * 1.12;
+    const versus = metric.benchmark_set === "league_pack" ? "top 7" : "auto";
+    const copy = awaiting
+      ? (metric.lower_is_better ? "Lower is better. Bars fill after game 1." : "Bars fill after the first league match.")
+      : `${signed(metric.delta_vs_auto)} vs ${versus}${metric.lower_is_better ? " · lower is better" : ""}`;
+    return `<article class="st-slide">
+      ${slideHead(data, metric.label, "Outcome")}
+      <div class="st-slide__body">
+        <div class="st-deck-headline">
+          <span class="st-deck-status is-${statusClass(metric.status)}">${statusLabel(metric.status, metric.benchmark_set)}</span>
+          <p>${copy}</p>
+        </div>
+        <div class="st-deck-bars">${rows.map((row) => barRowHtml(row.label, row.value, row.kind, row.digits, maxAbs)).join("")}</div>
+      </div>
+    </article>`;
+  }
+
+  function styleBarSlide(data, metric, groupLabel) {
+    const bench = metric.benchmarks || {};
+    const digits = metric.digits != null ? metric.digits : 1;
+    const rate = metric.chart === "running_rate";
+    const valePg = rate ? Number(metric.current || 0) : Number(metric.per_game || 0);
+    const scale = rate || !metric.project ? 1 : SEASON_GAMES;
+    const league = bench.playoff == null ? null : Number(bench.playoff) / scale;
+    const top7 = bench.auto == null ? null : Number(bench.auto) / scale;
+    const top3 = bench.champion == null ? null : Number(bench.champion) / scale;
+    const awaiting = metric.status === "awaiting";
+    const rows = [
+      { label: "Port Vale", value: awaiting ? null : valePg, kind: "vale" },
+      { label: "Top 7", value: top7, kind: "auto" },
+      { label: "Top 3", value: top3, kind: "champ" },
+      { label: "League", value: league, kind: "playoff" },
+    ];
+    const maxAbs = Math.max(0.01, ...rows.map((row) => Math.abs(Number(row.value) || 0))) * 1.15;
+    const barDigits = rate ? 1 : Math.max(digits, 1);
+    const copy = awaiting
+      ? (metric.lower_is_better ? "Lower is better. Per-game bars after kick-off." : "Per-game bars vs this season’s pack after kick-off.")
+      : `${signed(metric.delta_vs_auto)} vs top 7${metric.lower_is_better ? " · lower is better" : ""}${rate ? "" : " · per game"}`;
+    return `<article class="st-slide">
+      ${slideHead(data, metric.label, groupLabel)}
+      <div class="st-slide__body">
+        <div class="st-deck-headline">
+          <span class="st-deck-status is-${statusClass(metric.status)}">${statusLabel(metric.status, "league_pack")}</span>
+          <p>${copy}</p>
+        </div>
+        <div class="st-deck-bars">${rows.map((row) => barRowHtml(row.label, row.value, row.kind, barDigits, maxAbs)).join("")}</div>
+      </div>
     </article>`;
   }
 
@@ -824,23 +887,12 @@
             <div class="st-deck-kpi"><b>${fmt(s.auto_target, 1)}</b><span>Auto</span></div>
             <div class="st-deck-kpi"><b>${fmt(s.champion_target, 1)}</b><span>Champions</span></div>
           </div>
-          <p class="st-deck-note">${fmt(data.played)}/${SEASON_GAMES} league games · ${fmt(data.games_remaining)} remaining · dashed targets on the next slide are champions / auto / play-off.</p>
+          <p class="st-deck-note">${fmt(data.played)}/${SEASON_GAMES} league games · ${fmt(data.games_remaining)} remaining · next: one slide per metric, as bars.</p>
         </div>
       </article>
+      ${(data.metrics || []).map((metric) => outcomeBarSlide(data, metric)).join("")}
       <article class="st-slide">
-        ${slideHead(data, "Points pace")}
-        <div class="st-slide__body">
-          <div class="st-deck-chart">${points ? buildPaceSvg(data, points, { w: 1100, h: 520 }) : ""}</div>
-        </div>
-      </article>
-      <article class="st-slide">
-        ${slideHead(data, "Outcome scorecard")}
-        <div class="st-slide__body">
-          <div class="st-deck-cards">${(data.metrics || []).map(deckCardHtml).join("")}</div>
-        </div>
-      </article>
-      <article class="st-slide">
-        ${slideHead(data, "Goals by time")}
+        ${slideHead(data, "Goals by time", "Scoring")}
         <div class="st-slide__body">
           ${goalsEmpty
             ? `<p class="st-deck-empty">Timing splits unlock after the first league goal.</p>`
@@ -856,24 +908,14 @@
               </div>`}
         </div>
       </article>
+      ${styleByGroup(data, "attack").map((metric) => styleBarSlide(data, metric, "Attack")).join("")}
+      ${styleByGroup(data, "defend").map((metric) => styleBarSlide(data, metric, "Defend")).join("")}
       <article class="st-slide">
-        ${slideHead(data, "Attack — style that wins games")}
-        <div class="st-slide__body">
-          <div class="st-deck-cards">${styleByGroup(data, "attack").map(deckCardHtml).join("")}</div>
-        </div>
-      </article>
-      <article class="st-slide">
-        ${slideHead(data, "Defend — style that wins games")}
-        <div class="st-slide__body">
-          <div class="st-deck-cards">${styleByGroup(data, "defend").map(deckCardHtml).join("")}</div>
-        </div>
-      </article>
-      <article class="st-slide">
-        ${slideHead(data, "Player board")}
+        ${slideHead(data, "Player board", "Squad")}
         <div class="st-slide__body">${playerTable}</div>
       </article>
       <article class="st-slide">
-        ${slideHead(data, "Form and recent results")}
+        ${slideHead(data, "Form and recent results", "Results")}
         <div class="st-slide__body">
           <div class="st-deck-split">
             <div>
@@ -891,7 +933,7 @@
         </div>
       </article>
       <article class="st-slide">
-        ${slideHead(data, "How we use this")}
+        ${slideHead(data, "How we use this", "Board pack")}
         <div class="st-slide__body">
           <div class="st-deck-close">
             <p>${esc(closeBody)}</p>

@@ -23,7 +23,7 @@ PLAYOFF = (148, 163, 184)
 CHAMP = (52, 211, 153)
 FRAME_INSET = 5.0
 INNER_PAD = 8.0
-ATTACK_IDS = {
+ATTACK_ORDER = (
     "defenders_bypassed",
     "ball_progression",
     "xg_for",
@@ -31,14 +31,14 @@ ATTACK_IDS = {
     "offensive_interventions",
     "altered_threat",
     "packing_xg",
-}
-DEFEND_IDS = {
+)
+DEFEND_ORDER = (
     "xg_against",
     "duel_rate",
     "defensive_interventions",
     "ball_wins_defenders",
     "defenders_bypassed_against",
-}
+)
 
 
 def _fmt(value: Any, digits: int = 0) -> str:
@@ -348,6 +348,88 @@ class SeasonProgressPDF(FPDF):
                 "Waiting for kick-off" if status == "awaiting" else f"{_signed(delta)} vs target",
             )
 
+    def add_bar_slide(self, payload: dict[str, Any], metric: dict[str, Any], *, kind: str) -> None:
+        self.add_page()
+        x, y, w, h = self._chrome(str(metric.get("label") or "Metric"), payload)
+        status = str(metric.get("status") or "awaiting")
+        awaiting = status == "awaiting"
+        pack = metric.get("benchmark_set") == "league_pack"
+        self._fill(_status_rgb(status))
+        self.rect(x, y, 62, 10, style="F")
+        self.set_xy(x, y + 2)
+        self.set_font("Helvetica", "B", 8)
+        self._text((12, 15, 20) if status != "behind" else TEXT)
+        self.cell(62, 6, _status_label(status, pack=pack), align="C")
+        note = (
+            "Bars fill after kick-off"
+            if awaiting
+            else f"{_signed(metric.get('delta_vs_auto'))} vs {'top 7' if pack else 'auto'}"
+        )
+        if metric.get("lower_is_better"):
+            note = f"{note}  |  lower is better"
+        self.set_xy(x + 68, y)
+        self.set_font("Helvetica", "", 12)
+        self._text(TEXT)
+        self.cell(w - 68, 10, pdf_safe(note))
+        bench = metric.get("benchmarks") or {}
+        labels = metric.get("benchmark_labels") or {}
+        digits = int(metric.get("digits") or 0)
+        if kind == "style":
+            rate = metric.get("chart") == "running_rate"
+            vale = (
+                None
+                if awaiting
+                else (float(metric.get("current") or 0) if rate else float(metric.get("per_game") or 0))
+            )
+            scale = 1 if rate or not metric.get("project") else 46
+            rows = [
+                ("Port Vale", vale, GOLD),
+                ("Top 7", (None if bench.get("auto") is None else float(bench["auto"]) / scale), AUTO),
+                ("Top 3", (None if bench.get("champion") is None else float(bench["champion"]) / scale), CHAMP),
+                ("League", (None if bench.get("playoff") is None else float(bench["playoff"]) / scale), PLAYOFF),
+            ]
+            bar_digits = 1 if rate else max(digits, 1)
+        else:
+            rows = [
+                ("Port Vale now", None if awaiting else metric.get("current"), GOLD),
+            ]
+            if metric.get("project"):
+                rows.append(("Season proj.", None if awaiting else metric.get("compare"), (253, 230, 138)))
+            rows.extend(
+                [
+                    (str(labels.get("playoff") or "Play-off"), bench.get("playoff"), PLAYOFF),
+                    (str(labels.get("auto") or "Auto"), bench.get("auto"), AUTO),
+                    (str(labels.get("champion") or "Champions"), bench.get("champion"), CHAMP),
+                ]
+            )
+            bar_digits = max(digits, 1) if digits or metric.get("chart") == "running_rate" else 0
+        max_abs = max(
+            0.01,
+            *(abs(float(value)) for _label, value, _color in rows if value is not None),
+        ) * 1.12
+        bar_x = x + 52
+        bar_w = w - 52 - 42
+        row_h = min(22.0, (h - 24) / max(len(rows), 1))
+        for i, (label, value, color) in enumerate(rows):
+            cy = y + 18 + i * (row_h + 4)
+            self.set_xy(x, cy + 4)
+            self.set_font("Helvetica", "", 10)
+            self._text(MUTED)
+            self.cell(50, 8, pdf_safe(label))
+            self._fill(BG)
+            self._draw(BORDER)
+            self.set_line_width(0.2)
+            self.rect(bar_x, cy + 3, bar_w, row_h - 4, style="DF")
+            if value is not None:
+                fill_w = max(1.2, min(bar_w, (abs(float(value)) / max_abs) * bar_w))
+                self._fill(color)
+                self.rect(bar_x, cy + 3, fill_w, row_h - 4, style="F")
+            self.set_xy(bar_x + bar_w + 2, cy + 4)
+            self.set_font("Helvetica", "B", 12)
+            self._text(GOLD if color == GOLD else TEXT)
+            this_digits = 1 if kind == "style" else (1 if label == "Season proj." else bar_digits)
+            self.cell(40, 8, "-" if value is None else _fmt(value, this_digits), align="R")
+
     def add_goals(self, payload: dict[str, Any]) -> None:
         self.add_page()
         x, y, w, h = self._chrome("Goals by time", payload)
@@ -583,20 +665,18 @@ def build_season_progress_pdf(payload: dict[str, Any]) -> bytes:
     pdf = SeasonProgressPDF()
     pdf.add_cover(payload)
     pdf.add_headline(payload)
-    pdf.add_pace(payload)
-    pdf.add_scorecard(payload, title="Outcome scorecard", metrics=payload.get("metrics") or [])
+    for metric in payload.get("metrics") or []:
+        pdf.add_bar_slide(payload, metric, kind="outcome")
     pdf.add_goals(payload)
-    style = payload.get("style_metrics") or []
-    pdf.add_scorecard(
-        payload,
-        title="Attack - style that wins games",
-        metrics=[row for row in style if row.get("id") in ATTACK_IDS],
-    )
-    pdf.add_scorecard(
-        payload,
-        title="Defend - style that wins games",
-        metrics=[row for row in style if row.get("id") in DEFEND_IDS],
-    )
+    style_by_id = {row.get("id"): row for row in (payload.get("style_metrics") or [])}
+    for key in ATTACK_ORDER:
+        metric = style_by_id.get(key)
+        if metric:
+            pdf.add_bar_slide(payload, metric, kind="style")
+    for key in DEFEND_ORDER:
+        metric = style_by_id.get(key)
+        if metric:
+            pdf.add_bar_slide(payload, metric, kind="style")
     pdf.add_players(payload)
     pdf.add_form(payload)
     pdf.add_close(payload)
