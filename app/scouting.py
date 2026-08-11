@@ -13,12 +13,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.label_utils import humanize_profile_name
-from app.paths import STANDALONE_DIR
+from app.paths import STANDALONE_DIR, STRATEGY_REPORTS_DIR
 from app.scouting_monthly import ScoutingMonthlyListRequest
 from app.scouting_monthly_report import ScoutingMonthlyReportRequest
 
 SCOUTING_DIR = STANDALONE_DIR
-STRATEGY_REPORTS_DIR = Path("/Users/AnalysisMac1/strategy-reports")
+STRATEGY_FALLBACK_HTML = STANDALONE_DIR / "strategy.html"
 SCOUTING_CACHE_TTL_SECONDS = 3600
 SCOUTING_DISK_CACHE_DIR = Path.home() / ".cache" / "impect-scouting"
 MIN_POSITION_MATCH_SHARE = 5.0
@@ -1192,10 +1192,21 @@ def register_scouting_routes(app: FastAPI) -> None:
     @app.get("/strategy", response_class=HTMLResponse)
     @app.get("/strategy/", response_class=HTMLResponse)
     def strategy_report_home() -> HTMLResponse:
-        html_path = STRATEGY_REPORTS_DIR / "index.html"
-        if not html_path.exists():
-            raise HTTPException(status_code=404, detail="Strategy report not found.")
-        return HTMLResponse(html_path.read_text(encoding="utf-8"))
+        for html_path in (STRATEGY_REPORTS_DIR / "index.html", STRATEGY_FALLBACK_HTML):
+            if html_path.is_file():
+                return HTMLResponse(html_path.read_text(encoding="utf-8"))
+        raise HTTPException(status_code=404, detail="Strategy report not found.")
+
+    @app.get("/players-strategy", response_class=HTMLResponse)
+    @app.get("/players-strategy/", response_class=HTMLResponse)
+    def players_strategy_report_home() -> HTMLResponse:
+        for html_path in (
+            STRATEGY_REPORTS_DIR / "players-strategy.html",
+            STANDALONE_DIR / "players-strategy.html",
+        ):
+            if html_path.is_file():
+                return HTMLResponse(html_path.read_text(encoding="utf-8"))
+        raise HTTPException(status_code=404, detail="Players strategy report not found.")
 
     if STRATEGY_REPORTS_DIR.is_dir():
         app.mount(
