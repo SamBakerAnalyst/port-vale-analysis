@@ -649,47 +649,14 @@ function metricStrip(stats, single, fixture) {
   `;
 }
 
-function clockLabel(minute) {
-  return `${Math.round(Number(minute) || 0)}'`;
-}
-
-function factsHtml(facts) {
-  if (!facts) return "";
-  const biggest = facts.biggestChance;
-  const first = facts.firstGoal;
-  const tiles = [
-    {
-      label: "Shots",
-      value: `${fmtNum(facts.valeShots)}–${fmtNum(facts.oppShots)}`,
-    },
-    {
-      label: "HT xG",
-      value: `${fmtNum(facts.valeHtXg, 2)}–${fmtNum(facts.oppHtXg, 2)}`,
-    },
-    {
-      label: "Biggest chance",
-      value: biggest ? `${fmtNum(biggest.xg, 2)} · ${biggest.ours ? "Vale" : "Opp"} ${clockLabel(biggest.minute)}` : "—",
-    },
-    {
-      label: "First goal",
-      value: first ? `${clockLabel(first.minute)} · ${first.ours ? "Vale" : "Opp"}` : "No goals",
-    },
-    {
-      label: "Goals from xG",
-      value: `${fmtNum(facts.valeGoals)} from ${fmtNum(facts.valeXg, 2)}`,
-    },
-  ];
-  return `
-    <div class="ba-facts">
-      ${tiles.map((tile) => `
-        <article class="ba-fact">
-          <p class="ba-fact__label">${escapeHtml(tile.label)}</p>
-          <p class="ba-fact__value">${escapeHtml(tile.value)}</p>
-        </article>
-      `).join("")}
-    </div>
-  `;
-}
+const PHASE_STRIP_ORDER = [
+  "IN_POSSESSION",
+  "ATTACKING_TRANSITION",
+  "SECOND_BALL",
+  "SET_PIECE",
+  "DEFENSIVE_TRANSITION",
+  "OUT_OF_POSSESSION",
+];
 
 function niceXgMax(value) {
   const padded = Math.max(Number(value) || 0, 0.01) * 1.12;
@@ -826,45 +793,57 @@ function fieldTiltHtml(tilt) {
   `;
 }
 
+function phaseStripSegments(rows, key) {
+  return rows.map((row) => {
+    const value = Math.min(100, Math.max(0, Number(row[key]) || 0));
+    if (value <= 0) return "";
+    return `<span class="ba-phasestrip__seg ba-phase__fill--${escapeHtml(row.id)}" style="width:${value}%" title="${escapeHtml(row.label)} ${fmtNum(value, 0)}%"></span>`;
+  }).join("");
+}
+
 function phasesHtml(phases) {
-  if (!phases?.phases?.length) {
+  if (!phases?.phases?.length) return "";
+  const byId = Object.fromEntries((phases.phases || []).map((row) => [row.id, row]));
+  const rows = PHASE_STRIP_ORDER.map((id) => byId[id]).filter(Boolean);
+  if (!rows.length) return "";
+  const hasAvg = rows.some((row) => row.avg != null);
+  const legend = rows.map((row) => {
+    const value = Number(row.percent) || 0;
+    const avg = row.avg == null ? null : Number(row.avg);
+    const delta = avg == null ? null : value - avg;
+    const deltaText = delta == null
+      ? ""
+      : `<span class="ba-phasestrip__delta ${delta >= 0.5 ? "is-up" : delta <= -0.5 ? "is-down" : ""}">${delta >= 0 ? "+" : ""}${fmtNum(delta, 0)}</span>`;
     return `
-      <article class="ba-chart ba-phasebox">
-        <header class="ba-chart__head">
-          <div>
-            <h4>Time in phase</h4>
-            <p>Share of match time</p>
-          </div>
-        </header>
-        <p class="ba-chart__empty">No phase data</p>
-      </article>
-    `;
-  }
-  const rows = phases.phases.map((row) => {
-    const value = Math.min(100, Math.max(0, Number(row.percent) || 0));
-    const avg = row.avg == null ? null : Math.min(100, Math.max(0, Number(row.avg)));
-    return `
-      <div class="ba-phase">
-        <span class="ba-phase__name">${escapeHtml(row.label || row.id)}</span>
-        <div class="ba-phase__track">
-          <span class="ba-phase__fill ba-phase__fill--${escapeHtml(row.id)}" style="width:${value}%"></span>
-          ${avg == null ? "" : `<i class="ba-phase__avg" style="left:${avg}%"></i>`}
-        </div>
-        <span class="ba-phase__num">${escapeHtml(fmtNum(value, 0))}%</span>
-        <span class="ba-phase__bench">${avg == null ? "—" : `avg ${escapeHtml(fmtNum(avg, 0))}`}</span>
-      </div>
+      <li>
+        <i class="ba-phase__fill--${escapeHtml(row.id)}"></i>
+        <span>${escapeHtml(row.label)}</span>
+        <b>${escapeHtml(fmtNum(value, 0))}%</b>
+        ${avg == null ? "" : `<em>avg ${escapeHtml(fmtNum(avg, 0))} ${deltaText}</em>`}
+      </li>
     `;
   }).join("");
   return `
-    <article class="ba-chart ba-phasebox">
-      <header class="ba-chart__head">
+    <article class="ba-phasestrip">
+      <header class="ba-phasestrip__head">
         <div>
-          <h4>Time in phase</h4>
-          <p>This match vs ${escapeHtml(avgGamesLabel(phases.avgGames))}</p>
+          <h4>How the game was spent</h4>
+          <p>Share of time in each phase · ${escapeHtml(avgGamesLabel(phases.avgGames))}</p>
         </div>
-        <p class="ba-chart__legend"><span class="ba-phase__swatch"></span> tick = average</p>
       </header>
-      <div class="ba-phasebox__rows">${rows}</div>
+      <div class="ba-phasestrip__bars">
+        <div class="ba-phasestrip__row">
+          <span>This match</span>
+          <div class="ba-phasestrip__track">${phaseStripSegments(rows, "percent")}</div>
+        </div>
+        ${hasAvg ? `
+          <div class="ba-phasestrip__row">
+            <span>Vale avg</span>
+            <div class="ba-phasestrip__track">${phaseStripSegments(rows, "avg")}</div>
+          </div>
+        ` : ""}
+      </div>
+      <ul class="ba-phasestrip__legend">${legend}</ul>
     </article>
   `;
 }
@@ -1086,6 +1065,7 @@ function dashHtml(block) {
         ${sheetMasthead({ ...mast, title: pageTitle, page: 1 })}
         <div class="ba-sheet__body">
           ${metricStrip(stats, single, fixture)}
+          ${single ? phasesHtml(stats.phases) : ""}
           ${single ? `
             <div class="ba-charts">
               ${xgRaceHtml(stats.xgRace) || `<article class="ba-chart ba-race"><header class="ba-chart__head"><div><h4>Chance race</h4><p>Expected goals over time</p></div></header><p class="ba-chart__empty">No shot data</p></article>`}
