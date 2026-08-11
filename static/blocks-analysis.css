@@ -1284,20 +1284,39 @@ a:hover { text-decoration: underline; }
   height: 16px;
 }
 
+.ba-meter__rail--req {
+  height: 24px;
+}
+
 .ba-meter__flag {
   position: absolute;
   top: 0;
   transform: translateX(-50%);
+  display: inline-flex;
+  align-items: baseline;
+  gap: .22rem;
   font-family: var(--display);
-  font-size: .7rem;
   font-weight: 800;
-  letter-spacing: .05em;
+  letter-spacing: .04em;
   text-transform: uppercase;
   white-space: nowrap;
-  line-height: 1.15;
-  padding: .1rem .34rem;
+  line-height: 1;
+  padding: .16rem .42rem .14rem;
   border-radius: 2px;
   z-index: 2;
+}
+
+.ba-meter__flag em {
+  font-style: normal;
+  font-size: .62rem;
+  letter-spacing: .1em;
+  opacity: .85;
+}
+
+.ba-meter__flag b {
+  font-size: 1.12rem;
+  font-weight: 800;
+  letter-spacing: .02em;
 }
 
 .ba-meter__flag.is-start { transform: translateX(0); }
@@ -1306,6 +1325,11 @@ a:hover { text-decoration: underline; }
 .ba-meter__flag--req {
   background: #111;
   color: #f5c518;
+}
+
+.ba-meter__flag--req em {
+  color: #fff;
+  opacity: 1;
 }
 
 .ba-meter__flag--avg {
@@ -1585,7 +1609,7 @@ a:hover { text-decoration: underline; }
 }
 
 .ba-sheet__main--compact .ba-unitrow__nums {
-  margin-bottom: .02rem;
+  margin-bottom: .1rem;
   gap: .28rem;
 }
 
@@ -1593,13 +1617,12 @@ a:hover { text-decoration: underline; }
   font-size: .55rem;
 }
 
-.ba-sheet__main--compact .ba-meter__rail {
-  height: 12px;
+.ba-sheet__main--compact .ba-meter__rail--req {
+  height: 24px;
 }
 
-.ba-sheet__main--compact .ba-meter__flag {
-  font-size: .58rem;
-  padding: .04rem .22rem;
+.ba-sheet__main--compact .ba-meter__rail--avg {
+  height: 16px;
 }
 
 .ba-sheet__main--compact .ba-meter__track {

@@ -304,7 +304,7 @@ function meterHtml(value, bench, { higherBetter = true, rate = false, digits = 1
     <div class="ba-meter ba-meter--${tone}">
       ${reqPct == null ? `<div class="ba-meter__rail"></div>` : `
         <div class="ba-meter__rail ba-meter__rail--req">
-          <span class="ba-meter__flag ba-meter__flag--req ${meterFlagAlign(reqPct)}" style="left:${reqPct}%">Req ${reqLabel}</span>
+          <span class="ba-meter__flag ba-meter__flag--req ${meterFlagAlign(reqPct)}" style="left:${reqPct}%"><em>Req</em><b>${reqLabel}</b></span>
         </div>
       `}
       <span class="ba-meter__track">
@@ -314,7 +314,7 @@ function meterHtml(value, bench, { higherBetter = true, rate = false, digits = 1
       </span>
       ${avgPct == null ? `<div class="ba-meter__rail"></div>` : `
         <div class="ba-meter__rail ba-meter__rail--avg">
-          <span class="ba-meter__flag ba-meter__flag--avg ${meterFlagAlign(avgPct)}" style="left:${avgPct}%">Avg ${avgLabel}</span>
+          <span class="ba-meter__flag ba-meter__flag--avg ${meterFlagAlign(avgPct)}" style="left:${avgPct}%"><em>Avg</em><b>${avgLabel}</b></span>
         </div>
       `}
     </div>
