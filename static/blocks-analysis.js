@@ -906,20 +906,23 @@ function mastPhasesHtml(phases) {
   const byId = Object.fromEntries((phases.phases || []).map((row) => [row.id, row]));
   const rows = PHASE_STRIP_ORDER.map((id) => byId[id]).filter(Boolean);
   if (!rows.length) return "";
-  const legend = rows.map((row) => `
-    <li>
-      <i class="ba-phase__fill--${escapeHtml(row.id)}"></i>
-      <span>${escapeHtml(MAST_PHASE_LABELS[row.id] || row.label)}</span>
-      <b>${escapeHtml(fmtNum(row.percent, 0))}%</b>
-    </li>
-  `).join("");
+  const parts = rows.map((row) => {
+    const value = Math.min(100, Math.max(0, Number(row.percent) || 0));
+    if (value <= 0) return "";
+    return `
+      <div class="ba-mastphase__part" style="flex:${value} 1 0%">
+        <span class="ba-mastphase__seg ba-phase__fill--${escapeHtml(row.id)}"></span>
+        <span class="ba-mastphase__cap">
+          <em>${escapeHtml(MAST_PHASE_LABELS[row.id] || row.label)}</em>
+          <b>${escapeHtml(fmtNum(value, 0))}%</b>
+        </span>
+      </div>
+    `;
+  }).join("");
   return `
     <div class="ba-mastphase">
       <p class="ba-mastphase__label">Time in phase</p>
-      <div class="ba-mastphase__main">
-        <div class="ba-mastphase__track">${phaseStripSegments(rows, "percent")}</div>
-        <ul class="ba-mastphase__legend">${legend}</ul>
-      </div>
+      <div class="ba-mastphase__parts">${parts}</div>
     </div>
   `;
 }
