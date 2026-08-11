@@ -275,21 +275,32 @@ function meterTone(value, top7, higherBetter) {
   return "cold";
 }
 
-function meterHtml(value, top7, { higherBetter = true, rate = false, digits = 1 } = {}) {
-  if (value == null || top7 == null || Number.isNaN(Number(top7))) return "";
-  const ratio = higherBetter
-    ? Number(value) / Number(top7)
-    : Number(top7) / Math.max(Number(value), 0.0001);
-  const fill = Math.max(3, Math.min(100, (ratio / 1.25) * 100));
-  const mark = (1 / 1.25) * 100;
-  const tone = meterTone(value, top7, higherBetter);
+function formatBench(value, { rate = false, digits = 1 } = {}) {
+  if (value == null || Number.isNaN(Number(value))) return "—";
+  return rate ? `${fmtNum(value, digits)}%` : fmtNum(value, digits);
+}
+
+function meterHtml(value, bench, { higherBetter = true, rate = false, digits = 1 } = {}) {
+  const team = bench?.team;
+  const top7 = bench?.top7;
+  if (value == null || (team == null && top7 == null)) return "";
+  const nums = [Number(value) || 0];
+  if (team != null) nums.push(Number(team));
+  if (top7 != null) nums.push(Number(top7));
+  const max = Math.max(...nums, 0.01) * 1.18;
+  const pct = (n) => Math.max(0, Math.min(100, (Number(n) / max) * 100));
+  const tone = meterTone(value, top7 ?? team, higherBetter);
   return `
     <div class="ba-meter ba-meter--${tone}">
       <span class="ba-meter__track">
-        <span class="ba-meter__fill" style="width:${fill}%"></span>
-        <span class="ba-meter__mark" style="left:${mark}%"></span>
+        <span class="ba-meter__fill" style="width:${pct(value)}%"></span>
+        ${team == null ? "" : `<span class="ba-meter__mark ba-meter__mark--avg" style="left:${pct(team)}%" title="Vale average"></span>`}
+        ${top7 == null ? "" : `<span class="ba-meter__mark ba-meter__mark--req" style="left:${pct(top7)}%" title="League requirement"></span>`}
       </span>
-      <span class="ba-meter__req">Top 7 ${escapeHtml(rate ? `${fmtNum(top7, digits)}%` : fmtNum(top7, digits))}</span>
+      <div class="ba-meter__keys">
+        ${team == null ? "" : `<span class="ba-meter__key ba-meter__key--avg">Vale avg ${escapeHtml(formatBench(team, { rate, digits }))}</span>`}
+        ${top7 == null ? "" : `<span class="ba-meter__key ba-meter__key--req">League req ${escapeHtml(formatBench(top7, { rate, digits }))}</span>`}
+      </div>
     </div>
   `;
 }
@@ -341,7 +352,7 @@ function unitPanelHtml(title, metricKey, hint, stats, single) {
             <span class="ba-unitrow__val ${tone ? `is-${tone}` : ""}">${escapeHtml(unitValueText(metricKey, row))}</span>
             ${extra ? `<span class="ba-unitrow__sub">${escapeHtml(extra)}</span>` : ""}
           </div>
-          ${meterHtml(value, bench.top7, { higherBetter: true, rate, digits: rate ? 1 : 1 })}
+          ${meterHtml(value, bench, { higherBetter: true, rate, digits: rate ? 1 : 1 })}
         </div>
       </div>
     `;
@@ -358,13 +369,13 @@ function unitPanelHtml(title, metricKey, hint, stats, single) {
 }
 
 const PLAYER_BOARDS = [
-  { key: "ppg", label: "Points per game", hint: "Team pts when they played", digits: 2 },
-  { key: "xg", label: "Player xG", hint: "Shot xG", digits: 2 },
-  { key: "offensiveInterventions", label: "Offensive interventions", hint: "Ball wins by action", digits: 0 },
-  { key: "defensiveInterventions", label: "Defensive interventions", hint: "Teammates added by ball wins", digits: 0 },
-  { key: "regainsFromDefenders", label: "Regains from defenders", hint: "Removed opposition defenders", digits: 0 },
-  { key: "defendersBypassed", label: "Defenders bypassed", hint: "Taken out of the game", digits: 0 },
-  { key: "duelRate", label: "Duel rate", hint: "Won / attempted", digits: 1, rate: true, minDuels: 3 },
+  { key: "ppg", label: "Points per game", hint: "Team points when they played", digits: 2 },
+  { key: "xg", label: "Expected goals", hint: "Shot xG created", digits: 2 },
+  { key: "offensiveInterventions", label: "Attacking ball wins", hint: "Turnovers in attacking areas", digits: 0 },
+  { key: "defensiveInterventions", label: "Defensive ball wins", hint: "Teammates added by winning it", digits: 0 },
+  { key: "regainsFromDefenders", label: "Regains vs their defence", hint: "Won it against opposition defenders", digits: 0 },
+  { key: "defendersBypassed", label: "Defenders taken out", hint: "Opponents taken out of the game", digits: 0 },
+  { key: "duelRate", label: "Duels won", hint: "Won of attempted", digits: 1, rate: true, minDuels: 3 },
 ];
 
 function aggregatePlayers(fixtures) {
@@ -559,19 +570,19 @@ function metricStrip(stats, single) {
   const facts = stats.facts || {};
   const items = single
     ? [
-        { label: "Team xG", key: "xg", digits: 2 },
-        { label: "Opp xG", value: facts.oppXg, digits: 2, skipBench: true, invert: true },
-        { label: "Offensive int.", key: "offensiveInterventions", digits: 0 },
-        { label: "Wins vs DEF", key: "ballWinsFromOppDefenders", digits: 0 },
-        { label: "Defenders bypassed", key: "defendersBypassed", digits: 0 },
-        { label: "Duel rate", key: "duelRate", digits: 1, rate: true },
+        { label: "Our xG", key: "xg", digits: 2 },
+        { label: "Their xG", value: facts.oppXg, digits: 2, skipBench: true, invert: true },
+        { label: "Attacking ball wins", key: "offensiveInterventions", digits: 0 },
+        { label: "Regains vs defence", key: "ballWinsFromOppDefenders", digits: 0 },
+        { label: "Defenders taken out", key: "defendersBypassed", digits: 0 },
+        { label: "Duels won", key: "duelRate", digits: 1, rate: true },
       ]
     : [
-        { label: "Team xG", key: "xg", digits: 2 },
-        { label: "Offensive int.", key: "offensiveInterventions", digits: 0 },
-        { label: "Wins vs DEF", key: "ballWinsFromOppDefenders", digits: 0 },
-        { label: "Defenders bypassed", key: "defendersBypassed", digits: 0 },
-        { label: "Duel rate", key: "duelRate", digits: 1, rate: true },
+        { label: "Our xG", key: "xg", digits: 2 },
+        { label: "Attacking ball wins", key: "offensiveInterventions", digits: 0 },
+        { label: "Regains vs defence", key: "ballWinsFromOppDefenders", digits: 0 },
+        { label: "Defenders taken out", key: "defendersBypassed", digits: 0 },
+        { label: "Duels won", key: "duelRate", digits: 1, rate: true },
         { label: "Goals against", key: "goalsAgainst", digits: 0, invert: true },
       ];
   return `
@@ -585,7 +596,7 @@ function metricStrip(stats, single) {
           <article class="ba-strip__cell">
             <p class="ba-strip__label">${escapeHtml(item.label)}</p>
             <p class="ba-strip__value ${tone ? `is-${tone}` : ""}">${escapeHtml(formatMetric(value, item))}</p>
-            ${bench ? meterHtml(value, bench.top7, {
+            ${bench ? meterHtml(value, bench, {
               higherBetter,
               rate: Boolean(item.rate || bench.spec?.rate),
               digits: item.digits,
@@ -689,8 +700,8 @@ function xgRaceHtml(race) {
     <article class="ba-chart ba-race">
       <header class="ba-chart__head">
         <div>
-          <h4>xG race</h4>
-          <p>Shot-based · ball = goal</p>
+          <h4>Chance race</h4>
+          <p>Expected goals over time · dots are goals</p>
         </div>
         <p class="ba-chart__legend">
           <span class="ba-race__swatch ba-race__swatch--vale"></span>
@@ -723,8 +734,8 @@ function fieldTiltHtml(tilt) {
       <article class="ba-chart ba-tilt">
         <header class="ba-chart__head">
           <div>
-            <h4>Field tilt</h4>
-            <p>Final third + box share</p>
+            <h4>Territory</h4>
+            <p>Share of attacking-third play</p>
           </div>
         </header>
         <p class="ba-chart__empty">No attacking-third data</p>
@@ -753,8 +764,8 @@ function fieldTiltHtml(tilt) {
     <article class="ba-chart ba-tilt">
       <header class="ba-chart__head">
         <div>
-          <h4>Field tilt</h4>
-          <p>Final third + box · ${escapeHtml(avgGamesLabel(tilt.avgGames))}</p>
+          <h4>Territory</h4>
+          <p>Attacking-third share · ${escapeHtml(avgGamesLabel(tilt.avgGames))}</p>
         </div>
         <p class="ba-chart__legend">
           Vale ${escapeHtml(fmtNum(focus, 1))}%
@@ -817,11 +828,142 @@ function phasesHtml(phases) {
   `;
 }
 
+const BA_PITCH = { mx: 120, lx: 48, rx: 192, top: 14, seam: 90, amBase: 126 };
+BA_PITCH.ibTop = BA_PITCH.top + 8;
+BA_PITCH.seamCurve = BA_PITCH.seam - 6;
+
+const BA_ZONE_LAYOUT = {
+  IBWL: {
+    d: `M8,${BA_PITCH.ibTop} Q18,${BA_PITCH.top} ${BA_PITCH.lx},${BA_PITCH.ibTop} L${BA_PITCH.lx},${BA_PITCH.seam} L8,${BA_PITCH.seam} Z`,
+    cx: 28, valY: 52, name: "L", variant: "ib",
+  },
+  IBWR: {
+    d: `M${BA_PITCH.rx},${BA_PITCH.ibTop} Q222,${BA_PITCH.top} 232,${BA_PITCH.ibTop} L232,${BA_PITCH.seam} L${BA_PITCH.rx},${BA_PITCH.seam} Z`,
+    cx: 212, valY: 52, name: "R", variant: "ib",
+  },
+  IB: {
+    d: `M${BA_PITCH.lx},${BA_PITCH.ibTop} Q${BA_PITCH.mx},${BA_PITCH.top} ${BA_PITCH.rx},${BA_PITCH.ibTop} L${BA_PITCH.rx},${BA_PITCH.seam} Q${BA_PITCH.mx},${BA_PITCH.seamCurve} ${BA_PITCH.lx},${BA_PITCH.seam} Z`,
+    cx: BA_PITCH.mx, valY: 52, name: "C", variant: "ib",
+  },
+  WL: {
+    d: `M8,${BA_PITCH.seam} L${BA_PITCH.lx},${BA_PITCH.seam} L${BA_PITCH.lx},162 L8,162 Z`,
+    cx: 28, valY: 124, name: "WL", variant: "pass",
+  },
+  WR: {
+    d: `M${BA_PITCH.rx},${BA_PITCH.seam} L232,${BA_PITCH.seam} L232,162 L${BA_PITCH.rx},162 Z`,
+    cx: 212, valY: 124, name: "WR", variant: "pass",
+  },
+  AM: {
+    d: `M${BA_PITCH.lx},${BA_PITCH.seam} Q${BA_PITCH.mx},${BA_PITCH.seamCurve} ${BA_PITCH.rx},${BA_PITCH.seam} L${BA_PITCH.rx},${BA_PITCH.amBase} Q${BA_PITCH.mx},136 ${BA_PITCH.lx},${BA_PITCH.amBase} Z`,
+    cx: BA_PITCH.mx, valY: 104, name: "AM", variant: "pass",
+  },
+};
+
+function behindHeat(value, maxVal, variant) {
+  if (value <= 0) return { fill: "rgba(8, 28, 18, 0.72)", text: "#94a3b8" };
+  const t = Math.min(1, Math.max(0, value / Math.max(maxVal, 1)));
+  if (variant === "ib") {
+    const r = Math.round(18 + t * 56);
+    const g = Math.round(68 + t * 160);
+    const b = Math.round(48 + t * 80);
+    return { fill: `rgb(${r}, ${g}, ${b})`, text: t > 0.38 ? "#0f172a" : "#f8fafc" };
+  }
+  const r = Math.round(110 + t * 110);
+  const g = Math.round(82 + t * 88);
+  const b = Math.round(12 + t * 8);
+  return { fill: `rgb(${r}, ${g}, ${b})`, text: t > 0.32 ? "#0f172a" : "#fef9c3" };
+}
+
+function behindPlayerList(title, rows, empty) {
+  const items = (rows || []).map((row) => `
+    <li>
+      <span>${escapeHtml(row.name)}</span>
+      <b>${escapeHtml(fmtNum(row.count, Number.isInteger(Number(row.count)) ? 0 : 1))}</b>
+    </li>
+  `).join("");
+  return `
+    <div class="ba-behind__list">
+      <p>${escapeHtml(title)}</p>
+      ${items ? `<ol>${items}</ol>` : `<span class="ba-behind__empty">${escapeHtml(empty)}</span>`}
+    </div>
+  `;
+}
+
+function behindHtml(data) {
+  if (!data) {
+    return `
+      <article class="ba-chart ba-behind">
+        <header class="ba-chart__head">
+          <div>
+            <h4>Balls in behind</h4>
+            <p>Touches and passes into the last line</p>
+          </div>
+        </header>
+        <p class="ba-chart__empty">No in-behind data</p>
+      </article>
+    `;
+  }
+  const ibById = Object.fromEntries((data.ibZones || []).map((z) => [z.id, z]));
+  const fromById = Object.fromEntries((data.fromZones || []).map((z) => [z.id, z]));
+  const maxTouch = Math.max(1, ...(data.ibZones || []).map((z) => Number(z.value) || 0));
+  const maxPass = Math.max(1, ...(data.fromZones || []).map((z) => Number(z.value) || 0));
+  const zones = ["WL", "WR", "AM", "IBWL", "IBWR", "IB"].map((id) => {
+    const layout = BA_ZONE_LAYOUT[id];
+    const row = layout.variant === "ib" ? ibById[id] : fromById[id];
+    const value = Number(row?.value) || 0;
+    const colors = behindHeat(value, layout.variant === "ib" ? maxTouch : maxPass, layout.variant);
+    const shown = fmtNum(value, Number.isInteger(value) ? 0 : 1);
+    return `
+      <g>
+        <path d="${layout.d}" fill="${colors.fill}" stroke="rgba(255,255,255,.18)" stroke-width="0.6"/>
+        <text x="${layout.cx}" y="${layout.valY}" text-anchor="middle" fill="${colors.text}" class="ba-behind__zval">${shown}</text>
+        <text x="${layout.cx}" y="${layout.valY + 11}" text-anchor="middle" fill="${colors.text}" class="ba-behind__zname">${layout.name}</text>
+      </g>
+    `;
+  }).join("");
+  const how = (data.fromZones || []).map((row) => `
+    <span class="ba-behind__how-chip">
+      ${escapeHtml(row.label)} <b>${escapeHtml(fmtNum(row.value, Number.isInteger(Number(row.value)) ? 0 : 1))}</b>
+    </span>
+  `).join("");
+  return `
+    <article class="ba-chart ba-behind">
+      <header class="ba-chart__head">
+        <div>
+          <h4>Balls in behind</h4>
+          <p>Green = who received · gold = where the pass came from</p>
+        </div>
+        <p class="ba-chart__legend">
+          ${escapeHtml(fmtNum(data.touches))} touches
+          <span class="ba-chart__avg">${escapeHtml(fmtNum(data.passes))} passes in</span>
+        </p>
+      </header>
+      <div class="ba-behind__body">
+        <div class="ba-behind__pitch">
+          <svg class="ba-behind__svg" viewBox="0 0 240 170" preserveAspectRatio="xMidYMid meet" role="img" aria-label="In-behind touches and pass origins">
+            <rect x="6" y="6" width="228" height="158" rx="8" fill="#145a35"/>
+            <rect x="6" y="6" width="228" height="158" rx="8" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="0.8"/>
+            ${zones}
+          </svg>
+          <div class="ba-behind__how">
+            <p>How the passes were played</p>
+            <div class="ba-behind__how-row">${how || `<span class="ba-behind__empty">No passes into in-behind</span>`}</div>
+          </div>
+        </div>
+        <div class="ba-behind__lists">
+          ${behindPlayerList("Who received", data.touchPlayers, "Nobody recorded")}
+          ${behindPlayerList("Who played the pass", data.passPlayers, "Nobody recorded")}
+        </div>
+      </div>
+    </article>
+  `;
+}
+
 function playerStandouts(players) {
   const specs = [
-    { key: "xg", label: "Highest xG", digits: 2 },
-    { key: "defendersBypassed", label: "Most defenders bypassed", digits: 0 },
-    { key: "duelRate", label: "Best duel rate", digits: 1, rate: true, minDuels: 3 },
+    { key: "xg", label: "Highest expected goals", digits: 2 },
+    { key: "defendersBypassed", label: "Most defenders taken out", digits: 0 },
+    { key: "duelRate", label: "Best duel success", digits: 1, rate: true, minDuels: 3 },
   ];
   const used = new Set();
   return specs.map((spec) => {
@@ -886,8 +1028,8 @@ function dashHtml(block) {
     .join("");
   const outcome = (single && fixture?.outcome) || "";
   const foot = single
-    ? "Top 5 outfield · bars vs League Two top 7 per game · wing-backs 50/50 DEF and ATT"
-    : "Top 5 outfield across the block · bars vs League Two top 7 · wing-backs 50/50 DEF and ATT";
+    ? "Gold tick = Vale average · black tick = league requirement (top 7) · wing-backs 50/50 DEF and ATT"
+    : "Gold tick = Vale average · black tick = league requirement (top 7) · wing-backs 50/50 DEF and ATT";
 
   return `
     <section class="ba-report">
@@ -902,18 +1044,17 @@ function dashHtml(block) {
       <article class="ba-sheet ba-sheet--team ${outcome ? `ba-sheet--${outcome}` : ""}" data-sheet="1">
         ${sheetMasthead({ ...mast, title: pageTitle, page: 1 })}
         <div class="ba-sheet__body">
+          ${metricStrip(stats, single)}
           ${single ? `
             <div class="ba-charts">
-              ${xgRaceHtml(stats.xgRace) || `<article class="ba-chart ba-race"><header class="ba-chart__head"><div><h4>xG race</h4><p>Shot-based</p></div></header><p class="ba-chart__empty">No shot data</p></article>`}
+              ${xgRaceHtml(stats.xgRace) || `<article class="ba-chart ba-race"><header class="ba-chart__head"><div><h4>Chance race</h4><p>Expected goals over time</p></div></header><p class="ba-chart__empty">No shot data</p></article>`}
               ${fieldTiltHtml(stats.fieldTilt)}
-              ${phasesHtml(stats.phases)}
+              ${behindHtml(stats.inBehind)}
             </div>
           ` : ""}
-          ${metricStrip(stats, single)}
-          ${single ? factsHtml(stats.facts) : ""}
           <div class="ba-sheet__main ${single ? "ba-sheet__main--compact" : ""}">
-            ${unitPanelHtml("Defenders bypassed", "defendersBypassed", "Taken out of the game", stats, single)}
-            ${unitPanelHtml("Duel rate", "duelRate", "Won / attempted", stats, single)}
+            ${unitPanelHtml("Defenders taken out", "defendersBypassed", "Opponents removed from the play", stats, single)}
+            ${unitPanelHtml("Duels won", "duelRate", "Success rate by unit", stats, single)}
           </div>
         </div>
         <footer class="ba-sheet__bar"><span>Port Vale Analysis</span><span>${escapeHtml(foot)}</span></footer>

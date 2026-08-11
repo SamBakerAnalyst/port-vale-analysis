@@ -43,6 +43,7 @@ from app.post_match.field_tilt import (
     _overall_focus_tilt,
     build_field_tilt,
 )
+from app.post_match.offensive_touches_zones import build_offensive_touches_zones
 from app.post_match.phase_analysis import (
     PHASE_ORDER,
     _fetch_match_events,
@@ -67,7 +68,7 @@ BLOCK_COUNT = 9
 GAMES_PER_BLOCK = 5
 KPI_SHOT_XG = 82
 MATCH_KPI_CACHE_TTL = 6 * 3600
-MATCH_STATS_CACHE_VERSION = 6
+MATCH_STATS_CACHE_VERSION = 7
 PHASE_SHORT_LABELS = {
     "IN_POSSESSION": "In possession",
     "OUT_OF_POSSESSION": "Out of possession",
@@ -75,6 +76,11 @@ PHASE_SHORT_LABELS = {
     "DEFENSIVE_TRANSITION": "Def. transition",
     "SECOND_BALL": "Second ball",
     "SET_PIECE": "Set piece",
+}
+FROM_ZONE_LABELS = {
+    "WL": "Wide left",
+    "AM": "Attacking mid",
+    "WR": "Wide right",
 }
 PAYLOAD_CACHE_TTL = 45
 PLAYER_NAMES_TTL = 6 * 3600
@@ -684,12 +690,19 @@ def build_block_benchmarks(
         return _benchmark_cache[1]
 
     payload = _benchmarks_for_iteration(iteration_id)
-    if all(row.get("top7") is None for row in payload.values()):
-        older = _benchmarks_for_iteration(PREVIOUS_LEAGUE_TWO_ITERATION_ID)
-        for key, row in payload.items():
-            if row.get("top7") is None and older.get(key, {}).get("top7") is not None:
-                row["top7"] = older[key]["top7"]
-                row["top7From"] = "previous"
+    older = None
+    for key, row in payload.items():
+        if row.get("top7") is not None and row.get("team") is not None:
+            continue
+        if older is None:
+            older = _benchmarks_for_iteration(PREVIOUS_LEAGUE_TWO_ITERATION_ID)
+        prev = older.get(key) or {}
+        if row.get("top7") is None and prev.get("top7") is not None:
+            row["top7"] = prev["top7"]
+            row["top7From"] = "previous"
+        if row.get("team") is None and prev.get("team") is not None:
+            row["team"] = prev["team"]
+            row["teamFrom"] = "previous"
 
     _benchmark_cache = (now, payload)
     return payload
@@ -945,6 +958,55 @@ def _compute_vale_form(squad_id: int) -> tuple[dict[str, Any] | None, dict[str, 
     return None, None
 
 
+def _short_player_name(name: str) -> str:
+    parts = str(name or "").strip().split()
+    if len(parts) >= 2:
+        return parts[-1]
+    return str(name or "—")
+
+
+def _compact_players(rows: list[dict[str, Any]], count_key: str, limit: int = 6) -> list[dict[str, Any]]:
+    compact: list[dict[str, Any]] = []
+    for row in rows[:limit]:
+        compact.append(
+            {
+                "name": _short_player_name(str(row.get("playerName") or "")),
+                "count": row.get(count_key) or 0,
+            }
+        )
+    return compact
+
+
+def _compact_in_behind(data: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not data:
+        return None
+    detail = data.get("inBehind") or {}
+    ib_zones = [
+        {"id": row.get("id"), "value": round(float(row.get("value") or 0), 1)}
+        for row in (data.get("zones") or [])
+        if row.get("isInBehind")
+    ]
+    from_zones = [
+        {
+            "id": row.get("id"),
+            "label": FROM_ZONE_LABELS.get(str(row.get("id") or ""), str(row.get("label") or "")),
+            "value": round(float(row.get("value") or 0), 1),
+        }
+        for row in (data.get("conversionZones") or [])
+    ]
+    touches = detail.get("totalTouches")
+    if touches is None:
+        touches = round(sum(row["value"] for row in ib_zones), 1)
+    return {
+        "touches": touches,
+        "passes": data.get("totalPassesIntoInBehind") or 0,
+        "ibZones": ib_zones,
+        "fromZones": from_zones,
+        "touchPlayers": _compact_players(detail.get("touchPlayers") or [], "touchCount"),
+        "passPlayers": _compact_players(detail.get("passPlayers") or [], "passCount"),
+    }
+
+
 def _vale_form_baselines(
     squad_id: int,
     *,
@@ -971,6 +1033,7 @@ def _fetch_match_stats(
     away_squad_id: int = 0,
     home_name: str = "Home",
     away_name: str = "Away",
+    iteration_id: int = 0,
     form_phases: dict[str, Any] | None = None,
     form_tilt: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -999,6 +1062,7 @@ def _fetch_match_stats(
     stats["facts"] = facts
     stats["fieldTilt"] = None
     stats["phases"] = None
+    stats["inBehind"] = None
     if home_squad_id and away_squad_id:
         try:
             stats["fieldTilt"] = _compact_field_tilt(
@@ -1021,6 +1085,16 @@ def _fetch_match_stats(
             )
         except Exception:  # noqa: BLE001
             stats["phases"] = None
+        try:
+            stats["inBehind"] = _compact_in_behind(
+                build_offensive_touches_zones(
+                    match_id,
+                    squad_id,
+                    int(iteration_id or BLOCKS_ITERATION_ID),
+                )
+            )
+        except Exception:  # noqa: BLE001
+            stats["inBehind"] = None
     return stats
 
 
@@ -1046,6 +1120,7 @@ def _empty_kpi_stats() -> dict[str, Any]:
         "facts": None,
         "fieldTilt": None,
         "phases": None,
+        "inBehind": None,
     }
 
 
@@ -1097,6 +1172,7 @@ def _load_match_kpis(
                     int((match.get("away") or {}).get("squadId") or 0),
                     str((match.get("home") or {}).get("name") or "Home"),
                     str((match.get("away") or {}).get("name") or "Away"),
+                    int(match.get("iterationId") or BLOCKS_ITERATION_ID),
                     form_phases,
                     form_tilt,
                 ): match
