@@ -8,6 +8,15 @@
     subtitle: document.getElementById("pageSubtitle"),
     updated: document.getElementById("lastUpdated"),
     refresh: document.getElementById("refreshBtn"),
+    present: document.getElementById("presentBtn"),
+    exportBtn: document.getElementById("exportBtn"),
+    deck: document.getElementById("stDeck"),
+    deckStage: document.getElementById("deckStage"),
+    deckFit: document.getElementById("deckFit"),
+    deckPrev: document.getElementById("deckPrev"),
+    deckNext: document.getElementById("deckNext"),
+    deckExit: document.getElementById("deckExit"),
+    deckCounter: document.getElementById("deckCounter"),
     badge: document.getElementById("summaryBadge"),
     headline: document.getElementById("summaryHeadline"),
     meta: document.getElementById("summaryMeta"),
@@ -55,6 +64,9 @@
     metric: hashMetric(),
     competition: new URLSearchParams(location.search).get("competition") || "",
     playerSort: { key: "minutes", dir: "desc" },
+    presenting: false,
+    slide: 0,
+    exporting: false,
   };
 
   function hashMetric() {
@@ -114,6 +126,8 @@
     const params = new URLSearchParams(location.search);
     if (state.competition) params.set("competition", state.competition);
     else params.delete("competition");
+    if (state.presenting) params.set("present", "1");
+    else params.delete("present");
     const query = params.toString();
     const hash = state.metric && state.metric !== DEFAULT_METRIC ? `#${state.metric}` : "";
     const next = `${location.pathname}${query ? `?${query}` : ""}${hash || (state.metric === DEFAULT_METRIC ? "#points" : "")}`;
@@ -193,8 +207,20 @@
         <span class="st-legend__item st-legend__item--po"><i></i>${labels.playoff}</span>`;
     }
 
-    const W = 1000;
-    const H = 320;
+    els.chart.innerHTML = buildPaceSvg(data, metric, { w: 1000, h: 320 });
+  }
+
+  function buildPaceSvg(data, metric, { w = 1000, h = 320 } = {}) {
+    const series = data.series || data.points_series || [];
+    const bench = metric.benchmarks || {};
+    const rateChart = metric.chart === "running_rate";
+    const played = data.played || 0;
+    const key = metric.id;
+    const values = series.map((row) => Number(row[key] ?? 0));
+    const current = values.length ? values[values.length - 1] : Number(metric.current || 0);
+    const projected = !rateChart && metric.project && played > 0 ? (current / played) * SEASON_GAMES : null;
+    const W = w;
+    const H = h;
     const pad = { l: 48, r: 18, t: 22, b: 36 };
     const innerW = W - pad.l - pad.r;
     const innerH = H - pad.t - pad.b;
@@ -257,7 +283,7 @@
       ? `<text x="${W / 2}" y="${H / 2}" fill="#8b9bb0" font-size="14" text-anchor="middle">Season track starts after game 1</text>`
       : "";
 
-    els.chart.innerHTML = `
+    return `
       <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${metric.label} pace versus promotion targets">
         <rect x="0" y="0" width="${W}" height="${H}" fill="transparent" />
         ${grid.join("")}
@@ -463,6 +489,55 @@
     }
   }
 
+  function buildTimingSvg(data, { w = 720, h = 280 } = {}) {
+    const times = data.goal_times || {};
+    const order = times.bucket_order || [];
+    const labels = times.bucket_labels || {};
+    const scored = times.for || { total: 0, buckets: {} };
+    const conceded = times.against || { total: 0, buckets: {} };
+    const W = w;
+    const H = h;
+    const pad = { l: 36, r: 12, t: 18, b: 52 };
+    const innerW = W - pad.l - pad.r;
+    const innerH = H - pad.t - pad.b;
+    const n = Math.max(order.length, 1);
+    const groupW = innerW / n;
+    const barW = Math.max(6, groupW * 0.32);
+    const maxVal = Math.max(
+      1,
+      ...order.map((key) => Number((scored.buckets?.[key] || {}).total || 0)),
+      ...order.map((key) => Number((conceded.buckets?.[key] || {}).total || 0)),
+    );
+    const y = (val) => pad.t + innerH - (val / maxVal) * innerH;
+    const bars = [];
+    order.forEach((key, i) => {
+      const gf = Number((scored.buckets?.[key] || {}).total || 0);
+      const ga = Number((conceded.buckets?.[key] || {}).total || 0);
+      const cx = pad.l + i * groupW + groupW / 2;
+      const gfH = Math.max(gf ? 3 : 0, (gf / maxVal) * innerH);
+      const gaH = Math.max(ga ? 3 : 0, (ga / maxVal) * innerH);
+      bars.push(`<rect x="${cx - barW - 2}" y="${y(gf)}" width="${barW}" height="${gfH}" rx="2" fill="#f5c518" />`);
+      bars.push(`<rect x="${cx + 2}" y="${y(ga)}" width="${barW}" height="${gaH}" rx="2" fill="#f87171" />`);
+      if (gf) bars.push(`<text x="${cx - barW / 2 - 2}" y="${y(gf) - 4}" fill="#f5c518" font-size="11" text-anchor="middle">${gf}</text>`);
+      if (ga) bars.push(`<text x="${cx + barW / 2 + 2}" y="${y(ga) - 4}" fill="#f87171" font-size="11" text-anchor="middle">${ga}</text>`);
+      bars.push(`<text x="${cx}" y="${H - 18}" fill="#8b9bb0" font-size="11" text-anchor="middle">${labels[key] || key}</text>`);
+    });
+    const timedTotal = order.reduce((sum, key) => {
+      return sum
+        + Number((scored.buckets?.[key] || {}).total || 0)
+        + Number((conceded.buckets?.[key] || {}).total || 0);
+    }, 0);
+    const empty = !timedTotal
+      ? `<text x="${W / 2}" y="${H / 2 - 8}" fill="#8b9bb0" font-size="16" text-anchor="middle">${scored.total || conceded.total ? "Goals recorded — minutes not in Impect yet" : "No timed goals yet"}</text>`
+      : "";
+    return `
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Goals scored and conceded by time bucket">
+        <line x1="${pad.l}" y1="${pad.t + innerH}" x2="${pad.l + innerW}" y2="${pad.t + innerH}" stroke="rgba(255,255,255,0.12)" />
+        ${bars.join("")}
+        ${empty}
+      </svg>`;
+  }
+
   function renderTiming(data) {
     const times = data.goal_times || {};
     const order = times.bucket_order || [];
@@ -480,50 +555,7 @@
         : `When Vale score and concede — 15-minute windows plus 1H / 2H added time.`;
     }
 
-    const W = 720;
-    const H = 280;
-    const pad = { l: 36, r: 12, t: 18, b: 52 };
-    const innerW = W - pad.l - pad.r;
-    const innerH = H - pad.t - pad.b;
-    const n = Math.max(order.length, 1);
-    const groupW = innerW / n;
-    const barW = Math.max(6, groupW * 0.32);
-    const maxVal = Math.max(
-      1,
-      ...order.map((key) => Number((scored.buckets?.[key] || {}).total || 0)),
-      ...order.map((key) => Number((conceded.buckets?.[key] || {}).total || 0)),
-    );
-    const y = (val) => pad.t + innerH - (val / maxVal) * innerH;
-
-    const bars = [];
-    order.forEach((key, i) => {
-      const gf = Number((scored.buckets?.[key] || {}).total || 0);
-      const ga = Number((conceded.buckets?.[key] || {}).total || 0);
-      const cx = pad.l + i * groupW + groupW / 2;
-      const gfH = Math.max(gf ? 3 : 0, (gf / maxVal) * innerH);
-      const gaH = Math.max(ga ? 3 : 0, (ga / maxVal) * innerH);
-      bars.push(`<rect x="${cx - barW - 2}" y="${y(gf)}" width="${barW}" height="${gfH}" rx="2" fill="#f5c518" />`);
-      bars.push(`<rect x="${cx + 2}" y="${y(ga)}" width="${barW}" height="${gaH}" rx="2" fill="#f87171" />`);
-      if (gf) bars.push(`<text x="${cx - barW / 2 - 2}" y="${y(gf) - 4}" fill="#f5c518" font-size="10" text-anchor="middle">${gf}</text>`);
-      if (ga) bars.push(`<text x="${cx + barW / 2 + 2}" y="${y(ga) - 4}" fill="#f87171" font-size="10" text-anchor="middle">${ga}</text>`);
-      bars.push(`<text x="${cx}" y="${H - 18}" fill="#8b9bb0" font-size="10" text-anchor="middle">${labels[key] || key}</text>`);
-    });
-
-    const timedTotal = order.reduce((sum, key) => {
-      return sum
-        + Number((scored.buckets?.[key] || {}).total || 0)
-        + Number((conceded.buckets?.[key] || {}).total || 0);
-    }, 0);
-    const empty = !timedTotal
-      ? `<text x="${W / 2}" y="${H / 2 - 8}" fill="#8b9bb0" font-size="14" text-anchor="middle">${scored.total || conceded.total ? "Goals recorded — minutes not in Impect yet" : "No timed goals yet"}</text>`
-      : "";
-
-    els.timingChart.innerHTML = `
-      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Goals scored and conceded by time bucket">
-        <line x1="${pad.l}" y1="${pad.t + innerH}" x2="${pad.l + innerW}" y2="${pad.t + innerH}" stroke="rgba(255,255,255,0.12)" />
-        ${bars.join("")}
-        ${empty}
-      </svg>`;
+    els.timingChart.innerHTML = buildTimingSvg(data, { w: 720, h: 280 });
 
     const spot = data.goal_spotlight || {};
     const net = (scored.total || 0) - (conceded.total || 0);
@@ -643,6 +675,15 @@
       hour: "2-digit",
       minute: "2-digit",
     })}`;
+    try {
+      buildDeck(data);
+    } catch (err) {
+      console.error("Deck build failed", err);
+    }
+    if (state.presenting) {
+      showSlide(state.slide);
+      layoutDeck();
+    }
   }
 
   async function load(refresh = false) {
@@ -669,6 +710,280 @@
       els.refresh.disabled = false;
     }
   }
+
+  function esc(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function slideHead(data, title) {
+    return `<header class="st-slide__head"><span>Port Vale F.C.</span><span>${esc(data.competition || "")}  |  ${esc(data.season || "")}</span></header>
+      <h2 class="st-slide__title">${esc(title)}</h2>`;
+  }
+
+  function deckCardHtml(metric) {
+    const digits = metric.digits != null ? metric.digits : 0;
+    const nowDigits = metric.chart === "running_rate" || digits > 0 ? Math.max(digits, 1) : 0;
+    const tone = statusClass(metric.status);
+    const copy = metric.status === "awaiting"
+      ? "Waiting for kick-off"
+      : `${signed(metric.delta_vs_auto)} vs target`;
+    return `<article class="st-deck-card is-${tone}">
+      <h3>${esc(metric.label)}</h3>
+      <b>${fmt(metric.current, nowDigits)}</b>
+      <em>${statusLabel(metric.status, metric.benchmark_set)}</em>
+      <p>${copy}</p>
+    </article>`;
+  }
+
+  function styleByGroup(data, groupId) {
+    const group = STYLE_GROUPS.find((row) => row.id === groupId);
+    const byId = Object.fromEntries((data.style_metrics || []).map((row) => [row.id, row]));
+    return (group?.ids || []).map((id) => byId[id]).filter(Boolean);
+  }
+
+  function buildDeck(data) {
+    if (!els.deckFit) return;
+    const s = data.summary || {};
+    const status = s.status || "awaiting";
+    const points = metricById(data, "points");
+    const headline = data.kickoff_ready
+      ? `Waiting for kick-off — auto target ${fmt(s.auto_target, 1)} pts`
+      : `Projected ${fmt(s.projected_points, 1)} pts · auto ${fmt(s.auto_target, 1)} (${signed(s.delta_vs_auto)})`;
+    const times = data.goal_times || {};
+    const scored = times.for || {};
+    const conceded = times.against || {};
+    const spot = data.goal_spotlight || {};
+    const players = [...(data.players || [])]
+      .filter((row) => Number(row.minutes || 0) >= 90)
+      .sort((a, b) => (Number(b.minutes) || 0) - (Number(a.minutes) || 0))
+      .slice(0, 10);
+    const form = data.form || [];
+    const series = [...(data.series || [])].slice(-8).reverse();
+    const ahead = [...(data.metrics || []), ...(data.style_metrics || [])]
+      .filter((row) => row.status === "ahead")
+      .map((row) => row.label)
+      .slice(0, 4);
+    const behind = [...(data.metrics || []), ...(data.style_metrics || [])]
+      .filter((row) => row.status === "behind")
+      .map((row) => row.label)
+      .slice(0, 4);
+    const closeBody = data.kickoff_ready
+      ? "Season not started. After each league game this pack updates: points pace vs auto, style numbers vs the top 7, and the player board."
+      : `Keep going: ${ahead.join(", ") || "the metrics already at promotion pace"}. Fix next: ${behind.join(", ") || "nothing currently behind the auto / top-7 line"}.`;
+    const goalsEmpty = data.kickoff_ready || (!(scored.total || 0) && !(conceded.total || 0));
+    const playerCols = PLAYER_COLS.filter((col) => col.key !== "packing_xg" && col.key !== "ball_wins_defenders" && col.key !== "appearances");
+    const playerTable = players.length
+      ? `<table class="st-deck-table"><thead><tr>${playerCols.map((col) => `<th>${col.label}</th>`).join("")}</tr></thead>
+         <tbody>${players.map((row) => `<tr>${playerCols.map((col) => {
+           if (col.key === "name") return `<td>${esc(row.name || "—")}</td>`;
+           if (col.key === "position_short") return `<td>${esc(row.position_short || "—")}</td>`;
+           return `<td>${fmt(row[col.key], col.digits || 0)}</td>`;
+         }).join("")}</tr>`).join("")}</tbody></table>`
+      : `<p class="st-deck-empty">Player board unlocks after the first league match (90+ minutes).</p>`;
+    const formDots = form.length
+      ? form.map((result) => `<span class="st-form__dot is-${result}">${result}</span>`).join("")
+      : `<span class="st-muted">Form strip starts after game 1</span>`;
+    const resultRows = series.length
+      ? series.map((row) => `<tr>
+          <td>${row.played}</td>
+          <td>${esc(row.date || "—")}</td>
+          <td>${esc(row.opponent || "—")}</td>
+          <td>${esc(row.venue || "")} ${esc(row.result || "")}</td>
+          <td>${row.scored ?? "—"}–${row.conceded ?? "—"}</td>
+          <td>${row.points}</td>
+        </tr>`).join("")
+      : `<tr><td colspan="6">Results land here after kick-off.</td></tr>`;
+    const gf = metricById(data, "goals_for")?.current;
+    const ga = metricById(data, "goals_against")?.current;
+
+    els.deckFit.innerHTML = `
+      <article class="st-slide st-slide--cover">
+        <img src="/standalone/port-vale-badge.png?v=2" width="72" height="88" alt="" />
+        <p class="st-slide__kicker">Port Vale F.C.</p>
+        <h2>Season Progress Report</h2>
+        <p class="st-slide__sub">${esc(data.competition || "")}  |  ${esc(data.season || "")}</p>
+        <p class="st-slide__lede">Board pack: promotion pace, style numbers that win games, and the player board.</p>
+        <p class="st-slide__foot">Present in the room  ·  PDF is the leave-behind</p>
+      </article>
+      <article class="st-slide">
+        ${slideHead(data, "Where we are")}
+        <div class="st-slide__body">
+          <div class="st-deck-headline">
+            <span class="st-deck-status is-${statusClass(status)}">${statusLabel(status, "promotion")}</span>
+            <p>${esc(headline)}</p>
+          </div>
+          <div class="st-deck-kpis">
+            <div class="st-deck-kpi"><b>${fmt(data.played)}</b><span>Played</span></div>
+            <div class="st-deck-kpi"><b>${fmt(points?.current)}</b><span>Points</span></div>
+            <div class="st-deck-kpi"><b>${data.kickoff_ready ? "—" : fmt(s.projected_points, 1)}</b><span>Season proj.</span></div>
+            <div class="st-deck-kpi"><b>${data.position != null ? data.position : "—"}</b><span>Position</span></div>
+            <div class="st-deck-kpi"><b>${fmt(s.auto_target, 1)}</b><span>Auto</span></div>
+            <div class="st-deck-kpi"><b>${fmt(s.champion_target, 1)}</b><span>Champions</span></div>
+          </div>
+          <p class="st-deck-note">${fmt(data.played)}/${SEASON_GAMES} league games · ${fmt(data.games_remaining)} remaining · dashed targets on the next slide are champions / auto / play-off.</p>
+        </div>
+      </article>
+      <article class="st-slide">
+        ${slideHead(data, "Points pace")}
+        <div class="st-slide__body">
+          <div class="st-deck-chart">${points ? buildPaceSvg(data, points, { w: 1100, h: 520 }) : ""}</div>
+        </div>
+      </article>
+      <article class="st-slide">
+        ${slideHead(data, "Outcome scorecard")}
+        <div class="st-slide__body">
+          <div class="st-deck-cards">${(data.metrics || []).map(deckCardHtml).join("")}</div>
+        </div>
+      </article>
+      <article class="st-slide">
+        ${slideHead(data, "Goals by time")}
+        <div class="st-slide__body">
+          ${goalsEmpty
+            ? `<p class="st-deck-empty">Timing splits unlock after the first league goal.</p>`
+            : `<div class="st-deck-goals">
+                <div class="st-deck-chart">${buildTimingSvg(data, { w: 760, h: 480 })}</div>
+                <div class="st-deck-side">
+                  <p>Scored <b>${fmt(scored.total)}</b></p>
+                  <p>Conceded <b>${fmt(conceded.total)}</b></p>
+                  <p>1H <b>${fmt(spot.first_half_for)}</b> for / <b>${fmt(spot.first_half_against)}</b> against</p>
+                  <p>2H <b>${fmt(spot.second_half_for)}</b> for / <b>${fmt(spot.second_half_against)}</b> against</p>
+                  ${spot.best_scoring ? `<p>Best window <b>${esc(spot.best_scoring.label)}</b> (${spot.best_scoring.total})</p>` : ""}
+                </div>
+              </div>`}
+        </div>
+      </article>
+      <article class="st-slide">
+        ${slideHead(data, "Attack — style that wins games")}
+        <div class="st-slide__body">
+          <div class="st-deck-cards">${styleByGroup(data, "attack").map(deckCardHtml).join("")}</div>
+        </div>
+      </article>
+      <article class="st-slide">
+        ${slideHead(data, "Defend — style that wins games")}
+        <div class="st-slide__body">
+          <div class="st-deck-cards">${styleByGroup(data, "defend").map(deckCardHtml).join("")}</div>
+        </div>
+      </article>
+      <article class="st-slide">
+        ${slideHead(data, "Player board")}
+        <div class="st-slide__body">${playerTable}</div>
+      </article>
+      <article class="st-slide">
+        ${slideHead(data, "Form and recent results")}
+        <div class="st-slide__body">
+          <div class="st-deck-split">
+            <div>
+              <p class="st-deck-note" style="margin:0 0 8px">Last six</p>
+              <div class="st-deck-form">${formDots}</div>
+              <p>Goals vs xG <b>${fmt(gf)}</b> / ${fmt(data.xg_for, 1)}</p>
+              <p>Conceded vs xGA <b>${fmt(ga)}</b> / ${fmt(data.xg_against, 1)}</p>
+              <p>Pts vs xPts <b>${signed(data.xp_vs_actual)}</b></p>
+            </div>
+            <table class="st-deck-table">
+              <thead><tr><th>#</th><th>Date</th><th>Opp</th><th></th><th>Score</th><th>Pts</th></tr></thead>
+              <tbody>${resultRows}</tbody>
+            </table>
+          </div>
+        </div>
+      </article>
+      <article class="st-slide">
+        ${slideHead(data, "How we use this")}
+        <div class="st-slide__body">
+          <div class="st-deck-close">
+            <p>${esc(closeBody)}</p>
+            <span>Present this deck in the room. Export PDF is the same story for the board pack.</span>
+          </div>
+        </div>
+      </article>`;
+    showSlide(state.slide);
+  }
+
+  function layoutDeck() {
+    if (!els.deckStage || !els.deckFit) return;
+    const sw = els.deckStage.clientWidth || 1;
+    const sh = els.deckStage.clientHeight || 1;
+    const scale = Math.min(sw / 1280, sh / 720);
+    els.deckFit.style.transform = `scale(${scale})`;
+  }
+
+  function showSlide(index) {
+    const slides = els.deckFit ? [...els.deckFit.querySelectorAll(".st-slide")] : [];
+    if (!slides.length) return;
+    state.slide = ((index % slides.length) + slides.length) % slides.length;
+    slides.forEach((slide, i) => slide.classList.toggle("is-on", i === state.slide));
+    if (els.deckCounter) els.deckCounter.textContent = `${state.slide + 1} / ${slides.length}`;
+  }
+
+  function setPresent(on) {
+    state.presenting = Boolean(on);
+    document.body.classList.toggle("is-present", state.presenting);
+    if (els.deck) els.deck.setAttribute("aria-hidden", state.presenting ? "false" : "true");
+    const btn = document.getElementById("presentBtn");
+    if (btn) btn.textContent = state.presenting ? "Exit present" : "Present";
+    syncUrl();
+    if (!state.presenting) {
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      return;
+    }
+    try {
+      if (state.data) buildDeck(state.data);
+    } catch (err) {
+      console.error("Deck build failed", err);
+    }
+    showSlide(state.slide || 0);
+    requestAnimationFrame(() => {
+      layoutDeck();
+      requestAnimationFrame(layoutDeck);
+    });
+    const root = document.documentElement;
+    const fs = root.requestFullscreen || root.webkitRequestFullscreen;
+    if (typeof fs === "function") {
+      Promise.resolve(fs.call(root)).catch(() => {});
+    }
+  }
+
+  async function exportPdf() {
+    if (state.exporting) return;
+    state.exporting = true;
+    if (els.exportBtn) els.exportBtn.disabled = true;
+    setStatus("Building board PDF…");
+    try {
+      const params = new URLSearchParams();
+      if (state.competition) params.set("competition", state.competition);
+      const res = await fetch(`${API}/api/strategy-tracker/export-pdf?${params}`, {
+        signal: AbortSignal.timeout(180000),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload.detail || `Export failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") || "";
+      const match = disposition.match(/filename="?([^"]+)"?/i);
+      const filename = match?.[1] || "season-progress.pdf";
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setStatus("");
+    } catch (err) {
+      setStatus(err.message || "Could not export PDF.", "error");
+    } finally {
+      state.exporting = false;
+      if (els.exportBtn) els.exportBtn.disabled = false;
+    }
+  }
+
+  window.stTogglePresent = () => setPresent(!state.presenting);
+  window.stExportPdf = exportPdf;
 
   els.refresh.addEventListener("click", () => load(true));
   function onMetricClick(event) {
@@ -704,6 +1019,67 @@
   });
   window.addEventListener("hashchange", () => {
     selectMetric(hashMetric(), { skipUrl: true });
+  });
+  document.addEventListener("click", (event) => {
+    if (event.target.closest("#presentBtn")) {
+      event.preventDefault();
+      setPresent(!state.presenting);
+      return;
+    }
+    if (event.target.closest("#exportBtn")) {
+      event.preventDefault();
+      exportPdf();
+      return;
+    }
+    if (event.target.closest("#deckPrev")) {
+      event.preventDefault();
+      showSlide(state.slide - 1);
+      return;
+    }
+    if (event.target.closest("#deckNext")) {
+      event.preventDefault();
+      showSlide(state.slide + 1);
+      return;
+    }
+    if (event.target.closest("#deckExit")) {
+      event.preventDefault();
+      setPresent(false);
+      return;
+    }
+    if (!state.presenting || !els.deckFit || !els.deckFit.contains(event.target)) return;
+    if (event.target.closest("button, a")) return;
+    const rect = els.deckStage.getBoundingClientRect();
+    if (event.clientX > rect.left + rect.width * 0.55) showSlide(state.slide + 1);
+    else showSlide(state.slide - 1);
+  });
+  window.addEventListener("resize", () => {
+    if (state.presenting) layoutDeck();
+  });
+  window.addEventListener("keydown", (event) => {
+    const tag = (event.target && event.target.tagName) || "";
+    if (tag === "INPUT" || tag === "TEXTAREA" || event.target?.isContentEditable) return;
+    if ((event.key === "p" || event.key === "P") && !event.metaKey && !event.ctrlKey) {
+      event.preventDefault();
+      setPresent(!state.presenting);
+      return;
+    }
+    if (!state.presenting) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setPresent(false);
+    } else if (["ArrowRight", " ", "PageDown", "ArrowDown"].includes(event.key)) {
+      event.preventDefault();
+      showSlide(state.slide + 1);
+    } else if (["ArrowLeft", "PageUp", "ArrowUp"].includes(event.key)) {
+      event.preventDefault();
+      showSlide(state.slide - 1);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      showSlide(0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      showSlide(-1);
+    }
   });
 
   syncUrl();

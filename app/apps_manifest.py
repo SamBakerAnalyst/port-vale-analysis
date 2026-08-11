@@ -461,8 +461,8 @@ APPS: list[dict[str, Any]] = [
         "group": "strategy",
         "title": "Season Progress Report",
         "description": (
-            "Live promotion pace for every key metric, goals by time, "
-            "and season targets versus auto / play-off / champions."
+            "Live promotion pace, Impect style stats, and a Present / PDF board pack "
+            "versus auto / play-off / champions."
         ),
         "href": "/strategy-tracker",
         "icon": "📉",

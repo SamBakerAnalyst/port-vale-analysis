@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/strategy-tracker.css?v=4" />
+  <link rel="stylesheet" href="/static/strategy-tracker.css?v=6" />
 </head>
 <body>
   <div class="st-app">
@@ -28,6 +28,8 @@
         </div>
         <div class="st-updated" id="lastUpdated" aria-live="polite">Loading…</div>
         <button type="button" class="st-btn" id="refreshBtn">Refresh</button>
+        <button type="button" class="st-btn st-btn--gold" id="presentBtn">Present</button>
+        <button type="button" class="st-btn" id="exportBtn">Export PDF</button>
         <a class="st-btn st-btn--ghost" href="/strategy">Staff report →</a>
       </div>
     </header>
@@ -151,6 +153,19 @@
 
     <p class="st-footnote" id="sourceNote"></p>
   </div>
-  <script defer src="/static/strategy-tracker.js?v=4"></script>
+
+  <div class="st-deck" id="stDeck" aria-hidden="true">
+    <div class="st-deck__stage" id="deckStage">
+      <div class="st-deck__fit" id="deckFit"></div>
+    </div>
+    <div class="st-deck__chrome">
+      <button type="button" class="st-deck__nav" id="deckPrev" aria-label="Previous slide">←</button>
+      <span id="deckCounter">1 / 1</span>
+      <button type="button" class="st-deck__nav" id="deckNext" aria-label="Next slide">→</button>
+      <span class="st-deck__hint">← → Space · Esc to exit</span>
+      <button type="button" class="st-btn" id="deckExit">Exit</button>
+    </div>
+  </div>
+  <script defer src="/static/strategy-tracker.js?v=6"></script>
 </body>
 </html>

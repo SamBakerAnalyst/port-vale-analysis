@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 
 from app.club_strategy import (
     COMPETITIONS,
@@ -1357,3 +1357,18 @@ def register_strategy_tracker_routes(app: FastAPI) -> None:
         competition: str = Query(""),
     ) -> dict[str, Any]:
         return build_strategy_tracker(competition=competition, force_refresh=refresh)
+
+    @app.get("/api/strategy-tracker/export-pdf")
+    def strategy_tracker_export_pdf(competition: str = Query("")) -> Response:
+        from app.strategy_tracker_pdf import build_season_progress_pdf
+
+        payload = build_strategy_tracker(competition=competition, force_refresh=False)
+        pdf_bytes = build_season_progress_pdf(payload)
+        season = str(payload.get("season") or "season").replace("/", "-")
+        comp = str(payload.get("competition") or "league").replace(" ", "-").lower()
+        filename = f"season-progress-{comp}-{season}.pdf"
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
