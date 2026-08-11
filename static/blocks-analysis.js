@@ -556,34 +556,159 @@ function sheetMasthead({ title, kicker, page, single, fixture, stats, block }) {
 }
 
 function metricStrip(stats, single) {
-  const items = [
-    { label: "Team xG", key: "xg", digits: 2 },
-    { label: "Offensive int.", key: "offensiveInterventions", digits: 0 },
-    { label: "Wins vs DEF", key: "ballWinsFromOppDefenders", digits: 0 },
-    { label: "Defenders bypassed", key: "defendersBypassed", digits: 0 },
-    { label: "Duel rate", key: "duelRate", digits: 1, rate: true },
-    { label: "Goals against", key: "goalsAgainst", digits: 0, invert: true },
-  ];
+  const facts = stats.facts || {};
+  const items = single
+    ? [
+        { label: "Team xG", key: "xg", digits: 2 },
+        { label: "Opp xG", value: facts.oppXg, digits: 2, skipBench: true, invert: true },
+        { label: "Offensive int.", key: "offensiveInterventions", digits: 0 },
+        { label: "Wins vs DEF", key: "ballWinsFromOppDefenders", digits: 0 },
+        { label: "Defenders bypassed", key: "defendersBypassed", digits: 0 },
+        { label: "Duel rate", key: "duelRate", digits: 1, rate: true },
+      ]
+    : [
+        { label: "Team xG", key: "xg", digits: 2 },
+        { label: "Offensive int.", key: "offensiveInterventions", digits: 0 },
+        { label: "Wins vs DEF", key: "ballWinsFromOppDefenders", digits: 0 },
+        { label: "Defenders bypassed", key: "defendersBypassed", digits: 0 },
+        { label: "Duel rate", key: "duelRate", digits: 1, rate: true },
+        { label: "Goals against", key: "goalsAgainst", digits: 0, invert: true },
+      ];
   return `
     <div class="ba-strip">
       ${items.map((item) => {
-        const bench = scaledBench(item.key, stats, single);
-        const value = stats[item.key];
+        const value = item.value != null ? item.value : stats[item.key];
+        const bench = item.skipBench ? null : scaledBench(item.key, stats, single);
         const higherBetter = item.invert ? false : (bench?.spec?.higherBetter !== false);
         const tone = meterTone(value, bench?.top7, higherBetter);
         return `
           <article class="ba-strip__cell">
             <p class="ba-strip__label">${escapeHtml(item.label)}</p>
             <p class="ba-strip__value ${tone ? `is-${tone}` : ""}">${escapeHtml(formatMetric(value, item))}</p>
-            ${meterHtml(value, bench?.top7, {
+            ${bench ? meterHtml(value, bench.top7, {
               higherBetter,
-              rate: Boolean(item.rate || bench?.spec?.rate),
+              rate: Boolean(item.rate || bench.spec?.rate),
               digits: item.digits,
-            })}
+            }) : ""}
           </article>
         `;
       }).join("")}
     </div>
+  `;
+}
+
+function clockLabel(minute) {
+  return `${Math.round(Number(minute) || 0)}'`;
+}
+
+function factsHtml(facts) {
+  if (!facts) return "";
+  const biggest = facts.biggestChance;
+  const first = facts.firstGoal;
+  const tiles = [
+    {
+      label: "Shots",
+      value: `${fmtNum(facts.valeShots)}–${fmtNum(facts.oppShots)}`,
+    },
+    {
+      label: "HT xG",
+      value: `${fmtNum(facts.valeHtXg, 2)}–${fmtNum(facts.oppHtXg, 2)}`,
+    },
+    {
+      label: "Biggest chance",
+      value: biggest ? `${fmtNum(biggest.xg, 2)} · ${biggest.ours ? "Vale" : "Opp"} ${clockLabel(biggest.minute)}` : "—",
+    },
+    {
+      label: "First goal",
+      value: first ? `${clockLabel(first.minute)} · ${first.ours ? "Vale" : "Opp"}` : "No goals",
+    },
+    {
+      label: "Goals from xG",
+      value: `${fmtNum(facts.valeGoals)} from ${fmtNum(facts.valeXg, 2)}`,
+    },
+  ];
+  return `
+    <div class="ba-facts">
+      ${tiles.map((tile) => `
+        <article class="ba-fact">
+          <p class="ba-fact__label">${escapeHtml(tile.label)}</p>
+          <p class="ba-fact__value">${escapeHtml(tile.value)}</p>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
+function niceXgMax(value) {
+  const padded = Math.max(Number(value) || 0, 0.01) * 1.12;
+  if (padded <= 1) return 1;
+  if (padded <= 1.5) return 1.5;
+  if (padded <= 2) return 2;
+  if (padded <= 3) return 3;
+  if (padded <= 4) return 4;
+  return Math.ceil(padded);
+}
+
+function racePolyline(series, endMinute, maxXg, box) {
+  if (!series.length) return "";
+  return series.map((point) => {
+    const x = box.l + (Number(point.minute) / endMinute) * box.w;
+    const y = box.t + box.h - (Number(point.xg) / maxXg) * box.h;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+}
+
+function xgRaceHtml(race) {
+  if (!race?.vale?.series || !race?.opp?.series) return "";
+  const endMinute = Math.max(Number(race.endMinute) || 90, 90);
+  const htMinute = Number(race.htMinute) || 45;
+  const maxXg = niceXgMax(Math.max(Number(race.vale.totalXg) || 0, Number(race.opp.totalXg) || 0));
+  const vb = { w: 640, h: 280 };
+  const box = { l: 36, t: 12, w: 586, h: 232 };
+  const valePts = racePolyline(race.vale.series, endMinute, maxXg, box);
+  const oppPts = racePolyline(race.opp.series, endMinute, maxXg, box);
+  const htX = box.l + (htMinute / endMinute) * box.w;
+  const yTicks = maxXg <= 1.5 ? [0, 0.5, 1, maxXg] : [0, maxXg / 2, maxXg];
+  const uniqueTicks = [...new Set(yTicks.map((n) => Number(n.toFixed(2))))];
+  const goalDots = (side, cls) => (side.series || [])
+    .filter((point) => point.isGoal)
+    .map((point) => {
+      const x = box.l + (Number(point.minute) / endMinute) * box.w;
+      const y = box.t + box.h - (Number(point.xg) / maxXg) * box.h;
+      return `<circle class="${cls}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5" />`;
+    })
+    .join("");
+  const yGrid = uniqueTicks.map((tick) => {
+    const y = box.t + box.h - (tick / maxXg) * box.h;
+    return `
+      <line class="ba-race__grid" x1="${box.l}" y1="${y.toFixed(1)}" x2="${box.l + box.w}" y2="${y.toFixed(1)}" />
+      <text class="ba-race__tick" x="${box.l - 6}" y="${y.toFixed(1)}" text-anchor="end" dominant-baseline="middle">${tick}</text>
+    `;
+  }).join("");
+  return `
+    <article class="ba-race">
+      <header class="ba-race__head">
+        <div>
+          <h4>xG race</h4>
+          <p>Shot-based · ball = goal</p>
+        </div>
+        <p class="ba-race__legend">
+          <span class="ba-race__swatch ba-race__swatch--vale"></span>
+          Vale ${escapeHtml(fmtNum(race.vale.totalXg, 2))}
+          <span class="ba-race__swatch ba-race__swatch--opp"></span>
+          ${escapeHtml(shortOpponent(race.opp.name))} ${escapeHtml(fmtNum(race.opp.totalXg, 2))}
+        </p>
+      </header>
+      <svg class="ba-race__svg" viewBox="0 0 ${vb.w} ${vb.h}" preserveAspectRatio="none" role="img" aria-label="Expected goals race">
+        ${yGrid}
+        <line class="ba-race__ht" x1="${htX.toFixed(1)}" y1="${box.t}" x2="${htX.toFixed(1)}" y2="${box.t + box.h}" />
+        <text class="ba-race__ht-label" x="${htX.toFixed(1)}" y="${vb.h - 6}" text-anchor="middle">HT</text>
+        <polyline class="ba-race__line ba-race__line--opp" points="${oppPts}" />
+        <polyline class="ba-race__line ba-race__line--vale" points="${valePts}" />
+        ${goalDots(race.opp, "ba-race__goal ba-race__goal--opp")}
+        ${goalDots(race.vale, "ba-race__goal ba-race__goal--vale")}
+      </svg>
+    </article>
   `;
 }
 
@@ -673,7 +798,9 @@ function dashHtml(block) {
         ${sheetMasthead({ ...mast, title: pageTitle, page: 1 })}
         <div class="ba-sheet__body">
           ${metricStrip(stats, single)}
-          <div class="ba-sheet__units">
+          ${single ? factsHtml(stats.facts) : ""}
+          <div class="ba-sheet__main ${stats.xgRace ? "ba-sheet__main--race" : ""}">
+            ${stats.xgRace ? xgRaceHtml(stats.xgRace) : ""}
             ${unitPanelHtml("Defenders bypassed", "defendersBypassed", "Impect packing", stats, single)}
             ${unitPanelHtml("Duel rate", "duelRate", "Won / attempted", stats, single)}
           </div>

@@ -36,6 +36,7 @@ from app.post_match.report import (
     _player_directory,
 )
 from app.post_match.season_matches import build_season_matches
+from app.post_match.xg_race import build_xg_race
 from app.scouting import SCOUTING_DIR
 
 # League Two 26/27. Keep these here — post-match DEFAULT_ITERATION_ID may still
@@ -51,7 +52,7 @@ BLOCK_COUNT = 9
 GAMES_PER_BLOCK = 5
 KPI_SHOT_XG = 82
 MATCH_KPI_CACHE_TTL = 6 * 3600
-MATCH_STATS_CACHE_VERSION = 4
+MATCH_STATS_CACHE_VERSION = 5
 PAYLOAD_CACHE_TTL = 45
 PLAYER_NAMES_TTL = 6 * 3600
 BENCHMARK_CACHE_TTL = 600
@@ -676,10 +677,114 @@ def _fetch_squad_kpis(match_id: int) -> dict[int, float]:
     return lookup.get(PORT_VALE_SQUAD_ID) or {}
 
 
+def _half_time_xg(series: list[dict[str, Any]]) -> float:
+    first = [row for row in series if row.get("half") == "first"]
+    if first:
+        return float(first[-1].get("xg") or 0)
+    last = 0.0
+    for row in series:
+        if float(row.get("minute") or 0) <= 45.01:
+            last = float(row.get("xg") or 0)
+    return last
+
+
+def _compact_race_series(series: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "minute": round(float(row.get("minute") or 0), 1),
+            "xg": round(float(row.get("xg") or 0), 3),
+            "isGoal": bool(row.get("isGoal")),
+        }
+        for row in series
+    ]
+
+
+def _match_story(
+    match_id: int,
+    *,
+    squad_id: int,
+    home_squad_id: int,
+    away_squad_id: int,
+    home_name: str,
+    away_name: str,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    if not home_squad_id or not away_squad_id:
+        return None, None
+    try:
+        race = build_xg_race(
+            match_id,
+            home_squad_id,
+            away_squad_id,
+            home_name,
+            away_name,
+        )
+    except Exception:  # noqa: BLE001
+        return None, None
+
+    vale_home = home_squad_id == squad_id
+    vale = race["home"] if vale_home else race["away"]
+    opp = race["away"] if vale_home else race["home"]
+    shots = race.get("shots") or []
+    vale_shots = [row for row in shots if int(row.get("squadId") or 0) == squad_id]
+    opp_shots = [row for row in shots if int(row.get("squadId") or 0) != squad_id]
+    biggest = max(shots, key=lambda row: float(row.get("xg") or 0), default=None)
+    goals = [row for row in shots if row.get("isGoal")]
+    first_goal = min(goals, key=lambda row: float(row.get("minute") or 0), default=None)
+    timeline = race.get("timeline") or {}
+    vale_goals = sum(1 for row in vale_shots if row.get("isGoal"))
+    compact = {
+        "endMinute": float(timeline.get("secondHalfEnd") or 90),
+        "htMinute": float(timeline.get("firstHalfEnd") or 45),
+        "vale": {
+            "name": "Port Vale",
+            "isHome": vale_home,
+            "totalXg": round(float(vale.get("totalXg") or 0), 2),
+            "series": _compact_race_series(vale.get("series") or []),
+        },
+        "opp": {
+            "name": (away_name if vale_home else home_name) or "Opponent",
+            "isHome": not vale_home,
+            "totalXg": round(float(opp.get("totalXg") or 0), 2),
+            "series": _compact_race_series(opp.get("series") or []),
+        },
+    }
+    facts = {
+        "valeXg": compact["vale"]["totalXg"],
+        "oppXg": compact["opp"]["totalXg"],
+        "valeShots": len(vale_shots),
+        "oppShots": len(opp_shots),
+        "valeGoals": vale_goals,
+        "valeHtXg": round(_half_time_xg(vale.get("series") or []), 2),
+        "oppHtXg": round(_half_time_xg(opp.get("series") or []), 2),
+        "biggestChance": (
+            {
+                "xg": round(float(biggest.get("xg") or 0), 2),
+                "minute": round(float(biggest.get("minute") or 0), 0),
+                "ours": int(biggest.get("squadId") or 0) == squad_id,
+            }
+            if biggest and float(biggest.get("xg") or 0) > 0
+            else None
+        ),
+        "firstGoal": (
+            {
+                "minute": round(float(first_goal.get("minute") or 0), 0),
+                "ours": int(first_goal.get("squadId") or 0) == squad_id,
+            }
+            if first_goal
+            else None
+        ),
+    }
+    return compact, facts
+
+
 def _fetch_match_stats(
     match_id: int,
     squad_id: int = PORT_VALE_SQUAD_ID,
     player_names: dict[int, str] | None = None,
+    home_squad_id: int = 0,
+    away_squad_id: int = 0,
+    home_name: str = "Home",
+    away_name: str = "Away",
 ) -> dict[str, Any]:
     kpis = _fetch_squad_kpis(match_id)
     stats = _extract_match_kpis(kpis) if kpis else _empty_kpi_stats()
@@ -694,6 +799,16 @@ def _fetch_match_stats(
     except Exception:  # noqa: BLE001
         stats["units"] = _empty_units()
         stats["players"] = []
+    race, facts = _match_story(
+        match_id,
+        squad_id=squad_id,
+        home_squad_id=home_squad_id,
+        away_squad_id=away_squad_id,
+        home_name=home_name,
+        away_name=away_name,
+    )
+    stats["xgRace"] = race
+    stats["facts"] = facts
     return stats
 
 
@@ -715,6 +830,8 @@ def _empty_kpi_stats() -> dict[str, Any]:
         "xg": None,
         "units": _empty_units(),
         "players": [],
+        "xgRace": None,
+        "facts": None,
     }
 
 
@@ -759,6 +876,10 @@ def _load_match_kpis(
                     int(match["matchId"]),
                     PORT_VALE_SQUAD_ID,
                     names,
+                    int((match.get("home") or {}).get("squadId") or 0),
+                    int((match.get("away") or {}).get("squadId") or 0),
+                    str((match.get("home") or {}).get("name") or "Home"),
+                    str((match.get("away") or {}).get("name") or "Away"),
                 ): match
                 for match in to_fetch
             }
