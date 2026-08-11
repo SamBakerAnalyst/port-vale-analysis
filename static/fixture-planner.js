@@ -1,21 +1,33 @@
 const DEFAULT_SEASON = "26/27";
 const ALLOWED_SEASONS = ["26/27", "25/26"];
 const ASSIGNMENTS_KEY = "fixture-planner-assignments-v1";
+/** @type {"upcoming"|"played"} */
+const APP_MODE = window.FIXTURE_PLANNER_MODE === "played" ? "played" : "upcoming";
+const IS_PLAYED_APP = APP_MODE === "played";
 
 const state = {
   meta: null,
   payload: null,
   season: DEFAULT_SEASON,
   leagues: [],
+  cupsMode: false,
+  savedLeagueSelection: null,
+  savedCupSelection: null,
   staffFilter: "",
   monthFilter: "",
   view: "list",
-  hidePast: true,
+  hidePast: !IS_PLAYED_APP,
+  playedOnly: IS_PLAYED_APP,
   loading: false,
   assignments: {},
   enrichment: {},
   enrichmentPending: {},
+  scoutingReportsByFixture: {},
   assignModal: null,
+  matchDetailsFixtureId: null,
+  teamNames: [],
+  teamEntries: [],
+  teamNamesLoaded: false,
 };
 
 const leagueColors = {
@@ -25,6 +37,16 @@ const leagueColors = {
   "Scottish Prem": "#a78bfa",
   PL2: "#f97316",
   "Irish Prem": "#22d3ee",
+  Manual: "#f472b6",
+  "FA Cup": "#ef4444",
+  "EFL Cup": "#fb923c",
+  "EFL Trophy": "#eab308",
+  "Vertu Trophy": "#eab308",
+  "National League Cup": "#84cc16",
+  "Premier League Cup": "#a855f7",
+  "Professional Development League": "#14b8a6",
+  "Scottish Cup": "#38bdf8",
+  Cups: "#f43f5e",
 };
 
 const els = {
@@ -38,6 +60,14 @@ const els = {
   statusBanner: document.getElementById("statusBanner"),
   statusBar: document.getElementById("statusBar"),
   refreshBtn: document.getElementById("refreshBtn"),
+  ticketRequestBtn: document.getElementById("ticketRequestBtn"),
+  scheduleUpdateBtn: document.getElementById("scheduleUpdateBtn"),
+  ticketModal: document.getElementById("ticketModal"),
+  ticketModalTitle: document.getElementById("ticketModalTitle"),
+  ticketModalMeta: document.getElementById("ticketModalMeta"),
+  ticketModalBody: document.getElementById("ticketModalBody"),
+  ticketAdditionalRequests: document.getElementById("ticketAdditionalRequests"),
+  ticketConfirmBtn: document.getElementById("ticketConfirmBtn"),
   pageSubtitle: document.getElementById("pageSubtitle"),
   hidePastToggle: document.getElementById("hidePastToggle"),
   coveragePanel: document.getElementById("coveragePanel"),
@@ -48,6 +78,19 @@ const els = {
   assignModalWatch: document.getElementById("assignModalWatch"),
   assignModalBody: document.getElementById("assignModalBody"),
   assignConfirmBtn: document.getElementById("assignConfirmBtn"),
+  matchDetailsModal: document.getElementById("matchDetailsModal"),
+  matchDetailsTitle: document.getElementById("matchDetailsTitle"),
+  matchDetailsMeta: document.getElementById("matchDetailsMeta"),
+  matchDetailsBody: document.getElementById("matchDetailsBody"),
+  createManualFixtureBtn: document.getElementById("createManualFixtureBtn"),
+  manualFixtureModal: document.getElementById("manualFixtureModal"),
+  manualFixtureForm: document.getElementById("manualFixtureForm"),
+  manualFixtureSaveBtn: document.getElementById("manualFixtureSaveBtn"),
+  manualPlayersList: document.getElementById("manualPlayersList"),
+  manualAddPlayerBtn: document.getElementById("manualAddPlayerBtn"),
+  manualStaff: document.getElementById("manualStaff"),
+  manualStaffTeams: document.getElementById("manualStaffTeams"),
+  manualTeamSheet: document.getElementById("manualTeamSheet"),
 };
 
 function setStatus(message, kind = "") {
@@ -63,12 +106,20 @@ function setStatus(message, kind = "") {
 
 async function fetchJson(url, options = {}) {
   const res = await fetch(url, {
+    cache: "no-store",
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     ...options,
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.detail || `Request failed (${res.status})`);
+    const detail = data.detail;
+    const message =
+      typeof detail === "string"
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map((row) => row.msg || JSON.stringify(row)).join("; ")
+          : `Request failed (${res.status})`;
+    throw new Error(message);
   }
   return data;
 }
@@ -80,26 +131,15 @@ function fixtureFromState(id) {
 async function loadAssignmentsFromServer() {
   try {
     const data = await fetchJson("/api/fixture-planner/assignments");
-    if (data.assignments && Object.keys(data.assignments).length) {
-      state.assignments = data.assignments;
-      localStorage.setItem(ASSIGNMENTS_KEY, JSON.stringify(state.assignments));
-      return;
-    }
+    // Always trust the server store — including an empty wipe.
+    state.assignments = data.assignments || {};
+    localStorage.setItem(ASSIGNMENTS_KEY, JSON.stringify(state.assignments));
+    return;
   } catch {
     // fall back to local cache below
   }
 
   loadAssignments();
-  if (Object.keys(state.assignments).length) {
-    try {
-      await fetchJson("/api/fixture-planner/assignments", {
-        method: "PUT",
-        body: JSON.stringify({ assignments: state.assignments }),
-      });
-    } catch {
-      // local-only mode
-    }
-  }
 }
 
 function loadAssignments() {
@@ -131,13 +171,15 @@ function enrichAssignment(id) {
 }
 
 async function flushPersistQueue() {
-  try {
-    await fetchJson("/api/fixture-planner/assignments", {
-      method: "PUT",
-      body: JSON.stringify({ assignments: state.assignments }),
-    });
-  } catch (error) {
-    console.warn("Could not sync assignments to server", error);
+  // Avoid bulk PUT of in-memory state — that can resurrect assignments
+  // deleted from Scout Summary in another tab. Retry individually instead.
+  const ids = Object.keys(state.assignments || {});
+  for (const id of ids) {
+    try {
+      await persistAssignment(id);
+    } catch (error) {
+      console.warn("Could not sync assignment", id, error);
+    }
   }
 }
 
@@ -147,13 +189,44 @@ function schedulePersist() {
 }
 
 function assignmentFor(fixtureId) {
-  return state.assignments[fixtureId] || { staff: "", watch_type: "" };
+  const row = state.assignments[fixtureId] || { staff: [], watch_type: "" };
+  return {
+    ...row,
+    staff: staffNames(row.staff),
+  };
+}
+
+function staffNames(value) {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => staffNames(item));
+  }
+  if (value && typeof value === "object") {
+    return staffNames(value.name || value.staff || value.label || "");
+  }
+  const single = String(value || "").trim();
+  return single ? [single] : [];
+}
+
+function staffLabel(value) {
+  return staffNames(value).join(", ");
+}
+
+function hasStaff(value) {
+  return staffNames(value).length > 0;
+}
+
+function primaryStaff(value) {
+  return staffNames(value)[0] || "";
 }
 
 function setAssignment(id, patch) {
   const current = assignmentFor(id);
-  const next = { ...current, ...patch };
-  if (!next.staff && !next.watch_type) {
+  const next = {
+    ...current,
+    ...patch,
+    staff: staffNames(patch.staff !== undefined ? patch.staff : current.staff),
+  };
+  if (!hasStaff(next.staff) && !next.watch_type) {
     delete state.assignments[id];
   } else {
     state.assignments[id] = next;
@@ -171,7 +244,7 @@ async function persistAssignment(id) {
   const body = assignment
     ? {
         fixture_id: id,
-        staff: assignment.staff || "",
+        staff: staffNames(assignment.staff),
         watch_type: assignment.watch_type || "",
         season: assignment.season || state.season || "",
         league: assignment.league || fixture?.league || "",
@@ -183,7 +256,7 @@ async function persistAssignment(id) {
       }
     : {
         fixture_id: id,
-        staff: "",
+        staff: [],
         watch_type: "",
         watched_players: [],
       };
@@ -209,12 +282,199 @@ async function persistAssignment(id) {
   }
 }
 
+async function sendBulkEmail(kind) {
+  if (kind === "ticket-request") {
+    openTicketRequestModal();
+    return;
+  }
+
+  if (!window.confirm("Email coaching + recruitment with the next fortnight of assigned fixtures?")) {
+    return;
+  }
+
+  const btn = els.scheduleUpdateBtn;
+  if (btn) btn.disabled = true;
+  setStatus("Sending fortnight schedule update…", "loading");
+
+  try {
+    const data = await fetchJson("/api/fixture-planner/email/schedule-update", {
+      method: "POST",
+      body: "{}",
+    });
+    if (data.sent) {
+      const to = Array.isArray(data.to) ? data.to.join(", ") : data.to || "recipients";
+      setStatus(`Schedule update sent to ${to} · ${data.fixture_count || 0} fixture(s)`, "ok");
+    } else {
+      setStatus(data.reason || "Email not sent", "error");
+    }
+  } catch (error) {
+    setStatus(error.message || "Could not send email", "error");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function closeTicketRequestModal() {
+  if (!els.ticketModal) return;
+  els.ticketModal.classList.add("fp-assign-modal--hidden");
+  els.ticketModal.setAttribute("aria-hidden", "true");
+}
+
+function renderTicketRequestRows(fixtures, alreadyRequested = []) {
+  if (!els.ticketModalBody) return;
+  if (!fixtures.length && !alreadyRequested.length) {
+    els.ticketModalBody.innerHTML = `<p class="fp-assign-modal__empty">No LIVE fixtures assigned in the next two weeks. Assign someone as LIVE first.</p>`;
+    if (els.ticketConfirmBtn) els.ticketConfirmBtn.disabled = true;
+    return;
+  }
+  if (!fixtures.length) {
+    els.ticketModalBody.innerHTML = `
+      <p class="fp-assign-modal__empty">All LIVE fixtures in the next two weeks have already been requested.</p>
+      ${renderAlreadyRequestedTickets(alreadyRequested)}
+    `;
+    if (els.ticketConfirmBtn) els.ticketConfirmBtn.disabled = true;
+    return;
+  }
+  if (els.ticketConfirmBtn) els.ticketConfirmBtn.disabled = false;
+  els.ticketModalBody.innerHTML = `
+    <p class="fp-ticket-modal__hint">New requests for the next two weeks only. Games already sent to admin stay remembered.</p>
+    <div class="fp-ticket-list">
+      ${fixtures
+        .map((row) => {
+          const id = escapeHtml(row.fixture_id || "");
+          const match = `${row.home || "Home"} vs ${row.away || "Away"}`;
+          return `
+            <article class="fp-ticket-card" data-fixture-id="${id}">
+              <div class="fp-ticket-card__main">
+                <strong class="fp-ticket-card__match">${escapeHtml(match)}</strong>
+                <span class="fp-ticket-card__meta">${escapeHtml(row.league || "")} · ${escapeHtml(row.kickoff_label || row.date || "TBC")} · ${escapeHtml(staffLabel(row.staff) || "TBC")}</span>
+              </div>
+              <div class="fp-ticket-card__fields">
+                <label class="fp-ticket-field">
+                  <span>Tickets</span>
+                  <input type="number" min="0" step="1" value="1" data-ticket-qty />
+                </label>
+                <label class="fp-ticket-field">
+                  <span>Parking</span>
+                  <select data-ticket-parking>
+                    <option value="No">No</option>
+                    <option value="Yes">Yes</option>
+                    <option value="Yes — 1 space">Yes — 1 space</option>
+                    <option value="Yes — 2 spaces">Yes — 2 spaces</option>
+                  </select>
+                </label>
+                <label class="fp-ticket-field fp-ticket-field--notes">
+                  <span>Notes</span>
+                  <input type="text" placeholder="Optional for this game" data-ticket-notes />
+                </label>
+              </div>
+            </article>
+          `;
+        })
+        .join("")}
+    </div>
+    ${renderAlreadyRequestedTickets(alreadyRequested)}
+  `;
+}
+
+function renderAlreadyRequestedTickets(rows) {
+  if (!rows?.length) return "";
+  return `
+    <div class="fp-ticket-already">
+      <h3 class="fp-ticket-already__title">Already requested (${rows.length})</h3>
+      <ul class="fp-ticket-already__list">
+        ${rows
+          .map((row) => {
+            const match = `${row.home || "Home"} vs ${row.away || "Away"}`;
+            return `<li><strong>${escapeHtml(match)}</strong> · ${escapeHtml(row.kickoff_label || row.date || "TBC")} · ${escapeHtml(staffLabel(row.staff) || "TBC")}</li>`;
+          })
+          .join("")}
+      </ul>
+    </div>
+  `;
+}
+
+async function openTicketRequestModal() {
+  if (!els.ticketModal) return;
+  els.ticketModal.classList.remove("fp-assign-modal--hidden");
+  els.ticketModal.setAttribute("aria-hidden", "false");
+  if (els.ticketModalBody) {
+    els.ticketModalBody.innerHTML = `<p class="fp-assign-modal__loading">Loading next two weeks of LIVE fixtures…</p>`;
+  }
+  if (els.ticketAdditionalRequests) els.ticketAdditionalRequests.value = "";
+  if (els.ticketConfirmBtn) els.ticketConfirmBtn.disabled = true;
+  if (els.ticketModalMeta) els.ticketModalMeta.textContent = "Fetching LIVE assignments…";
+  if (els.ticketModalTitle) els.ticketModalTitle.textContent = "Next two weeks · ticket requests";
+
+  try {
+    const data = await fetchJson("/api/fixture-planner/email/ticket-request");
+    const recipients = (data.recipients || []).join(", ") || "No admin recipients configured";
+    const newCount = data.fixture_count || (data.fixtures || []).length || 0;
+    const doneCount = data.already_requested_count || (data.already_requested || []).length || 0;
+    if (els.ticketModalMeta) {
+      els.ticketModalMeta.textContent = `${data.period_label || "Next two weeks"} · ${newCount} new · ${doneCount} already sent · To: ${recipients}`;
+    }
+    if (els.ticketModalTitle) {
+      els.ticketModalTitle.textContent =
+        newCount > 0
+          ? `${newCount} new live fixture${newCount === 1 ? "" : "s"} needing tickets`
+          : "No new ticket requests";
+    }
+    renderTicketRequestRows(data.fixtures || [], data.already_requested || []);
+  } catch (error) {
+    if (els.ticketModalBody) {
+      els.ticketModalBody.innerHTML = `<p class="fp-assign-modal__empty">${escapeHtml(error.message || "Could not load fixtures.")}</p>`;
+    }
+  }
+}
+
+function collectTicketRequestPayload() {
+  const fixtures = [...(els.ticketModalBody?.querySelectorAll(".fp-ticket-card") || [])].map((card) => ({
+    fixture_id: card.dataset.fixtureId || "",
+    tickets: Number(card.querySelector("[data-ticket-qty]")?.value || 1),
+    parking: card.querySelector("[data-ticket-parking]")?.value || "No",
+    notes: card.querySelector("[data-ticket-notes]")?.value || "",
+  }));
+  return {
+    fixtures,
+    additional_requests: els.ticketAdditionalRequests?.value || "",
+  };
+}
+
+async function confirmTicketRequest() {
+  const payload = collectTicketRequestPayload();
+  if (!payload.fixtures.length) {
+    setStatus("No LIVE fixtures to send", "error");
+    return;
+  }
+  if (els.ticketConfirmBtn) els.ticketConfirmBtn.disabled = true;
+  setStatus("Sending ticket request to admin…", "loading");
+  try {
+    const data = await fetchJson("/api/fixture-planner/email/ticket-request", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    if (data.sent) {
+      const to = Array.isArray(data.to) ? data.to.join(", ") : data.to || "recipients";
+      setStatus(`Ticket request sent to ${to} · ${data.fixture_count || 0} new fixture(s)`, "ok");
+      closeTicketRequestModal();
+    } else {
+      setStatus(data.reason || "Email not sent", "error");
+    }
+  } catch (error) {
+    setStatus(error.message || "Could not send email", "error");
+  } finally {
+    if (els.ticketConfirmBtn) els.ticketConfirmBtn.disabled = false;
+  }
+}
+
 function formatTime(iso) {
   if (!iso) return "TBC";
   return new Date(iso).toLocaleTimeString("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
+    timeZone: "Europe/London",
   });
 }
 
@@ -240,7 +500,20 @@ function formatShortDate(dateKey) {
 }
 
 function fixtureDateKey(fixture) {
-  return fixture.date || (fixture.scheduled_date || "").slice(0, 10);
+  const iso = fixture.kickoff_utc || fixture.scheduled_date || "";
+  if (iso && String(iso).includes("T")) {
+    try {
+      return new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Europe/London",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date(iso));
+    } catch (_err) {
+      /* fall through */
+    }
+  }
+  return fixture.date || String(iso || "").slice(0, 10);
 }
 
 function footballWeekendKey(dateKey) {
@@ -280,28 +553,178 @@ function escapeHtml(value) {
 }
 
 function isCompletedFixture(fixture) {
-  return fixture.status === "completed";
+  if (String(fixture?.status || "").toLowerCase() === "completed") return true;
+  if (fixture?.manual && String(fixture?.status || "").toLowerCase() === "scheduled") return false;
+  if (fixture?.manual && fixture?.score) return true;
+  return false;
 }
 
-function renderLineupBlock(label, lineup) {
-  if (!lineup?.players?.length) {
-    return "";
+function isManualFixture(fixture) {
+  return Boolean(fixture?.manual) || String(fixtureId(fixture) || "").startsWith("manual|");
+}
+
+function reportedPlayerIdsForFixture(fixtureIdValue) {
+  const bucket = state.scoutingReportsByFixture[fixtureIdValue] || {};
+  return new Set(
+    Object.values(bucket)
+      .map((row) => String(row?.player_id || ""))
+      .filter(Boolean),
+  );
+}
+
+function playerSurname(name) {
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  return (parts[parts.length - 1] || name || "").toUpperCase();
+}
+
+function playerInitials(name) {
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!parts.length) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] || ""}${parts[parts.length - 1][0] || ""}`.toUpperCase();
+}
+
+function isGoalkeeper(player) {
+  const position = String(player?.position_code || player?.position || "").toUpperCase();
+  return position === "GOALKEEPER" || position === "GK";
+}
+
+function playerPhotoUrl(player) {
+  if (player?.photo_url) return player.photo_url;
+  const name = String(player?.name || "").trim();
+  if (!name) return null;
+  return `/api/player-photo?name=${encodeURIComponent(name)}`;
+}
+
+function playerPhotoMarkup(player) {
+  const name = String(player?.name || "");
+  const photoUrl = playerPhotoUrl(player);
+  const shirt = player?.shirt_number ?? "";
+  if (photoUrl) {
+    return `<img class="so-pitch-player__img" src="${escapeHtml(photoUrl)}" alt="${escapeHtml(name)}" loading="lazy" onerror="this.closest('.so-pitch-player__face').classList.add('so-pitch-player__face--fallback'); this.remove();" />`;
   }
-  const formation = lineup.formation ? ` · ${lineup.formation}` : "";
-  const players = lineup.players
-    .map((player) => {
-      const shirt = player.shirt_number ? `${player.shirt_number} ` : "";
-      const pos = player.position ? ` (${player.position})` : "";
-      const pxt =
-        player.pxt != null ? ` · PXT ${player.pxt}` : "";
-      return `<li>${escapeHtml(`${shirt}${player.name}${pos}${pxt}`)}</li>`;
-    })
+  return `<span class="so-pitch-player__initials">${escapeHtml(String(shirt || playerInitials(name)))}</span>`;
+}
+
+function teamCrestMarkup(team) {
+  const name = String(team?.name || "?");
+  const src = team?.image_url || team?.imageUrl || "";
+  if (src) {
+    return `<img class="so-match-team__crest" src="${escapeHtml(src)}" alt="" loading="lazy" />`;
+  }
+  const initials = name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+  return `<span class="so-match-team__crest so-match-team__crest--fallback">${escapeHtml(initials)}</span>`;
+}
+
+function pitchPlayerMarkup(player, index, { fixtureId, side }) {
+  let left = Number(player.x_pct ?? 50);
+  let top = Number(player.y_pct ?? 50);
+  left = Math.max(14, Math.min(86, left));
+  const goalkeeper = isGoalkeeper(player);
+  if (goalkeeper) {
+    top = Math.min(top, 80);
+  } else if (top <= 16) {
+    top = 12;
+  } else {
+    top = Math.max(12, Math.min(86, top));
+  }
+  const shirt = player.shirt_number ? String(player.shirt_number) : "";
+  const reported = reportedPlayerIdsForFixture(fixtureId).has(String(player.player_id || ""));
+  const pxt =
+    player.pxt != null
+      ? `<span class="so-pitch-player__pxt${player.pxt < 0 ? " so-pitch-player__pxt--neg" : ""}">${player.pxt}</span>`
+      : `<span class="so-pitch-player__pxt so-pitch-player__pxt--na">—</span>`;
+  const title = [player.name, player.position, player.pxt != null ? `PXT ${player.pxt}` : ""]
+    .filter(Boolean)
+    .join(" · ");
+  return `<button type="button" class="so-pitch-player${reported ? " so-pitch-player--reported" : ""}" style="left:${left}%;top:${top}%;z-index:${index + 1}" title="${escapeHtml(title)}" data-player-id="${player.player_id}" data-side="${escapeHtml(side)}" data-player-name="${escapeHtml(player.name || "")}" data-position="${escapeHtml(player.position_code || player.position || "")}" aria-pressed="${reported ? "true" : "false"}">
+    <div class="so-pitch-player__face${goalkeeper ? " so-pitch-player__face--gk" : ""}">${playerPhotoMarkup(player)}</div>
+    <div class="so-pitch-player__card">
+      ${shirt ? `<span class="so-pitch-player__shirt">${escapeHtml(shirt)}</span>` : ""}
+      <span class="so-pitch-player__name">${escapeHtml(playerSurname(player.name))}</span>
+      ${pxt}
+    </div>
+  </button>`;
+}
+
+function renderSquadTable(players, { fixtureId, side }) {
+  const reported = reportedPlayerIdsForFixture(fixtureId);
+  const rows = [...players].sort((a, b) => {
+    const aPxt = a.pxt ?? -999;
+    const bPxt = b.pxt ?? -999;
+    return bPxt - aPxt;
+  });
+  return `
+    <div class="so-match-team__squad">
+      <div class="so-match-team__squad-head">
+        <span>#</span>
+        <span>Player</span>
+        <span>Pos</span>
+        <span>PXT</span>
+      </div>
+      ${rows
+        .map((player) => {
+          const pxtClass =
+            player.pxt == null
+              ? "so-match-team__pxt-val--na"
+              : player.pxt < 0
+                ? "so-match-team__pxt-val--neg"
+                : "";
+          const isReported = reported.has(String(player.player_id || ""));
+          return `<div class="so-match-team__squad-row${isReported ? " so-match-team__squad-row--reported" : ""}" role="button" tabindex="0" data-player-id="${player.player_id}" data-side="${escapeHtml(side)}" data-player-name="${escapeHtml(player.name || "")}" data-position="${escapeHtml(player.position_code || player.position || "")}" aria-pressed="${isReported ? "true" : "false"}">
+            <span class="so-match-team__num">${escapeHtml(String(player.shirt_number || "—"))}</span>
+            <span class="so-match-team__player">${escapeHtml(player.name || "")}</span>
+            <span class="so-match-team__pos">${escapeHtml(player.position || "—")}</span>
+            <span class="so-match-team__pxt-val ${pxtClass}">${player.pxt != null ? player.pxt : "—"}</span>
+          </div>`;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function renderFormationPitch(sideLabel, team, lineup, teamPxt, { fixtureId, side }) {
+  const players = lineup?.players || [];
+  if (!players.length) {
+    return `<section class="so-match-team"><p class="so-match-team__empty">Lineup not available.</p></section>`;
+  }
+  const formation = lineup.formation ? lineup.formation : "";
+  const pxtLabel = teamPxt != null ? `<span class="so-match-team__pxt">Team PXT ${teamPxt}</span>` : "";
+  const markers = players
+    .map((player, index) => pitchPlayerMarkup(player, index, { fixtureId, side }))
     .join("");
   return `
-    <details class="fp-fixture-lineup">
-      <summary>${escapeHtml(label)}${formation}</summary>
-      <ol class="fp-fixture-lineup__list">${players}</ol>
-    </details>
+    <section class="so-match-team" data-side="${escapeHtml(side)}">
+      <header class="so-match-team__head">
+        ${teamCrestMarkup(team)}
+        <div class="so-match-team__titles">
+          <h3 class="so-match-team__name">${escapeHtml(sideLabel)}</h3>
+          <div class="so-match-team__sub">
+            ${formation ? `<span class="so-match-team__formation">${escapeHtml(formation)}</span>` : ""}
+            ${pxtLabel}
+          </div>
+        </div>
+      </header>
+      <div class="so-match-pitch">
+        <div class="so-match-pitch__markings"></div>
+        ${markers}
+      </div>
+      <details class="so-match-team__details" open>
+        <summary class="so-match-team__details-summary">Full squad &amp; PXT</summary>
+        ${renderSquadTable(players, { fixtureId, side })}
+      </details>
+    </section>
   `;
 }
 
@@ -309,61 +732,257 @@ function renderEnrichmentBody(fixture, enrich) {
   if (!enrich) {
     return `<p class="fp-fixture-enrich__hint">Venue, PXT ratings and lineups will load here.</p>`;
   }
-  const venue = enrich.venue
-    ? `<p class="fp-fixture-enrich__venue">${escapeHtml(enrich.venue)}</p>`
-    : "";
+  const id = fixtureId(fixture);
+  const homeName = fixture.home?.name || enrich.home_team?.name || "Home";
+  const awayName = fixture.away?.name || enrich.away_team?.name || "Away";
   const homePxt = enrich.pxt?.home;
   const awayPxt = enrich.pxt?.away;
-  const pxtLine =
+  const venue = enrich.venue
+    ? `<div class="so-match-modal__stat so-match-modal__stat--venue">${escapeHtml(enrich.venue)}</div>`
+    : "";
+  const teamPxt =
     homePxt != null || awayPxt != null
-      ? `<p class="fp-fixture-enrich__pxt">PXT <span>${homePxt ?? "—"}</span> – <span>${awayPxt ?? "—"}</span></p>`
+      ? `<div class="so-match-modal__stat so-match-modal__stat--pxt"><span class="so-match-modal__stat-label">Team PXT</span> <strong>${homePxt ?? "—"}</strong> <span class="so-match-modal__stat-sep">vs</span> <strong>${awayPxt ?? "—"}</strong></div>`
       : "";
-  const homeName = fixture.home?.name || "Home";
-  const awayName = fixture.away?.name || "Away";
-  const lineups = [
-    renderLineupBlock(homeName, enrich.lineups?.home),
-    renderLineupBlock(awayName, enrich.lineups?.away),
-  ].join("");
-  return `${venue}${pxtLine}${lineups}`;
+  const reportedIds = reportedPlayerIdsForFixture(id);
+  const reportedNames = Object.values(state.scoutingReportsByFixture[id] || {})
+    .map((row) => row.player_name)
+    .filter(Boolean);
+  const reportedSummary = reportedNames.length
+    ? `<div class="so-match-modal__reports"><span class="so-match-modal__reports-label">Reports marked (${reportedIds.size})</span> ${reportedNames
+        .map((name) => `<span class="so-match-modal__report-chip">${escapeHtml(name)}</span>`)
+        .join("")}</div>`
+    : `<p class="so-match-modal__reports-hint">Click players on the pitch or in the squad list to mark scouting reports.</p>`;
+
+  return `
+    <div class="so-match-modal__stats">${venue}${teamPxt}</div>
+    ${reportedSummary}
+    <div class="so-match-modal__pitches">
+      ${renderFormationPitch(homeName, enrich.home_team || fixture.home, enrich.lineups?.home, homePxt, {
+        fixtureId: id,
+        side: "home",
+      })}
+      ${renderFormationPitch(awayName, enrich.away_team || fixture.away, enrich.lineups?.away, awayPxt, {
+        fixtureId: id,
+        side: "away",
+      })}
+    </div>
+  `;
 }
 
 function renderCompletedExtras(fixture) {
   if (!isCompletedFixture(fixture)) {
     return "";
   }
+  const id = fixtureId(fixture);
+  if (isManualFixture(fixture)) {
+    const players = fixture.watched_players || [];
+    const sheet = fixture.team_sheet ? " · team sheet" : "";
+    const hint = [
+      fixture.venue || "",
+      players.length ? `${players.length} player${players.length === 1 ? "" : "s"} watched` : "No players logged",
+      fixture.notes ? "notes" : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    return `
+      <button
+        type="button"
+        class="fp-match-details-btn"
+        data-open-match-details="${escapeHtml(id)}"
+      >
+        <span class="fp-match-details-btn__title">Manual match details</span>
+        <span class="fp-match-details-btn__hint">${escapeHtml(hint || "Open notes & players")}${escapeHtml(sheet)}</span>
+      </button>
+    `;
+  }
   if (!fixture.match_id) {
     return `<p class="fp-fixture-enrich__hint">Match details need Impect data for this fixture.</p>`;
   }
 
-  const id = fixtureId(fixture);
   const enrich = state.enrichment[id];
   const pending = state.enrichmentPending[id];
   const summaryHint = enrich
     ? [enrich.venue, enrich.pxt?.home != null ? `PXT ${enrich.pxt.home}–${enrich.pxt.away}` : ""]
         .filter(Boolean)
-        .join(" · ")
+        .join(" · ") || "Lineups ready"
     : pending
       ? "Loading…"
-      : "Tap to load venue, PXT & lineups";
-
-  const body = pending
-    ? `<p class="fp-fixture-enrich fp-fixture-enrich--loading">Loading lineups &amp; ratings…</p>`
-    : `<div class="fp-fixture-enrich">${renderEnrichmentBody(fixture, enrich)}</div>`;
+      : "Open for venue, PXT, lineups & reports";
 
   return `
-    <details class="fp-fixture-details"${enrich ? " open" : ""} data-fixture-id="${escapeHtml(id)}">
-      <summary class="fp-fixture-details__summary">
-        <span class="fp-fixture-details__title">Match details</span>
-        <span class="fp-fixture-details__hint">${escapeHtml(summaryHint)}</span>
-      </summary>
-      ${body}
-    </details>
+    <button
+      type="button"
+      class="fp-match-details-btn"
+      data-open-match-details="${escapeHtml(id)}"
+    >
+      <span class="fp-match-details-btn__title">Match details</span>
+      <span class="fp-match-details-btn__hint">${escapeHtml(summaryHint)}</span>
+    </button>
   `;
+}
+
+function closeMatchDetailsModal() {
+  state.matchDetailsFixtureId = null;
+  if (els.matchDetailsModal) {
+    els.matchDetailsModal.classList.add("fp-assign-modal--hidden");
+    els.matchDetailsModal.setAttribute("aria-hidden", "true");
+  }
+}
+
+function renderMatchDetailsModalBody() {
+  if (!els.matchDetailsBody) return;
+  const id = state.matchDetailsFixtureId;
+  if (!id) {
+    els.matchDetailsBody.innerHTML = "";
+    return;
+  }
+  const fixture = fixtureFromState(id);
+  if (!fixture) {
+    els.matchDetailsBody.innerHTML = `<p class="fp-assign-modal__empty">Fixture not found.</p>`;
+    return;
+  }
+  if (isManualFixture(fixture)) {
+    els.matchDetailsBody.innerHTML = `<div class="fp-fixture-enrich fp-fixture-enrich--modal">${renderManualMatchBody(fixture)}</div>`;
+    return;
+  }
+  const enrich = state.enrichment[id];
+  const pending = state.enrichmentPending[id];
+  if (pending && !enrich) {
+    els.matchDetailsBody.innerHTML = `<p class="fp-assign-modal__loading">Loading venue, PXT &amp; lineups…</p>`;
+    return;
+  }
+  els.matchDetailsBody.innerHTML = `<div class="fp-fixture-enrich fp-fixture-enrich--modal">${renderEnrichmentBody(fixture, enrich)}</div>`;
+}
+
+function renderManualMatchBody(fixture) {
+  const players = fixture.watched_players || [];
+  const assignment = assignmentFor(fixtureId(fixture));
+  const venue = fixture.venue
+    ? `<div class="so-match-modal__stat so-match-modal__stat--venue">${escapeHtml(fixture.venue)}</div>`
+    : "";
+  const score = fixture.score
+    ? `<div class="so-match-modal__stat"><span class="so-match-modal__stat-label">Score</span> <strong>${escapeHtml(fixture.score)}</strong></div>`
+    : "";
+  const coverage =
+    hasStaff(assignment.staff) || hasStaff(fixture.staff)
+      ? `<div class="so-match-modal__stat"><span class="so-match-modal__stat-label">Coverage</span> <strong>${escapeHtml(assignment.watch_type || fixture.watch_type || "LIVE")}</strong> · ${escapeHtml(staffLabel(assignment.staff || fixture.staff) || "")}</div>`
+      : "";
+  const notes = fixture.notes
+    ? `<section class="fp-manual-detail"><h3>Game notes</h3><p>${escapeHtml(fixture.notes).replace(/\n/g, "<br>")}</p></section>`
+    : `<p class="fp-fixture-enrich__hint">No game notes logged.</p>`;
+  const sheet = fixture.team_sheet
+    ? `<p class="fp-manual-detail__sheet"><a class="fp-btn fp-btn--ghost" href="/api/fixture-planner/manual-fixtures/${encodeURIComponent(fixtureId(fixture))}/team-sheet" target="_blank" rel="noopener">Open team sheet (${escapeHtml(fixture.team_sheet.filename || "file")})</a></p>`
+    : `<p class="fp-fixture-enrich__hint">No team sheet attached.</p>`;
+  const playerRows = players.length
+    ? `<ul class="fp-manual-detail__players">${players
+        .map((player) => {
+          const name = player.player_name || "Player";
+          const bits = [player.team || "", player.side || "", player.position || ""].filter(Boolean);
+          const meta = bits.length ? ` · ${escapeHtml(bits.join(" · "))}` : "";
+          const pid = Number(player.player_id || 0);
+          const nameHtml =
+            pid > 0
+              ? `<a class="fp-manual-player-link" href="/player/${pid}">${escapeHtml(name)}</a>`
+              : `<span class="fp-manual-player-link" data-resolve-player-name="${escapeHtml(name)}" data-resolve-player-team="${escapeHtml(player.team || "")}">${escapeHtml(name)}</span>`;
+          return `<li>${nameHtml}${meta}</li>`;
+        })
+        .join("")}</ul>`
+    : `<p class="fp-fixture-enrich__hint">No players logged for this game.</p>`;
+  return `
+    <div class="so-match-modal__stats">${venue}${score}${coverage}</div>
+    ${notes}
+    <section class="fp-manual-detail">
+      <h3>Players watched</h3>
+      ${playerRows}
+    </section>
+    <section class="fp-manual-detail">
+      <h3>Team sheet</h3>
+      ${sheet}
+    </section>
+  `;
+}
+
+async function resolvePlayerCatalogId(name, team = "") {
+  const clean = String(name || "").trim();
+  if (!clean) return null;
+  try {
+    const data = await fetchJson("/api/players", {
+      method: "POST",
+      body: JSON.stringify({ search: clean }),
+    });
+    const players = data.players || [];
+    const norm = clean.toLowerCase();
+    let matches = players.filter((row) => String(row.name || "").trim().toLowerCase() === norm);
+    if (!matches.length) {
+      matches = players.filter((row) => String(row.name || "").trim().toLowerCase().includes(norm));
+    }
+    const teamNorm = String(team || "").trim().toLowerCase();
+    if (teamNorm && matches.length > 1) {
+      const byClub = matches.filter((row) => {
+        const club = String(row.club || row.context_club || row.label || "").toLowerCase();
+        return club.includes(teamNorm) || teamNorm.includes(club);
+      });
+      if (byClub.length) matches = byClub;
+    }
+    const best = matches[0] || (players.length === 1 ? players[0] : null);
+    if (!best) return null;
+    const id = Number(best.impect_player_id || best.playerId || best.id || 0);
+    return id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+async function enrichManualPlayerLinks() {
+  if (!els.matchDetailsBody) return;
+  const nodes = [...els.matchDetailsBody.querySelectorAll("[data-resolve-player-name]")];
+  await Promise.all(
+    nodes.map(async (node) => {
+      const name = node.dataset.resolvePlayerName || "";
+      const team = node.dataset.resolvePlayerTeam || "";
+      const id = await resolvePlayerCatalogId(name, team);
+      if (!id) return;
+      const link = document.createElement("a");
+      link.className = "fp-manual-player-link";
+      link.href = `/player/${id}`;
+      link.textContent = name;
+      node.replaceWith(link);
+    }),
+  );
+}
+
+async function openMatchDetailsModal(fixtureIdValue) {
+  const fixture = fixtureFromState(fixtureIdValue);
+  if (!fixture || !els.matchDetailsModal) return;
+  state.matchDetailsFixtureId = fixtureIdValue;
+  if (els.matchDetailsTitle) {
+    els.matchDetailsTitle.textContent = fixtureTeams(fixture);
+  }
+  if (els.matchDetailsMeta) {
+    const bits = [
+      fixture.league || "",
+      formatShortDate(fixtureDateKey(fixture)),
+      formatTime(fixture.kickoff_utc || fixture.scheduled_date),
+      isManualFixture(fixture) ? "Manual" : "",
+    ].filter(Boolean);
+    els.matchDetailsMeta.textContent = bits.join(" · ");
+  }
+  els.matchDetailsModal.classList.remove("fp-assign-modal--hidden");
+  els.matchDetailsModal.setAttribute("aria-hidden", "false");
+  renderMatchDetailsModalBody();
+  if (isManualFixture(fixture)) {
+    enrichManualPlayerLinks();
+  } else {
+    await loadEnrichmentForIds([fixtureIdValue]);
+    renderMatchDetailsModalBody();
+  }
 }
 
 async function loadEnrichmentForIds(ids) {
   const needed = ids.filter((id) => id && !state.enrichment[id] && !state.enrichmentPending[id]).slice(0, 24);
   if (!needed.length) {
+    refreshEnrichmentPanels(ids.filter(Boolean));
     return;
   }
 
@@ -379,6 +998,7 @@ async function loadEnrichmentForIds(ids) {
     });
     const data = await fetchJson(`/api/fixture-planner/match-enrichment?${params}`);
     Object.assign(state.enrichment, data.enrichments || {});
+    await Promise.all(needed.map((id) => loadScoutingReportsForFixture(id)));
   } catch (error) {
     console.warn("Could not load match enrichment", error);
   } finally {
@@ -389,38 +1009,109 @@ async function loadEnrichmentForIds(ids) {
   }
 }
 
+async function loadScoutingReportsForFixture(fixtureIdValue) {
+  if (!fixtureIdValue) return;
+  try {
+    const params = new URLSearchParams({ fixture_id: fixtureIdValue });
+    const data = await fetchJson(`/api/fixture-planner/scouting-reports?${params}`);
+    state.scoutingReportsByFixture[fixtureIdValue] = data.reports || {};
+  } catch (error) {
+    console.warn("Could not load scouting reports", error);
+  }
+}
+
 function refreshEnrichmentPanels(ids) {
+  // Card buttons only need a light hint refresh via re-render if visible.
+  const openId = state.matchDetailsFixtureId;
+  if (openId && ids.includes(openId)) {
+    renderMatchDetailsModalBody();
+  }
+  // Update button hints without rebuilding the whole list.
   ids.forEach((id) => {
-    const details = els.listRoot?.querySelector(`.fp-fixture-details[data-fixture-id="${CSS.escape(id)}"]`);
-    if (!details) return;
-    const fixture = fixtureFromState(id);
-    if (!fixture) return;
+    const roots = [els.listRoot, els.calendarRoot].filter(Boolean);
+    let btn = null;
+    for (const root of roots) {
+      btn = [...root.querySelectorAll("[data-open-match-details]")].find(
+        (el) => el.dataset.openMatchDetails === id,
+      );
+      if (btn) break;
+    }
+    if (!btn) return;
     const enrich = state.enrichment[id];
     const pending = state.enrichmentPending[id];
-    const body = pending
-      ? `<p class="fp-fixture-enrich fp-fixture-enrich--loading">Loading lineups &amp; ratings…</p>`
-      : `<div class="fp-fixture-enrich">${renderEnrichmentBody(fixture, enrich)}</div>`;
-    const summary = details.querySelector(".fp-fixture-details__hint");
-    if (summary) {
-      const summaryHint = enrich
-        ? [enrich.venue, enrich.pxt?.home != null ? `PXT ${enrich.pxt.home}–${enrich.pxt.away}` : ""]
-            .filter(Boolean)
-            .join(" · ")
-        : pending
-          ? "Loading…"
-          : "Tap to load venue, PXT & lineups";
-      summary.textContent = summaryHint;
-    }
-    const content = details.querySelector(".fp-fixture-enrich, .fp-fixture-enrich--loading");
-    if (content) {
-      content.outerHTML = body;
-    } else if (details.open) {
-      details.insertAdjacentHTML("beforeend", body);
-    }
-    if (enrich) {
-      details.open = true;
-    }
+    const hint = btn.querySelector(".fp-match-details-btn__hint");
+    if (!hint) return;
+    hint.textContent = enrich
+      ? [enrich.venue, enrich.pxt?.home != null ? `PXT ${enrich.pxt.home}–${enrich.pxt.away}` : ""]
+          .filter(Boolean)
+          .join(" · ") || "Lineups ready"
+      : pending
+        ? "Loading…"
+        : "Open for venue, PXT, lineups & reports";
   });
+}
+
+async function toggleLineupReport(button) {
+  const fixtureIdValue = button.dataset.fixtureId || state.matchDetailsFixtureId || "";
+  const playerId = Number(button.dataset.playerId || 0);
+  if (!fixtureIdValue || !playerId) return;
+
+  const bucket = { ...(state.scoutingReportsByFixture[fixtureIdValue] || {}) };
+  const key = String(playerId);
+  const currentlyReported = Boolean(bucket[key]);
+  const reported = !currentlyReported;
+  const fixture = fixtureFromState(fixtureIdValue);
+  const enrich = state.enrichment[fixtureIdValue];
+  const assignment = assignmentFor(fixtureIdValue);
+  const side = button.dataset.side || "";
+  const team =
+    button.dataset.team ||
+    (side === "away"
+      ? fixture?.away?.name || enrich?.away_team?.name || ""
+      : fixture?.home?.name || enrich?.home_team?.name || "");
+  const playerName = button.dataset.playerName || "";
+  const position = button.dataset.position || "";
+
+  if (reported) {
+    bucket[key] = {
+      player_id: playerId,
+      player_name: playerName,
+      side,
+      team,
+      position,
+      marked_at: new Date().toISOString(),
+    };
+  } else {
+    delete bucket[key];
+  }
+  state.scoutingReportsByFixture[fixtureIdValue] = bucket;
+  refreshEnrichmentPanels([fixtureIdValue]);
+
+  try {
+    await fetchJson("/api/fixture-planner/scouting-report", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fixture_id: fixtureIdValue,
+        player_id: playerId,
+        player_name: playerName,
+        side,
+        team,
+        position,
+        season: state.season || fixture?.season || "",
+        staff: primaryStaff(assignment.staff),
+        fixture_date: fixtureDateKey(fixture) || "",
+        reported,
+      }),
+    });
+    els.statusBar.textContent = reported
+      ? `Marked report: ${playerName || "player"}`
+      : `Removed report mark: ${playerName || "player"}`;
+  } catch (error) {
+    await loadScoutingReportsForFixture(fixtureIdValue);
+    refreshEnrichmentPanels([fixtureIdValue]);
+    els.statusBar.textContent = error.message || "Could not save report mark.";
+  }
 }
 
 function fixtureTeams(fixture) {
@@ -448,9 +1139,54 @@ function isValidDateKey(dateKey) {
 
 const MAX_UNFILTERED_FIXTURES = 320;
 
+function isCupCompetition(league) {
+  const name = String(league || "").trim();
+  if (!name) return false;
+  if (cupUis().includes(name)) return true;
+  const lower = name.toLowerCase();
+  return (
+    lower.includes("cup") ||
+    lower.includes("trophy") ||
+    lower.includes("carabao") ||
+    lower.includes("papa john") ||
+    lower.includes("vertu") ||
+    lower.includes("professional development league") ||
+    lower === "pdl"
+  );
+}
+
 function fixturesForLeagues(all = state.payload?.fixtures || []) {
+  if (state.cupsMode) {
+    const selected = (state.leagues.length ? state.leagues : cupUis()).filter((name) =>
+      cupUis().includes(name),
+    );
+    const active = selected.length ? selected : cupUis();
+    return all.filter((fixture) => {
+      if (!(fixture.cup || isCupCompetition(fixture.league))) return false;
+      const league = String(fixture.league || "").trim();
+      if (active.includes(league)) return true;
+      // Alias: older EFL Trophy rows still match Vertu Trophy filter
+      if (active.includes("Vertu Trophy") && /efl trophy|vertu trophy/i.test(league)) return true;
+      if (active.includes("Professional Development League") && /^pdl$/i.test(league)) return true;
+      return false;
+    });
+  }
   const leagues = state.leagues.length ? state.leagues : (state.meta?.default_leagues || []);
-  return all.filter((fixture) => leagues.includes(fixture.league));
+  return all.filter((fixture) => {
+    if (fixture.manual) return true;
+    if (isCupCompetition(fixture.league) || fixture.cup) return false;
+    return leagues.includes(fixture.league);
+  });
+}
+
+function cupFixturesInPayload(all = state.payload?.fixtures || []) {
+  return all.filter((fixture) => fixture.cup || isCupCompetition(fixture.league));
+}
+
+function isPlayedFixture(fixture) {
+  if (isCompletedFixture(fixture)) return true;
+  const dateKey = fixtureDateKey(fixture);
+  return isValidDateKey(dateKey) && dateKey < todayKey();
 }
 
 function defaultMonthForPastView() {
@@ -461,6 +1197,13 @@ function defaultMonthForPastView() {
     .sort();
   if (!dated.length) {
     return today.slice(0, 7);
+  }
+  if (state.playedOnly) {
+    const past = dated.filter((dateKey) => dateKey < today);
+    if (past.length) {
+      return past[past.length - 1].slice(0, 7);
+    }
+    return dated[dated.length - 1].slice(0, 7);
   }
   const upcoming = dated.find((dateKey) => dateKey >= today);
   if (upcoming) {
@@ -474,6 +1217,9 @@ function visibleFixtures() {
   const today = todayKey();
   let fixtures = fixturesForLeagues(all).filter((fixture) => {
     const dateKey = fixtureDateKey(fixture);
+    if (state.playedOnly && !isPlayedFixture(fixture)) {
+      return false;
+    }
     if (state.hidePast && isValidDateKey(dateKey) && dateKey < today) {
       return false;
     }
@@ -482,12 +1228,21 @@ function visibleFixtures() {
     }
     if (state.staffFilter) {
       const assignment = assignmentFor(fixtureId(fixture));
-      return assignment.staff === state.staffFilter;
+      return staffNames(assignment.staff).includes(state.staffFilter);
     }
     return true;
   });
 
-  if (!state.hidePast && !state.monthFilter && fixtures.length > MAX_UNFILTERED_FIXTURES) {
+  if (state.playedOnly && !state.monthFilter && fixtures.length > MAX_UNFILTERED_FIXTURES) {
+    const monthKey = defaultMonthForPastView();
+    fixtures = fixtures.filter((fixture) => fixtureDateKey(fixture).slice(0, 7) === monthKey);
+  } else if (
+    !state.cupsMode &&
+    !state.hidePast &&
+    !state.playedOnly &&
+    !state.monthFilter &&
+    fixtures.length > MAX_UNFILTERED_FIXTURES
+  ) {
     const monthKey = defaultMonthForPastView();
     fixtures = fixtures.filter((fixture) => fixtureDateKey(fixture).slice(0, 7) === monthKey);
   }
@@ -496,6 +1251,30 @@ function visibleFixtures() {
 }
 
 function visibleFixtureHint() {
+  if (state.playedOnly) {
+    const all = fixturesForLeagues().filter((fixture) => isPlayedFixture(fixture));
+    if (!all.length) {
+      return "No played fixtures in this season yet. Live assignments from Fixture Planner will appear here after kick-off.";
+    }
+    if (!state.monthFilter && all.length > MAX_UNFILTERED_FIXTURES) {
+      const monthKey = defaultMonthForPastView();
+      return `Showing ${formatMonthLabel(monthKey)} only — pick a month above to browse played games (${all.length} loaded).`;
+    }
+    return "";
+  }
+  if (state.cupsMode) {
+    const all = fixturesForLeagues();
+    const cupCount = cupFixturesInPayload().length;
+    if (!all.length && !cupCount) {
+      return `No cup fixtures loaded for this season yet (${cupsLabelShort()}). Hit Refresh.`;
+    }
+    if (!all.length && cupCount) {
+      return `Cup fixtures are loaded (${cupCount}), but none match the current filters — clear the month filter or show past games.`;
+    }
+    if (state.monthFilter) {
+      return `Cups month filter on (${formatMonthLabel(state.monthFilter)}) — clear month to see the full cup run, including early EFL Cup ties.`;
+    }
+  }
   if (state.hidePast) {
     const all = fixturesForLeagues();
     const today = todayKey();
@@ -504,10 +1283,12 @@ function visibleFixtureHint() {
       return !isValidDateKey(dateKey) || dateKey >= today;
     }).length;
     if (!upcoming) {
-      return "No upcoming fixtures in this season. Uncheck “Upcoming only” and pick a month to browse past games.";
+      return state.cupsMode
+        ? "No upcoming cup fixtures from FotMob in this season. Clear filters or open Played Fixtures."
+        : "No upcoming fixtures in this season. Open Played Fixtures for games that have already taken place.";
     }
   }
-  if (!state.hidePast && !state.monthFilter) {
+  if (!state.cupsMode && !state.hidePast && !state.monthFilter) {
     const count = fixturesForLeagues().length;
     if (count > MAX_UNFILTERED_FIXTURES) {
       const monthKey = defaultMonthForPastView();
@@ -546,12 +1327,13 @@ function teamSelectOptions(team, selected = "") {
 function assignmentControls(fixture) {
   const id = fixtureId(fixture);
   const assignment = assignmentFor(id);
+  const assigned = staffNames(assignment.staff);
   const watchTypes = state.meta?.watch_types || ["LIVE", "VIDEO"];
   const teams = staffTeams();
 
   const teamSelects = teams
     .map((team) => {
-      const selected = (team.members || []).includes(assignment.staff) ? assignment.staff : "";
+      const selected = (team.members || []).find((name) => assigned.includes(name)) || "";
       const disabled = !(team.members || []).length ? " disabled" : "";
       return `
         <label class="fp-team-assign">
@@ -579,15 +1361,25 @@ function assignmentControls(fixture) {
     .join("");
 
   const editPlayers =
-    assignment.staff
-      ? `<button type="button" class="fp-btn fp-btn--ghost fp-assign-edit" data-fixture-id="${id}" data-staff="${escapeHtml(assignment.staff)}">Players</button>`
+    assigned.length
+      ? `<button type="button" class="fp-btn fp-btn--ghost fp-assign-edit" data-fixture-id="${id}" data-staff="${escapeHtml(primaryStaff(assigned))}">Players</button>`
+      : "";
+  const reportsLink =
+    IS_PLAYED_APP && assigned.length
+      ? `<a class="fp-btn fp-btn--ghost" href="/scout-summary?staff=${encodeURIComponent(primaryStaff(assigned))}">Reports</a>`
+      : "";
+  const coverageNote =
+    IS_PLAYED_APP && assigned.length && assignment.watch_type
+      ? `<div class="fp-assignment__note">${escapeHtml(assignment.watch_type)} · ${escapeHtml(staffLabel(assigned))}</div>`
       : "";
 
   return `
     <div class="fp-assignment" data-fixture-id="${id}">
+      ${coverageNote}
       <div class="fp-team-assigns">${teamSelects}</div>
       <div class="fp-watch-toggle">${watchButtons}</div>
       ${editPlayers}
+      ${reportsLink}
     </div>
   `;
 }
@@ -672,10 +1464,10 @@ function renderAssignModalChrome() {
   if (els.assignModalMeta) {
     const kickoff = formatTime(fixture?.kickoff_utc || fixture?.scheduled_date);
     const dateLabel = formatShortDate(fixtureDateKey(fixture) || modal.date || "");
-    els.assignModalMeta.textContent = `${fixture?.league || modal.league || ""} · ${dateLabel} · ${kickoff} · Assigning ${modal.staff}`;
+    els.assignModalMeta.textContent = `${fixture?.league || modal.league || ""} · ${dateLabel} · ${kickoff} · Assigning ${staffLabel(modal.staffList || modal.staff)}`;
   }
   if (els.assignModalStaff) {
-    els.assignModalStaff.textContent = modal.staff;
+    els.assignModalStaff.textContent = staffLabel(modal.staffList || modal.staff);
   }
   if (els.assignModalWatch) {
     const watchTypes = state.meta?.watch_types || ["LIVE", "VIDEO"];
@@ -689,13 +1481,29 @@ function renderAssignModalChrome() {
   }
 }
 
-async function openAssignModal(fixtureIdValue, staffName) {
+async function openAssignModal(fixtureIdValue, staffName, nextStaffList = null) {
   const fixture = fixtureFromState(fixtureIdValue);
   if (!fixture || !staffName) return;
   const current = assignmentFor(fixtureIdValue);
+  const staffList = staffNames(nextStaffList ?? [...staffNames(current.staff), staffName]);
+
+  // Manual fixtures have no Impect squad lists — keep logged players and assign directly.
+  if (isManualFixture(fixture)) {
+    setAssignment(fixtureIdValue, {
+      staff: staffList,
+      watch_type: current.watch_type || fixture.watch_type || "LIVE",
+      watched_players: current.watched_players?.length
+        ? current.watched_players
+        : fixture.watched_players || [],
+    });
+    els.statusBar.textContent = `Assigned ${staffLabel(staffList)} to manual fixture`;
+    return;
+  }
+
   state.assignModal = {
     fixtureId: fixtureIdValue,
     staff: staffName,
+    staffList,
     watchType: current.watch_type || "LIVE",
     selectedIds: (current.watched_players || []).map((row) => row.player_id),
     home: fixture.home?.name || "",
@@ -729,7 +1537,7 @@ function confirmAssignModal() {
   if (!modal) return;
   const watched = selectedWatchedPlayersFromModal();
   setAssignment(modal.fixtureId, {
-    staff: modal.staff,
+    staff: staffNames(modal.staffList?.length ? modal.staffList : modal.staff),
     watch_type: modal.watchType || "LIVE",
     watched_players: watched,
   });
@@ -742,28 +1550,31 @@ function bindAssignmentEvents(root) {
       const id = select.dataset.fixtureId;
       const next = select.value || "";
       const current = assignmentFor(id);
+      const currentList = staffNames(current.staff);
       const teamMembers = [...select.options]
         .map((opt) => opt.value)
         .filter(Boolean);
+      const withoutTeam = currentList.filter((name) => !teamMembers.includes(name));
 
       if (!next) {
-        if (current.staff && teamMembers.includes(current.staff)) {
-          setAssignment(id, { staff: "", watched_players: [] });
-        } else {
-          renderView();
-        }
+        setAssignment(id, {
+          staff: withoutTeam,
+          watched_players: withoutTeam.length ? current.watched_players || [] : [],
+        });
         return;
       }
 
-      openAssignModal(id, next);
-      // Keep showing the previous assignee until modal confirms
+      openAssignModal(id, next, [...withoutTeam, next]);
+      // Keep showing the previous assignees until modal confirms
       renderView();
     });
   });
 
   root.querySelectorAll(".fp-assign-edit").forEach((btn) => {
     btn.addEventListener("click", () => {
-      openAssignModal(btn.dataset.fixtureId, btn.dataset.staff);
+      const id = btn.dataset.fixtureId;
+      const current = assignmentFor(id);
+      openAssignModal(id, btn.dataset.staff || primaryStaff(current.staff), staffNames(current.staff));
     });
   });
 
@@ -827,42 +1638,179 @@ function renderMonthFilter() {
   els.monthFilter.disabled = state.loading || !months.length;
 }
 
+function cupUis() {
+  if (state.meta?.cup_uis?.length) return state.meta.cup_uis;
+  if (state.meta?.cups?.length) return state.meta.cups.map((row) => row.ui);
+  return [
+    "FA Cup",
+    "EFL Cup",
+    "Vertu Trophy",
+    "National League Cup",
+    "Premier League Cup",
+    "Professional Development League",
+    "Scottish Cup",
+  ];
+}
+
+function cupsLabelShort() {
+  const selected = state.cupsMode
+    ? state.leagues.filter((name) => cupUis().includes(name))
+    : cupUis();
+  const names = selected.length ? selected : cupUis();
+  return names.map(cupShortLabel).join(" · ");
+}
+
+function cupShortLabel(name) {
+  const map = {
+    "FA Cup": "FA Cup",
+    "EFL Cup": "EFL Cup",
+    "Vertu Trophy": "Vertu Trophy",
+    "National League Cup": "NL Cup",
+    "Premier League Cup": "PL Cup",
+    "Professional Development League": "PDL",
+    "Scottish Cup": "Scottish Cup",
+  };
+  return map[name] || name;
+}
+
+function cupMetaRows() {
+  if (state.meta?.cups?.length) return state.meta.cups;
+  return cupUis().map((ui) => ({
+    ui,
+    color: leagueColors[ui] || "#f43f5e",
+  }));
+}
+
 function allLeagueUis() {
   return (state.meta?.leagues || []).map((row) => row.ui);
 }
 
-function renderLeagueToggle() {
-  const leagues = state.meta?.leagues || [];
-  if (!state.leagues.length) {
-    state.leagues = leagues.map((row) => row.ui);
+function selectedCupUis() {
+  const selected = state.leagues.filter((name) => cupUis().includes(name));
+  return selected.length ? selected : [...cupUis()];
+}
+
+function selectedLeagueUis() {
+  const selected = state.leagues.filter((name) => allLeagueUis().includes(name));
+  return selected.length ? selected : allLeagueUis();
+}
+
+function syncCompTabs() {
+  document.querySelectorAll("[data-comp-tab]").forEach((btn) => {
+    const active =
+      (btn.dataset.compTab === "cups" && state.cupsMode) ||
+      (btn.dataset.compTab === "leagues" && !state.cupsMode);
+    btn.classList.toggle("fp-comp-scope__btn--active", active);
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+  });
+}
+
+function setCompetitionScope(nextCupsMode, { refetch = false } = {}) {
+  if (nextCupsMode === state.cupsMode && !refetch) {
+    renderLeagueToggle();
+    renderMonthFilter();
+    renderSummary();
+    renderView();
+    return;
   }
 
-  const allSelected = leagues.length > 0 && leagues.every((row) => state.leagues.includes(row.ui));
+  if (nextCupsMode && !state.cupsMode) {
+    state.savedLeagueSelection = selectedLeagueUis();
+    state.cupsMode = true;
+    state.leagues = state.savedCupSelection?.length ? [...state.savedCupSelection] : [...cupUis()];
+    state.monthFilter = "";
+    state.view = "list";
+  } else if (!nextCupsMode && state.cupsMode) {
+    state.savedCupSelection = selectedCupUis();
+    state.cupsMode = false;
+    state.leagues = state.savedLeagueSelection?.length
+      ? [...state.savedLeagueSelection]
+      : allLeagueUis();
+  }
 
-  els.leagueToggle.innerHTML = [
-    `<button type="button" class="fp-league-btn fp-league-btn--all${allSelected ? " fp-league-btn--active" : ""}" data-league-action="all"${state.loading ? " disabled" : ""}>All leagues</button>`,
-    ...leagues.map((league) => {
-      const active = state.leagues.includes(league.ui);
-      const color = league.color || leagueColors[league.ui] || "#34d399";
-      return `<button type="button" class="fp-league-btn${active ? " fp-league-btn--active" : ""}" data-league="${league.ui}" style="--league-color:${color}"${state.loading ? " disabled" : ""}>${league.ui}</button>`;
-    }),
-  ].join("");
+  renderLeagueToggle();
+  renderMonthFilter();
+  renderSummary();
+  renderView();
+  if (nextCupsMode || refetch) {
+    els.statusBar.textContent = nextCupsMode
+      ? "Loading cup fixtures…"
+      : "Loading league fixtures…";
+    loadFixtures();
+  }
+}
+
+function renderLeagueToggle() {
+  const leagues = state.meta?.leagues || [];
+  const cups = cupMetaRows();
+  syncCompTabs();
+
+  if (!state.leagues.length) {
+    state.leagues = state.cupsMode ? [...cupUis()] : leagues.map((row) => row.ui);
+  }
+
+  if (state.cupsMode) {
+    const selected = selectedCupUis();
+    const allSelected = cupUis().every((name) => selected.includes(name));
+    els.leagueToggle.innerHTML = [
+      `<button type="button" class="fp-league-btn fp-league-btn--cups-all${allSelected ? " fp-league-btn--active" : ""}" data-league-action="all-cups"${state.loading ? " disabled" : ""}>All cups</button>`,
+      ...cups.map((cup) => {
+        const active = selected.includes(cup.ui);
+        const color = cup.color || leagueColors[cup.ui] || "#f43f5e";
+        return `<button type="button" class="fp-league-btn${active ? " fp-league-btn--active" : ""}" data-cup="${escapeHtml(cup.ui)}" title="${escapeHtml(cup.ui)}" style="--league-color:${color}"${state.loading ? " disabled" : ""}>${escapeHtml(cupShortLabel(cup.ui))}</button>`;
+      }),
+    ].join("");
+  } else {
+    const selected = selectedLeagueUis();
+    const allSelected =
+      leagues.length > 0 && leagues.every((row) => selected.includes(row.ui));
+    els.leagueToggle.innerHTML = [
+      `<button type="button" class="fp-league-btn fp-league-btn--all${allSelected ? " fp-league-btn--active" : ""}" data-league-action="all"${state.loading ? " disabled" : ""}>All leagues</button>`,
+      ...leagues.map((league) => {
+        const active = selected.includes(league.ui);
+        const color = league.color || leagueColors[league.ui] || "#34d399";
+        return `<button type="button" class="fp-league-btn${active ? " fp-league-btn--active" : ""}" data-league="${escapeHtml(league.ui)}" style="--league-color:${color}"${state.loading ? " disabled" : ""}>${escapeHtml(league.ui)}</button>`;
+      }),
+    ].join("");
+  }
 
   els.leagueToggle.querySelectorAll(".fp-league-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       if (btn.disabled) return;
-      if (btn.dataset.leagueAction === "all") {
+      if (btn.dataset.leagueAction === "all-cups") {
+        state.cupsMode = true;
+        state.leagues = [...cupUis()];
+      } else if (btn.dataset.leagueAction === "all") {
+        state.cupsMode = false;
         state.leagues = allLeagueUis();
-      } else {
-        const league = btn.dataset.league;
-        if (state.leagues.includes(league)) {
-          state.leagues = state.leagues.filter((item) => item !== league);
+      } else if (btn.dataset.cup) {
+        state.cupsMode = true;
+        const cup = btn.dataset.cup;
+        let next = state.leagues.filter((item) => cupUis().includes(item));
+        if (!next.length) {
+          next = [cup];
+        } else if (next.includes(cup)) {
+          next = next.filter((item) => item !== cup);
+          if (!next.length) next = [cup];
         } else {
-          state.leagues = [...state.leagues, league];
+          next = [...next, cup];
         }
-        if (!state.leagues.length) {
-          state.leagues = [league];
+        state.leagues = next;
+        state.savedCupSelection = [...next];
+      } else {
+        state.cupsMode = false;
+        const league = btn.dataset.league;
+        let next = state.leagues.filter((item) => allLeagueUis().includes(item));
+        if (!next.length) {
+          next = [league];
+        } else if (next.includes(league)) {
+          next = next.filter((item) => item !== league);
+          if (!next.length) next = [league];
+        } else {
+          next = [...next, league];
         }
+        state.leagues = next;
+        state.savedLeagueSelection = [...next];
       }
       renderLeagueToggle();
       renderMonthFilter();
@@ -873,7 +1821,7 @@ function renderLeagueToggle() {
 }
 
 function countAssignments() {
-  const assigned = Object.values(state.assignments).filter((row) => row.staff).length;
+  const assigned = Object.values(state.assignments).filter((row) => hasStaff(row.staff)).length;
   const live = Object.values(state.assignments).filter((row) => row.watch_type === "LIVE").length;
   const video = Object.values(state.assignments).filter((row) => row.watch_type === "VIDEO").length;
   return { assigned, live, video };
@@ -905,11 +1853,21 @@ function renderCoveragePanel() {
   const fixtures = state.payload?.fixtures || [];
   const apiCoverage = state.payload?.coverage || {};
   const computedCoverage = coverageFromFixtures(fixtures);
-  const rows = activeLeagueOrder().map((league) => {
-    const row = apiCoverage[league]?.fixture_count ? apiCoverage[league] : computedCoverage[league] || {};
+  const order = state.cupsMode ? cupUis() : activeLeagueOrder();
+  const rows = order.map((league) => {
+    const apiRow = apiCoverage[league] || {};
+    const computedRow = computedCoverage[league] || {};
+    const row =
+      Number(apiRow.fixture_count || 0) >= Number(computedRow.fixture_count || 0)
+        ? apiRow.fixture_count
+          ? apiRow
+          : computedRow
+        : computedRow.fixture_count
+          ? computedRow
+          : apiRow;
     const color = leagueColors[league] || "#34d399";
     if (!row.fixture_count) {
-      return `<div class="fp-coverage__item fp-coverage__item--empty" style="--league-color:${color}"><strong>${league}</strong><span>No ${state.season} fixtures in loaded data</span></div>`;
+      return `<div class="fp-coverage__item fp-coverage__item--empty" style="--league-color:${color}"><strong>${league}</strong><span>No ${state.season} fixtures published yet</span></div>`;
     }
     const start = formatShortDate(row.first_date);
     const end = formatShortDate(row.last_date);
@@ -935,6 +1893,10 @@ function renderSummary() {
   const fixtures = visibleFixtures();
   const all = state.payload?.fixtures || [];
   const { assigned, live, video } = countAssignments();
+  const selectionLabel = state.cupsMode ? "Cup comps" : "Leagues selected";
+  const selectionValue = state.cupsMode
+    ? selectedCupUis().length
+    : selectedLeagueUis().length;
 
   els.summaryPanel.innerHTML = `
     <div class="fp-summary__item">
@@ -942,8 +1904,8 @@ function renderSummary() {
       <span class="fp-summary__label">Fixtures shown</span>
     </div>
     <div class="fp-summary__item">
-      <span class="fp-summary__value">${state.leagues.length}</span>
-      <span class="fp-summary__label">Leagues selected</span>
+      <span class="fp-summary__value">${selectionValue}</span>
+      <span class="fp-summary__label">${selectionLabel}</span>
     </div>
     <div class="fp-summary__item">
       <span class="fp-summary__value">${assigned}</span>
@@ -959,9 +1921,20 @@ function renderSummary() {
     </div>
   `;
 
-  const leagueLabel = state.leagues.join(", ") || "All leagues";
-  els.pageSubtitle.textContent = `${state.season} fixtures · ${leagueLabel} · assign scouts as Live or Video`;
+  const leagueLabel = state.cupsMode
+    ? `Cups (${cupsLabelShort()})`
+    : state.leagues.filter((item) => allLeagueUis().includes(item)).join(", ") || "All leagues";
+  if (els.pageSubtitle) {
+    els.pageSubtitle.textContent = IS_PLAYED_APP
+      ? `${state.season} played fixtures · ${leagueLabel} · keep LIVE coverage, pick up VIDEO, players & reports`
+      : `${state.season} upcoming fixtures · ${leagueLabel} · assign scouts as Live or Video`;
+  }
   renderCoveragePanel();
+}
+
+function compareDateKeys(a, b) {
+  const cmp = String(a || "").localeCompare(String(b || ""));
+  return IS_PLAYED_APP ? -cmp : cmp;
 }
 
 function groupFixturesByMonth(fixtures) {
@@ -973,7 +1946,7 @@ function groupFixturesByMonth(fixtures) {
     if (!months.has(monthKey)) months.set(monthKey, []);
     months.get(monthKey).push({ ...fixture, date: dateKey });
   });
-  return [...months.entries()].sort(([a], [b]) => a.localeCompare(b));
+  return [...months.entries()].sort(([a], [b]) => compareDateKeys(a, b));
 }
 
 function groupFixturesByDate(fixtures) {
@@ -984,7 +1957,7 @@ function groupFixturesByDate(fixtures) {
     if (!days.has(dateKey)) days.set(dateKey, []);
     days.get(dateKey).push({ ...fixture, date: dateKey });
   });
-  return [...days.entries()].sort(([a], [b]) => a.localeCompare(b));
+  return [...days.entries()].sort(([a], [b]) => compareDateKeys(a, b));
 }
 
 function groupFixturesByWeekend(fixtures) {
@@ -996,7 +1969,7 @@ function groupFixturesByWeekend(fixtures) {
     if (!weekends.has(key)) weekends.set(key, []);
     weekends.get(key).push({ ...fixture, date: dateKey });
   });
-  return [...weekends.entries()].sort(([a], [b]) => a.localeCompare(b));
+  return [...weekends.entries()].sort(([a], [b]) => compareDateKeys(a, b));
 }
 
 function formatWeekendLabel(weekendKey, fixtures) {
@@ -1011,13 +1984,16 @@ function formatWeekendLabel(weekendKey, fixtures) {
 
 function assignmentBadge(fixture) {
   const assignment = assignmentFor(fixtureId(fixture));
-  if (!assignment.staff && !assignment.watch_type) {
+  const assigned = staffNames(assignment.staff);
+  if (!assigned.length && !assignment.watch_type) {
     return "";
   }
   const parts = [];
-  if (assignment.staff) {
-    parts.push(`<span class="fp-assignment-badge fp-assignment-badge--staff">${assignment.staff.split(" ")[0]}</span>`);
-  }
+  assigned.forEach((name) => {
+    parts.push(
+      `<span class="fp-assignment-badge fp-assignment-badge--staff">${escapeHtml(name.split(" ")[0])}</span>`,
+    );
+  });
   if (assignment.watch_type) {
     const cls = assignment.watch_type === "LIVE" ? "fp-assignment-badge--live" : "fp-assignment-badge--video";
     parts.push(`<span class="fp-assignment-badge ${cls}">${assignment.watch_type}</span>`);
@@ -1114,17 +2090,43 @@ function groupFixturesByLeague(fixtures) {
     rows.sort((a, b) => {
       const ta = a.kickoff_utc || a.scheduled_date || "";
       const tb = b.kickoff_utc || b.scheduled_date || "";
-      return ta.localeCompare(tb);
+      return compareDateKeys(ta, tb);
     });
   });
   return byLeague;
 }
 
 function activeLeagueOrder() {
-  const selected = state.leagues.length ? state.leagues : Object.keys(leagueColors);
-  return (state.meta?.default_leagues || Object.keys(leagueColors)).filter((league) =>
+  const selected = state.leagues.length ? state.leagues : (state.meta?.default_leagues || Object.keys(leagueColors));
+  const order = (state.meta?.default_leagues || Object.keys(leagueColors)).filter((league) =>
     selected.includes(league),
   );
+  const seen = new Set(order);
+  for (const fixture of visibleFixtures()) {
+    const league = fixture.league || "Manual";
+    if (!seen.has(league)) {
+      order.push(league);
+      seen.add(league);
+    }
+  }
+  return order;
+}
+
+function groupFixturesByDay(fixtures) {
+  const byDay = new Map();
+  fixtures.forEach((fixture) => {
+    const day = fixtureDateKey(fixture) || "unknown";
+    if (!byDay.has(day)) byDay.set(day, []);
+    byDay.get(day).push(fixture);
+  });
+  byDay.forEach((rows) => {
+    rows.sort((a, b) => {
+      const ta = a.kickoff_utc || a.scheduled_date || "";
+      const tb = b.kickoff_utc || b.scheduled_date || "";
+      return compareDateKeys(ta, tb);
+    });
+  });
+  return [...byDay.entries()].sort((a, b) => compareDateKeys(a[0], b[0]));
 }
 
 function renderFixtureCard(fixture, { showDate = false } = {}) {
@@ -1134,11 +2136,16 @@ function renderFixtureCard(fixture, { showDate = false } = {}) {
   const dateLine = showDateLine
     ? `<span class="fp-list-fixture__date">${formatShortDate(fixtureDateKey(fixture))}</span>`
     : "";
+  const cupBadge =
+    state.cupsMode || isCupCompetition(fixture.league) || fixture.cup
+      ? `<span class="fp-cup-badge" style="--league-color:${color}">${escapeHtml(fixture.league || "Cup")}</span>`
+      : "";
   return `
-    <article class="fp-list-fixture fp-list-fixture--stacked${completed ? " fp-list-fixture--completed" : ""}" style="--league-color:${color}">
+    <article class="fp-list-fixture fp-list-fixture--stacked${completed ? " fp-list-fixture--completed" : ""}${state.cupsMode ? " fp-list-fixture--cup" : ""}" style="--league-color:${color}">
       <div class="fp-list-fixture__schedule">
         <span class="fp-list-fixture__time">${formatTime(fixture.kickoff_utc || fixture.scheduled_date)}</span>
         ${dateLine}
+        ${cupBadge}
       </div>
       <div class="fp-list-fixture__main">
         <div class="fp-list-fixture__head">
@@ -1174,16 +2181,42 @@ function renderList() {
   const fixtures = visibleFixtures();
   const hint = visibleFixtureHint();
   if (!fixtures.length) {
-    const message = hint || "No fixtures for the selected leagues and filters.";
+    const message =
+      hint ||
+      (state.cupsMode
+        ? `No cup fixtures for the selected season and filters. Cups: ${cupsLabelShort()} — clear the month filter and hit Refresh.`
+        : "No fixtures for the selected leagues and filters.");
     els.listRoot.innerHTML = `<div class="card fp-list-empty"><p>${escapeHtml(message)}</p></div>`;
     return;
   }
 
-  const leagueOrder = activeLeagueOrder();
   const hintHtml = hint
     ? `<div class="fp-list-hint card"><p>${escapeHtml(hint)}</p></div>`
     : "";
 
+  if (state.cupsMode) {
+    els.listRoot.innerHTML =
+      hintHtml +
+      `<div class="fp-cups-banner card"><strong>Cups</strong><span>${escapeHtml(cupsLabelShort())} — matchday grid (no league columns)</span></div>` +
+      groupFixturesByDay(fixtures)
+        .map(([dayKey, dayFixtures]) => {
+          const cards = dayFixtures.map((fixture) => renderFixtureCard(fixture)).join("");
+          return `
+            <section class="fp-list-day fp-list-day--cups" data-weekend-start="${escapeHtml(dayKey)}">
+              <header class="fp-list-day__head">${formatShortDate(dayKey)} · ${dayFixtures.length} fixture${dayFixtures.length === 1 ? "" : "s"}</header>
+              <div class="fp-list-day__stack">${cards}</div>
+            </section>
+          `;
+        })
+        .join("");
+    bindAssignmentEvents(els.listRoot);
+    if (!IS_PLAYED_APP) {
+      scrollListToUpcoming();
+    }
+    return;
+  }
+
+  const leagueOrder = activeLeagueOrder();
   els.listRoot.innerHTML =
     hintHtml +
     groupFixturesByWeekend(fixtures)
@@ -1204,7 +2237,9 @@ function renderList() {
       .join("");
 
   bindAssignmentEvents(els.listRoot);
-  scrollListToUpcoming();
+  if (!IS_PLAYED_APP) {
+    scrollListToUpcoming();
+  }
 }
 
 function renderView() {
@@ -1215,29 +2250,45 @@ function renderView() {
   else renderList();
 }
 
-async function loadFixtures() {
+async function loadFixtures({ forceRefresh = true } = {}) {
   state.loading = true;
   state.enrichment = {};
   state.enrichmentPending = {};
   renderSeasonToggle();
   renderLeagueToggle();
   setStatus(`Loading ${state.season} fixtures…`, "loading");
-  els.statusBar.textContent = "Fetching fixtures from Impect, FotMob and BBC…";
+  els.statusBar.textContent = state.cupsMode
+    ? "Pulling cup fixtures from FotMob…"
+    : "Fetching fixtures from Impect, FotMob and BBC…";
 
   try {
+    const refresh = forceRefresh ? "&refresh=1" : "";
     state.payload = await fetchJson(
-      `/api/fixture-planner/fixtures?season=${encodeURIComponent(state.season)}`,
+      `/api/fixture-planner/fixtures?season=${encodeURIComponent(state.season)}${refresh}&_=${Date.now()}`,
     );
+    state.teamNamesLoaded = false;
+    setTeamNameCatalog(teamNamesFromPayload(state.payload));
+    await loadAssignmentsFromServer();
     renderMonthFilter();
     renderSummary();
     renderView();
     setStatus("");
     const coverage = state.payload?.coverage || {};
-    const missing = activeLeagueOrder().filter((league) => !(coverage[league]?.fixture_count));
-    if (state.season === "26/27" && missing.length) {
-      els.statusBar.textContent = `Loaded ${state.payload.fixtures?.length || 0} fixtures for ${state.season}. League One/Two start 15 Aug 2026; Scottish Prem starts 31 Jul 2026. ${missing.join(", ")} ${missing.length === 1 ? "has" : "have"} no published 26/27 schedule yet.`;
+    const cupCount = cupFixturesInPayload().length;
+    const eflCount = Number(coverage["EFL Cup"]?.fixture_count || 0);
+    const manualCount = (state.payload?.fixtures || []).filter((row) => row.manual).length;
+    if (state.cupsMode) {
+      els.statusBar.textContent =
+        cupCount > 0
+          ? `Cups loaded: ${cupCount} fixtures (${eflCount} EFL Cup). Other comps appear when published.`
+          : "No cup fixtures returned from FotMob yet for this season.";
     } else {
-      els.statusBar.textContent = `Loaded ${state.payload.fixtures?.length || 0} fixtures for ${state.season}. Use league filters and assign staff below.`;
+      const missing = activeLeagueOrder().filter((league) => !(coverage[league]?.fixture_count));
+      if (state.season === "26/27" && missing.length) {
+        els.statusBar.textContent = `Loaded ${state.payload.fixtures?.length || 0} fixtures for ${state.season}. ${missing.join(", ")} ${missing.length === 1 ? "has" : "have"} no published schedule yet. Cups: ${cupCount}.`;
+      } else {
+        els.statusBar.textContent = `Loaded ${state.payload.fixtures?.length || 0} fixtures for ${state.season}${manualCount ? ` · ${manualCount} manual` : ""} · cups ${cupCount}.`;
+      }
     }
   } catch (error) {
     setStatus(error.message, "error");
@@ -1250,8 +2301,878 @@ async function loadFixtures() {
   }
 }
 
+function populateManualStaffSelect() {
+  const root = els.manualStaffTeams || els.manualStaff;
+  if (!root) return;
+  const teams = staffTeams();
+  if (els.manualStaffTeams) {
+    els.manualStaffTeams.innerHTML = teams
+      .map((team) => {
+        const disabled = !(team.members || []).length ? " disabled" : "";
+        return `
+          <label class="fp-team-assign">
+            <span class="fp-team-assign__label">${escapeHtml(team.label)}</span>
+            <select class="fp-manual-staff-select fp-team-assign__select" data-manual-staff-team="${escapeHtml(team.id)}"${disabled}>
+              ${teamSelectOptions(team, "")}
+            </select>
+          </label>
+        `;
+      })
+      .join("");
+    return;
+  }
+  const options = [`<option value="">Unassigned</option>`];
+  teams.forEach((team) => {
+    const members = team.members || [];
+    if (!members.length) return;
+    options.push(
+      `<optgroup label="${escapeHtml(team.label)}">${members
+        .map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
+        .join("")}</optgroup>`,
+    );
+  });
+  els.manualStaff.innerHTML = options.join("");
+}
+
+function collectManualStaff() {
+  if (els.manualStaffTeams) {
+    return [...els.manualStaffTeams.querySelectorAll(".fp-manual-staff-select")]
+      .map((select) => select.value.trim())
+      .filter(Boolean);
+  }
+  const single = els.manualStaff?.value?.trim() || "";
+  return single ? [single] : [];
+}
+
+function teamNamesFromPayload(payload) {
+  const entries = [];
+  for (const fixture of payload?.fixtures || []) {
+    const home = fixture?.home?.name || fixture?.home || "";
+    const away = fixture?.away?.name || fixture?.away || "";
+    if (home) entries.push({ name: String(home).trim(), country: "", country_label: "" });
+    if (away) entries.push({ name: String(away).trim(), country: "", country_label: "" });
+  }
+  return entries;
+}
+
+function setTeamNameCatalog(entriesOrNames) {
+  const entries = [];
+  const seen = new Set();
+  for (const row of entriesOrNames || []) {
+    const name = typeof row === "string" ? row : row?.name;
+    const clean = String(name || "").trim();
+    if (!clean) continue;
+    const key = clean.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    entries.push({
+      name: clean,
+      country: typeof row === "string" ? "" : String(row?.country || "").trim().toUpperCase(),
+      country_label:
+        typeof row === "string"
+          ? ""
+          : String(row?.country_label || row?.country || "").trim(),
+    });
+  }
+  entries.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  state.teamEntries = entries;
+  state.teamNames = entries.map((row) => row.name);
+}
+
+function normalizeTeamKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/\b(fc|afc|cf)\b/g, "")
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function filterTeamNameSuggestions(query, limit = 8) {
+  const typed = String(query || "").trim();
+  if (!typed || !state.teamEntries.length) return [];
+  const lower = typed.toLowerCase();
+  const key = normalizeTeamKey(typed);
+  const starts = [];
+  const includes = [];
+  const fuzzy = [];
+  for (const entry of state.teamEntries) {
+    const nameLower = entry.name.toLowerCase();
+    if (nameLower.startsWith(lower)) {
+      starts.push(entry);
+    } else if (nameLower.includes(lower)) {
+      includes.push(entry);
+    } else if (key && normalizeTeamKey(entry.name).includes(key)) {
+      fuzzy.push(entry);
+    }
+    if (starts.length >= limit) break;
+  }
+  return [...starts, ...includes, ...fuzzy].slice(0, limit);
+}
+
+function highlightTeamMatch(name, query) {
+  const typed = String(query || "").trim();
+  if (!typed) return escapeHtml(name);
+  const lowerName = name.toLowerCase();
+  const lowerQuery = typed.toLowerCase();
+  const index = lowerName.indexOf(lowerQuery);
+  if (index < 0) return escapeHtml(name);
+  const before = name.slice(0, index);
+  const match = name.slice(index, index + typed.length);
+  const after = name.slice(index + typed.length);
+  return `${escapeHtml(before)}<mark>${escapeHtml(match)}</mark>${escapeHtml(after)}`;
+}
+
+function snapTeamInputToCatalog(input) {
+  if (!input) return;
+  const typed = input.value.trim();
+  if (!typed || !state.teamNames.length) return;
+  const exact = state.teamNames.find((name) => name.toLowerCase() === typed.toLowerCase());
+  if (exact) {
+    input.value = exact;
+    input.classList.toggle("fp-team-ac__input--matched", true);
+    return;
+  }
+  const typedKey = normalizeTeamKey(typed);
+  const matches = state.teamNames.filter((name) => normalizeTeamKey(name) === typedKey);
+  if (matches.length === 1) {
+    input.value = matches[0];
+    input.classList.toggle("fp-team-ac__input--matched", true);
+    return;
+  }
+  input.classList.toggle(
+    "fp-team-ac__input--matched",
+    state.teamNames.some((name) => name.toLowerCase() === typed.toLowerCase()),
+  );
+}
+
+function closeTeamAutocompleteMenus(exceptWrap = null) {
+  document.querySelectorAll(".fp-team-ac__menu").forEach((menu) => {
+    if (exceptWrap && exceptWrap.contains(menu)) return;
+    menu.hidden = true;
+    menu.innerHTML = "";
+  });
+  document.querySelectorAll(".fp-team-ac__input").forEach((input) => {
+    if (exceptWrap && exceptWrap.contains(input)) return;
+    input.setAttribute("aria-expanded", "false");
+  });
+}
+
+const playerAutocompleteUi = {
+  openMenu: null,
+  openInput: null,
+  openWrap: null,
+};
+
+function closePlayerAutocompleteMenus(exceptWrap = null) {
+  if (exceptWrap && playerAutocompleteUi.openWrap === exceptWrap) return;
+  if (playerAutocompleteUi.openMenu) {
+    hidePlayerAutocompleteMenu(playerAutocompleteUi.openMenu, playerAutocompleteUi.openInput);
+  }
+  document.querySelectorAll(".fp-player-ac__menu").forEach((menu) => {
+    if (!menu.hidden) hidePlayerAutocompleteMenu(menu);
+  });
+  document.querySelectorAll(".fp-player-ac__input").forEach((input) => {
+    if (exceptWrap && exceptWrap.contains(input)) return;
+    input.setAttribute("aria-expanded", "false");
+  });
+}
+
+function openTeamAutocompleteMenu(input, menu, options, activeIndex = 0) {
+  if (!options.length) {
+    menu.hidden = true;
+    menu.innerHTML = "";
+    input.setAttribute("aria-expanded", "false");
+    return;
+  }
+  const query = input.value.trim();
+  menu.innerHTML = options
+    .map((entry, index) => {
+      const name = entry.name || entry;
+      const meta = entry.country_label || entry.country || "FotMob";
+      return `
+      <button type="button" class="fp-team-ac__option${index === activeIndex ? " fp-team-ac__option--active" : ""}" data-team-option="${escapeHtml(name)}" role="option" aria-selected="${index === activeIndex ? "true" : "false"}">
+        <span class="fp-team-ac__option-name">${highlightTeamMatch(name, query)}</span>
+        <span class="fp-team-ac__option-meta">${escapeHtml(meta)}</span>
+      </button>
+    `;
+    })
+    .join("");
+  menu.hidden = false;
+  input.setAttribute("aria-expanded", "true");
+  menu.dataset.activeIndex = String(activeIndex);
+}
+
+function enhanceTeamAutocomplete(input) {
+  if (!input || input.dataset.teamAcBound === "1") return;
+  input.dataset.teamAcBound = "1";
+  input.classList.add("fp-team-ac__input");
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-expanded", "false");
+  input.removeAttribute("list");
+
+  const wrap = document.createElement("div");
+  wrap.className = "fp-team-ac";
+  input.parentNode.insertBefore(wrap, input);
+  wrap.appendChild(input);
+
+  const menu = document.createElement("div");
+  menu.className = "fp-team-ac__menu";
+  menu.hidden = true;
+  menu.setAttribute("role", "listbox");
+  wrap.appendChild(menu);
+
+  let activeIndex = 0;
+  let currentOptions = [];
+
+  const refresh = () => {
+    currentOptions = filterTeamNameSuggestions(input.value);
+    activeIndex = 0;
+    openTeamAutocompleteMenu(input, menu, currentOptions, activeIndex);
+  };
+
+  const choose = (name) => {
+    input.value = name;
+    input.classList.add("fp-team-ac__input--matched");
+    menu.hidden = true;
+    menu.innerHTML = "";
+    input.setAttribute("aria-expanded", "false");
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+
+  input.addEventListener("focus", () => {
+    closeTeamAutocompleteMenus(wrap);
+    closePlayerAutocompleteMenus();
+    refresh();
+  });
+  input.addEventListener("input", () => {
+    input.classList.remove("fp-team-ac__input--matched");
+    refresh();
+  });
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      if (menu.hidden) refresh();
+      if (!currentOptions.length) return;
+      activeIndex = (activeIndex + 1) % currentOptions.length;
+      openTeamAutocompleteMenu(input, menu, currentOptions, activeIndex);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!currentOptions.length) return;
+      activeIndex = (activeIndex - 1 + currentOptions.length) % currentOptions.length;
+      openTeamAutocompleteMenu(input, menu, currentOptions, activeIndex);
+    } else if (event.key === "Enter") {
+      const selected = currentOptions[activeIndex];
+      if (!menu.hidden && selected) {
+        event.preventDefault();
+        choose(selected.name || selected);
+      }
+    } else if (event.key === "Escape") {
+      menu.hidden = true;
+      menu.innerHTML = "";
+      input.setAttribute("aria-expanded", "false");
+    }
+  });
+  menu.addEventListener("mousedown", (event) => {
+    const option = event.target.closest("[data-team-option]");
+    if (!option) return;
+    event.preventDefault();
+    choose(option.dataset.teamOption || "");
+  });
+  input.addEventListener("blur", () => {
+    window.setTimeout(() => {
+      if (wrap.contains(document.activeElement)) return;
+      menu.hidden = true;
+      menu.innerHTML = "";
+      input.setAttribute("aria-expanded", "false");
+      snapTeamInputToCatalog(input);
+    }, 120);
+  });
+}
+
+function bindTeamAutocompletes(root = document) {
+  root.querySelectorAll("[data-team-autocomplete]").forEach((input) => enhanceTeamAutocomplete(input));
+}
+
+async function ensureTeamNameSuggestions() {
+  const local = teamNamesFromPayload(state.payload);
+  if (local.length) {
+    setTeamNameCatalog(local);
+  }
+  if (state.teamNamesLoaded && state.teamNames.length) {
+    return state.teamNames;
+  }
+  try {
+    const season = state.season && state.season !== "ALL" ? state.season : "";
+    const query = season ? `?season=${encodeURIComponent(season)}` : "";
+    const data = await fetchJson(`/api/fixture-planner/team-names${query}`);
+    const remote = Array.isArray(data.teams) ? data.teams : [];
+    setTeamNameCatalog([...local, ...remote]);
+    state.teamNamesLoaded = true;
+  } catch (error) {
+    if (!state.teamNames.length && local.length) {
+      setTeamNameCatalog(local);
+    }
+    console.warn("Could not load team name suggestions", error);
+  }
+  return state.teamNames;
+}
+
+function manualPlayerRowMarkup(index = 0) {
+  return `
+    <div class="fp-manual-player-row" data-manual-player-row>
+      <div class="fp-player-ac" data-player-ac>
+        <input type="text" data-manual-player-name data-player-autocomplete placeholder="Search player…" autocomplete="off" aria-autocomplete="list" aria-expanded="false" />
+        <a class="fp-player-ac__link" data-manual-player-link hidden target="_blank" rel="noopener" title="Open player page" aria-label="Open player page">↗</a>
+        <div class="fp-player-ac__menu" hidden role="listbox"></div>
+      </div>
+      <input type="text" data-manual-player-team data-team-autocomplete placeholder="Club / team" autocomplete="off" />
+      <select data-manual-player-side>
+        <option value="">Side</option>
+        <option value="home">Home</option>
+        <option value="away">Away</option>
+      </select>
+      <input type="text" data-manual-player-position placeholder="Pos" autocomplete="off" />
+      <button type="button" class="fp-btn fp-btn--ghost" data-manual-player-remove aria-label="Remove player">×</button>
+    </div>
+  `;
+}
+
+function renderManualPlayerRows(count = 2) {
+  if (!els.manualPlayersList) return;
+  els.manualPlayersList.innerHTML = Array.from({ length: Math.max(1, count) }, (_, index) =>
+    manualPlayerRowMarkup(index),
+  ).join("");
+  bindTeamAutocompletes(els.manualPlayersList);
+  bindPlayerAutocompletes(els.manualPlayersList);
+}
+
+function collectManualPlayers() {
+  if (!els.manualPlayersList) return [];
+  return [...els.manualPlayersList.querySelectorAll("[data-manual-player-row]")]
+    .map((row) => {
+      const playerId = Number(row.dataset.playerId || 0);
+      return {
+        player_name: row.querySelector("[data-manual-player-name]")?.value?.trim() || "",
+        team: row.querySelector("[data-manual-player-team]")?.value?.trim() || "",
+        side: row.querySelector("[data-manual-player-side]")?.value || "",
+        position: row.querySelector("[data-manual-player-position]")?.value?.trim() || "",
+        player_id: playerId > 0 ? playerId : undefined,
+      };
+    })
+    .filter((row) => row.player_name);
+}
+
+function playerCatalogClub(player) {
+  return String(
+    player?.club ||
+      player?.context_club ||
+      player?.seasons?.[0]?.club ||
+      "",
+  ).trim();
+}
+
+function playerCatalogMeta(player) {
+  const club = playerCatalogClub(player);
+  const label = String(player?.label || "").trim();
+  if (club && label && !label.toLowerCase().includes(club.toLowerCase())) {
+    return `${club} · ${label}`;
+  }
+  return club || label || "Impect";
+}
+
+function setManualPlayerSelection(row, player) {
+  if (!row) return;
+  const nameInput = row.querySelector("[data-manual-player-name]");
+  const teamInput = row.querySelector("[data-manual-player-team]");
+  const link = row.querySelector("[data-manual-player-link]");
+  const name = String(player?.name || "").trim();
+  const id = Number(player?.impect_player_id || player?.playerId || player?.id || 0);
+  if (nameInput && name) {
+    nameInput.value = name;
+    nameInput.classList.add("fp-player-ac__input--matched");
+  }
+  if (id > 0) {
+    row.dataset.playerId = String(id);
+    if (link) {
+      link.href = `/player/${id}`;
+      link.hidden = false;
+    }
+  } else {
+    delete row.dataset.playerId;
+    if (link) {
+      link.removeAttribute("href");
+      link.hidden = true;
+    }
+  }
+  const club = playerCatalogClub(player);
+  if (teamInput && club && !teamInput.value.trim()) {
+    teamInput.value = club;
+    snapTeamInputToCatalog(teamInput);
+  }
+}
+
+function clearManualPlayerSelection(row) {
+  if (!row) return;
+  delete row.dataset.playerId;
+  const nameInput = row.querySelector("[data-manual-player-name]");
+  const link = row.querySelector("[data-manual-player-link]");
+  nameInput?.classList.remove("fp-player-ac__input--matched");
+  if (link) {
+    link.removeAttribute("href");
+    link.hidden = true;
+  }
+}
+
+async function searchPlayerCatalog(query, { team = "", limit = 8 } = {}) {
+  const clean = String(query || "").trim();
+  if (clean.length < 2) return [];
+  try {
+    const data = await fetchJson("/api/players", {
+      method: "POST",
+      body: JSON.stringify({ search: clean }),
+    });
+    let players = Array.isArray(data.players) ? data.players : [];
+    const teamNorm = String(team || "").trim().toLowerCase();
+    if (teamNorm) {
+      const byClub = players.filter((row) => {
+        const club = playerCatalogClub(row).toLowerCase();
+        const label = String(row.label || "").toLowerCase();
+        return club.includes(teamNorm) || teamNorm.includes(club) || label.includes(teamNorm);
+      });
+      if (byClub.length) players = byClub;
+    }
+    return players.slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
+function hidePlayerAutocompleteMenu(menu, input = null) {
+  if (!menu) return;
+  menu.hidden = true;
+  menu.innerHTML = "";
+  menu.classList.remove("fp-player-ac__menu--fixed");
+  menu.style.cssText = "";
+  if (input) input.setAttribute("aria-expanded", "false");
+  if (playerAutocompleteUi.openMenu === menu) {
+    playerAutocompleteUi.openMenu = null;
+    playerAutocompleteUi.openInput = null;
+    playerAutocompleteUi.openWrap = null;
+  }
+}
+
+function positionPlayerAutocompleteMenu(input, menu) {
+  const rect = input.getBoundingClientRect();
+  const width = Math.max(rect.width, 280);
+  const left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
+  let top = rect.bottom + 6;
+  menu.hidden = false;
+  menu.classList.add("fp-player-ac__menu--fixed");
+  const menuHeight = Math.min(menu.scrollHeight || 240, 280);
+  if (top + menuHeight > window.innerHeight - 12 && rect.top > menuHeight + 12) {
+    top = rect.top - menuHeight - 6;
+  }
+  menu.style.position = "fixed";
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+  menu.style.width = `${width}px`;
+  menu.style.right = "auto";
+  menu.style.zIndex = "240";
+  if (menu.parentElement !== document.body) {
+    document.body.appendChild(menu);
+  }
+  playerAutocompleteUi.openMenu = menu;
+  playerAutocompleteUi.openInput = input;
+  playerAutocompleteUi.openWrap = input.closest("[data-player-ac]");
+}
+
+function openPlayerAutocompleteMenu(input, menu, options, activeIndex = 0, { emptyMessage = "" } = {}) {
+  const query = input.value.trim();
+  if (!options.length) {
+    if (!emptyMessage) {
+      hidePlayerAutocompleteMenu(menu, input);
+      return;
+    }
+    menu.innerHTML = `<div class="fp-player-ac__empty">${escapeHtml(emptyMessage)}</div>`;
+    positionPlayerAutocompleteMenu(input, menu);
+    input.setAttribute("aria-expanded", "true");
+    menu.dataset.activeIndex = "-1";
+    return;
+  }
+  menu.innerHTML = options
+    .map((player, index) => {
+      const name = String(player.name || "").trim();
+      const id = Number(player.impect_player_id || player.id || 0);
+      return `
+      <button type="button" class="fp-player-ac__option${index === activeIndex ? " fp-player-ac__option--active" : ""}" data-player-option-index="${index}" data-player-id="${id}" role="option" aria-selected="${index === activeIndex ? "true" : "false"}">
+        <span class="fp-player-ac__option-name">${highlightTeamMatch(name, query)}</span>
+        <span class="fp-player-ac__option-meta">${escapeHtml(playerCatalogMeta(player))}</span>
+      </button>
+    `;
+    })
+    .join("");
+  positionPlayerAutocompleteMenu(input, menu);
+  input.setAttribute("aria-expanded", "true");
+  menu.dataset.activeIndex = String(activeIndex);
+}
+
+function enhancePlayerAutocomplete(input) {
+  if (!input || input.dataset.playerAcBound === "1") return;
+  input.dataset.playerAcBound = "1";
+  input.classList.add("fp-player-ac__input");
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-expanded", "false");
+
+  const wrap = input.closest("[data-player-ac]");
+  const row = input.closest("[data-manual-player-row]");
+  let menu = wrap?.querySelector(".fp-player-ac__menu");
+  if (!wrap) return;
+  if (!menu) {
+    menu = document.createElement("div");
+    menu.className = "fp-player-ac__menu";
+    menu.hidden = true;
+    menu.setAttribute("role", "listbox");
+    wrap.appendChild(menu);
+  }
+
+  let activeIndex = 0;
+  let currentOptions = [];
+  let searchToken = 0;
+  let debounceTimer = 0;
+
+  const closeMenu = () => hidePlayerAutocompleteMenu(menu, input);
+
+  const refresh = async () => {
+    const query = input.value.trim();
+    if (query.length < 2) {
+      currentOptions = [];
+      openPlayerAutocompleteMenu(input, menu, [], 0, {
+        emptyMessage: "Type at least 2 letters to search players",
+      });
+      return;
+    }
+    const token = ++searchToken;
+    openPlayerAutocompleteMenu(input, menu, [], 0, { emptyMessage: "Searching…" });
+    const team = row?.querySelector("[data-manual-player-team]")?.value || "";
+    const options = await searchPlayerCatalog(query, { team });
+    if (token !== searchToken) return;
+    currentOptions = options;
+    activeIndex = 0;
+    openPlayerAutocompleteMenu(input, menu, currentOptions, activeIndex, {
+      emptyMessage: `No players matched “${query}”`,
+    });
+  };
+
+  const choose = (player) => {
+    setManualPlayerSelection(row, player);
+    closeMenu();
+  };
+
+  input.addEventListener("focus", () => {
+    closeTeamAutocompleteMenus();
+    closePlayerAutocompleteMenus(wrap);
+    refresh();
+  });
+  input.addEventListener("input", () => {
+    clearManualPlayerSelection(row);
+    window.clearTimeout(debounceTimer);
+    debounceTimer = window.setTimeout(() => {
+      refresh();
+    }, 180);
+  });
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      if (menu.hidden) refresh();
+      if (!currentOptions.length) return;
+      activeIndex = (activeIndex + 1) % currentOptions.length;
+      openPlayerAutocompleteMenu(input, menu, currentOptions, activeIndex);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!currentOptions.length) return;
+      activeIndex = (activeIndex - 1 + currentOptions.length) % currentOptions.length;
+      openPlayerAutocompleteMenu(input, menu, currentOptions, activeIndex);
+    } else if (event.key === "Enter") {
+      if (!menu.hidden && currentOptions[activeIndex]) {
+        event.preventDefault();
+        choose(currentOptions[activeIndex]);
+      }
+    } else if (event.key === "Escape") {
+      closeMenu();
+    }
+  });
+  menu.addEventListener("mousedown", (event) => {
+    const option = event.target.closest("[data-player-option-index]");
+    if (!option) return;
+    event.preventDefault();
+    const index = Number(option.dataset.playerOptionIndex || -1);
+    if (index >= 0 && currentOptions[index]) choose(currentOptions[index]);
+  });
+  const reposition = () => {
+    if (!menu.hidden) positionPlayerAutocompleteMenu(input, menu);
+  };
+  window.addEventListener("resize", reposition);
+  document.querySelector(".fp-assign-modal__body")?.addEventListener("scroll", reposition, { passive: true });
+  input.addEventListener("blur", () => {
+    window.setTimeout(() => {
+      if (wrap.contains(document.activeElement) || menu.contains(document.activeElement)) return;
+      closeMenu();
+    }, 160);
+  });
+}
+
+function bindPlayerAutocompletes(root = document) {
+  root.querySelectorAll("[data-player-autocomplete]").forEach((input) => enhancePlayerAutocomplete(input));
+}
+
+function tomorrowKey() {
+  const now = new Date();
+  now.setDate(now.getDate() + 1);
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function configureManualFixtureModalChrome() {
+  const title = document.getElementById("manualFixtureTitle");
+  const meta = document.getElementById("manualFixtureMeta");
+  const eyebrow = document.getElementById("manualFixtureEyebrow");
+  const playersHeading = document.getElementById("manualPlayersHeading");
+  const playersHelp = document.getElementById("manualPlayersHelp");
+  const notesLabel = document.getElementById("manualNotesLabel");
+  const scoreField = document.getElementById("manualScoreField");
+  const teamSheetField = document.getElementById("manualTeamSheetField");
+  if (IS_PLAYED_APP) {
+    if (title) title.textContent = "Create manual fixture";
+    if (eyebrow) eyebrow.textContent = "Outside the pulled schedule";
+    if (meta) {
+      meta.textContent = "For games you attended that aren’t in the league pulls.";
+    }
+    if (playersHeading) playersHeading.textContent = "Players watched";
+    if (playersHelp) {
+      playersHelp.textContent =
+        "Click a player name field and type 2+ letters — pick from the list (Scout Summary marks them reported).";
+    }
+    if (notesLabel) notesLabel.textContent = "Game notes";
+    if (els.manualFixtureSaveBtn) els.manualFixtureSaveBtn.textContent = "Save fixture";
+    if (els.createManualFixtureBtn) els.createManualFixtureBtn.textContent = "Create manual fixture";
+    scoreField?.classList.remove("hidden");
+    teamSheetField?.classList.remove("hidden");
+  } else {
+    if (title) title.textContent = "Add upcoming game";
+    if (eyebrow) eyebrow.textContent = "Outside the pulled schedule";
+    if (meta) {
+      meta.textContent = "Add a future game that isn’t in the league pulls, then assign coverage as usual.";
+    }
+    if (playersHeading) playersHeading.textContent = "Players to watch";
+    if (playersHelp) {
+      playersHelp.textContent =
+        "Click a player name field and type 2+ letters — pick from the list, then open their page with ↗.";
+    }
+    if (notesLabel) notesLabel.textContent = "Notes";
+    if (els.manualFixtureSaveBtn) els.manualFixtureSaveBtn.textContent = "Save game";
+    if (els.createManualFixtureBtn) els.createManualFixtureBtn.textContent = "Add upcoming game";
+    scoreField?.classList.add("hidden");
+    // Keep team sheet available for upcoming too (optional).
+    teamSheetField?.classList.remove("hidden");
+  }
+}
+
+function openManualFixtureModal() {
+  if (!els.manualFixtureModal) return;
+  configureManualFixtureModalChrome();
+  populateManualStaffSelect();
+  ensureTeamNameSuggestions().catch(() => {});
+  els.manualFixtureForm?.reset();
+  const dateInput = document.getElementById("manualDate");
+  if (dateInput) {
+    dateInput.value = IS_PLAYED_APP ? todayKey() : tomorrowKey();
+  }
+  const leagueInput = document.getElementById("manualLeague");
+  if (leagueInput) {
+    leagueInput.value = "Manual";
+  }
+  renderManualPlayerRows(IS_PLAYED_APP ? 3 : 2);
+  bindTeamAutocompletes(els.manualFixtureModal);
+  els.manualFixtureModal.classList.remove("fp-assign-modal--hidden");
+  els.manualFixtureModal.setAttribute("aria-hidden", "false");
+  document.getElementById("manualHome")?.focus();
+}
+
+function closeManualFixtureModal() {
+  if (!els.manualFixtureModal) return;
+  els.manualFixtureModal.classList.add("fp-assign-modal--hidden");
+  els.manualFixtureModal.setAttribute("aria-hidden", "true");
+  if (els.manualTeamSheet) {
+    els.manualTeamSheet.value = "";
+  }
+}
+
+async function saveManualFixture() {
+  snapTeamInputToCatalog(document.getElementById("manualHome"));
+  snapTeamInputToCatalog(document.getElementById("manualAway"));
+  els.manualPlayersList
+    ?.querySelectorAll("[data-manual-player-team]")
+    .forEach((input) => snapTeamInputToCatalog(input));
+  const home = document.getElementById("manualHome")?.value?.trim() || "";
+  const away = document.getElementById("manualAway")?.value?.trim() || "";
+  const date = document.getElementById("manualDate")?.value || "";
+  if (!home || !away || !date) {
+    els.statusBar.textContent = "Home, away and date are required.";
+    return;
+  }
+  const kickoff = document.getElementById("manualKickoff")?.value || "";
+  const league = document.getElementById("manualLeague")?.value?.trim() || "Manual";
+  const score = document.getElementById("manualScore")?.value?.trim() || "";
+  const venue = document.getElementById("manualVenue")?.value?.trim() || "";
+  const notes = document.getElementById("manualNotes")?.value?.trim() || "";
+  const staff = collectManualStaff();
+  const watchType = document.getElementById("manualWatchType")?.value || "LIVE";
+  const players = collectManualPlayers();
+  const resolvedPlayers = [];
+  for (const player of players) {
+    const playerId =
+      Number(player.player_id || 0) > 0
+        ? Number(player.player_id)
+        : await resolvePlayerCatalogId(player.player_name, player.team);
+    resolvedPlayers.push({
+      ...player,
+      player_id: playerId || undefined,
+    });
+  }
+
+  if (els.manualFixtureSaveBtn) {
+    els.manualFixtureSaveBtn.disabled = true;
+    els.manualFixtureSaveBtn.textContent = "Saving…";
+  }
+
+  try {
+    const created = await fetchJson("/api/fixture-planner/manual-fixtures", {
+      method: "POST",
+      body: JSON.stringify({
+        season: state.season,
+        league,
+        competition: league,
+        home,
+        away,
+        date,
+        kickoff,
+        score: IS_PLAYED_APP ? score : "",
+        venue,
+        notes,
+        staff,
+        watch_type: watchType,
+        players: resolvedPlayers,
+        mark_reports: IS_PLAYED_APP,
+        status: IS_PLAYED_APP ? "completed" : "scheduled",
+      }),
+    });
+    const fixtureIdValue = created?.fixture?.fixture_id || "";
+    const file = els.manualTeamSheet?.files?.[0];
+    if (file && fixtureIdValue) {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(
+        `/api/fixture-planner/manual-fixtures/${encodeURIComponent(fixtureIdValue)}/team-sheet`,
+        { method: "POST", body: form },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.detail || "Fixture saved, but team sheet upload failed.");
+      }
+    }
+    closeManualFixtureModal();
+    await loadFixtures();
+    els.statusBar.textContent = `Manual fixture saved: ${home} vs ${away}`;
+  } catch (error) {
+    els.statusBar.textContent = error.message || "Could not save manual fixture.";
+  } finally {
+    if (els.manualFixtureSaveBtn) {
+      els.manualFixtureSaveBtn.disabled = false;
+      els.manualFixtureSaveBtn.textContent = "Save fixture";
+    }
+  }
+}
+
+function bindManualFixtureUi() {
+  if (!els.manualFixtureModal) return;
+  els.createManualFixtureBtn?.addEventListener("click", openManualFixtureModal);
+  els.manualFixtureModal.querySelectorAll("[data-manual-close]").forEach((btn) => {
+    btn.addEventListener("click", closeManualFixtureModal);
+  });
+  els.manualAddPlayerBtn?.addEventListener("click", () => {
+    if (!els.manualPlayersList) return;
+    els.manualPlayersList.insertAdjacentHTML("beforeend", manualPlayerRowMarkup());
+    bindTeamAutocompletes(els.manualPlayersList);
+    bindPlayerAutocompletes(els.manualPlayersList);
+  });
+  els.manualPlayersList?.addEventListener("click", (event) => {
+    const remove = event.target.closest("[data-manual-player-remove]");
+    if (!remove) return;
+    const row = remove.closest("[data-manual-player-row]");
+    row?.remove();
+    if (!els.manualPlayersList.querySelector("[data-manual-player-row]")) {
+      renderManualPlayerRows(1);
+    }
+  });
+  document.addEventListener("pointerdown", (event) => {
+    const teamWrap = event.target.closest?.(".fp-team-ac");
+    const playerWrap = event.target.closest?.(".fp-player-ac");
+    const playerMenu = event.target.closest?.(".fp-player-ac__menu");
+    if (playerMenu) return;
+    if (teamWrap) {
+      closeTeamAutocompleteMenus(teamWrap);
+      closePlayerAutocompleteMenus();
+      return;
+    }
+    if (playerWrap) {
+      closePlayerAutocompleteMenus(playerWrap);
+      closeTeamAutocompleteMenus();
+      return;
+    }
+    closeTeamAutocompleteMenus();
+    closePlayerAutocompleteMenus();
+  });
+  els.manualFixtureSaveBtn?.addEventListener("click", () => {
+    saveManualFixture();
+  });
+}
+
 async function init() {
+  if (els.pageSubtitle && IS_PLAYED_APP) {
+    els.pageSubtitle.textContent =
+      "Games that have taken place · LIVE coverage carries over · create a manual fixture when the game isn’t in the pulled list";
+  }
+  if (els.createManualFixtureBtn) {
+    els.createManualFixtureBtn.classList.remove("hidden");
+    configureManualFixtureModalChrome();
+  }
+
   await loadAssignmentsFromServer();
+
+  if (IS_PLAYED_APP) {
+    state.hidePast = false;
+    state.playedOnly = true;
+    document.getElementById("hidePastControl")?.classList.add("hidden");
+    els.ticketRequestBtn?.classList.add("hidden");
+    els.scheduleUpdateBtn?.classList.add("hidden");
+    if (els.assignConfirmBtn) {
+      els.assignConfirmBtn.textContent = "Save coverage";
+    }
+  } else {
+    state.hidePast = true;
+    state.playedOnly = false;
+    if (els.hidePastToggle) {
+      els.hidePastToggle.checked = true;
+      els.hidePastToggle.disabled = true;
+    }
+  }
 
   document.querySelectorAll(".fp-view-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -1260,6 +3181,14 @@ async function init() {
       btn.classList.add("fp-view-btn--active");
       state.view = btn.dataset.view;
       renderView();
+    });
+  });
+
+  document.querySelectorAll("[data-comp-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (btn.disabled) return;
+      const wantCups = btn.dataset.compTab === "cups";
+      setCompetitionScope(wantCups, { refetch: wantCups && !state.cupsMode });
     });
   });
 
@@ -1293,6 +3222,13 @@ async function init() {
 
   els.refreshBtn.addEventListener("click", () => loadFixtures());
 
+  els.ticketRequestBtn?.addEventListener("click", () => sendBulkEmail("ticket-request"));
+  els.scheduleUpdateBtn?.addEventListener("click", () => sendBulkEmail("schedule-update"));
+  els.ticketModal?.querySelectorAll("[data-ticket-close]").forEach((btn) => {
+    btn.addEventListener("click", closeTicketRequestModal);
+  });
+  els.ticketConfirmBtn?.addEventListener("click", confirmTicketRequest);
+
   els.assignModal?.querySelectorAll("[data-assign-close]").forEach((btn) => {
     btn.addEventListener("click", closeAssignModal);
   });
@@ -1304,14 +3240,46 @@ async function init() {
     renderAssignModalChrome();
   });
 
-  els.listRoot?.addEventListener("toggle", (event) => {
-    const details = event.target.closest(".fp-fixture-details");
-    if (!details || !details.open) return;
-    const fixtureIdValue = details.dataset.fixtureId;
-    if (fixtureIdValue) {
-      loadEnrichmentForIds([fixtureIdValue]);
+  // Match details opens as a popup (not an inline accordion).
+  const onOpenMatchDetails = (event) => {
+    const button = event.target.closest("[data-open-match-details]");
+    if (!button) return;
+    event.preventDefault();
+    openMatchDetailsModal(button.dataset.openMatchDetails || "");
+  };
+  els.listRoot?.addEventListener("click", onOpenMatchDetails);
+  els.calendarRoot?.addEventListener("click", onOpenMatchDetails);
+
+  els.matchDetailsModal?.querySelectorAll("[data-match-details-close]").forEach((btn) => {
+    btn.addEventListener("click", closeMatchDetailsModal);
+  });
+
+  const onReportClick = (event) => {
+    if (event.target.closest("summary, a, .so-match-team__details-summary")) return;
+    const target = event.target.closest("[data-player-id]");
+    if (!target || !els.matchDetailsBody?.contains(target)) return;
+    event.preventDefault();
+    toggleLineupReport(target);
+  };
+  els.matchDetailsModal?.addEventListener("click", onReportClick);
+  els.matchDetailsModal?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const target = event.target.closest("[data-player-id]");
+    if (!target || !els.matchDetailsBody?.contains(target)) return;
+    event.preventDefault();
+    toggleLineupReport(target);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && state.matchDetailsFixtureId) {
+      closeMatchDetailsModal();
+    }
+    if (event.key === "Escape" && els.manualFixtureModal && !els.manualFixtureModal.classList.contains("fp-assign-modal--hidden")) {
+      closeManualFixtureModal();
     }
   });
+
+  bindManualFixtureUi();
 
   try {
     state.meta = await fetchJson("/api/fixture-planner/meta");

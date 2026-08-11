@@ -9,3 +9,5 @@ xlsxwriter==3.2.9
 pymupdf==1.28.0
 python-multipart>=0.0.9
 itsdangerous>=2.2.0
+gspread==6.2.1
+google-auth==2.40.3

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import threading
 import time
+import uuid
+import zlib
 from calendar import monthrange
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -11,18 +14,32 @@ from urllib.parse import quote
 from typing import Any
 
 import requests
-from fastapi import Body, FastAPI, HTTPException, Query
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi import Body, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 
 from app.paths import FIXTURE_PLANNER_DATA_DIR
 from app.scouting import SCOUTING_DIR
-from app.fixture_assignment_email import send_assignment_email, team_badge_url
+from app.fixture_assignment_email import (
+    admin_team_emails,
+    app_base_url,
+    parse_reject_token,
+    schedule_update_emails,
+    scout_email_for,
+    send_assignment_email,
+    send_rejection_notify_email,
+    send_schedule_update_email,
+    send_ticket_request_email,
+    team_badge_url,
+    _format_kickoff,
+)
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_SEASON = "26/27"
 ALLOWED_FIXTURE_SEASONS: tuple[str, ...] = ("26/27", "25/26")
 FIXTURE_CACHE_TTL_SECONDS = 1800
-FIXTURE_CACHE_VERSION = "v5"
+FIXTURE_CACHE_VERSION = "v14"
 
 FIXTURE_STAFF_TEAMS: tuple[dict[str, Any], ...] = (
     {
@@ -75,8 +92,64 @@ ASSIGNMENTS_DIR = FIXTURE_PLANNER_DATA_DIR
 ASSIGNMENTS_DIR.mkdir(parents=True, exist_ok=True)
 ASSIGNMENTS_PATH = ASSIGNMENTS_DIR / "assignments.json"
 SCOUTING_REPORTS_PATH = ASSIGNMENTS_DIR / "scouting-reports.json"
+MANUAL_FIXTURES_PATH = ASSIGNMENTS_DIR / "manual-fixtures.json"
+TICKET_REQUESTS_PATH = ASSIGNMENTS_DIR / "ticket-requests.json"
+TEAM_SHEETS_DIR = ASSIGNMENTS_DIR / "team-sheets"
+TEAM_SHEETS_DIR.mkdir(parents=True, exist_ok=True)
 _assignments_lock = threading.Lock()
 _scouting_reports_lock = threading.Lock()
+_manual_fixtures_lock = threading.Lock()
+_ticket_requests_lock = threading.Lock()
+TICKET_REQUEST_DAYS_AHEAD = 13
+
+MANUAL_LEAGUE_LABEL = "Manual"
+MANUAL_FIXTURE_ID_PREFIX = "manual|"
+
+
+def _normalize_league_label(value: str | None) -> str:
+    """Fold common typos / aliases into canonical competition labels."""
+    raw = str(value or "").strip()
+    if not raw:
+        return MANUAL_LEAGUE_LABEL
+    compact = "".join(ch for ch in raw.casefold() if ch.isalnum())
+    # "Pre Season Friednly", "Pre-Season Friendly", "Friendly", etc.
+    if "friendly" in compact or "friednly" in compact:
+        return "Friendly"
+    # Sponsor / historic names for the EFL Trophy
+    if compact in {
+        "efltrophy",
+        "vertutrophy",
+        "papajohnstrophy",
+        "bristolstreetmotorstrophy",
+        "leasingcomtrophy",
+        "checkatradetrophy",
+        "johnstonespainttrophy",
+    } or ("trophy" in compact and any(token in compact for token in ("efl", "vertu", "papa", "bristol"))):
+        return "Vertu Trophy"
+    if compact in {"nationalleaguecup", "nlcup"} or "nationalleaguecup" in compact:
+        return "National League Cup"
+    if compact in {"premierleaguecup", "plcup"}:
+        return "Premier League Cup"
+    if compact in {
+        "professionaldevelopmentleague",
+        "pdl",
+        "u21professionaldevelopmentleague",
+    }:
+        return "Professional Development League"
+    return raw
+TEAM_SHEET_MAX_BYTES = 12 * 1024 * 1024
+TEAM_SHEET_ALLOWED_EXT = frozenset({".pdf", ".png", ".jpg", ".jpeg", ".webp", ".heic", ".heif"})
+TEAM_SHEET_ALLOWED_TYPES = frozenset(
+    {
+        "application/pdf",
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "image/heic",
+        "image/heif",
+        "application/octet-stream",
+    }
+)
 
 
 def _parse_fixture_id_parts(fixture_id: str) -> dict[str, str] | None:
@@ -99,6 +172,62 @@ def _team_names_match(left: str, right: str) -> bool:
     if left_norm == right_norm:
         return True
     return left_norm in right_norm or right_norm in left_norm
+
+
+def _team_names_same_club(left: str, right: str) -> bool:
+    """Stricter than substring match — used when merging fixtures across sources.
+
+    Allows Celtic Glasgow ≈ Celtic, but not Dundee ≈ Dundee United.
+    """
+    left_norm = _normalize_team_name(left)
+    right_norm = _normalize_team_name(right)
+    if not left_norm or not right_norm:
+        return False
+    if left_norm == right_norm:
+        return True
+
+    shorter, longer = (
+        (left_norm, right_norm)
+        if len(left_norm) <= len(right_norm)
+        else (right_norm, left_norm)
+    )
+    short_tokens = shorter.split()
+    long_tokens = longer.split()
+    if not short_tokens or len(long_tokens) <= len(short_tokens):
+        return False
+
+    def _remainder_is_noise(tokens: list[str]) -> bool:
+        if not tokens:
+            return True
+        if any(token in _CLUB_DISTINGUISHER_TOKENS for token in tokens):
+            return False
+        return all(token in _CLUB_NOISE_TOKENS for token in tokens)
+
+    # Celtic Glasgow ≈ Celtic (suffix place name)
+    if long_tokens[: len(short_tokens)] == short_tokens:
+        return _remainder_is_noise(long_tokens[len(short_tokens) :])
+
+    # Glasgow Rangers ≈ Rangers (prefix place name)
+    if long_tokens[-len(short_tokens) :] == short_tokens:
+        return _remainder_is_noise(long_tokens[: -len(short_tokens)])
+
+    return False
+
+
+def _fixture_sides_match(
+    left_home: str,
+    left_away: str,
+    right_home: str,
+    right_away: str,
+) -> bool:
+    same = _team_names_same_club(left_home, right_home) and _team_names_same_club(
+        left_away, right_away
+    )
+    if same:
+        return True
+    return _team_names_same_club(left_home, right_away) and _team_names_same_club(
+        left_away, right_home
+    )
 
 
 def _fixture_is_played(fixture: dict[str, Any]) -> bool:
@@ -194,7 +323,8 @@ def _cached_fixtures_list(seasons: list[str], *, warm: bool = False) -> list[dic
         with _fixture_cache_lock:
             cached = _fixture_cache.get(cache_key)
         if cached and now - cached[0] < FIXTURE_CACHE_TTL_SECONDS:
-            for fixture in cached[1].get("fixtures") or []:
+            merged = _merge_manual_fixtures_into_payload(cached[1], season=season)
+            for fixture in merged.get("fixtures") or []:
                 fixtures.append({**fixture, "season": season})
         elif warm:
             try:
@@ -242,9 +372,44 @@ def _scout_ops_cache_clear() -> None:
         _scout_ops_cache.clear()
 
 
+def _normalize_staff_names(value: Any, *, validate: bool = False) -> list[str]:
+    """Accept legacy string or list; return unique staff names in order."""
+    if value is None:
+        raw: list[str] = []
+    elif isinstance(value, str):
+        raw = [value]
+    elif isinstance(value, (list, tuple, set)):
+        raw = [str(item) for item in value]
+    else:
+        raw = [str(value)]
+
+    names: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        name = str(item or "").strip()
+        if not name:
+            continue
+        if validate and name not in FIXTURE_STAFF:
+            raise HTTPException(status_code=400, detail=f"Unknown staff member: {name}")
+        key = name.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        names.append(name)
+    return names
+
+
+def _staff_label(value: Any) -> str:
+    return ", ".join(_normalize_staff_names(value))
+
+
+def _staff_name_set(value: Any) -> set[str]:
+    return {name.casefold() for name in _normalize_staff_names(value)}
+
+
 class FixtureAssignmentUpdate(BaseModel):
     fixture_id: str
-    staff: str = ""
+    staff: list[str] | str = ""
     watch_type: str = ""
     season: str = ""
     league: str = ""
@@ -259,6 +424,18 @@ class FixtureAssignmentsBulkUpdate(BaseModel):
     assignments: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
+class TicketRequestFixtureDetail(BaseModel):
+    fixture_id: str
+    tickets: int = 1
+    parking: str = "No"
+    notes: str = ""
+
+
+class TicketRequestBody(BaseModel):
+    fixtures: list[TicketRequestFixtureDetail] = Field(default_factory=list)
+    additional_requests: str = ""
+
+
 class ScoutingReportToggle(BaseModel):
     fixture_id: str
     player_id: int
@@ -270,6 +447,50 @@ class ScoutingReportToggle(BaseModel):
     fixture_date: str = ""
     position: str = ""
     reported: bool = True
+
+
+class ManualFixturePlayerInput(BaseModel):
+    player_name: str = ""
+    name: str = ""
+    team: str = ""
+    side: str = ""
+    position: str = ""
+    player_id: int | None = None
+
+
+class ManualFixtureCreate(BaseModel):
+    season: str = DEFAULT_SEASON
+    league: str = MANUAL_LEAGUE_LABEL
+    competition: str = ""
+    home: str
+    away: str
+    date: str
+    kickoff: str = ""
+    score: str = ""
+    venue: str = ""
+    notes: str = ""
+    staff: list[str] | str = ""
+    watch_type: str = "LIVE"
+    players: list[ManualFixturePlayerInput] = Field(default_factory=list)
+    mark_reports: bool = True
+    # "scheduled" = upcoming (Fixture Planner), "completed" = played / attended
+    status: str = "completed"
+
+
+class ManualFixtureUpdate(BaseModel):
+    league: str | None = None
+    competition: str | None = None
+    home: str | None = None
+    away: str | None = None
+    date: str | None = None
+    kickoff: str | None = None
+    score: str | None = None
+    venue: str | None = None
+    notes: str | None = None
+    staff: list[str] | str | None = None
+    watch_type: str | None = None
+    players: list[ManualFixturePlayerInput] | None = None
+    mark_reports: bool = True
 
 
 # Impect / lineup position codes → report pitch buckets (1–11 style).
@@ -399,8 +620,118 @@ FIXTURE_LEAGUES: tuple[dict[str, Any], ...] = (
     },
 )
 
-FIXTURE_LEAGUE_BY_UI = {row["ui"]: row for row in FIXTURE_LEAGUES}
+# Domestic cups — shown under a dedicated Cups toggle with stacked layout.
+# Prefer FotMob when fotmob_id is set; use Premier League Pulse when pulse_competition_id is set
+# (PDL / Premier League Cup / Vertu Trophy are incomplete or missing on FotMob).
+FIXTURE_CUPS: tuple[dict[str, Any], ...] = (
+    {
+        "ui": "FA Cup",
+        "competition": "FA Cup",
+        "fotmob_id": 132,
+        "bbc_path": "fa-cup",
+        "color": "#ef4444",
+        "cup": True,
+    },
+    {
+        "ui": "EFL Cup",
+        "competition": "EFL Cup",
+        "fotmob_id": 133,
+        "bbc_path": "efl-cup",
+        "color": "#fb923c",
+        "cup": True,
+    },
+    {
+        "ui": "Vertu Trophy",
+        "competition": "EFL Trophy",
+        "fotmob_id": 142,
+        "pulse_competition_id": 13,
+        "bbc_path": "efl-trophy",
+        "color": "#eab308",
+        "cup": True,
+    },
+    {
+        "ui": "National League Cup",
+        "competition": "National League Cup",
+        "fotmob_id": 10705,
+        "color": "#84cc16",
+        "cup": True,
+    },
+    {
+        "ui": "Premier League Cup",
+        "competition": "Premier League Cup",
+        "pulse_competition_id": 9,
+        "color": "#a855f7",
+        "cup": True,
+    },
+    {
+        "ui": "Professional Development League",
+        "competition": "Professional Development League",
+        "pulse_competition_id": 6,
+        "color": "#14b8a6",
+        "cup": True,
+    },
+    {
+        "ui": "Scottish Cup",
+        "competition": "Scottish Cup",
+        "fotmob_id": 137,
+        "bbc_path": "scottish-cup",
+        "color": "#38bdf8",
+        "cup": True,
+    },
+)
+
+# FotMob competitions used only for manual-fixture club autocomplete.
+# Strictly England / Scotland / Wales / Republic of Ireland / Northern Ireland.
+FOTMOB_TEAM_CATALOG_LEAGUES: tuple[dict[str, Any], ...] = (
+    # England
+    {"id": 47, "label": "Premier League", "country": "ENG"},
+    {"id": 48, "label": "Championship", "country": "ENG"},
+    {"id": 108, "label": "League One", "country": "ENG"},
+    {"id": 109, "label": "League Two", "country": "ENG"},
+    {"id": 117, "label": "National League", "country": "ENG"},
+    {"id": 8944, "label": "National North & South", "country": "ENG"},
+    {"id": 9084, "label": "Premier League 2", "country": "ENG"},
+    {"id": 132, "label": "FA Cup", "country": "ENG"},
+    {"id": 133, "label": "EFL Cup", "country": "ENG"},
+    {"id": 142, "label": "Vertu Trophy", "country": "ENG"},
+    {"id": 10705, "label": "National League Cup", "country": "ENG"},
+    {"id": 9253, "label": "FA Trophy", "country": "ENG"},
+    # Scotland
+    {"id": 64, "label": "Scottish Premiership", "country": "SCO"},
+    {"id": 123, "label": "Scottish Championship", "country": "SCO"},
+    {"id": 124, "label": "Scottish League One", "country": "SCO"},
+    {"id": 125, "label": "Scottish League Two", "country": "SCO"},
+    {"id": 137, "label": "Scottish Cup", "country": "SCO"},
+    {"id": 180, "label": "Scottish League Cup", "country": "SCO"},
+    {"id": 179, "label": "Scottish Challenge Cup", "country": "SCO"},
+    # Wales
+    {"id": 116, "label": "Cymru Premier", "country": "WAL"},
+    {"id": 9166, "label": "Welsh Cup", "country": "WAL"},
+    # Republic of Ireland
+    {"id": 126, "label": "Irish Premier Division", "country": "IRL", "calendar_year": True},
+    {"id": 218, "label": "Irish First Division", "country": "IRL", "calendar_year": True},
+    {"id": 219, "label": "FAI Cup", "country": "IRL", "calendar_year": True},
+    # Northern Ireland
+    {"id": 129, "label": "NIFL Premiership", "country": "NIR"},
+)
+
+TEAM_CATALOG_COUNTRIES = frozenset({"ENG", "SCO", "WAL", "IRL", "NIR"})
+TEAM_CATALOG_TTL_SECONDS = 6 * 3600
+_team_catalog_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+_team_catalog_cache_lock = threading.Lock()
+
+COUNTRY_LABELS: dict[str, str] = {
+    "ENG": "England",
+    "SCO": "Scotland",
+    "WAL": "Wales",
+    "IRL": "Ireland",
+    "NIR": "N. Ireland",
+}
+
+FIXTURE_COMPETITIONS: tuple[dict[str, Any], ...] = tuple(FIXTURE_LEAGUES) + tuple(FIXTURE_CUPS)
+FIXTURE_LEAGUE_BY_UI = {row["ui"]: row for row in FIXTURE_COMPETITIONS}
 FIXTURE_LEAGUE_UIS = [row["ui"] for row in FIXTURE_LEAGUES]
+FIXTURE_CUP_UIS = [row["ui"] for row in FIXTURE_CUPS]
 
 BBC_SEASON_MONTHS: dict[str, tuple[str, ...]] = {
     "26/27": (
@@ -451,7 +782,60 @@ TEAM_ALIASES: dict[str, str] = {
     "man city": "manchester city",
     "oxford utd": "oxford united",
     "cambridge utd": "cambridge united",
+    # Impect vs FotMob/BBC naming for Scottish clubs
+    "celtic glasgow": "celtic",
+    "glasgow celtic": "celtic",
+    "rangers glasgow": "rangers",
+    "glasgow rangers": "rangers",
+    "hibernian edinburgh": "hibernian",
+    "edinburgh hibernian": "hibernian",
+    "heart of midlothian": "hearts",
+    "hearts of midlothian": "hearts",
+    "dundee fc": "dundee",
+    "st mirren": "st mirren",
+    "saint mirren": "st mirren",
 }
+
+# Tokens that mean a different club when appended (Dundee ≠ Dundee United).
+_CLUB_DISTINGUISHER_TOKENS = frozenset(
+    {
+        "united",
+        "city",
+        "wednesday",
+        "athletic",
+        "athletico",
+        "wanderers",
+        "rovers",
+        "albion",
+        "town",
+        "county",
+        "forest",
+        "hotspur",
+        "argyle",
+        "villa",
+        "palace",
+        "orient",
+    }
+)
+
+# Harmless place / filler suffixes (Celtic Glasgow ≈ Celtic).
+_CLUB_NOISE_TOKENS = frozenset(
+    {
+        "glasgow",
+        "edinburgh",
+        "london",
+        "manchester",
+        "birmingham",
+        "nottingham",
+        "newcastle",
+        "upon",
+        "tyne",
+        "and",
+        "the",
+        "of",
+        "midlothian",
+    }
+)
 
 SOURCE_PRIORITY: dict[str, int] = {
     "impect": 3,
@@ -499,6 +883,214 @@ def _season_to_fotmob(season: str, *, calendar_year: bool = False) -> str:
     if token.isdigit() and len(token) == 4:
         return token
     return "2026/2027"
+
+
+def _season_year_pair(season: str) -> tuple[int, int] | None:
+    token = str(season or DEFAULT_SEASON).strip()
+    if "/" not in token:
+        return None
+    left, right = [part.strip() for part in token.split("/", 1)]
+    if not (left.isdigit() and right.isdigit()):
+        return None
+    start = int(left)
+    end = int(right)
+    if start < 100:
+        start += 2000
+    if end < 100:
+        end += 2000
+    return start, end
+
+
+_PULSE_API = "https://footballapi.pulselive.com/football"
+_PULSE_HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Origin": "https://www.premierleague.com",
+    "Referer": "https://www.premierleague.com/",
+}
+
+
+def _resolve_pulse_comp_season_id(competition_id: int, season: str) -> int | None:
+    """Map hub season (26/27) to a Premier League Pulse compSeason id."""
+    years = _season_year_pair(season)
+    if years is None:
+        return None
+    start, end = years
+    needles = {
+        f"{start}/{end}",
+        f"{start}/{str(end)[-2:]}",
+        f"{start}-{end}",
+        f"{str(start)[-2:]}/{str(end)[-2:]}",
+        f"season {start}",
+    }
+    try:
+        response = _http.get(
+            f"{_PULSE_API}/competitions/{int(competition_id)}/compseasons",
+            headers=_PULSE_HEADERS,
+            timeout=25,
+        )
+        if not response.ok:
+            return None
+        payload = response.json()
+    except (requests.RequestException, ValueError, TypeError):
+        logger.exception("Pulse comp-season lookup failed for competition %s", competition_id)
+        return None
+
+    rows = payload.get("content") if isinstance(payload, dict) else payload
+    if not isinstance(rows, list):
+        return None
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        label = str(row.get("label") or "").casefold()
+        if not label:
+            continue
+        if any(needle.casefold() in label for needle in needles):
+            try:
+                return int(row["id"])
+            except (KeyError, TypeError, ValueError):
+                continue
+    return None
+
+
+def _pulse_kickoff_iso(kickoff: Any) -> str | None:
+    if not isinstance(kickoff, dict):
+        return None
+    millis = kickoff.get("millis")
+    try:
+        ms = float(millis)
+    except (TypeError, ValueError):
+        return None
+    if ms <= 0:
+        return None
+    return datetime.fromtimestamp(ms / 1000.0, tz=UTC).isoformat()
+
+
+def _fetch_pulse_fixtures(
+    competition_id: int,
+    *,
+    league_ui: str,
+    season: str,
+) -> list[dict[str, Any]]:
+    """Pull fixtures from Premier League Pulse (PDL, Premier League Cup, Vertu Trophy)."""
+    comp_season_id = _resolve_pulse_comp_season_id(competition_id, season)
+    if comp_season_id is None:
+        logger.info(
+            "No Pulse compSeason for competition=%s season=%s",
+            competition_id,
+            season,
+        )
+        return []
+
+    fixtures: list[dict[str, Any]] = []
+    page = 0
+    total_pages = 1
+    while page < total_pages and page < 40:
+        try:
+            response = _http.get(
+                f"{_PULSE_API}/fixtures",
+                params={
+                    "comps": int(competition_id),
+                    "compSeasons": int(comp_season_id),
+                    "page": page,
+                    "pageSize": 100,
+                    "sort": "asc",
+                    "statuses": "U,L,C,A",
+                },
+                headers=_PULSE_HEADERS,
+                timeout=30,
+            )
+            if not response.ok:
+                break
+            payload = response.json()
+        except (requests.RequestException, ValueError, TypeError):
+            logger.exception(
+                "Pulse fixtures fetch failed for competition %s season %s page %s",
+                competition_id,
+                season,
+                page,
+            )
+            break
+
+        page_info = payload.get("pageInfo") or {}
+        try:
+            total_pages = max(1, int(page_info.get("numPages") or 1))
+        except (TypeError, ValueError):
+            total_pages = 1
+        rows = payload.get("content") or []
+        if not isinstance(rows, list):
+            break
+
+        for match in rows:
+            if not isinstance(match, dict):
+                continue
+            teams = match.get("teams") or []
+            if not isinstance(teams, list) or len(teams) < 2:
+                continue
+            home = teams[0] if isinstance(teams[0], dict) else {}
+            away = teams[1] if isinstance(teams[1], dict) else {}
+            home_team = home.get("team") if isinstance(home.get("team"), dict) else {}
+            away_team = away.get("team") if isinstance(away.get("team"), dict) else {}
+            home_name = str(home_team.get("name") or "").strip()
+            away_name = str(away_team.get("name") or "").strip()
+            if not home_name or not away_name:
+                continue
+            kickoff = _pulse_kickoff_iso(match.get("kickoff") or match.get("provisionalKickoff"))
+            status_code = str(match.get("status") or "").strip().upper()
+            finished = status_code in {"C", "A"}
+            home_score = home.get("score")
+            away_score = away.get("score")
+            try:
+                home_score_i = int(home_score) if home_score is not None else None
+            except (TypeError, ValueError):
+                home_score_i = None
+            try:
+                away_score_i = int(away_score) if away_score is not None else None
+            except (TypeError, ValueError):
+                away_score_i = None
+            score = None
+            if home_score_i is not None and away_score_i is not None:
+                score = f"{home_score_i} - {away_score_i}"
+            group = match.get("group")
+            gameweek = match.get("gameweek") if isinstance(match.get("gameweek"), dict) else {}
+            round_label = None
+            if group not in (None, ""):
+                round_label = str(group)
+            else:
+                gw = _safe_int(gameweek.get("gameweek"))
+                if gw is not None:
+                    round_label = str(gw)
+
+            fixtures.append(
+                {
+                    "league": league_ui,
+                    "season": season,
+                    "match_day": _safe_int(gameweek.get("gameweek")),
+                    "round": round_label,
+                    "round_name": round_label,
+                    "scheduled_date": kickoff,
+                    "date": _parse_iso_date(kickoff),
+                    "kickoff_utc": kickoff,
+                    "home": {
+                        "name": home_name,
+                        "fotmob_id": None,
+                    },
+                    "away": {
+                        "name": away_name,
+                        "fotmob_id": None,
+                    },
+                    "status": "completed" if finished else "scheduled",
+                    "score": score,
+                    "home_score": home_score_i,
+                    "away_score": away_score_i,
+                    "sources": ["pulse"],
+                    "source_ids": {"pulse": str(match.get("id") or "")},
+                }
+            )
+        page += 1
+        if not rows:
+            break
+
+    return fixtures
 
 
 def _season_to_transfermarkt(season: str, *, calendar_year: bool = False) -> int:
@@ -622,9 +1214,61 @@ def _row_source_priority(row: dict[str, Any]) -> int:
     return max(SOURCE_PRIORITY.get(str(source), 0) for source in sources)
 
 
+def _kickoff_time_quality(value: Any) -> int:
+    """Rank how likely an ISO kickoff is a real time vs a date-only placeholder.
+
+    Impect often stores unknown kickoffs as 22:00Z / 23:00Z (shows as 23:00/00:00 UK).
+    FotMob/BBC carry the actual 15:00 etc — prefer those when merging.
+    """
+    token = str(value or "").strip()
+    if not token:
+        return 0
+    if "T" not in token:
+        return 1
+    try:
+        time_part = token.split("T", 1)[1]
+        hour = int(time_part[0:2])
+        minute = int(time_part[3:5]) if len(time_part) >= 5 and time_part[2] == ":" else 0
+    except (TypeError, ValueError):
+        return 0
+    # Common date-only placeholders (midnight-ish UTC).
+    if minute == 0 and hour in (0, 22, 23):
+        return 2
+    if minute in (15, 45):
+        return 8
+    if minute in (0, 30):
+        return 6
+    return 5
+
+
+def _prefer_kickoff_value(
+    current: Any,
+    incoming: Any,
+    *,
+    current_priority: int,
+    incoming_priority: int,
+) -> Any:
+    current_q = _kickoff_time_quality(current)
+    incoming_q = _kickoff_time_quality(incoming)
+    if incoming_q > current_q:
+        return incoming or current
+    if incoming_q < current_q:
+        return current or incoming
+    if incoming_priority >= current_priority and incoming:
+        return incoming
+    return current or incoming
+
+
 def _prefer_display_name(current: str, incoming: str) -> str:
+    """Prefer the shorter same-club label (Celtic over Celtic Glasgow)."""
     current_name = str(current or "").strip()
     incoming_name = str(incoming or "").strip()
+    if not current_name:
+        return incoming_name
+    if not incoming_name:
+        return current_name
+    if _team_names_same_club(current_name, incoming_name):
+        return current_name if len(current_name) <= len(incoming_name) else incoming_name
     if len(incoming_name) > len(current_name):
         return incoming_name
     return current_name
@@ -688,6 +1332,173 @@ def _squads_map(iteration_id: int) -> dict[int, dict[str, Any]]:
     impect = _impect()
     squads = _unwrap_items(impect._impect_get(impect._squads_path(iteration_id))["data"])
     return {int(row["id"]): row for row in squads if row.get("id") is not None}
+
+
+_iteration_squad_players_cache: dict[int, tuple[float, dict[int, list[dict[str, Any]]]]] = {}
+_iteration_squad_players_lock = threading.Lock()
+ITERATION_SQUAD_PLAYERS_CACHE_TTL_SECONDS = 30 * 60
+
+
+def _players_by_squad_for_iteration(iteration_id: int) -> dict[int, list[dict[str, Any]]]:
+    """Map squad_id -> [{player_id, player_name}] for one Impect iteration."""
+    iid = int(iteration_id or 0)
+    if not iid:
+        return {}
+    now = time.time()
+    with _iteration_squad_players_lock:
+        cached = _iteration_squad_players_cache.get(iid)
+        if cached and now - cached[0] < ITERATION_SQUAD_PLAYERS_CACHE_TTL_SECONDS:
+            return cached[1]
+
+    impect = _impect()
+    by_squad: dict[int, list[dict[str, Any]]] = {}
+    try:
+        players = impect._fetch_players_for_iteration(iid)
+    except Exception:
+        players = []
+    for player in players:
+        squad_id = impect._extract_squad_id_from_player(player)
+        player_id = player.get("id")
+        name = impect._extract_player_name(player)
+        if squad_id is None or player_id is None or not name:
+            continue
+        by_squad.setdefault(int(squad_id), []).append(
+            {
+                "player_id": int(player_id),
+                "player_name": name,
+            }
+        )
+    for rows in by_squad.values():
+        rows.sort(key=lambda row: str(row.get("player_name") or "").casefold())
+
+    with _iteration_squad_players_lock:
+        _iteration_squad_players_cache[iid] = (now, by_squad)
+    return by_squad
+
+
+def _resolve_squad_player_lists(
+    squad_ids: list[int],
+    *,
+    preferred_iteration_id: int | None = None,
+) -> dict[int, list[dict[str, Any]]]:
+    """Load Impect squad lists, falling back across recent seasons when the
+    preferred iteration has not been populated yet (common early in a season).
+
+    Prefers the richest squad list found for each club (e.g. Port Vale from
+    last season's League One rather than a thin League Two snapshot).
+    """
+    wanted = [int(sid) for sid in squad_ids if int(sid or 0)]
+    result: dict[int, list[dict[str, Any]]] = {sid: [] for sid in wanted}
+    if not wanted:
+        return result
+
+    def _consider(by_squad: dict[int, list[dict[str, Any]]]) -> None:
+        for sid in wanted:
+            rows = by_squad.get(sid) or []
+            if len(rows) > len(result.get(sid) or []):
+                result[sid] = rows
+
+    if preferred_iteration_id:
+        _consider(_players_by_squad_for_iteration(int(preferred_iteration_id)))
+
+    # Already have a decent list for every squad from the preferred iteration.
+    if preferred_iteration_id and all(len(result.get(sid) or []) >= 12 for sid in wanted):
+        return result
+
+    impect = _impect()
+    candidates: list[dict[str, Any]] = []
+    for item in impect._fetch_iterations():
+        season = str(item.get("season") or "").strip()
+        if season not in ALLOWED_FIXTURE_SEASONS:
+            continue
+        iid = int(item.get("id") or 0)
+        if not iid or iid == int(preferred_iteration_id or 0):
+            continue
+        candidates.append(item)
+    season_rank = {season: idx for idx, season in enumerate(ALLOWED_FIXTURE_SEASONS)}
+    candidates.sort(
+        key=lambda row: (
+            season_rank.get(str(row.get("season") or ""), 99),
+            -int(row.get("id") or 0),
+        )
+    )
+    for item in candidates:
+        _consider(_players_by_squad_for_iteration(int(item["id"])))
+        if all(len(result.get(sid) or []) >= 12 for sid in wanted):
+            break
+    return result
+
+
+_fotmob_squad_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+_fotmob_squad_cache_lock = threading.Lock()
+FOTMOB_SQUAD_CACHE_TTL_SECONDS = 6 * 60 * 60
+
+
+def _fetch_fotmob_team_squad(fotmob_team_id: str | int | None) -> list[dict[str, Any]]:
+    """Current FotMob club squad — preferred after transfer windows over stale Impect lists."""
+    token = str(fotmob_team_id or "").strip()
+    if not token.isdigit():
+        return []
+    now = time.time()
+    with _fotmob_squad_cache_lock:
+        cached = _fotmob_squad_cache.get(token)
+        if cached and now - cached[0] < FOTMOB_SQUAD_CACHE_TTL_SECONDS:
+            return list(cached[1])
+
+    try:
+        response = _http.get(
+            "https://www.fotmob.com/api/data/teams",
+            params={"id": token},
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=20,
+        )
+    except requests.RequestException:
+        return []
+    if not response.ok:
+        return []
+    try:
+        payload = response.json()
+    except ValueError:
+        return []
+
+    groups = ((payload.get("squad") or {}).get("squad") or [])
+    players: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for group in groups:
+        title = str(group.get("title") or "").strip().casefold()
+        if title in {"coach", "staff"}:
+            continue
+        for member in group.get("members") or []:
+            if not isinstance(member, dict):
+                continue
+            player_id = int(member.get("id") or 0)
+            name = str(member.get("name") or "").strip()
+            if not player_id or not name or player_id in seen:
+                continue
+            seen.add(player_id)
+            role = member.get("role") if isinstance(member.get("role"), dict) else {}
+            players.append(
+                {
+                    "player_id": player_id,
+                    "player_name": name,
+                    "fotmob_id": player_id,
+                    "source": "fotmob",
+                    "position": str(role.get("fallback") or role.get("key") or "").strip() or None,
+                    "shirt_number": member.get("shirtNumber"),
+                }
+            )
+    players.sort(key=lambda row: str(row.get("player_name") or "").casefold())
+    with _fotmob_squad_cache_lock:
+        _fotmob_squad_cache[token] = (now, players)
+    return list(players)
+
+
+def _side_fotmob_team_id(side: dict[str, Any] | None) -> str | None:
+    side = side or {}
+    token = str(side.get("fotmob_id") or "").strip()
+    if token.isdigit():
+        return token
+    return None
 
 
 def _iteration_for_competition(competition: str, season: str) -> dict[str, Any] | None:
@@ -802,6 +1613,8 @@ def _fetch_fotmob_fixtures(
                 "league": league_ui,
                 "season": season,
                 "match_day": _safe_int(match.get("round") or match.get("roundName")),
+                "round": str(match.get("round") or "").strip() or None,
+                "round_name": str(match.get("roundName") or match.get("round") or "").strip() or None,
                 "scheduled_date": kickoff,
                 "date": _parse_iso_date(kickoff),
                 "kickoff_utc": kickoff,
@@ -814,13 +1627,36 @@ def _fetch_fotmob_fixtures(
                     "fotmob_id": str(away.get("id") or "").strip() or None,
                 },
                 "status": "completed" if status.get("finished") else "scheduled",
-                "score": None,
+                "score": str(status.get("scoreStr") or "").strip() or None,
+                "home_score": _fotmob_side_score(home, status.get("scoreStr"), which="home"),
+                "away_score": _fotmob_side_score(away, status.get("scoreStr"), which="away"),
                 "sources": ["fotmob"],
                 "source_ids": {"fotmob": str(match.get("id") or "")},
                 "fotmob_page_url": str(match.get("pageUrl") or "").strip() or None,
             }
         )
     return fixtures
+
+
+def _score_pair(score_str: Any) -> tuple[int | None, int | None]:
+    text = str(score_str or "").strip()
+    if not text or "-" not in text:
+        return None, None
+    left, right = [part.strip() for part in text.split("-", 1)]
+    try:
+        return int(left), int(right)
+    except ValueError:
+        return None, None
+
+
+def _fotmob_side_score(team_row: Any, score_str: Any, *, which: str) -> int | None:
+    if isinstance(team_row, dict) and team_row.get("score") is not None:
+        try:
+            return int(team_row["score"])
+        except (TypeError, ValueError):
+            pass
+    home_score, away_score = _score_pair(score_str)
+    return home_score if which == "home" else away_score
 
 
 def _parse_bbc_initial_data(html: str) -> list[dict[str, Any]]:
@@ -840,9 +1676,28 @@ def _parse_bbc_initial_data(html: str) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     for group in groups:
         for secondary in group.get("secondaryGroups") or []:
+            group_round = str(secondary.get("displayLabel") or "").strip()
             for event in secondary.get("events") or []:
-                events.append(event)
+                if not isinstance(event, dict):
+                    continue
+                stage = event.get("stage") if isinstance(event.get("stage"), dict) else {}
+                round_label = str(stage.get("name") or group_round or "").strip()
+                row = dict(event)
+                row["_round_label"] = round_label
+                events.append(row)
     return events
+
+
+def _is_fa_cup_qualifier_round(round_label: Any) -> bool:
+    """True for Extra Preliminary / Preliminary / Qualifying rounds (not 1st Round Proper)."""
+    text = str(round_label or "").strip().casefold()
+    if not text:
+        return False
+    if "qualif" in text:
+        return True
+    if "preliminary" in text:
+        return True
+    return False
 
 
 def _fetch_bbc_fixtures(
@@ -865,6 +1720,9 @@ def _fetch_bbc_fixtures(
         if not response.ok:
             continue
         for event in _parse_bbc_initial_data(response.text):
+            round_label = str(event.get("_round_label") or "").strip()
+            if league_ui == "FA Cup" and _is_fa_cup_qualifier_round(round_label):
+                continue
             home = event.get("home") or {}
             away = event.get("away") or {}
             home_name = str(home.get("fullName") or home.get("shortName") or "")
@@ -875,6 +1733,8 @@ def _fetch_bbc_fixtures(
                     "league": league_ui,
                     "season": season,
                     "match_day": 0,
+                    "round": round_label or None,
+                    "round_name": round_label or None,
                     "scheduled_date": kickoff,
                     "date": _parse_iso_date(kickoff),
                     "kickoff_utc": kickoff,
@@ -972,15 +1832,14 @@ def _merge_fixture_sources(
         if exact_key in merged:
             return exact_key
 
-        pair_key = _teams_pair_key(home_name, away_name)
         for key in order:
             existing = merged[key]
             existing_home = str((existing.get("home") or {}).get("name") or "")
             existing_away = str((existing.get("away") or {}).get("name") or "")
-            if _teams_pair_key(existing_home, existing_away) != pair_key:
-                continue
             existing_day = _fixture_day(existing.get("date") or existing.get("scheduled_date"))
-            if _days_between(row_day, existing_day) <= FIXTURE_DATE_MATCH_TOLERANCE_DAYS:
+            if _days_between(row_day, existing_day) > FIXTURE_DATE_MATCH_TOLERANCE_DAYS:
+                continue
+            if _fixture_sides_match(existing_home, existing_away, home_name, away_name):
                 return key
         return None
 
@@ -999,7 +1858,17 @@ def _merge_fixture_sources(
 
         incoming_priority = _row_source_priority(row)
         existing_priority = _row_source_priority(existing)
-        if incoming_priority >= existing_priority:
+        preferred_kickoff = _prefer_kickoff_value(
+            existing.get("kickoff_utc") or existing.get("scheduled_date"),
+            row.get("kickoff_utc") or row.get("scheduled_date"),
+            current_priority=existing_priority,
+            incoming_priority=incoming_priority,
+        )
+        if preferred_kickoff:
+            existing["kickoff_utc"] = preferred_kickoff
+            existing["scheduled_date"] = preferred_kickoff
+            existing["date"] = _parse_iso_date(str(preferred_kickoff)) or existing.get("date")
+        elif incoming_priority >= existing_priority:
             for field in ("date", "scheduled_date", "kickoff_utc"):
                 if row.get(field):
                     existing[field] = row[field]
@@ -1017,6 +1886,15 @@ def _merge_fixture_sources(
                 existing[field] = row[field]
         if row.get("fotmob_page_url"):
             existing["fotmob_page_url"] = row["fotmob_page_url"]
+        for field in ("round", "round_name"):
+            if row.get(field) and (
+                not existing.get(field)
+                or (
+                    isinstance(row.get(field), str)
+                    and len(str(row.get(field))) > len(str(existing.get(field) or ""))
+                )
+            ):
+                existing[field] = row[field]
         for side in ("home", "away"):
             row_side = row.get(side) or {}
             existing_side = existing.setdefault(side, {})
@@ -1073,6 +1951,56 @@ def _merge_fixture_sources(
     return fixtures
 
 
+def _attach_impect_metadata(
+    fixtures: list[dict[str, Any]],
+    impect_fixtures: list[dict[str, Any]],
+    *,
+    iteration_id: int | None,
+) -> int:
+    """Keep FotMob fixture rows, but attach Impect match/squad IDs for popup enrichment."""
+    if iteration_id:
+        for row in fixtures:
+            if not row.get("iteration_id"):
+                row["iteration_id"] = iteration_id
+
+    unused = list(impect_fixtures)
+    linked = 0
+    for row in fixtures:
+        home_name = str((row.get("home") or {}).get("name") or "")
+        away_name = str((row.get("away") or {}).get("name") or "")
+        row_day = _fixture_day(row.get("date") or row.get("scheduled_date") or row.get("kickoff_utc"))
+        best_idx: int | None = None
+        for idx, impect_row in enumerate(unused):
+            impect_home = str((impect_row.get("home") or {}).get("name") or "")
+            impect_away = str((impect_row.get("away") or {}).get("name") or "")
+            impect_day = _fixture_day(
+                impect_row.get("date")
+                or impect_row.get("scheduled_date")
+                or impect_row.get("kickoff_utc")
+            )
+            if _days_between(row_day, impect_day) > FIXTURE_DATE_MATCH_TOLERANCE_DAYS:
+                continue
+            if not _fixture_sides_match(home_name, away_name, impect_home, impect_away):
+                continue
+            best_idx = idx
+            break
+        if best_idx is None:
+            continue
+        impect_row = unused.pop(best_idx)
+        if impect_row.get("match_id"):
+            row["match_id"] = impect_row["match_id"]
+        row["iteration_id"] = impect_row.get("iteration_id") or iteration_id
+        for side in ("home", "away"):
+            impect_side = impect_row.get(side) or {}
+            row_side = row.setdefault(side, {})
+            if impect_side.get("id") is not None:
+                row_side["id"] = impect_side["id"]
+            if impect_side.get("image_url") and not row_side.get("image_url"):
+                row_side["image_url"] = impect_side["image_url"]
+        linked += 1
+    return linked
+
+
 def _build_league_bundle(league_ui: str, season: str) -> dict[str, Any]:
     config = FIXTURE_LEAGUE_BY_UI.get(league_ui)
     if config is None:
@@ -1088,6 +2016,8 @@ def _build_league_bundle(league_ui: str, season: str) -> dict[str, Any]:
     iteration_id = None
     if iteration is not None:
         iteration_id = int(iteration["id"])
+        # Impect is only used to resolve match/squad IDs for enrichment popups —
+        # fixture list + kickoff times come from FotMob alone.
         impect_fixtures = _fetch_impect_fixtures(
             iteration_id,
             league_ui=league_ui,
@@ -1095,29 +2025,61 @@ def _build_league_bundle(league_ui: str, season: str) -> dict[str, Any]:
             season=season,
         )
 
-    fotmob_fixtures = _fetch_fotmob_fixtures(
-        int(config["fotmob_id"]),
-        league_ui=league_ui,
-        season=season,
-        calendar_year=calendar_year,
-    )
-    bbc_fixtures = _fetch_bbc_fixtures(
-        str(config.get("bbc_path") or ""),
-        league_ui=league_ui,
-        season=season,
-        calendar_year=calendar_year,
-    )
-    primary = impect_fixtures or fotmob_fixtures or bbc_fixtures
-    merged = _merge_fixture_sources(
-        primary,
-        fotmob_fixtures,
-        bbc_fixtures,
-    )
+    fotmob_fixtures: list[dict[str, Any]] = []
+    if config.get("fotmob_id") is not None:
+        fotmob_fixtures = _fetch_fotmob_fixtures(
+            int(config["fotmob_id"]),
+            league_ui=league_ui,
+            season=season,
+            calendar_year=calendar_year,
+        )
+
+    pulse_fixtures: list[dict[str, Any]] = []
+    if config.get("pulse_competition_id") is not None:
+        pulse_fixtures = _fetch_pulse_fixtures(
+            int(config["pulse_competition_id"]),
+            league_ui=league_ui,
+            season=season,
+        )
+
+    # Prefer Pulse when configured and non-empty (better Vertu / PDL / PL Cup coverage).
+    source_fixtures = pulse_fixtures if pulse_fixtures else fotmob_fixtures
     filtered = _filter_fixtures_to_season(
-        merged,
+        source_fixtures,
         season,
         calendar_year=calendar_year,
     )
+    if league_ui == "FA Cup":
+        filtered = [
+            row
+            for row in filtered
+            if not _is_fa_cup_qualifier_round(row.get("round") or row.get("round_name"))
+        ]
+
+    linked = _attach_impect_metadata(
+        filtered,
+        impect_fixtures,
+        iteration_id=iteration_id,
+    )
+    primary_source = "pulse" if source_fixtures is pulse_fixtures else "fotmob"
+    for row in filtered:
+        sources = [primary_source]
+        if row.get("match_id"):
+            sources.append("impect")
+        row["sources"] = sources
+        row["source_count"] = len(sources)
+        row["verified"] = bool(row.get("match_id"))
+        row["fixture_id"] = _fixture_id(
+            str(row.get("league") or league_ui),
+            str((row.get("home") or {}).get("name") or ""),
+            str((row.get("away") or {}).get("name") or ""),
+            row.get("date") or row.get("scheduled_date") or row.get("kickoff_utc"),
+        )
+
+    if config.get("cup"):
+        for row in filtered:
+            row["cup"] = True
+            row["competition"] = competition
 
     return {
         "league": league_ui,
@@ -1126,11 +2088,13 @@ def _build_league_bundle(league_ui: str, season: str) -> dict[str, Any]:
         "iteration_id": iteration_id,
         "counts": {
             "impect": len(impect_fixtures),
+            "impect_linked": linked,
             "fotmob": len(fotmob_fixtures),
-            "bbc": len(bbc_fixtures),
+            "pulse": len(pulse_fixtures),
+            "bbc": 0,
             "merged": len(filtered),
             "verified": sum(1 for row in filtered if row.get("verified")),
-            "dropped_out_of_season": max(0, len(merged) - len(filtered)),
+            "dropped_out_of_season": max(0, len(source_fixtures) - len(filtered)),
         },
         "coverage": _league_coverage(filtered),
         "fixtures": filtered,
@@ -1140,7 +2104,7 @@ def _build_league_bundle(league_ui: str, season: str) -> dict[str, Any]:
 def fixture_planner_meta() -> dict[str, Any]:
     impect = _impect()
     seasons_by_league: dict[str, list[str]] = {}
-    for row in FIXTURE_LEAGUES:
+    for row in FIXTURE_COMPETITIONS:
         competition = str(row["competition"])
         seasons: list[str] = []
         for item in impect._fetch_iterations():
@@ -1175,15 +2139,37 @@ def fixture_planner_meta() -> dict[str, Any]:
             }
             for row in FIXTURE_LEAGUES
         ],
+        "cups": [
+            {
+                "ui": row["ui"],
+                "competition": row["competition"],
+                "color": row["color"],
+                "seasons": seasons_by_league.get(row["ui"], []),
+            }
+            for row in FIXTURE_CUPS
+        ],
+        "cup_uis": list(FIXTURE_CUP_UIS),
         "default_leagues": FIXTURE_LEAGUE_UIS,
-        "sources": ["impect", "fotmob", "bbc"],
+        "sources": ["fotmob", "pulse", "impect"],
         "generated_at": datetime.now(UTC).isoformat(),
     }
+
+
+def clear_fixture_planner_cache(season: str | None = None) -> None:
+    with _fixture_cache_lock:
+        if not season:
+            _fixture_cache.clear()
+            return
+        prefix = f"{FIXTURE_CACHE_VERSION}:{season}"
+        for key in list(_fixture_cache.keys()):
+            if key == prefix or key.endswith(f":{season}"):
+                _fixture_cache.pop(key, None)
 
 
 def build_fixture_planner_payload(
     *,
     season: str,
+    force_refresh: bool = False,
 ) -> dict[str, Any]:
     if season not in ALLOWED_FIXTURE_SEASONS:
         raise HTTPException(
@@ -1191,13 +2177,16 @@ def build_fixture_planner_payload(
             detail=f"Season must be one of: {', '.join(ALLOWED_FIXTURE_SEASONS)}",
         )
 
-    selected = FIXTURE_LEAGUE_UIS
+    selected = list(FIXTURE_LEAGUE_UIS) + list(FIXTURE_CUP_UIS)
     cache_key = f"{FIXTURE_CACHE_VERSION}:{season}"
     now = time.time()
-    with _fixture_cache_lock:
-        cached = _fixture_cache.get(cache_key)
-        if cached and now - cached[0] < FIXTURE_CACHE_TTL_SECONDS:
-            return cached[1]
+    if force_refresh:
+        clear_fixture_planner_cache(season)
+    else:
+        with _fixture_cache_lock:
+            cached = _fixture_cache.get(cache_key)
+            if cached and now - cached[0] < FIXTURE_CACHE_TTL_SECONDS:
+                return _merge_manual_fixtures_into_payload(cached[1], season=season)
 
     bundles = [_build_league_bundle(league_ui, season) for league_ui in selected]
     fixtures = [fixture for bundle in bundles for fixture in bundle["fixtures"]]
@@ -1212,6 +2201,7 @@ def build_fixture_planner_payload(
     payload = {
         "season": season,
         "leagues": list(FIXTURE_LEAGUE_UIS),
+        "cups": list(FIXTURE_CUP_UIS),
         "fixtures": fixtures,
         "bundles": [
             {
@@ -1232,9 +2222,10 @@ def build_fixture_planner_payload(
             "verified_fixtures": sum(1 for row in fixtures if row.get("verified")),
             "by_league": {bundle["league"]: bundle["counts"]["merged"] for bundle in bundles},
             "by_source": {
-                "impect": sum(bundle["counts"]["impect"] for bundle in bundles),
                 "fotmob": sum(bundle["counts"]["fotmob"] for bundle in bundles),
-                "bbc": sum(bundle["counts"]["bbc"] for bundle in bundles),
+                "impect_linked": sum(bundle["counts"].get("impect_linked", 0) for bundle in bundles),
+                "impect": sum(bundle["counts"]["impect"] for bundle in bundles),
+                "bbc": 0,
             },
         },
         "generated_at": datetime.now(UTC).isoformat(),
@@ -1242,7 +2233,7 @@ def build_fixture_planner_payload(
 
     with _fixture_cache_lock:
         _fixture_cache[cache_key] = (now, payload)
-    return payload
+    return _merge_manual_fixtures_into_payload(payload, season=season)
 
 
 def _load_assignments_store() -> dict[str, Any]:
@@ -1273,10 +2264,100 @@ def _save_assignments_store(payload: dict[str, Any]) -> None:
 
 def get_fixture_assignments() -> dict[str, Any]:
     store = _load_assignments_store()
+    assignments: dict[str, Any] = {}
+    for fixture_id, row in dict(store.get("assignments") or {}).items():
+        if not isinstance(row, dict):
+            continue
+        cleaned = dict(row)
+        cleaned["staff"] = _normalize_staff_names(cleaned.get("staff"))
+        assignments[str(fixture_id)] = cleaned
     return {
-        "assignments": dict(store.get("assignments") or {}),
+        "assignments": assignments,
         "updated_at": store.get("updated_at"),
     }
+
+
+def _load_ticket_requests_store() -> dict[str, Any]:
+    with _ticket_requests_lock:
+        if not TICKET_REQUESTS_PATH.exists():
+            return {"version": 1, "updated_at": None, "requests": {}}
+        try:
+            payload = json.loads(TICKET_REQUESTS_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {"version": 1, "updated_at": None, "requests": {}}
+        if not isinstance(payload, dict):
+            return {"version": 1, "updated_at": None, "requests": {}}
+        requests_map = payload.get("requests")
+        if not isinstance(requests_map, dict):
+            payload["requests"] = {}
+        return payload
+
+
+def _save_ticket_requests_store(payload: dict[str, Any]) -> None:
+    ASSIGNMENTS_DIR.mkdir(parents=True, exist_ok=True)
+    payload["version"] = 1
+    payload["updated_at"] = datetime.now(UTC).isoformat()
+    temp_path = TICKET_REQUESTS_PATH.with_suffix(".json.tmp")
+    temp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    temp_path.replace(TICKET_REQUESTS_PATH)
+
+
+def get_ticket_requests() -> dict[str, Any]:
+    store = _load_ticket_requests_store()
+    requests_map = dict(store.get("requests") or {})
+    today = datetime.now(UTC).date().isoformat()
+    pruned: dict[str, Any] = {}
+    for key, value in requests_map.items():
+        if not isinstance(value, dict):
+            continue
+        day = str(value.get("date") or "").strip()[:10]
+        if not day:
+            parts = str(key or "").split("|")
+            day = parts[-1][:10] if parts else ""
+        if day and day < today:
+            continue
+        pruned[key] = value
+    if len(pruned) != len(requests_map):
+        store["requests"] = pruned
+        _save_ticket_requests_store(store)
+    return {
+        "requests": pruned,
+        "updated_at": store.get("updated_at"),
+    }
+
+
+def mark_ticket_requests_sent(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    store = _load_ticket_requests_store()
+    requests_map = dict(store.get("requests") or {})
+    now = datetime.now(UTC).isoformat()
+    for row in rows:
+        fixture_id = str(row.get("fixture_id") or "").strip()
+        if not fixture_id:
+            continue
+        requests_map[fixture_id] = {
+            "fixture_id": fixture_id,
+            "requested_at": now,
+            "home": row.get("home") or "",
+            "away": row.get("away") or "",
+            "league": row.get("league") or "",
+            "date": str(row.get("date") or "")[:10],
+            "staff": row.get("staff") or "",
+            "watch_type": row.get("watch_type") or "LIVE",
+            "kickoff_utc": row.get("kickoff_utc"),
+            "tickets": row.get("tickets", 1),
+            "parking": row.get("parking") or "No",
+            "notes": row.get("notes") or "",
+        }
+    store["requests"] = requests_map
+    _save_ticket_requests_store(store)
+    return get_ticket_requests()
+
+
+def _synthetic_player_id(name: str, team: str = "") -> int:
+    raw = f"{str(name or '').strip().casefold()}|{str(team or '').strip().casefold()}"
+    digest = zlib.crc32(raw.encode("utf-8")) & 0x7FFFFFFF
+    # Negative IDs stay clear of Impect player IDs.
+    return -digest if digest else -1
 
 
 def _normalize_watched_players(rows: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
@@ -1285,24 +2366,29 @@ def _normalize_watched_players(rows: list[dict[str, Any]] | None) -> list[dict[s
     for row in rows or []:
         if not isinstance(row, dict):
             continue
+        name = str(row.get("player_name") or row.get("name") or "").strip()
+        team = str(row.get("team") or "").strip()
         try:
             player_id = int(row.get("player_id") or 0)
         except (TypeError, ValueError):
-            continue
+            player_id = 0
+        if not player_id and name:
+            player_id = _synthetic_player_id(name, team)
         if not player_id or player_id in seen:
             continue
         seen.add(player_id)
         cleaned.append(
             {
                 "player_id": player_id,
-                "player_name": str(row.get("player_name") or "").strip(),
-                "team": str(row.get("team") or "").strip(),
+                "player_name": name,
+                "team": team,
                 "side": str(row.get("side") or "").strip().lower(),
+                "position": str(row.get("position") or "").strip(),
             }
         )
     cleaned.sort(
         key=lambda item: (
-            0 if item.get("side") == "home" else 1,
+            0 if item.get("side") == "home" else 1 if item.get("side") == "away" else 2,
             str(item.get("player_name") or "").casefold(),
         )
     )
@@ -1321,31 +2407,36 @@ def _watched_player_ids(rows: list[dict[str, Any]] | None) -> set[int]:
     return ids
 
 
-def upsert_fixture_assignment(body: FixtureAssignmentUpdate) -> dict[str, Any]:
+def upsert_fixture_assignment(
+    body: FixtureAssignmentUpdate,
+    *,
+    mirror_to_live: bool = True,
+    send_email: bool = True,
+) -> dict[str, Any]:
     store = _load_assignments_store()
     assignments: dict[str, Any] = store.setdefault("assignments", {})
     fixture_id = str(body.fixture_id or "").strip()
     if not fixture_id:
         raise HTTPException(status_code=400, detail="fixture_id is required")
 
-    staff = str(body.staff or "").strip()
+    staff_names = _normalize_staff_names(body.staff, validate=True)
     watch_type = str(body.watch_type or "").strip().upper()
     if watch_type and watch_type not in WATCH_TYPES:
         raise HTTPException(status_code=400, detail=f"watch_type must be one of: {', '.join(WATCH_TYPES)}")
-    if staff and staff not in FIXTURE_STAFF:
-        raise HTTPException(status_code=400, detail=f"Unknown staff member: {staff}")
 
     previous = dict(assignments.get(fixture_id) or {})
-    previous_staff = str(previous.get("staff") or "").strip()
+    previous_staff = _normalize_staff_names(previous.get("staff"))
+    previous_staff_keys = {name.casefold() for name in previous_staff}
     previous_watch = str(previous.get("watch_type") or "").strip().upper()
     previous_players = _watched_player_ids(previous.get("watched_players") or [])
     watched_players = _normalize_watched_players(body.watched_players)
 
-    if not staff and not watch_type:
+    if not staff_names and not watch_type:
         assignments.pop(fixture_id, None)
+        saved_assignment: dict[str, Any] = {}
     else:
-        assignments[fixture_id] = {
-            "staff": staff,
+        saved_assignment = {
+            "staff": staff_names,
             "watch_type": watch_type,
             "season": str(body.season or "").strip(),
             "league": str(body.league or "").strip(),
@@ -1356,27 +2447,127 @@ def upsert_fixture_assignment(body: FixtureAssignmentUpdate) -> dict[str, Any]:
             "watched_players": watched_players,
             "updated_at": datetime.now(UTC).isoformat(),
         }
+        assignments[fixture_id] = saved_assignment
     _save_assignments_store(store)
 
+    if mirror_to_live:
+        _mirror_assignment_to_live(fixture_id=fixture_id, assignment=saved_assignment)
+
+    sheets_result: dict[str, Any] | None = None
+    try:
+        from app.fixture_sheets_backup import sync_assignment_to_sheet
+
+        sheets_result = sync_assignment_to_sheet(fixture_id, saved_assignment or None)
+    except Exception as exc:  # noqa: BLE001 - never fail assignment save on Sheets
+        logger = __import__("logging").getLogger(__name__)
+        logger.exception("Sheets backup hook failed for %s", fixture_id)
+        sheets_result = {"ok": False, "reason": str(exc)}
+
     email_result: dict[str, Any] | None = None
-    should_notify = bool(
-        staff
+    added_staff = [name for name in staff_names if name.casefold() not in previous_staff_keys]
+    coverage_changed = bool(
+        staff_names
         and (
-            staff != previous_staff
-            or (watch_type and watch_type != previous_watch)
+            (watch_type and watch_type != previous_watch)
             or _watched_player_ids(watched_players) != previous_players
         )
     )
-    if should_notify:
-        email_result = _notify_assignment_email(
-            fixture_id=fixture_id,
-            assignment=assignments.get(fixture_id) or {},
-        )
+    notify_targets = added_staff if added_staff else (staff_names if coverage_changed else [])
+    if send_email and notify_targets:
+        results = []
+        for name in notify_targets:
+            results.append(
+                _notify_assignment_email(
+                    fixture_id=fixture_id,
+                    assignment=assignments.get(fixture_id) or {},
+                    staff=name,
+                )
+            )
+        sent = [row for row in results if row.get("sent")]
+        if sent:
+            email_result = {
+                "sent": True,
+                "to": ", ".join(str(row.get("to") or "") for row in sent if row.get("to")),
+                "results": results,
+            }
+        else:
+            email_result = {
+                "sent": False,
+                "reason": "; ".join(
+                    str(row.get("reason") or "not sent") for row in results
+                )
+                or "No staff emails sent",
+                "results": results,
+            }
 
     payload = get_fixture_assignments()
     if email_result is not None:
         payload["email"] = email_result
+    if sheets_result is not None:
+        payload["sheets_backup"] = sheets_result
     return payload
+
+
+def _title_from_slug(value: str) -> str:
+    raw = str(value or "").replace("-", " ").replace("_", " ").strip()
+    if not raw:
+        return ""
+    return " ".join(part.capitalize() for part in raw.split())
+
+
+def _mirror_assignment_to_live(*, fixture_id: str, assignment: dict[str, Any]) -> None:
+    """Keep the live hub assignment store in sync so reject links work for staff."""
+    import os
+
+    if str(os.getenv("FIXTURE_MIRROR_ASSIGNMENTS", "1") or "1").strip().lower() in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }:
+        return
+
+    base = app_base_url().rstrip("/")
+    if not base:
+        return
+
+    username = str(os.getenv("TEAM_USERNAME", "PortVale") or "PortVale").strip()
+    password = str(os.getenv("TEAM_PASSWORD", "") or "").strip()
+    if not password:
+        return
+
+    payload = {
+        "fixture_id": fixture_id,
+        "staff": _normalize_staff_names(assignment.get("staff")),
+        "watch_type": str(assignment.get("watch_type") or ""),
+        "season": str(assignment.get("season") or ""),
+        "league": str(assignment.get("league") or ""),
+        "home": str(assignment.get("home") or ""),
+        "away": str(assignment.get("away") or ""),
+        "date": str(assignment.get("date") or ""),
+        "kickoff_utc": assignment.get("kickoff_utc"),
+        "watched_players": list(assignment.get("watched_players") or []),
+    }
+
+    try:
+        session = requests.Session()
+        session.trust_env = False
+        login = session.post(
+            f"{base}/api/auth/login",
+            json={"username": username, "password": password},
+            timeout=12,
+        )
+        if login.status_code >= 400:
+            return
+        session.patch(
+            f"{base}/api/fixture-planner/assignment",
+            params={"mirror": "0"},
+            json=payload,
+            timeout=12,
+        )
+    except Exception:
+        logger = __import__("logging").getLogger(__name__)
+        logger.exception("Failed to mirror assignment %s to live hub", fixture_id)
 
 
 def build_fixture_squads_payload(*, season: str, fixture_id: str) -> dict[str, Any]:
@@ -1392,43 +2583,74 @@ def build_fixture_squads_payload(*, season: str, fixture_id: str) -> dict[str, A
     fixture = None
     for row in _cached_fixtures_list([season], warm=True):
         if str(row.get("fixture_id") or "") == fixture_token:
-            fixture = row
+            fixture = dict(row)
             break
     if fixture is None:
         raise HTTPException(status_code=404, detail="Fixture not found")
 
-    home = fixture.get("home") if isinstance(fixture.get("home"), dict) else {}
-    away = fixture.get("away") if isinstance(fixture.get("away"), dict) else {}
+    home = dict(fixture.get("home") or {}) if isinstance(fixture.get("home"), dict) else {}
+    away = dict(fixture.get("away") or {}) if isinstance(fixture.get("away"), dict) else {}
     home_id = int(home.get("id") or 0)
     away_id = int(away.get("id") or 0)
     iteration_id = int(fixture.get("iteration_id") or 0)
 
+    # If FotMob row is missing Impect IDs (stale cache), try to attach them now.
+    if not iteration_id or not (home_id and away_id):
+        league_ui = str(fixture.get("league") or "").strip()
+        competition = str(
+            (FIXTURE_LEAGUE_BY_UI.get(league_ui) or {}).get("competition") or league_ui
+        )
+        iteration = _iteration_for_competition(competition, season)
+        if iteration is not None:
+            iteration_id = iteration_id or int(iteration["id"])
+            try:
+                impect_fixtures = _fetch_impect_fixtures(
+                    int(iteration["id"]),
+                    league_ui=league_ui or competition,
+                    competition=competition,
+                    season=season,
+                )
+            except Exception:
+                impect_fixtures = []
+            _attach_impect_metadata(
+                [fixture],
+                impect_fixtures,
+                iteration_id=int(iteration["id"]),
+            )
+            home = dict(fixture.get("home") or {}) if isinstance(fixture.get("home"), dict) else home
+            away = dict(fixture.get("away") or {}) if isinstance(fixture.get("away"), dict) else away
+            home_id = int(home.get("id") or 0)
+            away_id = int(away.get("id") or 0)
+            iteration_id = int(fixture.get("iteration_id") or iteration_id or 0)
+
     home_players: list[dict[str, Any]] = []
     away_players: list[dict[str, Any]] = []
-    available = bool(iteration_id and (home_id or away_id))
+    squad_source = None
 
-    if available:
-        impect = _impect()
-        try:
-            players = impect._fetch_players_for_iteration(iteration_id)
-        except Exception:
-            players = []
-        for player in players:
-            squad_id = impect._extract_squad_id_from_player(player)
-            player_id = player.get("id")
-            name = impect._extract_player_name(player)
-            if player_id is None or not name:
-                continue
-            entry = {
-                "player_id": int(player_id),
-                "player_name": name,
-            }
-            if home_id and squad_id == home_id:
-                home_players.append(entry)
-            elif away_id and squad_id == away_id:
-                away_players.append(entry)
-        home_players.sort(key=lambda row: str(row.get("player_name") or "").casefold())
-        away_players.sort(key=lambda row: str(row.get("player_name") or "").casefold())
+    # Prefer current FotMob squads (post-window accurate). Impect season lists are often empty
+    # early in the year and last-season Impect lists go stale after the summer window.
+    home_fm = _side_fotmob_team_id(home)
+    away_fm = _side_fotmob_team_id(away)
+    if home_fm:
+        home_players = _fetch_fotmob_team_squad(home_fm)
+    if away_fm:
+        away_players = _fetch_fotmob_team_squad(away_fm)
+    if home_players or away_players:
+        squad_source = "fotmob"
+
+    if not (home_players and away_players) and iteration_id and (home_id or away_id):
+        by_squad = _resolve_squad_player_lists(
+            [sid for sid in (home_id, away_id) if sid],
+            preferred_iteration_id=iteration_id,
+        )
+        if not home_players:
+            home_players = list(by_squad.get(home_id) or [])
+        if not away_players:
+            away_players = list(by_squad.get(away_id) or [])
+        if (home_players or away_players) and squad_source is None:
+            squad_source = "impect"
+
+    available = bool(home_players or away_players)
 
     return {
         "fixture_id": fixture_token,
@@ -1437,15 +2659,18 @@ def build_fixture_squads_payload(*, season: str, fixture_id: str) -> dict[str, A
         "date": fixture.get("date"),
         "kickoff_utc": fixture.get("kickoff_utc") or fixture.get("scheduled_date"),
         "iteration_id": iteration_id or None,
-        "available": available and bool(home_players or away_players),
+        "squad_source": squad_source,
+        "available": available,
         "home": {
             "id": home_id or None,
+            "fotmob_id": home_fm or home.get("fotmob_id"),
             "name": home.get("name") or "",
             "image_url": home.get("image_url"),
             "players": home_players,
         },
         "away": {
             "id": away_id or None,
+            "fotmob_id": away_fm or away.get("fotmob_id"),
             "name": away.get("name") or "",
             "image_url": away.get("image_url"),
             "players": away_players,
@@ -1475,9 +2700,14 @@ def _resolve_fixture_for_email(fixture_id: str, assignment: dict[str, Any]) -> d
     }
 
 
-def _notify_assignment_email(*, fixture_id: str, assignment: dict[str, Any]) -> dict[str, Any]:
-    staff = str(assignment.get("staff") or "").strip()
-    if not staff:
+def _notify_assignment_email(
+    *,
+    fixture_id: str,
+    assignment: dict[str, Any],
+    staff: str | None = None,
+) -> dict[str, Any]:
+    staff_name = str(staff or "").strip() or (_normalize_staff_names(assignment.get("staff"))[:1] or [""])[0]
+    if not staff_name:
         return {"sent": False, "reason": "No staff assigned"}
 
     try:
@@ -1494,7 +2724,7 @@ def _notify_assignment_email(*, fixture_id: str, assignment: dict[str, Any]) -> 
             venue = f"{home_name} (home)"
 
         return send_assignment_email(
-            staff=staff,
+            staff=staff_name,
             home=home_name,
             away=away_name,
             league=str(fixture.get("league") or assignment.get("league") or ""),
@@ -1505,6 +2735,7 @@ def _notify_assignment_email(*, fixture_id: str, assignment: dict[str, Any]) -> 
             home_badge_url=team_badge_url(home if isinstance(home, dict) else None),
             away_badge_url=team_badge_url(away if isinstance(away, dict) else None),
             watched_players=list(assignment.get("watched_players") or []),
+            fixture_id=fixture_id,
         )
     except Exception as exc:  # noqa: BLE001 - never fail assignment save on email errors
         logger = __import__("logging").getLogger(__name__)
@@ -1513,18 +2744,20 @@ def _notify_assignment_email(*, fixture_id: str, assignment: dict[str, Any]) -> 
 
 
 def replace_fixture_assignments(body: FixtureAssignmentsBulkUpdate) -> dict[str, Any]:
-    store = _load_assignments_store()
-    merged = dict(store.get("assignments") or {})
+    """Full replace of the assignment store from the client map."""
+    cleaned: dict[str, Any] = {}
     for fixture_id, row in (body.assignments or {}).items():
         if not isinstance(row, dict):
             continue
-        staff = str(row.get("staff") or "").strip()
-        watch_type = str(row.get("watch_type") or "").strip().upper()
-        if not staff and not watch_type:
-            merged.pop(fixture_id, None)
+        key = str(fixture_id or "").strip()
+        if not key:
             continue
-        merged[fixture_id] = {
-            "staff": staff,
+        staff_names = _normalize_staff_names(row.get("staff"), validate=True)
+        watch_type = str(row.get("watch_type") or "").strip().upper()
+        if not staff_names and not watch_type:
+            continue
+        cleaned[key] = {
+            "staff": staff_names,
             "watch_type": watch_type,
             "season": str(row.get("season") or "").strip(),
             "league": str(row.get("league") or "").strip(),
@@ -1535,7 +2768,8 @@ def replace_fixture_assignments(body: FixtureAssignmentsBulkUpdate) -> dict[str,
             "watched_players": _normalize_watched_players(row.get("watched_players") or []),
             "updated_at": row.get("updated_at") or datetime.now(UTC).isoformat(),
         }
-    store["assignments"] = merged
+    store = _load_assignments_store()
+    store["assignments"] = cleaned
     _save_assignments_store(store)
     return get_fixture_assignments()
 
@@ -1605,6 +2839,760 @@ def scouting_reports_for_fixture(fixture_id: str) -> list[dict[str, Any]]:
     return rows
 
 
+def _load_manual_fixtures_store() -> dict[str, Any]:
+    with _manual_fixtures_lock:
+        if not MANUAL_FIXTURES_PATH.exists():
+            return {"version": 1, "updated_at": None, "fixtures": {}}
+        try:
+            payload = json.loads(MANUAL_FIXTURES_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {"version": 1, "updated_at": None, "fixtures": {}}
+        if not isinstance(payload, dict):
+            return {"version": 1, "updated_at": None, "fixtures": {}}
+        fixtures = payload.get("fixtures")
+        if not isinstance(fixtures, dict):
+            payload["fixtures"] = {}
+        return payload
+
+
+def _save_manual_fixtures_store(payload: dict[str, Any]) -> None:
+    ASSIGNMENTS_DIR.mkdir(parents=True, exist_ok=True)
+    payload["updated_at"] = datetime.now(UTC).isoformat()
+    temp_path = MANUAL_FIXTURES_PATH.with_suffix(".json.tmp")
+    temp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    temp_path.replace(MANUAL_FIXTURES_PATH)
+    _scout_ops_cache_clear()
+
+
+def _manual_fixture_list_shape(row: dict[str, Any]) -> dict[str, Any]:
+    home_name = str((row.get("home") or {}).get("name") if isinstance(row.get("home"), dict) else row.get("home") or "").strip()
+    away_name = str((row.get("away") or {}).get("name") if isinstance(row.get("away"), dict) else row.get("away") or "").strip()
+    team_sheet = row.get("team_sheet") if isinstance(row.get("team_sheet"), dict) else None
+    date_key = str(row.get("date") or "")[:10]
+    status = str(row.get("status") or "").strip().lower()
+    if status not in {"scheduled", "completed"}:
+        # Legacy rows defaulted to completed; future dates without an explicit
+        # status should still surface in Fixture Planner as upcoming.
+        today = datetime.now(UTC).date().isoformat()
+        status = "completed" if (date_key and date_key < today) or row.get("score") else "scheduled"
+        if not date_key and not row.get("score"):
+            status = "completed"
+    league = _normalize_league_label(row.get("league") or MANUAL_LEAGUE_LABEL)
+    competition = _normalize_league_label(
+        row.get("competition") or row.get("league") or MANUAL_LEAGUE_LABEL
+    )
+    return {
+        "fixture_id": str(row.get("fixture_id") or ""),
+        "manual": True,
+        "season": str(row.get("season") or ""),
+        "league": league,
+        "competition": competition,
+        "home": {"name": home_name},
+        "away": {"name": away_name},
+        "date": date_key,
+        "scheduled_date": date_key,
+        "kickoff_utc": row.get("kickoff_utc"),
+        "score": str(row.get("score") or "").strip() or None,
+        "venue": str(row.get("venue") or "").strip() or None,
+        "status": status,
+        "notes": str(row.get("notes") or ""),
+        "watched_players": list(row.get("watched_players") or []),
+        "team_sheet": team_sheet,
+        "staff": str(row.get("staff") or ""),
+        "watch_type": str(row.get("watch_type") or ""),
+        "match_id": None,
+        "sources": ["manual"],
+        "source_count": 1,
+        "verified": False,
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+    }
+
+
+def get_manual_fixture(fixture_id: str) -> dict[str, Any] | None:
+    store = _load_manual_fixtures_store()
+    row = (store.get("fixtures") or {}).get(str(fixture_id or "").strip())
+    if not isinstance(row, dict):
+        return None
+    return _manual_fixture_list_shape(row)
+
+
+def list_manual_fixtures(*, season: str | None = None) -> list[dict[str, Any]]:
+    store = _load_manual_fixtures_store()
+    rows: list[dict[str, Any]] = []
+    for row in (store.get("fixtures") or {}).values():
+        if not isinstance(row, dict):
+            continue
+        shaped = _manual_fixture_list_shape(row)
+        if season and shaped.get("season") and shaped["season"] != season:
+            continue
+        rows.append(shaped)
+    rows.sort(key=lambda item: (str(item.get("date") or ""), str(item.get("home", {}).get("name") or "")))
+    return rows
+
+
+def _merge_manual_fixtures_into_payload(payload: dict[str, Any], *, season: str) -> dict[str, Any]:
+    manuals = list_manual_fixtures(season=season)
+    if not manuals:
+        return payload
+    merged = dict(payload)
+    fixtures = list(payload.get("fixtures") or [])
+    existing = {str(row.get("fixture_id") or "") for row in fixtures}
+    added = 0
+    for row in manuals:
+        fid = str(row.get("fixture_id") or "")
+        if not fid or fid in existing:
+            continue
+        fixtures.append(row)
+        existing.add(fid)
+        added += 1
+    if not added:
+        return payload
+    fixtures.sort(
+        key=lambda row: (
+            str(row.get("date") or ""),
+            str(row.get("kickoff_utc") or ""),
+            str(row.get("league") or ""),
+        )
+    )
+    leagues = list(payload.get("leagues") or list(FIXTURE_LEAGUE_UIS))
+    if MANUAL_LEAGUE_LABEL not in leagues:
+        leagues.append(MANUAL_LEAGUE_LABEL)
+    summary = dict(payload.get("summary") or {})
+    summary["total_fixtures"] = len(fixtures)
+    by_league = dict(summary.get("by_league") or {})
+    by_league[MANUAL_LEAGUE_LABEL] = sum(1 for row in fixtures if row.get("manual"))
+    summary["by_league"] = by_league
+    merged["fixtures"] = fixtures
+    merged["leagues"] = leagues
+    merged["summary"] = summary
+    return merged
+
+
+def _extract_fotmob_league_team_names(payload: dict[str, Any]) -> list[str]:
+    names: list[str] = []
+    seen: set[str] = set()
+
+    def remember(raw: Any) -> None:
+        name = str(raw or "").strip()
+        if not name:
+            return
+        key = name.casefold()
+        if key in seen:
+            return
+        seen.add(key)
+        names.append(name)
+
+    table = payload.get("table") or []
+    if isinstance(table, list):
+        for block in table:
+            if not isinstance(block, dict):
+                continue
+            data = block.get("data") or {}
+            if not isinstance(data, dict):
+                continue
+            inner = data.get("table") or {}
+            rows: list[Any] = []
+            if isinstance(inner, dict):
+                for value in inner.values():
+                    if isinstance(value, list):
+                        rows.extend(value)
+            elif isinstance(inner, list):
+                rows = inner
+            for row in rows:
+                if isinstance(row, dict):
+                    remember(row.get("name"))
+
+    matches = (payload.get("fixtures") or {}).get("allMatches") or []
+    if isinstance(matches, list):
+        for match in matches:
+            if not isinstance(match, dict):
+                continue
+            for side in ("home", "away"):
+                remember((match.get(side) or {}).get("name"))
+    return names
+
+
+def _fetch_fotmob_catalog_league_teams(
+    *,
+    fotmob_id: int,
+    country: str,
+    season: str,
+    calendar_year: bool = False,
+) -> list[dict[str, Any]]:
+    fotmob_season = _season_to_fotmob(season, calendar_year=calendar_year)
+    try:
+        response = _http.get(
+            "https://www.fotmob.com/api/data/leagues",
+            params={"id": int(fotmob_id), "season": fotmob_season},
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=25,
+        )
+    except Exception:
+        logger.exception("FotMob team catalog fetch failed for league %s", fotmob_id)
+        return []
+    if not response.ok:
+        return []
+    try:
+        payload = response.json()
+    except Exception:
+        return []
+    details = payload.get("details") or {}
+    resolved_country = str(details.get("country") or country or "").strip().upper()
+    if resolved_country and resolved_country not in TEAM_CATALOG_COUNTRIES:
+        return []
+    country_code = resolved_country or str(country or "").strip().upper()
+    rows: list[dict[str, Any]] = []
+    for name in _extract_fotmob_league_team_names(payload):
+        rows.append(
+            {
+                "name": name,
+                "country": country_code,
+                "country_label": COUNTRY_LABELS.get(country_code, country_code),
+            }
+        )
+    return rows
+
+
+def list_known_team_entries(*, seasons: list[str] | None = None) -> list[dict[str, Any]]:
+    """Canonical clubs from FotMob ENG/SCO/WAL/IRL/NIR competitions (+ local fixtures)."""
+    use_seasons = [
+        season
+        for season in (seasons or list(ALLOWED_FIXTURE_SEASONS))
+        if season in ALLOWED_FIXTURE_SEASONS
+    ] or list(ALLOWED_FIXTURE_SEASONS)
+    cache_key = f"fotmob-bi|{','.join(use_seasons)}"
+    now = time.time()
+    with _team_catalog_cache_lock:
+        cached = _team_catalog_cache.get(cache_key)
+        if cached and now - cached[0] < TEAM_CATALOG_TTL_SECONDS:
+            return list(cached[1])
+
+    by_norm: dict[str, dict[str, Any]] = {}
+
+    def remember(name: str, *, country: str = "") -> None:
+        clean = str(name or "").strip()
+        norm = _normalize_team_name(clean)
+        if not norm:
+            return
+        country_code = str(country or "").strip().upper()
+        existing = by_norm.get(norm)
+        if not existing:
+            by_norm[norm] = {
+                "name": clean,
+                "country": country_code,
+                "country_label": COUNTRY_LABELS.get(country_code, country_code),
+            }
+            return
+        preferred = _prefer_display_name(str(existing.get("name") or ""), clean)
+        existing["name"] = preferred
+        if country_code and not existing.get("country"):
+            existing["country"] = country_code
+            existing["country_label"] = COUNTRY_LABELS.get(country_code, country_code)
+
+    # Local planner fixtures first (includes manuals already merged into cache).
+    for fixture in _cached_fixtures_list(use_seasons, warm=True):
+        for name, _side in _fixture_team_sides(fixture):
+            remember(name)
+
+    # Broad FotMob catalog for British Isles competitions only.
+    catalog_season = use_seasons[0] if use_seasons else DEFAULT_SEASON
+    for league in FOTMOB_TEAM_CATALOG_LEAGUES:
+        rows = _fetch_fotmob_catalog_league_teams(
+            fotmob_id=int(league["id"]),
+            country=str(league.get("country") or ""),
+            season=catalog_season,
+            calendar_year=bool(league.get("calendar_year")),
+        )
+        for row in rows:
+            remember(str(row.get("name") or ""), country=str(row.get("country") or ""))
+
+    entries = sorted(by_norm.values(), key=lambda row: str(row.get("name") or "").casefold())
+    with _team_catalog_cache_lock:
+        _team_catalog_cache[cache_key] = (now, entries)
+    return entries
+
+
+def list_known_team_names(*, seasons: list[str] | None = None) -> list[str]:
+    return [str(row.get("name") or "") for row in list_known_team_entries(seasons=seasons) if row.get("name")]
+
+
+def resolve_canonical_team_name(raw: str, catalog: list[str] | None = None) -> str:
+    """Map typed scout input onto the fixture catalog when the club is unambiguous."""
+    typed = str(raw or "").strip()
+    if not typed:
+        return typed
+    names = catalog if catalog is not None else list_known_team_names()
+    for name in names:
+        if name.casefold() == typed.casefold():
+            return name
+    typed_norm = _normalize_team_name(typed)
+    if typed_norm:
+        exact_norm = [name for name in names if _normalize_team_name(name) == typed_norm]
+        if len(exact_norm) == 1:
+            return exact_norm[0]
+    same_club = [name for name in names if _team_names_same_club(name, typed)]
+    if len(same_club) == 1:
+        return same_club[0]
+    return typed
+
+
+def _players_from_manual_inputs(rows: list[ManualFixturePlayerInput] | list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    raw: list[dict[str, Any]] = []
+    for row in rows or []:
+        if isinstance(row, ManualFixturePlayerInput):
+            raw.append(row.model_dump())
+        elif isinstance(row, dict):
+            raw.append(row)
+    catalog = list_known_team_names()
+    for row in raw:
+        if isinstance(row, dict) and row.get("team"):
+            row["team"] = resolve_canonical_team_name(str(row.get("team") or ""), catalog)
+    cleaned = _normalize_watched_players(raw)
+    return [_resolve_watched_player_against_catalog(player) for player in cleaned]
+
+
+def _resolve_watched_player_against_catalog(player: dict[str, Any]) -> dict[str, Any]:
+    """Prefer a real Impect player_id so LIVE/VID/REP and dossier links line up."""
+    try:
+        existing = int(player.get("player_id") or 0)
+    except (TypeError, ValueError):
+        existing = 0
+    if existing > 0:
+        return player
+
+    name = str(player.get("player_name") or "").strip()
+    team = str(player.get("team") or "").strip()
+    resolved = _lookup_impect_player_id(name, team=team)
+    if not resolved:
+        return player
+    return {**player, "player_id": int(resolved)}
+
+
+def _lookup_impect_player_id(name: str, *, team: str = "") -> int | None:
+    clean = str(name or "").strip()
+    if len(clean) < 3:
+        return None
+    try:
+        from app import main as impect
+
+        body = impect.PlayerCatalogRequest(search=clean)
+        payload = impect.list_players(body)
+    except Exception:
+        logger = __import__("logging").getLogger(__name__)
+        logger.exception("Could not resolve Impect player id for %s", clean)
+        return None
+
+    players = list(payload.get("players") or [])
+    if not players:
+        return None
+
+    norm = clean.casefold()
+    matches = [
+        row
+        for row in players
+        if str(row.get("name") or "").strip().casefold() == norm
+    ]
+    if not matches:
+        matches = [
+            row
+            for row in players
+            if norm in str(row.get("name") or "").strip().casefold()
+        ]
+    team_norm = str(team or "").strip().casefold()
+    if team_norm and len(matches) > 1:
+        club_hits = []
+        for row in matches:
+            club = str(
+                row.get("club")
+                or row.get("context_club")
+                or row.get("label")
+                or ""
+            ).casefold()
+            if team_norm in club or club in team_norm:
+                club_hits.append(row)
+        if club_hits:
+            matches = club_hits
+
+    best = matches[0] if matches else (players[0] if len(players) == 1 else None)
+    if not best:
+        return None
+    try:
+        player_id = int(best.get("impect_player_id") or best.get("playerId") or best.get("id") or 0)
+    except (TypeError, ValueError):
+        return None
+    return player_id if player_id > 0 else None
+
+
+def _kickoff_utc_from_date_and_time(date_key: str, kickoff: str | None) -> str | None:
+    date_token = _parse_iso_date(date_key) or ""
+    if not date_token:
+        return None
+    time_token = str(kickoff or "").strip()
+    match = re.match(r"^(\d{1,2}):(\d{2})$", time_token)
+    if match:
+        hour = int(match.group(1))
+        minute = int(match.group(2))
+        if 0 <= hour <= 23 and 0 <= minute <= 59:
+            return f"{date_token}T{hour:02d}:{minute:02d}:00"
+    return f"{date_token}T15:00:00"
+
+
+def _sync_manual_assignment(
+    *,
+    fixture_id: str,
+    season: str,
+    league: str,
+    home: str,
+    away: str,
+    date_key: str,
+    kickoff_utc: str | None,
+    staff: list[str] | str,
+    watch_type: str,
+    watched_players: list[dict[str, Any]],
+    send_email: bool = False,
+) -> None:
+    staff_names = _normalize_staff_names(staff, validate=True)
+    watch = str(watch_type or "").strip().upper() or "LIVE"
+    if not staff_names:
+        # Clear assignment if staff removed.
+        upsert_fixture_assignment(
+            FixtureAssignmentUpdate(fixture_id=fixture_id),
+            mirror_to_live=True,
+            send_email=False,
+        )
+        return
+    upsert_fixture_assignment(
+        FixtureAssignmentUpdate(
+            fixture_id=fixture_id,
+            staff=staff_names,
+            watch_type=watch if watch in WATCH_TYPES else "LIVE",
+            season=season,
+            league=league,
+            home=home,
+            away=away,
+            date=date_key,
+            kickoff_utc=kickoff_utc,
+            watched_players=watched_players,
+        ),
+        mirror_to_live=True,
+        send_email=send_email,
+    )
+
+
+def _sync_manual_scouting_reports(
+    *,
+    fixture_id: str,
+    season: str,
+    staff: str,
+    date_key: str,
+    players: list[dict[str, Any]],
+    mark_reports: bool,
+) -> None:
+    if not mark_reports:
+        return
+    for player in players:
+        player_id = int(player.get("player_id") or 0)
+        if not player_id:
+            continue
+        toggle_scouting_report(
+            ScoutingReportToggle(
+                fixture_id=fixture_id,
+                player_id=player_id,
+                player_name=str(player.get("player_name") or ""),
+                side=str(player.get("side") or ""),
+                team=str(player.get("team") or ""),
+                season=season,
+                staff=staff,
+                fixture_date=date_key,
+                position=str(player.get("position") or ""),
+                reported=True,
+            )
+        )
+
+
+def create_manual_fixture(body: ManualFixtureCreate) -> dict[str, Any]:
+    season = str(body.season or DEFAULT_SEASON).strip()
+    if season not in ALLOWED_FIXTURE_SEASONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Season must be one of: {', '.join(ALLOWED_FIXTURE_SEASONS)}",
+        )
+    home = resolve_canonical_team_name(str(body.home or "").strip())
+    away = resolve_canonical_team_name(str(body.away or "").strip())
+    if not home or not away:
+        raise HTTPException(status_code=400, detail="home and away team names are required")
+    date_key = _parse_iso_date(body.date)
+    if not date_key:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    staff_names = _normalize_staff_names(body.staff, validate=True)
+    watch_type = str(body.watch_type or "LIVE").strip().upper() or "LIVE"
+    if watch_type not in WATCH_TYPES:
+        raise HTTPException(status_code=400, detail=f"watch_type must be one of: {', '.join(WATCH_TYPES)}")
+
+    league = _normalize_league_label(body.league or MANUAL_LEAGUE_LABEL) or MANUAL_LEAGUE_LABEL
+    competition = _normalize_league_label(body.competition or league) or league
+    kickoff_utc = _kickoff_utc_from_date_and_time(date_key, body.kickoff)
+    players = _players_from_manual_inputs(body.players)
+    fixture_id = f"{MANUAL_FIXTURE_ID_PREFIX}{uuid.uuid4().hex}"
+    now = datetime.now(UTC).isoformat()
+    today = datetime.now(UTC).date().isoformat()
+    status = str(body.status or "").strip().lower()
+    if status not in {"scheduled", "completed"}:
+        status = "completed" if date_key <= today else "scheduled"
+    # Upcoming games shouldn't auto-mark reports unless explicitly requested.
+    mark_reports = bool(body.mark_reports) if status == "completed" else bool(body.mark_reports)
+
+    record = {
+        "fixture_id": fixture_id,
+        "manual": True,
+        "season": season,
+        "league": league,
+        "competition": competition,
+        "home": {"name": home},
+        "away": {"name": away},
+        "date": date_key,
+        "kickoff_utc": kickoff_utc,
+        "score": str(body.score or "").strip(),
+        "venue": str(body.venue or "").strip(),
+        "notes": str(body.notes or "").strip(),
+        "watched_players": players,
+        "team_sheet": None,
+        "staff": staff_names,
+        "watch_type": watch_type if staff_names else "",
+        "status": status,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    store = _load_manual_fixtures_store()
+    fixtures = store.setdefault("fixtures", {})
+    fixtures[fixture_id] = record
+    _save_manual_fixtures_store(store)
+
+    if staff_names:
+        _sync_manual_assignment(
+            fixture_id=fixture_id,
+            season=season,
+            league=league,
+            home=home,
+            away=away,
+            date_key=date_key,
+            kickoff_utc=kickoff_utc,
+            staff=staff_names,
+            watch_type=watch_type,
+            watched_players=players,
+            send_email=status == "scheduled",
+        )
+    _sync_manual_scouting_reports(
+        fixture_id=fixture_id,
+        season=season,
+        staff=staff_names[0] if staff_names else "",
+        date_key=date_key,
+        players=players,
+        mark_reports=mark_reports,
+    )
+
+    return {"ok": True, "fixture": _manual_fixture_list_shape(record)}
+
+
+def update_manual_fixture(fixture_id: str, body: ManualFixtureUpdate) -> dict[str, Any]:
+    token = str(fixture_id or "").strip()
+    store = _load_manual_fixtures_store()
+    fixtures = store.setdefault("fixtures", {})
+    record = fixtures.get(token)
+    if not isinstance(record, dict):
+        raise HTTPException(status_code=404, detail="Manual fixture not found")
+
+    if body.home is not None:
+        home = resolve_canonical_team_name(str(body.home or "").strip())
+        if not home:
+            raise HTTPException(status_code=400, detail="home team name is required")
+        record["home"] = {"name": home}
+    if body.away is not None:
+        away = resolve_canonical_team_name(str(body.away or "").strip())
+        if not away:
+            raise HTTPException(status_code=400, detail="away team name is required")
+        record["away"] = {"name": away}
+    if body.date is not None:
+        date_key = _parse_iso_date(body.date)
+        if not date_key:
+            raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+        record["date"] = date_key
+    if body.league is not None:
+        record["league"] = _normalize_league_label(body.league or MANUAL_LEAGUE_LABEL) or MANUAL_LEAGUE_LABEL
+        record["competition"] = record["league"]
+    if body.competition is not None:
+        record["competition"] = str(body.competition or "").strip()
+    if body.kickoff is not None:
+        record["kickoff_utc"] = _kickoff_utc_from_date_and_time(str(record.get("date") or ""), body.kickoff)
+    if body.score is not None:
+        record["score"] = str(body.score or "").strip()
+    if body.venue is not None:
+        record["venue"] = str(body.venue or "").strip()
+    if body.notes is not None:
+        record["notes"] = str(body.notes or "").strip()
+    if body.staff is not None:
+        staff_names = _normalize_staff_names(body.staff, validate=True)
+        record["staff"] = staff_names
+    if body.watch_type is not None:
+        watch = str(body.watch_type or "").strip().upper()
+        if watch and watch not in WATCH_TYPES:
+            raise HTTPException(status_code=400, detail=f"watch_type must be one of: {', '.join(WATCH_TYPES)}")
+        record["watch_type"] = watch
+    if body.players is not None:
+        record["watched_players"] = _players_from_manual_inputs(body.players)
+
+    record["updated_at"] = datetime.now(UTC).isoformat()
+    fixtures[token] = record
+    _save_manual_fixtures_store(store)
+
+    home_name = str((record.get("home") or {}).get("name") or "")
+    away_name = str((record.get("away") or {}).get("name") or "")
+    date_key = str(record.get("date") or "")
+    staff_names = _normalize_staff_names(record.get("staff"))
+    players = list(record.get("watched_players") or [])
+    _sync_manual_assignment(
+        fixture_id=token,
+        season=str(record.get("season") or DEFAULT_SEASON),
+        league=str(record.get("league") or MANUAL_LEAGUE_LABEL),
+        home=home_name,
+        away=away_name,
+        date_key=date_key,
+        kickoff_utc=record.get("kickoff_utc"),
+        staff=staff_names,
+        watch_type=str(record.get("watch_type") or "LIVE"),
+        watched_players=players,
+    )
+    if staff_names:
+        _sync_manual_scouting_reports(
+            fixture_id=token,
+            season=str(record.get("season") or DEFAULT_SEASON),
+            staff=staff_names[0],
+            date_key=date_key,
+            players=players,
+            mark_reports=bool(body.mark_reports),
+        )
+
+    return {"ok": True, "fixture": _manual_fixture_list_shape(record)}
+
+
+def delete_manual_fixture(fixture_id: str) -> dict[str, Any]:
+    token = str(fixture_id or "").strip()
+    store = _load_manual_fixtures_store()
+    fixtures = store.setdefault("fixtures", {})
+    record = fixtures.pop(token, None)
+    if not isinstance(record, dict):
+        raise HTTPException(status_code=404, detail="Manual fixture not found")
+    _save_manual_fixtures_store(store)
+
+    team_sheet = record.get("team_sheet") if isinstance(record.get("team_sheet"), dict) else None
+    if team_sheet:
+        stored = str(team_sheet.get("stored_name") or "").strip()
+        if stored:
+            path = TEAM_SHEETS_DIR / stored
+            if path.exists() and path.is_file():
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+
+    upsert_fixture_assignment(
+        FixtureAssignmentUpdate(fixture_id=token),
+        mirror_to_live=True,
+        send_email=False,
+    )
+    report_store = _load_scouting_reports_store()
+    reports = report_store.setdefault("reports", {})
+    if token in reports:
+        reports.pop(token, None)
+        _save_scouting_reports_store(report_store)
+
+    return {"ok": True, "fixture_id": token}
+
+
+def _safe_team_sheet_name(filename: str) -> str:
+    base = Path(str(filename or "team-sheet")).name
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", base).strip("._") or "team-sheet"
+    return cleaned[:120]
+
+
+def attach_manual_team_sheet(
+    *,
+    fixture_id: str,
+    filename: str,
+    content_type: str,
+    data: bytes,
+) -> dict[str, Any]:
+    token = str(fixture_id or "").strip()
+    store = _load_manual_fixtures_store()
+    fixtures = store.setdefault("fixtures", {})
+    record = fixtures.get(token)
+    if not isinstance(record, dict):
+        raise HTTPException(status_code=404, detail="Manual fixture not found")
+
+    original = _safe_team_sheet_name(filename or "team-sheet")
+    ext = Path(original).suffix.lower()
+    if ext not in TEAM_SHEET_ALLOWED_EXT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Team sheet must be one of: {', '.join(sorted(TEAM_SHEET_ALLOWED_EXT))}",
+        )
+    media = str(content_type or "application/octet-stream").split(";")[0].strip().lower()
+    if media not in TEAM_SHEET_ALLOWED_TYPES and ext not in TEAM_SHEET_ALLOWED_EXT:
+        raise HTTPException(status_code=400, detail="Unsupported team sheet file type")
+
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty team sheet file")
+    if len(data) > TEAM_SHEET_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="Team sheet must be 12MB or smaller")
+
+    TEAM_SHEETS_DIR.mkdir(parents=True, exist_ok=True)
+    stored_name = f"{uuid.uuid4().hex}{ext}"
+    dest = TEAM_SHEETS_DIR / stored_name
+    dest.write_bytes(data)
+
+    previous = record.get("team_sheet") if isinstance(record.get("team_sheet"), dict) else None
+    if previous:
+        old_name = str(previous.get("stored_name") or "").strip()
+        if old_name:
+            old_path = TEAM_SHEETS_DIR / old_name
+            if old_path.exists() and old_path.is_file():
+                try:
+                    old_path.unlink()
+                except OSError:
+                    pass
+
+    record["team_sheet"] = {
+        "filename": original,
+        "stored_name": stored_name,
+        "content_type": media or "application/octet-stream",
+        "size_bytes": len(data),
+        "uploaded_at": datetime.now(UTC).isoformat(),
+    }
+    record["updated_at"] = datetime.now(UTC).isoformat()
+    fixtures[token] = record
+    _save_manual_fixtures_store(store)
+    return {"ok": True, "fixture": _manual_fixture_list_shape(record)}
+
+
+def get_manual_team_sheet_file(fixture_id: str) -> FileResponse:
+    token = str(fixture_id or "").strip()
+    row = get_manual_fixture(token)
+    if not row:
+        raise HTTPException(status_code=404, detail="Manual fixture not found")
+    team_sheet = row.get("team_sheet") if isinstance(row.get("team_sheet"), dict) else None
+    if not team_sheet:
+        raise HTTPException(status_code=404, detail="No team sheet attached")
+    stored = str(team_sheet.get("stored_name") or "").strip()
+    path = TEAM_SHEETS_DIR / stored
+    if not stored or not path.exists() or not path.is_file():
+        raise HTTPException(status_code=404, detail="Team sheet file missing")
+    filename = str(team_sheet.get("filename") or path.name)
+    media = str(team_sheet.get("content_type") or "application/octet-stream")
+    return FileResponse(path, media_type=media, filename=filename)
+
+
 def toggle_scouting_report(body: ScoutingReportToggle) -> dict[str, Any]:
     fixture_id = str(body.fixture_id or "").strip()
     player_id = int(body.player_id or 0)
@@ -1634,7 +3622,105 @@ def toggle_scouting_report(body: ScoutingReportToggle) -> dict[str, Any]:
             reports.pop(fixture_id, None)
 
     _save_scouting_reports_store(store)
+    _sync_watched_player_from_report(
+        fixture_id=fixture_id,
+        player_id=player_id,
+        player_name=str(body.player_name or "").strip(),
+        side=str(body.side or "").strip().lower(),
+        team=str(body.team or "").strip(),
+        position=str(body.position or "").strip(),
+        season=str(body.season or "").strip(),
+        staff=str(body.staff or "").strip(),
+        fixture_date=str(body.fixture_date or "").strip()[:10],
+        reported=bool(body.reported),
+    )
     return get_scouting_reports(fixture_id)
+
+
+def _sync_watched_player_from_report(
+    *,
+    fixture_id: str,
+    player_id: int,
+    player_name: str,
+    side: str,
+    team: str,
+    position: str,
+    season: str,
+    staff: str,
+    fixture_date: str,
+    reported: bool,
+) -> None:
+    """Add pitch/squad report marks onto assignment watched_players (LIVE/VID counts).
+
+    Unmarking a report does not remove an existing watched_player — they may still
+    have been selected for coverage at assign time.
+    """
+    if not reported:
+        return
+
+    assign_store = _load_assignments_store()
+    assignments: dict[str, Any] = assign_store.setdefault("assignments", {})
+    current = dict(assignments.get(fixture_id) or {})
+
+    watched = list(current.get("watched_players") or [])
+    already = False
+    for row in watched:
+        if not isinstance(row, dict):
+            continue
+        try:
+            if int(row.get("player_id") or 0) == int(player_id):
+                already = True
+                break
+        except (TypeError, ValueError):
+            continue
+    if already:
+        return
+
+    watched.append(
+        {
+            "player_id": int(player_id),
+            "player_name": player_name,
+            "team": team,
+            "side": side,
+            "position": position,
+        }
+    )
+    watched = _normalize_watched_players(watched)
+
+    watch_type = str(current.get("watch_type") or "").strip().upper()
+    staff_names = _normalize_staff_names(staff) or _normalize_staff_names(current.get("staff"))
+    if not watch_type or not staff_names:
+        manual = get_manual_fixture(fixture_id)
+        if manual:
+            watch_type = watch_type or str(manual.get("watch_type") or "").strip().upper()
+            if not staff_names:
+                staff_names = _normalize_staff_names(manual.get("staff"))
+    if not watch_type:
+        watch_type = "LIVE"
+    if watch_type not in WATCH_TYPES:
+        watch_type = "LIVE"
+    if not staff_names:
+        # Need an assignee to persist watched_players on the assignment row.
+        return
+
+    saved = {
+        **current,
+        "staff": staff_names,
+        "watch_type": str(current.get("watch_type") or watch_type).strip().upper() or watch_type,
+        "season": str(current.get("season") or season or "").strip(),
+        "league": str(current.get("league") or "").strip(),
+        "home": str(current.get("home") or "").strip(),
+        "away": str(current.get("away") or "").strip(),
+        "date": str(current.get("date") or fixture_date or "").strip()[:10],
+        "kickoff_utc": current.get("kickoff_utc"),
+        "watched_players": watched,
+        "updated_at": datetime.now(UTC).isoformat(),
+    }
+    if saved["watch_type"] not in WATCH_TYPES:
+        saved["watch_type"] = watch_type
+    assignments[fixture_id] = saved
+    _save_assignments_store(assign_store)
+    _mirror_assignment_to_live(fixture_id=fixture_id, assignment=saved)
 
 
 def _assignment_rows_for_seasons(
@@ -1659,11 +3745,11 @@ def _assignment_rows_for_seasons(
     for fixture_id, assignment in assignment_store.items():
         if not isinstance(assignment, dict):
             continue
-        assigned_staff = str(assignment.get("staff") or "").strip()
+        staff_names = _normalize_staff_names(assignment.get("staff"))
         assigned_watch = str(assignment.get("watch_type") or "").strip().upper()
-        if not assigned_staff:
+        if not staff_names:
             continue
-        if staff and assigned_staff != staff:
+        if staff and staff.casefold() not in {name.casefold() for name in staff_names}:
             continue
         if watch_type and assigned_watch != watch_type.upper():
             continue
@@ -1695,29 +3781,40 @@ def _assignment_rows_for_seasons(
         if not include_past and date_key and date_key < today:
             continue
 
-        dedupe_key = fixture_id or f"{assigned_staff}|{date_key}|{league_name}|{home_name}|{away_name}"
+        staff_label = _staff_label(staff_names)
+        dedupe_key = fixture_id or f"{staff_label}|{date_key}|{league_name}|{home_name}|{away_name}"
         if dedupe_key in seen:
             continue
         seen.add(dedupe_key)
 
         canonical_fixture_id = str((fixture or {}).get("fixture_id") or fixture_id)
         report_rows = scouting_reports_for_fixture(canonical_fixture_id)
+        manual = get_manual_fixture(canonical_fixture_id) or get_manual_fixture(fixture_id)
+        watched = list(assignment.get("watched_players") or [])
+        if not watched and manual:
+            watched = list(manual.get("watched_players") or [])
 
         rows.append(
             {
                 "fixture_id": canonical_fixture_id,
-                "staff": assigned_staff,
+                "staff": staff_label,
+                "staff_names": staff_names,
                 "watch_type": assigned_watch,
                 "season": assignment_season,
-                "league": league_name,
-                "home": home_name,
-                "away": away_name,
-                "date": date_key or "",
-                "kickoff_utc": kickoff,
-                "status": fixture_status or ("completed" if fixture_score else ""),
-                "score": fixture_score,
+                "league": league_name or (manual.get("league") if manual else "") or "",
+                "home": home_name or ((manual or {}).get("home") or {}).get("name") or "",
+                "away": away_name or ((manual or {}).get("away") or {}).get("name") or "",
+                "date": date_key or (manual.get("date") if manual else "") or "",
+                "kickoff_utc": kickoff or (manual.get("kickoff_utc") if manual else None),
+                "status": fixture_status
+                or ("completed" if fixture_score or manual else ""),
+                "score": fixture_score or (manual.get("score") if manual else None),
                 "match_id": fixture_match_id,
                 "iteration_id": fixture_iteration_id,
+                "manual": bool(manual) or str(canonical_fixture_id).startswith(MANUAL_FIXTURE_ID_PREFIX),
+                "notes": (manual.get("notes") if manual else "") or "",
+                "team_sheet": (manual.get("team_sheet") if manual else None),
+                "watched_players": watched,
                 "scouting_reports": report_rows,
                 "scouting_report_count": len(report_rows),
             }
@@ -1767,32 +3864,43 @@ def build_scout_summary_payload(
     by_league: dict[str, int] = {}
 
     for row in rows:
-        staff_name = row["staff"]
-        bucket = by_staff.setdefault(
-            staff_name,
-            {
-                "staff": staff_name,
-                "live": 0,
-                "video": 0,
-                "total": 0,
-                "by_league": {},
-                "fixtures": [],
-            },
-        )
-        bucket["total"] += 1
+        names = list(row.get("staff_names") or [])
+        if not names:
+            label = str(row.get("staff") or "").strip()
+            names = [label] if label else []
+        if not names:
+            continue
+
         totals["assigned"] += 1
         if row["watch_type"] == "LIVE":
-            bucket["live"] += 1
             totals["live"] += 1
         elif row["watch_type"] == "VIDEO":
-            bucket["video"] += 1
             totals["video"] += 1
-
         league = row.get("league") or "Unknown"
-        bucket["by_league"][league] = bucket["by_league"].get(league, 0) + 1
         by_league[league] = by_league.get(league, 0) + 1
         totals["scouting_reports"] += int(row.get("scouting_report_count") or 0)
-        bucket["fixtures"].append(row)
+
+        for staff_name in names:
+            bucket = by_staff.setdefault(
+                staff_name,
+                {
+                    "staff": staff_name,
+                    "live": 0,
+                    "video": 0,
+                    "total": 0,
+                    "by_league": {},
+                    "fixtures": [],
+                },
+            )
+            bucket["total"] += 1
+            if row["watch_type"] == "LIVE":
+                bucket["live"] += 1
+            elif row["watch_type"] == "VIDEO":
+                bucket["video"] += 1
+            bucket["by_league"][league] = bucket["by_league"].get(league, 0) + 1
+            person_row = dict(row)
+            person_row["staff"] = staff_name
+            bucket["fixtures"].append(person_row)
 
     staff_rows = [by_staff[name] for name in FIXTURE_STAFF if by_staff[name]["total"]]
     for name, bucket in by_staff.items():
@@ -2094,7 +4202,11 @@ def _parse_export_date(value: str | None) -> str | None:
 
 
 def _fixture_team_names(fixture: dict[str, Any]) -> list[str]:
-    names: list[str] = []
+    return [name for name, _side in _fixture_team_sides(fixture)]
+
+
+def _fixture_team_sides(fixture: dict[str, Any]) -> list[tuple[str, str]]:
+    sides: list[tuple[str, str]] = []
     for side in ("home", "away"):
         value = fixture.get(side)
         if isinstance(value, dict):
@@ -2102,8 +4214,8 @@ def _fixture_team_names(fixture: dict[str, Any]) -> list[str]:
         else:
             name = str(value or "").strip()
         if name:
-            names.append(name)
-    return names
+            sides.append((name, side))
+    return sides
 
 
 def _build_league_team_exposure(
@@ -2114,49 +4226,98 @@ def _build_league_team_exposure(
     date_to: str | None = None,
     top_n: int = 12,
 ) -> list[dict[str, Any]]:
-    team_fixture_watch: dict[tuple[str, str], dict[str, str]] = {}
+    # Per team+fixture: watch type, home/away side, and whether the game has been played.
+    team_fixture_meta: dict[tuple[str, str], dict[str, dict[str, Any]]] = {}
 
-    def remember_fixture(league: str, team: str, fixture_id: str, watch: str = "") -> None:
+    def remember_fixture(
+        league: str,
+        team: str,
+        fixture_id: str,
+        *,
+        watch: str = "",
+        side: str = "",
+        played: bool = False,
+    ) -> None:
         if not league or not team or not fixture_id:
             return
         key = (league, team)
-        bucket = team_fixture_watch.setdefault(key, {})
-        existing = bucket.get(fixture_id, "")
-        if watch == "LIVE":
-            bucket[fixture_id] = "LIVE"
-        elif watch == "VIDEO":
-            bucket[fixture_id] = "VIDEO"
-        elif fixture_id not in bucket:
-            bucket[fixture_id] = existing
+        bucket = team_fixture_meta.setdefault(key, {})
+        entry = bucket.setdefault(
+            fixture_id,
+            {"watch": "", "side": "", "played": False},
+        )
+        if side in {"home", "away"}:
+            entry["side"] = side
+        if played:
+            entry["played"] = True
+        watch_token = str(watch or "").strip().upper()
+        if watch_token == "LIVE":
+            entry["watch"] = "LIVE"
+        elif watch_token == "VIDEO" and entry.get("watch") != "LIVE":
+            entry["watch"] = "VIDEO"
 
     for fixture in _cached_fixtures_list(seasons, warm=True):
         if not _fixture_in_date_range(fixture, date_from=date_from, date_to=date_to):
             continue
-        league = str(fixture.get("league") or "Unknown")
+        league = _normalize_league_label(fixture.get("league") or "Unknown")
         fixture_id = str(fixture.get("fixture_id") or "")
         if not fixture_id:
             continue
-        for team in _fixture_team_names(fixture):
-            remember_fixture(league, team, fixture_id)
+        played = _fixture_is_played(fixture)
+        for team, side in _fixture_team_sides(fixture):
+            remember_fixture(league, team, fixture_id, side=side, played=played)
 
     for staff_row in payload.get("staff") or []:
         for fixture in staff_row.get("fixtures") or []:
-            league = str(fixture.get("league") or "Unknown")
+            league = _normalize_league_label(fixture.get("league") or "Unknown")
             fixture_id = str(fixture.get("fixture_id") or "")
             if not fixture_id:
                 continue
             watch_type = str(fixture.get("watch_type") or "").strip().upper()
-            for team in _fixture_team_names(fixture):
-                remember_fixture(league, team, fixture_id, watch_type)
+            played = _fixture_is_played(fixture)
+            for team, side in _fixture_team_sides(fixture):
+                remember_fixture(
+                    league,
+                    team,
+                    fixture_id,
+                    watch=watch_type,
+                    side=side,
+                    played=played,
+                )
 
     leagues_map: dict[str, list[dict[str, Any]]] = {}
-    for (league, team), fixture_map in team_fixture_watch.items():
-        live = sum(1 for watch in fixture_map.values() if watch == "LIVE")
-        video = sum(1 for watch in fixture_map.values() if watch == "VIDEO")
-        not_seen = sum(1 for watch in fixture_map.values() if not watch)
-        total = len(fixture_map)
-        covered = live + video
-        if not total and not covered:
+    for (league, team), fixture_map in team_fixture_meta.items():
+        entries = list(fixture_map.values())
+        played = sum(1 for entry in entries if entry.get("played"))
+        live = sum(
+            1
+            for entry in entries
+            if entry.get("played") and entry.get("watch") == "LIVE"
+        )
+        video = sum(
+            1
+            for entry in entries
+            if entry.get("played") and entry.get("watch") == "VIDEO"
+        )
+        not_seen = sum(
+            1 for entry in entries if entry.get("played") and not entry.get("watch")
+        )
+        watched_home = sum(
+            1
+            for entry in entries
+            if entry.get("played")
+            and entry.get("watch") in {"LIVE", "VIDEO"}
+            and entry.get("side") == "home"
+        )
+        watched_away = sum(
+            1
+            for entry in entries
+            if entry.get("played")
+            and entry.get("watch") in {"LIVE", "VIDEO"}
+            and entry.get("side") == "away"
+        )
+        scheduled = len(entries)
+        if not played and not live and not video:
             continue
         leagues_map.setdefault(league, []).append(
             {
@@ -2164,7 +4325,12 @@ def _build_league_team_exposure(
                 "live": live,
                 "video": video,
                 "not_seen": not_seen,
-                "total": total,
+                "played": played,
+                "watched_home": watched_home,
+                "watched_away": watched_away,
+                "scheduled": scheduled,
+                # Bar scale / right-hand total = games already played.
+                "total": played,
             }
         )
 
@@ -2174,7 +4340,7 @@ def _build_league_team_exposure(
             leagues_map[league],
             key=lambda row: (
                 -int(row.get("live") or 0) - int(row.get("video") or 0),
-                -int(row.get("total") or 0),
+                -int(row.get("played") or 0),
                 str(row.get("team") or "").casefold(),
             ),
         )[:top_n]
@@ -3042,13 +5208,591 @@ def _scout_summary_export_response(
     )
 
 
+def _email_fixture_rows(
+    *,
+    watch_types: set[str] | None = None,
+    days_ahead: int | None = None,
+) -> tuple[list[dict[str, Any]], str]:
+    """Build upcoming assigned fixture rows for bulk emails."""
+    from app.fixture_assignment_email import _format_kickoff
+
+    today = datetime.now(UTC).date()
+    end_day = today + timedelta(days=int(days_ahead)) if days_ahead is not None else None
+    rows = _assignment_rows_for_seasons(
+        list(ALLOWED_FIXTURE_SEASONS),
+        include_past=False,
+    )
+    fixtures: list[dict[str, Any]] = []
+    for row in rows:
+        watch = str(row.get("watch_type") or "").strip().upper()
+        if watch_types and watch not in watch_types:
+            continue
+        date_key = str(row.get("date") or "").strip()[:10]
+        if not date_key:
+            continue
+        try:
+            day = datetime.fromisoformat(date_key).date()
+        except ValueError:
+            continue
+        if day < today:
+            continue
+        if end_day is not None and day > end_day:
+            continue
+
+        venue = ""
+        fixture_id = str(row.get("fixture_id") or "")
+        try:
+            resolved = _resolve_fixture_for_email(fixture_id, row) if fixture_id else None
+        except Exception:
+            resolved = None
+        if isinstance(resolved, dict):
+            page_url = resolved.get("fotmob_page_url")
+            if page_url:
+                venue = _fotmob_venue_from_page(page_url) or ""
+            if not venue:
+                home = resolved.get("home") if isinstance(resolved.get("home"), dict) else {}
+                venue = f"{(home or {}).get('name') or row.get('home') or 'Home'} (home)"
+
+        fixtures.append(
+            {
+                "fixture_id": fixture_id,
+                "home": row.get("home") or "Home",
+                "away": row.get("away") or "Away",
+                "league": row.get("league") or "",
+                "staff": row.get("staff") or "",
+                "watch_type": watch,
+                "date": date_key,
+                "kickoff_utc": row.get("kickoff_utc"),
+                "kickoff_label": _format_kickoff(
+                    str(row.get("kickoff_utc") or "") or None,
+                    date_key,
+                ),
+                "venue": venue,
+            }
+        )
+
+    if days_ahead is not None:
+        period_label = (
+            f"{today.strftime('%d %b %Y')} – {end_day.strftime('%d %b %Y')}"
+            if end_day
+            else today.strftime("%d %b %Y")
+        )
+    else:
+        period_label = f"Upcoming from {today.strftime('%d %b %Y')}"
+    return fixtures, period_label
+
+
+def preview_admin_ticket_request() -> dict[str, Any]:
+    fixtures, period_label = _email_fixture_rows(
+        watch_types={"LIVE"},
+        days_ahead=TICKET_REQUEST_DAYS_AHEAD,
+    )
+    requested = get_ticket_requests().get("requests") or {}
+    new_fixtures: list[dict[str, Any]] = []
+    already: list[dict[str, Any]] = []
+    for row in fixtures:
+        fixture_id = str(row.get("fixture_id") or "")
+        prior = requested.get(fixture_id) if fixture_id else None
+        if isinstance(prior, dict):
+            already.append(
+                {
+                    **row,
+                    "tickets": prior.get("tickets", 1),
+                    "parking": prior.get("parking") or "No",
+                    "notes": prior.get("notes") or "",
+                    "requested_at": prior.get("requested_at"),
+                    "already_requested": True,
+                }
+            )
+        else:
+            new_fixtures.append({**row, "already_requested": False})
+
+    return {
+        "period_label": period_label,
+        "days_ahead": TICKET_REQUEST_DAYS_AHEAD,
+        "recipients": admin_team_emails(),
+        "fixtures": new_fixtures,
+        "already_requested": already,
+        "fixture_count": len(new_fixtures),
+        "already_requested_count": len(already),
+        "total_live_in_window": len(fixtures),
+    }
+
+
+def send_admin_ticket_request(body: TicketRequestBody | None = None) -> dict[str, Any]:
+    fixtures, period_label = _email_fixture_rows(
+        watch_types={"LIVE"},
+        days_ahead=TICKET_REQUEST_DAYS_AHEAD,
+    )
+    requested = get_ticket_requests().get("requests") or {}
+    detail_by_id = {
+        str(item.fixture_id): item
+        for item in ((body.fixtures if body else None) or [])
+        if str(item.fixture_id or "").strip()
+    }
+
+    # Only fixtures in the fortnight window that have not already been emailed.
+    candidates = [
+        row
+        for row in fixtures
+        if str(row.get("fixture_id") or "")
+        and str(row.get("fixture_id") or "") not in requested
+    ]
+    if detail_by_id:
+        candidates = [
+            row
+            for row in candidates
+            if str(row.get("fixture_id") or "") in detail_by_id
+        ]
+
+    enriched: list[dict[str, Any]] = []
+    for row in candidates:
+        fixture_id = str(row.get("fixture_id") or "")
+        detail = detail_by_id.get(fixture_id)
+        tickets = 1
+        parking = "No"
+        notes = ""
+        if detail is not None:
+            try:
+                tickets = max(0, int(detail.tickets))
+            except (TypeError, ValueError):
+                tickets = 1
+            parking = str(detail.parking or "No").strip() or "No"
+            notes = str(detail.notes or "").strip()
+        enriched.append(
+            {
+                **row,
+                "tickets": tickets,
+                "parking": parking,
+                "notes": notes,
+            }
+        )
+
+    if not enriched:
+        return {
+            "sent": False,
+            "reason": "No new LIVE fixtures in the next two weeks to request (already sent or none assigned)",
+            "period_label": period_label,
+            "fixture_count": 0,
+            "already_requested_count": len(
+                [row for row in fixtures if str(row.get("fixture_id") or "") in requested]
+            ),
+            "recipients": admin_team_emails(),
+            "fixtures": [],
+        }
+
+    additional = str((body.additional_requests if body else "") or "").strip()
+    result = send_ticket_request_email(
+        fixtures=enriched,
+        period_label=f"{period_label} · new requests only",
+        additional_requests=additional,
+    )
+    if result.get("sent"):
+        mark_rows = [
+            {
+                "fixture_id": row.get("fixture_id"),
+                "home": row.get("home"),
+                "away": row.get("away"),
+                "league": row.get("league"),
+                "date": row.get("date"),
+                "staff": row.get("staff"),
+                "watch_type": row.get("watch_type"),
+                "kickoff_utc": row.get("kickoff_utc"),
+                "tickets": row.get("tickets"),
+                "parking": row.get("parking"),
+                "notes": row.get("notes"),
+            }
+            for row in enriched
+        ]
+        mark_ticket_requests_sent(mark_rows)
+
+    result["period_label"] = period_label
+    result["fixtures"] = [
+        {
+            "fixture_id": row.get("fixture_id"),
+            "home": row.get("home"),
+            "away": row.get("away"),
+            "date": row.get("date"),
+            "staff": row.get("staff"),
+            "watch_type": row.get("watch_type"),
+            "tickets": row.get("tickets"),
+            "parking": row.get("parking"),
+            "notes": row.get("notes"),
+        }
+        for row in enriched
+    ]
+    result["recipients"] = admin_team_emails()
+    result["already_requested_count"] = len(
+        [row for row in fixtures if str(row.get("fixture_id") or "") in requested]
+    )
+    return result
+
+
+def send_fortnight_schedule_update() -> dict[str, Any]:
+    fixtures, period_label = _email_fixture_rows(watch_types={"LIVE", "VIDEO"}, days_ahead=13)
+    result = send_schedule_update_email(fixtures=fixtures, period_label=period_label)
+    result["period_label"] = period_label
+    result["fixtures"] = [
+        {
+            "home": row.get("home"),
+            "away": row.get("away"),
+            "date": row.get("date"),
+            "staff": row.get("staff"),
+            "watch_type": row.get("watch_type"),
+        }
+        for row in fixtures
+    ]
+    result["recipients"] = schedule_update_emails()
+    return result
+
+
+def _escape_html(value: str) -> str:
+    return (
+        str(value or "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def _reject_assignment_shell(*, title: str, body_html: str) -> str:
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{_escape_html(title)}</title>
+  <style>
+    :root {{ color-scheme: dark; }}
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: radial-gradient(1200px 600px at 20% -10%, #1e293b, #0b1220 55%);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #e2e8f0;
+    }}
+    .card {{
+      width: min(520px, 100%);
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 16px;
+      padding: 28px 26px;
+      box-shadow: 0 24px 60px rgba(0,0,0,.35);
+    }}
+    h1 {{ margin: 0 0 8px; font-size: 1.45rem; color: #f8fafc; }}
+    p {{ margin: 0 0 14px; line-height: 1.5; color: #94a3b8; font-size: .95rem; }}
+    .meta {{
+      margin: 0 0 18px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      background: #0f172a;
+      border: 1px solid #1f2937;
+      font-size: .9rem;
+      color: #cbd5e1;
+      line-height: 1.55;
+    }}
+    label {{ display:block; font-size:.82rem; color:#94a3b8; margin-bottom:6px; }}
+    textarea {{
+      width: 100%;
+      min-height: 110px;
+      box-sizing: border-box;
+      border-radius: 10px;
+      border: 1px solid #334155;
+      background: #0b1220;
+      color: #f8fafc;
+      padding: 12px;
+      font: inherit;
+      resize: vertical;
+    }}
+    button {{
+      margin-top: 14px;
+      width: 100%;
+      border: 0;
+      border-radius: 10px;
+      padding: 12px 16px;
+      background: #7f1d1d;
+      color: #fecaca;
+      font-weight: 700;
+      font-size: .95rem;
+      cursor: pointer;
+    }}
+    button:hover {{ background: #991b1b; }}
+    .ok {{ color: #86efac; }}
+    .warn {{ color: #fbbf24; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    {body_html}
+  </div>
+</body>
+</html>
+"""
+
+
+def _reject_assignment_context(token: str) -> dict[str, Any]:
+    parsed = parse_reject_token(token)
+    if not parsed:
+        return {"ok": False, "error": "This reject link is invalid or has expired."}
+
+    fixture_id = str(parsed.get("fixture_id") or "").strip()
+    staff = str(parsed.get("staff") or "").strip()
+    store = _load_assignments_store()
+    assignments: dict[str, Any] = store.get("assignments") or {}
+    assignment = dict(assignments.get(fixture_id) or {})
+    current_staff_names = _normalize_staff_names(assignment.get("staff"))
+    current_staff = _staff_label(current_staff_names)
+    parsed_id = _parse_fixture_id_parts(fixture_id) or {}
+
+    fixture = _resolve_fixture_for_email(fixture_id, assignment) if assignment else {
+        "fixture_id": fixture_id,
+        "home": {"name": assignment.get("home") or _title_from_slug(parsed_id.get("home") or "")},
+        "away": {"name": assignment.get("away") or _title_from_slug(parsed_id.get("away") or "")},
+        "league": assignment.get("league") or parsed_id.get("league") or "",
+        "date": assignment.get("date") or parsed_id.get("date") or "",
+        "kickoff_utc": assignment.get("kickoff_utc"),
+    }
+    home = fixture.get("home") if isinstance(fixture.get("home"), dict) else {"name": fixture.get("home")}
+    away = fixture.get("away") if isinstance(fixture.get("away"), dict) else {"name": fixture.get("away")}
+    home_name = str(
+        (home or {}).get("name")
+        or assignment.get("home")
+        or _title_from_slug(parsed_id.get("home") or "")
+        or "Home"
+    )
+    away_name = str(
+        (away or {}).get("name")
+        or assignment.get("away")
+        or _title_from_slug(parsed_id.get("away") or "")
+        or "Away"
+    )
+    league = str(fixture.get("league") or assignment.get("league") or parsed_id.get("league") or "")
+    watch_type = str(assignment.get("watch_type") or "LIVE")
+    kickoff_label = _format_kickoff(
+        str(fixture.get("kickoff_utc") or assignment.get("kickoff_utc") or "") or None,
+        str(fixture.get("date") or assignment.get("date") or parsed_id.get("date") or "") or None,
+    )
+
+    status = "active"
+    if not assignment or not current_staff_names:
+        status = "already_cleared"
+    elif staff.casefold() not in {name.casefold() for name in current_staff_names}:
+        status = "reassigned"
+
+    return {
+        "ok": True,
+        "token": token,
+        "fixture_id": fixture_id,
+        "staff": staff,
+        "current_staff": current_staff,
+        "status": status,
+        "home": home_name,
+        "away": away_name,
+        "league": league,
+        "watch_type": watch_type,
+        "kickoff_label": kickoff_label,
+        "assignment": assignment,
+    }
+
+
+def reject_assignment_page_html(*, token: str = "", message: str = "", error: str = "") -> str:
+    if error:
+        return _reject_assignment_shell(
+            title="Reject fixture",
+            body_html=f"<h1>Can't reject fixture</h1><p class='warn'>{_escape_html(error)}</p>",
+        )
+    if message:
+        return _reject_assignment_shell(
+            title="Fixture rejected",
+            body_html=f"<h1 class='ok'>You're off this game</h1><p>{_escape_html(message)}</p>",
+        )
+
+    ctx = _reject_assignment_context(token)
+    if not ctx.get("ok"):
+        return reject_assignment_page_html(error=str(ctx.get("error") or "Invalid link"))
+
+    staff = str(ctx["staff"])
+    meta = (
+        f"<strong>{_escape_html(ctx['home'])} vs {_escape_html(ctx['away'])}</strong><br>"
+        f"{_escape_html(ctx['league'] or 'Fixture')} · {_escape_html(str(ctx['watch_type']).upper())}<br>"
+        f"{_escape_html(ctx['kickoff_label'])}"
+    )
+
+    if ctx["status"] == "reassigned":
+        return _reject_assignment_shell(
+            title="Reassigned",
+            body_html=(
+                f"<h1>Assignment changed</h1>"
+                f"<p>This fixture is now assigned to "
+                f"<strong>{_escape_html(str(ctx['current_staff']))}</strong>, so your reject link no longer applies.</p>"
+                f"<div class='meta'>{meta}</div>"
+            ),
+        )
+
+    note = (
+        "Hi {_name}, confirm below to remove yourself from this fixture. "
+        "Please add a reason so Sam knows what's going on."
+    ).format(_name=_escape_html(staff.split(" ")[0]))
+    if ctx["status"] == "already_cleared":
+        note = (
+            f"Hi {_escape_html(staff.split(' ')[0])}, this fixture is already clear on the hub, "
+            "but you can still send Sam a reason so he knows you can't cover."
+        )
+
+    body = f"""
+    <h1>Reject this game?</h1>
+    <p>{note}</p>
+    <div class="meta">{meta}</div>
+    <form method="post" action="/fixture-planner/reject-assignment">
+      <input type="hidden" name="token" value="{_escape_html(token)}" />
+      <label for="reason">Reason (required)</label>
+      <textarea id="reason" name="reason" maxlength="800" required placeholder="e.g. clash with another game / travel issue"></textarea>
+      <button type="submit">Confirm — remove me from this game</button>
+    </form>
+    """
+    return _reject_assignment_shell(title="Reject fixture", body_html=body)
+
+
+def process_reject_assignment(*, token: str, reason: str = "") -> dict[str, Any]:
+    ctx = _reject_assignment_context(token)
+    if not ctx.get("ok"):
+        return {"ok": False, "error": str(ctx.get("error") or "Invalid link")}
+    if ctx["status"] == "reassigned":
+        return {
+            "ok": False,
+            "error": "This fixture has been reassigned to someone else.",
+            "status": ctx["status"],
+        }
+
+    reason_clean = str(reason or "").strip()
+    if not reason_clean:
+        return {"ok": False, "error": "Please provide a reason before rejecting this game."}
+
+    fixture_id = str(ctx["fixture_id"])
+    staff = str(ctx["staff"])
+    removed = False
+    if ctx["status"] == "active":
+        store = _load_assignments_store()
+        assignments: dict[str, Any] = store.setdefault("assignments", {})
+        current = dict(assignments.get(fixture_id) or {})
+        current_names = _normalize_staff_names(current.get("staff"))
+        if staff.casefold() not in {name.casefold() for name in current_names}:
+            return {
+                "ok": False,
+                "error": "This fixture has been reassigned to someone else.",
+                "status": "reassigned",
+            }
+        remaining = [name for name in current_names if name.casefold() != staff.casefold()]
+        if remaining:
+            current["staff"] = remaining
+            current["updated_at"] = datetime.now(UTC).isoformat()
+            assignments[fixture_id] = current
+            _save_assignments_store(store)
+            _mirror_assignment_to_live(fixture_id=fixture_id, assignment=current)
+            try:
+                from app.fixture_sheets_backup import sync_assignment_to_sheet
+
+                sync_assignment_to_sheet(fixture_id, current)
+            except Exception:  # noqa: BLE001
+                logger = __import__("logging").getLogger(__name__)
+                logger.exception("Sheets backup after reject failed for %s", fixture_id)
+        else:
+            assignments.pop(fixture_id, None)
+            store["updated_at"] = datetime.now(UTC).isoformat()
+            _save_assignments_store(store)
+            _mirror_assignment_to_live(fixture_id=fixture_id, assignment={})
+            try:
+                from app.fixture_sheets_backup import remove_assignment_from_sheet
+
+                remove_assignment_from_sheet(fixture_id)
+            except Exception:  # noqa: BLE001
+                logger = __import__("logging").getLogger(__name__)
+                logger.exception("Sheets backup remove after reject failed for %s", fixture_id)
+        removed = True
+
+    notify: dict[str, Any]
+    try:
+        notify = send_rejection_notify_email(
+            staff=staff,
+            home=str(ctx["home"]),
+            away=str(ctx["away"]),
+            league=str(ctx["league"]),
+            watch_type=str(ctx["watch_type"]),
+            kickoff_label=str(ctx["kickoff_label"]),
+            reason=reason_clean,
+            scout_email=scout_email_for(staff),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger = __import__("logging").getLogger(__name__)
+        logger.exception("Failed to send rejection notify for %s", fixture_id)
+        notify = {"sent": False, "reason": str(exc)}
+
+    if removed:
+        message = (
+            f"Thanks — you've been removed from {ctx['home']} vs {ctx['away']}. "
+            "Sam has been emailed."
+        )
+    else:
+        message = (
+            f"Thanks — Sam has been emailed that you can't cover "
+            f"{ctx['home']} vs {ctx['away']}."
+        )
+
+    return {
+        "ok": True,
+        "fixture_id": fixture_id,
+        "staff": staff,
+        "notify": notify,
+        "removed": removed,
+        "message": message,
+    }
+
+
 def register_fixture_planner_routes(app: FastAPI) -> None:
     @app.get("/fixture-planner", response_class=HTMLResponse)
     def fixture_planner_page() -> HTMLResponse:
         html_path = SCOUTING_DIR / "fixture-planner.html"
         if not html_path.exists():
             raise HTTPException(status_code=404, detail="Fixture planner UI not found.")
-        return HTMLResponse(html_path.read_text(encoding="utf-8"))
+        return HTMLResponse(
+            html_path.read_text(encoding="utf-8"),
+            headers={"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"},
+        )
+
+    @app.get("/played-fixtures", response_class=HTMLResponse)
+    def played_fixtures_page() -> HTMLResponse:
+        html_path = SCOUTING_DIR / "played-fixtures.html"
+        if not html_path.exists():
+            raise HTTPException(status_code=404, detail="Played fixtures UI not found.")
+        return HTMLResponse(
+            html_path.read_text(encoding="utf-8"),
+            headers={"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"},
+        )
+
+    @app.get("/fixture-planner/reject-assignment", response_class=HTMLResponse)
+    def fixture_planner_reject_assignment_get(
+        token: str = Query(""),
+    ) -> HTMLResponse:
+        return HTMLResponse(reject_assignment_page_html(token=token))
+
+    @app.post("/fixture-planner/reject-assignment", response_class=HTMLResponse)
+    def fixture_planner_reject_assignment_post(
+        token: str = Form(""),
+        reason: str = Form(""),
+    ) -> HTMLResponse:
+        result = process_reject_assignment(token=token, reason=reason)
+        if not result.get("ok"):
+            return HTMLResponse(
+                reject_assignment_page_html(error=str(result.get("error") or "Could not reject assignment")),
+                status_code=400,
+            )
+        return HTMLResponse(
+            reject_assignment_page_html(message=str(result.get("message") or "Assignment rejected."))
+        )
 
     @app.get("/api/fixture-planner/meta")
     def fixture_planner_meta_route() -> dict[str, Any]:
@@ -3057,8 +5801,15 @@ def register_fixture_planner_routes(app: FastAPI) -> None:
     @app.get("/api/fixture-planner/fixtures")
     def fixture_planner_fixtures_route(
         season: str = Query(DEFAULT_SEASON),
-    ) -> dict[str, Any]:
-        return build_fixture_planner_payload(season=season)
+        refresh: int = Query(0),
+    ) -> JSONResponse:
+        return JSONResponse(
+            content=build_fixture_planner_payload(
+                season=season,
+                force_refresh=bool(refresh),
+            ),
+            headers={"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"},
+        )
 
     @app.get("/api/fixture-planner/match-enrichment")
     def fixture_planner_match_enrichment_route(
@@ -3086,6 +5837,29 @@ def register_fixture_planner_routes(app: FastAPI) -> None:
     def fixture_planner_assignments_route() -> dict[str, Any]:
         return get_fixture_assignments()
 
+    @app.get("/api/fixture-planner/sheets-backup/status")
+    def fixture_planner_sheets_backup_status_route() -> dict[str, Any]:
+        from app.fixture_sheets_backup import get_sheets_backup_status
+
+        return get_sheets_backup_status()
+
+    @app.post("/api/fixture-planner/sheets-backup/rebuild")
+    def fixture_planner_sheets_backup_rebuild_route() -> dict[str, Any]:
+        from app.fixture_sheets_backup import rebuild_sheet_from_assignments, sheets_backup_enabled
+
+        if not sheets_backup_enabled():
+            raise HTTPException(
+                status_code=400,
+                detail="Sheets backup is disabled. Set FIXTURE_SHEETS_ENABLED=1 and configure credentials.",
+            )
+        result = rebuild_sheet_from_assignments()
+        if not result.get("ok"):
+            raise HTTPException(
+                status_code=502,
+                detail=result.get("last_error") or result.get("reason") or "Sheets rebuild failed",
+            )
+        return result
+
     @app.put("/api/fixture-planner/assignments")
     def fixture_planner_assignments_bulk_route(
         body: FixtureAssignmentsBulkUpdate,
@@ -3095,8 +5869,28 @@ def register_fixture_planner_routes(app: FastAPI) -> None:
     @app.patch("/api/fixture-planner/assignment")
     def fixture_planner_assignment_route(
         body: FixtureAssignmentUpdate,
+        mirror: str = Query("1"),
     ) -> dict[str, Any]:
-        return upsert_fixture_assignment(body)
+        allow_mirror = str(mirror or "1").strip().lower() not in {"0", "false", "no", "off"}
+        return upsert_fixture_assignment(
+            body,
+            mirror_to_live=allow_mirror,
+            send_email=allow_mirror,
+        )
+
+    @app.get("/api/fixture-planner/email/ticket-request")
+    def fixture_planner_ticket_request_preview_route() -> dict[str, Any]:
+        return preview_admin_ticket_request()
+
+    @app.post("/api/fixture-planner/email/ticket-request")
+    def fixture_planner_ticket_request_route(
+        body: TicketRequestBody = Body(default_factory=TicketRequestBody),
+    ) -> dict[str, Any]:
+        return send_admin_ticket_request(body)
+
+    @app.post("/api/fixture-planner/email/schedule-update")
+    def fixture_planner_schedule_update_route() -> dict[str, Any]:
+        return send_fortnight_schedule_update()
 
     @app.get("/api/fixture-planner/scouting-reports")
     def fixture_planner_scouting_reports_route(
@@ -3109,6 +5903,70 @@ def register_fixture_planner_routes(app: FastAPI) -> None:
         body: ScoutingReportToggle,
     ) -> dict[str, Any]:
         return toggle_scouting_report(body)
+
+    @app.get("/api/fixture-planner/team-names")
+    def fixture_planner_team_names_route(
+        season: str | None = Query(None),
+    ) -> dict[str, Any]:
+        seasons = [season] if season in ALLOWED_FIXTURE_SEASONS else None
+        entries = list_known_team_entries(seasons=seasons)
+        return {
+            "teams": entries,
+            "names": [str(row.get("name") or "") for row in entries if row.get("name")],
+            "count": len(entries),
+            "countries": sorted(TEAM_CATALOG_COUNTRIES),
+            "source": "fotmob",
+        }
+
+    @app.get("/api/fixture-planner/manual-fixtures")
+    def fixture_planner_manual_fixtures_list_route(
+        season: str | None = Query(None),
+    ) -> dict[str, Any]:
+        if season is not None and season not in ALLOWED_FIXTURE_SEASONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Season must be one of: {', '.join(ALLOWED_FIXTURE_SEASONS)}",
+            )
+        rows = list_manual_fixtures(season=season)
+        return {"fixtures": rows, "updated_at": _load_manual_fixtures_store().get("updated_at")}
+
+    @app.post("/api/fixture-planner/manual-fixtures")
+    def fixture_planner_manual_fixtures_create_route(
+        body: ManualFixtureCreate,
+    ) -> dict[str, Any]:
+        return create_manual_fixture(body)
+
+    @app.patch("/api/fixture-planner/manual-fixtures/{fixture_id:path}")
+    def fixture_planner_manual_fixtures_update_route(
+        fixture_id: str,
+        body: ManualFixtureUpdate,
+    ) -> dict[str, Any]:
+        return update_manual_fixture(fixture_id, body)
+
+    @app.delete("/api/fixture-planner/manual-fixtures/{fixture_id:path}")
+    def fixture_planner_manual_fixtures_delete_route(
+        fixture_id: str,
+    ) -> dict[str, Any]:
+        return delete_manual_fixture(fixture_id)
+
+    @app.post("/api/fixture-planner/manual-fixtures/{fixture_id:path}/team-sheet")
+    async def fixture_planner_manual_team_sheet_upload_route(
+        fixture_id: str,
+        file: UploadFile = File(...),
+    ) -> dict[str, Any]:
+        data = await file.read()
+        return attach_manual_team_sheet(
+            fixture_id=fixture_id,
+            filename=file.filename or "team-sheet",
+            content_type=file.content_type or "application/octet-stream",
+            data=data,
+        )
+
+    @app.get("/api/fixture-planner/manual-fixtures/{fixture_id:path}/team-sheet")
+    def fixture_planner_manual_team_sheet_download_route(
+        fixture_id: str,
+    ) -> FileResponse:
+        return get_manual_team_sheet_file(fixture_id)
 
     @app.get("/api/fixture-planner/scout-summary")
     def fixture_planner_scout_summary_route(

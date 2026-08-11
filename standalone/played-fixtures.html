@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-  <title>Fixture Planner</title>
+  <title>Played Fixtures</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
@@ -16,21 +16,21 @@
     <header class="fp-toolbar">
       <div class="fp-toolbar__left">
         <p class="fp-toolbar__eyebrow">Recruitment · <a href="/">← All apps</a></p>
-        <h1 class="fp-toolbar__title">Fixture Planner</h1>
-        <p class="fp-toolbar__subtitle" id="pageSubtitle">Upcoming fixtures only · assign scouts as Live or Video</p>
+        <h1 class="fp-toolbar__title">Played Fixtures</h1>
+        <p class="fp-toolbar__subtitle" id="pageSubtitle">Games that have taken place · LIVE coverage carries over · pick up VIDEO, players &amp; reports</p>
       </div>
       <div class="fp-toolbar__right">
         <nav class="fp-toolbar__nav" aria-label="Related pages">
-          <a href="/played-fixtures" class="fp-btn fp-btn--ghost">Played fixtures</a>
+          <a href="/fixture-planner" class="fp-btn fp-btn--ghost">Fixture planner</a>
           <a href="/scout-summary" class="fp-btn fp-btn--ghost">Scout summary</a>
           <a href="/scout-summary-report" class="fp-btn fp-btn--ghost">Generate report</a>
           <a href="/scouts-calendar" class="fp-btn fp-btn--ghost">Scouts calendar</a>
           <a href="/scouting-address" class="fp-btn fp-btn--ghost">Scouting address</a>
         </nav>
-        <button type="button" class="fp-btn fp-btn--ghost" id="ticketRequestBtn" title="Email admin team with upcoming LIVE fixtures that need tickets">Submit upcoming fixtures to admin</button>
-        <button type="button" class="fp-btn fp-btn--ghost" id="scheduleUpdateBtn" title="Email coaching + recruitment with the next fortnight of assigned fixtures">Send fixture schedule update</button>
-        <button type="button" class="fp-btn fp-btn--primary" id="createManualFixtureBtn">Add upcoming game</button>
+        <button type="button" class="fp-btn fp-btn--ghost hidden" id="ticketRequestBtn" hidden>Submit upcoming fixtures to admin</button>
+        <button type="button" class="fp-btn fp-btn--ghost hidden" id="scheduleUpdateBtn" hidden>Send fixture schedule update</button>
         <button type="button" class="fp-btn fp-btn--ghost" id="refreshBtn">Refresh</button>
+        <button type="button" class="fp-btn fp-btn--primary" id="createManualFixtureBtn">Create manual fixture</button>
       </div>
     </header>
 
@@ -67,7 +67,7 @@
       </div>
       <div class="fp-controls__group hidden" id="hidePastControl">
         <label class="fp-controls__checkbox">
-          <input type="checkbox" id="hidePastToggle" checked disabled />
+          <input type="checkbox" id="hidePastToggle" />
           Upcoming only
         </label>
       </div>
@@ -90,8 +90,8 @@
     <div class="fp-assign-modal__panel" role="dialog" aria-modal="true" aria-labelledby="assignModalTitle">
       <header class="fp-assign-modal__header">
         <div>
-          <p class="fp-assign-modal__eyebrow">Assign staff</p>
-          <h2 class="fp-assign-modal__title" id="assignModalTitle">Select players to watch</h2>
+          <p class="fp-assign-modal__eyebrow">Coverage &amp; players</p>
+          <h2 class="fp-assign-modal__title" id="assignModalTitle">Select players to watch / report</h2>
           <p class="fp-assign-modal__meta" id="assignModalMeta"></p>
         </div>
         <button type="button" class="fp-assign-modal__close" data-assign-close aria-label="Close">×</button>
@@ -105,7 +105,7 @@
       </div>
       <footer class="fp-assign-modal__footer">
         <button type="button" class="fp-btn fp-btn--ghost" data-assign-close>Cancel</button>
-        <button type="button" class="fp-btn fp-btn--primary" id="assignConfirmBtn">Assign &amp; email</button>
+        <button type="button" class="fp-btn fp-btn--primary" id="assignConfirmBtn">Save coverage</button>
       </footer>
     </div>
   </div>
@@ -161,8 +161,8 @@
       <header class="fp-assign-modal__header">
         <div>
           <p class="fp-assign-modal__eyebrow" id="manualFixtureEyebrow">Outside the pulled schedule</p>
-          <h2 class="fp-assign-modal__title" id="manualFixtureTitle">Add upcoming game</h2>
-          <p class="fp-assign-modal__meta" id="manualFixtureMeta">Add a future game that isn’t in the league pulls, then assign coverage as usual.</p>
+          <h2 class="fp-assign-modal__title" id="manualFixtureTitle">Create manual fixture</h2>
+          <p class="fp-assign-modal__meta" id="manualFixtureMeta">For games you attended that aren’t in League One / Two / National League pulls.</p>
         </div>
         <button type="button" class="fp-assign-modal__close" data-manual-close aria-label="Close">×</button>
       </header>
@@ -211,14 +211,14 @@
           </div>
 
           <label class="fp-manual-field fp-manual-field--full">
-            <span id="manualNotesLabel">Notes</span>
-            <textarea id="manualNotes" name="notes" rows="4" placeholder="Anything useful for the scout / admin…"></textarea>
+            <span id="manualNotesLabel">Game notes</span>
+            <textarea id="manualNotes" name="notes" rows="4" placeholder="General notes about the game, style, standout moments…"></textarea>
           </label>
 
           <div class="fp-manual-players">
             <div class="fp-manual-players__head">
               <div>
-                <h3 id="manualPlayersHeading">Players to watch</h3>
+                <h3 id="manualPlayersHeading">Players watched</h3>
                 <p id="manualPlayersHelp">Click a player name field and type 2+ letters — pick from the list, then open their page with ↗.</p>
               </div>
               <button type="button" class="fp-btn fp-btn--ghost" id="manualAddPlayerBtn">Add player</button>
@@ -235,11 +235,14 @@
       </div>
       <footer class="fp-assign-modal__footer">
         <button type="button" class="fp-btn fp-btn--ghost" data-manual-close>Cancel</button>
-        <button type="button" class="fp-btn fp-btn--primary" id="manualFixtureSaveBtn">Save game</button>
+        <button type="button" class="fp-btn fp-btn--primary" id="manualFixtureSaveBtn">Save fixture</button>
       </footer>
     </div>
   </div>
 
+  <script>
+    window.FIXTURE_PLANNER_MODE = "played";
+  </script>
   <script defer src="/static/fixture-planner.js?v=46"></script>
 </body>
 </html>

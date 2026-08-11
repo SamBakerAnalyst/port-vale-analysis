@@ -122,6 +122,26 @@ do
   fi
 done
 
+# Fixture planner JS must handle staff-as-list. GitHub deploys of old main
+# used to restore assignment.staff.split and crash the page.
+curl -s --max-time 15 "$BASE_URL/static/fixture-planner.js" -o /tmp/pv-smoke-fp.js || true
+if grep -Fq 'function staffNames' /tmp/pv-smoke-fp.js; then
+  pass "fixture-planner.js has staffNames"
+else
+  bad "fixture-planner.js missing staffNames — staff list crash will return"
+fi
+if grep -Fq 'assignment.staff.split' /tmp/pv-smoke-fp.js; then
+  bad "fixture-planner.js still calls assignment.staff.split — red banner will show"
+else
+  pass "fixture-planner.js does not call assignment.staff.split"
+fi
+fp_page="$(curl -s -b "$COOKIE_JAR" --max-time 20 "$BASE_URL/fixture-planner" || true)"
+if echo "$fp_page" | grep -q 'fp-comp-scope'; then
+  pass "fixture planner has Leagues/Cups tabs"
+else
+  bad "fixture planner HTML missing Leagues/Cups tabs — stale page"
+fi
+
 # Key tool pages must open (not 404/502) after a sidebar restore.
 for path in \
   "/set-piece-pre-match" \
