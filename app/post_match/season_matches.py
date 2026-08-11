@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.post_match.config import POST_MATCH_COMPETITIONS, PORT_VALE_SQUAD_ID
 from app.post_match.impect_client import extract_rows, impect_get, v5_path
 from app.post_match.report import _squad_details
 from app.post_match.squad_badges import enrich_squad
@@ -60,6 +61,11 @@ def _score_label(
 def build_season_matches(
     iteration_id: int,
     focus_squad_id: int,
+    *,
+    include_upcoming: bool = True,
+    competition_label: str | None = None,
+    competition_short: str | None = None,
+    season_label: str | None = None,
 ) -> list[dict[str, Any]]:
     raw = impect_get(v5_path(f"/iterations/{iteration_id}/matches"))
     rows = extract_rows(raw["data"])
@@ -67,7 +73,8 @@ def build_season_matches(
 
     matches: list[dict[str, Any]] = []
     for row in rows:
-        if row.get("available") is False:
+        available = row.get("available") is not False
+        if not available and not include_upcoming:
             continue
         match_id = int(row.get("id") or 0)
         if not match_id:
@@ -87,9 +94,14 @@ def build_season_matches(
         matches.append(
             {
                 "matchId": match_id,
+                "iterationId": int(iteration_id),
                 "scheduledDate": row.get("scheduledDate"),
                 "matchDay": _match_day_index(row),
                 "result": row.get("result"),
+                "available": available,
+                "competitionLabel": competition_label,
+                "competitionShort": competition_short,
+                "seasonLabel": season_label,
                 "isHome": is_home,
                 "home": enrich_squad(
                     {
@@ -127,3 +139,63 @@ def build_season_matches(
 
     matches.sort(key=lambda item: item.get("scheduledDate") or "")
     return matches
+
+
+def build_combined_season_matches(
+    focus_squad_id: int = PORT_VALE_SQUAD_ID,
+    *,
+    competitions: list[dict[str, Any]] | None = None,
+    include_upcoming: bool = True,
+) -> dict[str, Any]:
+    comps = competitions if competitions is not None else POST_MATCH_COMPETITIONS
+    matches: list[dict[str, Any]] = []
+    errors: list[str] = []
+    loaded: list[dict[str, Any]] = []
+
+    for comp in comps:
+        iteration_id = int(comp.get("iterationId") or 0)
+        if not iteration_id:
+            continue
+        label = str(comp.get("label") or f"Iteration {iteration_id}")
+        short = str(comp.get("shortLabel") or label)
+        season = str(comp.get("season") or "")
+        try:
+            batch = build_season_matches(
+                iteration_id,
+                focus_squad_id,
+                include_upcoming=include_upcoming,
+                competition_label=label,
+                competition_short=short,
+                season_label=season or None,
+            )
+            matches.extend(batch)
+            loaded.append(
+                {
+                    "iterationId": iteration_id,
+                    "label": label,
+                    "shortLabel": short,
+                    "season": season,
+                    "matchCount": len(batch),
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 — keep other comps if one fails
+            errors.append(f"{label}: {exc}")
+
+    matches.sort(key=lambda item: item.get("scheduledDate") or "")
+
+    # Prefer latest available report; otherwise next upcoming kick-off.
+    default_match_id = None
+    for match in reversed(matches):
+        if match.get("available"):
+            default_match_id = match["matchId"]
+            break
+    if default_match_id is None and matches:
+        default_match_id = matches[0]["matchId"]
+
+    return {
+        "focusSquadId": focus_squad_id,
+        "competitions": loaded,
+        "matches": matches,
+        "defaultMatchId": default_match_id,
+        "errors": errors,
+    }
