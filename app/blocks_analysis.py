@@ -44,6 +44,7 @@ from app.post_match.field_tilt import (
     build_field_tilt,
 )
 from app.post_match.offensive_touches_zones import build_offensive_touches_zones
+from app.post_match.shots import _shot_outcome
 from app.post_match.phase_analysis import (
     PHASE_ORDER,
     _fetch_match_events,
@@ -68,7 +69,7 @@ BLOCK_COUNT = 9
 GAMES_PER_BLOCK = 5
 KPI_SHOT_XG = 82
 MATCH_KPI_CACHE_TTL = 6 * 3600
-MATCH_STATS_CACHE_VERSION = 7
+MATCH_STATS_CACHE_VERSION = 8
 PHASE_SHORT_LABELS = {
     "IN_POSSESSION": "In possession",
     "OUT_OF_POSSESSION": "Out of possession",
@@ -977,6 +978,64 @@ def _compact_players(rows: list[dict[str, Any]], count_key: str, limit: int = 6)
     return compact
 
 
+def _compact_shot_points(events: list[dict[str, Any]], xg_by_event: dict[int, float], squad_id: int) -> list[dict[str, Any]]:
+    points: list[dict[str, Any]] = []
+    for event in events:
+        if str(event.get("actionType") or "") != "SHOT":
+            continue
+        if int(event.get("squadId") or 0) != squad_id:
+            continue
+        start = event.get("start") or {}
+        coords = start.get("adjCoordinates") or start.get("coordinates") or {}
+        try:
+            impect_x = float(coords.get("x"))
+            impect_y = float(coords.get("y"))
+        except (TypeError, ValueError):
+            continue
+        event_id = int(event.get("id") or 0)
+        outcome = _shot_outcome(event)
+        points.append(
+            {
+                "x": round(impect_x, 2),
+                "y": round(impect_y, 2),
+                "xg": round(float(xg_by_event.get(event_id) or 0), 3),
+                "goal": outcome == "scored",
+                "on": outcome == "saved",
+            }
+        )
+    return points
+
+
+def _compact_shot_maps(
+    match_id: int,
+    squad_id: int,
+    opp_squad_id: int,
+) -> dict[str, Any] | None:
+    if not squad_id or not opp_squad_id:
+        return None
+    events = _fetch_match_events(match_id)
+    ekpi_payload = impect_get(v5_path(f"/matches/{match_id}/event-kpis"))["data"]
+    ekpi_rows = ekpi_payload.get("data") if isinstance(ekpi_payload, dict) else ekpi_payload
+    xg_by_event: dict[int, float] = defaultdict(float)
+    if isinstance(ekpi_rows, list):
+        for row in ekpi_rows:
+            if int(row.get("kpiId") or -1) != KPI_SHOT_XG:
+                continue
+            event_id = int(row.get("eventId") or 0)
+            if event_id:
+                xg_by_event[event_id] += float(row.get("value") or 0)
+    vale = _compact_shot_points(events, xg_by_event, squad_id)
+    opp = _compact_shot_points(events, xg_by_event, opp_squad_id)
+    return {
+        "for": vale,
+        "against": opp,
+        "forXg": round(sum(row["xg"] for row in vale), 2),
+        "againstXg": round(sum(row["xg"] for row in opp), 2),
+        "forGoals": sum(1 for row in vale if row["goal"]),
+        "againstGoals": sum(1 for row in opp if row["goal"]),
+    }
+
+
 def _compact_in_behind(data: dict[str, Any] | None) -> dict[str, Any] | None:
     if not data:
         return None
@@ -1063,6 +1122,7 @@ def _fetch_match_stats(
     stats["fieldTilt"] = None
     stats["phases"] = None
     stats["inBehind"] = None
+    stats["shotMaps"] = None
     if home_squad_id and away_squad_id:
         try:
             stats["fieldTilt"] = _compact_field_tilt(
@@ -1095,6 +1155,11 @@ def _fetch_match_stats(
             )
         except Exception:  # noqa: BLE001
             stats["inBehind"] = None
+        try:
+            opp_id = away_squad_id if int(squad_id) == int(home_squad_id) else home_squad_id
+            stats["shotMaps"] = _compact_shot_maps(match_id, squad_id, opp_id)
+        except Exception:  # noqa: BLE001
+            stats["shotMaps"] = None
     return stats
 
 
@@ -1121,6 +1186,7 @@ def _empty_kpi_stats() -> dict[str, Any]:
         "fieldTilt": None,
         "phases": None,
         "inBehind": None,
+        "shotMaps": None,
     }
 
 

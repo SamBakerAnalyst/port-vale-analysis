@@ -1009,6 +1009,96 @@ function playerStandouts(players) {
   });
 }
 
+function shotToSvg(x, y, plot) {
+  const clampedX = Math.min(plot.goalX, Math.max(plot.minX, Number(x) || plot.minX));
+  const clampedY = Math.min(plot.halfW, Math.max(-plot.halfW, Number(y) || 0));
+  return {
+    cx: plot.pad + ((clampedY + plot.halfW) / (plot.halfW * 2)) * plot.plotW,
+    cy: plot.pad + ((plot.goalX - clampedX) / (plot.goalX - plot.minX)) * plot.plotH,
+  };
+}
+
+function shotPitchHtml(title, points, totalXg, goals, side) {
+  const W = 360;
+  const H = 210;
+  const pad = 8;
+  const plot = {
+    pad,
+    plotW: W - pad * 2,
+    plotH: H - pad * 2,
+    goalX: 52.5,
+    minX: 17.5,
+    halfW: 34,
+  };
+  const pitchX = pad;
+  const pitchY = pad;
+  const drawW = plot.plotW;
+  const drawH = plot.plotH;
+  const penDepth = (16.5 / 35) * drawH;
+  const penWidth = (40.32 / 68) * drawW;
+  const sixDepth = (5.5 / 35) * drawH;
+  const sixWidth = (18.32 / 68) * drawW;
+  const penX = pitchX + (drawW - penWidth) / 2;
+  const sixX = pitchX + (drawW - sixWidth) / 2;
+  const cx = pitchX + drawW / 2;
+  const heatFill = side === "against" ? "rgba(180,35,24,.22)" : "rgba(245,197,24,.26)";
+  const rows = points || [];
+  const heats = rows.map((pt) => {
+    const { cx: hx, cy: hy } = shotToSvg(pt.x, pt.y, plot);
+    const r = 11 + Math.min(1.2, Number(pt.xg) || 0) * 36;
+    return `<circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="${r.toFixed(1)}" fill="${heatFill}" />`;
+  }).join("");
+  const dots = rows.map((pt) => {
+    const { cx: dx, cy: dy } = shotToSvg(pt.x, pt.y, plot);
+    const r = 3.1 + Math.sqrt(Math.max(0, Number(pt.xg) || 0)) * 6.2;
+    const fill = pt.goal ? "#22c55e" : pt.on ? "#f5c518" : "#fff";
+    const ring = Number(pt.xg) >= 0.2
+      ? `<circle cx="${dx.toFixed(1)}" cy="${dy.toFixed(1)}" r="${(r + 1.6).toFixed(1)}" fill="none" stroke="#f5c518" stroke-width="1.4" opacity=".85" />`
+      : "";
+    return `${ring}<circle cx="${dx.toFixed(1)}" cy="${dy.toFixed(1)}" r="${r.toFixed(1)}" fill="${fill}" stroke="#111" stroke-width=".85" />`;
+  }).join("");
+  const count = rows.length;
+  const xgText = fmtNum(totalXg, 2);
+  const goalText = `${fmtNum(goals)} goal${Number(goals) === 1 ? "" : "s"}`;
+  return `
+    <article class="ba-shotmap ba-shotmap--${side}">
+      <header class="ba-shotmap__head">
+        <h4>${escapeHtml(title)}</h4>
+        <p class="ba-shotmap__meta"><b>${escapeHtml(fmtNum(count))}</b> shots · <b>${escapeHtml(xgText)}</b> xG · ${escapeHtml(goalText)}</p>
+      </header>
+      <div class="ba-shotmap__pitch">
+        <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${escapeHtml(title)}">
+          <rect x="${pitchX}" y="${pitchY}" width="${drawW}" height="${drawH}" fill="#2f8a3a" />
+          <rect x="${pitchX}" y="${pitchY}" width="${drawW}" height="${drawH}" fill="none" stroke="#fff" stroke-width="1.2" />
+          <rect x="${penX}" y="${pitchY}" width="${penWidth}" height="${penDepth}" fill="none" stroke="#fff" stroke-width=".95" opacity=".92" />
+          <rect x="${sixX}" y="${pitchY}" width="${sixWidth}" height="${sixDepth}" fill="none" stroke="#fff" stroke-width=".8" opacity=".85" />
+          <path d="M ${cx - 22} ${pitchY + penDepth} A 22 ${((9.15 / 35) * drawH).toFixed(1)} 0 0 1 ${cx + 22} ${pitchY + penDepth}" fill="none" stroke="#fff" stroke-width=".8" opacity=".85" />
+          <circle cx="${cx}" cy="${pitchY + (11 / 35) * drawH}" r="1.6" fill="#fff" />
+          <g class="ba-shotmap__heat">${heats}</g>
+          <g class="ba-shotmap__dots">${dots}</g>
+        </svg>
+      </div>
+      <p class="ba-shotmap__legend">
+        <span><i class="ba-shotmap__swatch is-goal"></i>Goal</span>
+        <span><i class="ba-shotmap__swatch is-on"></i>On target</span>
+        <span><i class="ba-shotmap__swatch is-off"></i>Off</span>
+        <span>Size = xG</span>
+      </p>
+    </article>
+  `;
+}
+
+function shotMapsHtml(maps, fixture) {
+  if (!maps) return "";
+  const opp = shortOpponent(fixture?.opponentName || "Opp");
+  return `
+    <div class="ba-shots">
+      ${shotPitchHtml("Shots for", maps.for, maps.forXg, maps.forGoals, "for")}
+      ${shotPitchHtml(`Shots against · ${opp}`, maps.against, maps.againstXg, maps.againstGoals, "against")}
+    </div>
+  `;
+}
+
 function standoutsHtml(players) {
   const cards = playerStandouts(players).map(({ spec, player }) => {
     if (!player) {
@@ -1100,6 +1190,7 @@ function dashHtml(block) {
         ${sheetMasthead({ ...mast, title: "Players", page: 2 })}
         <div class="ba-sheet__body">
           ${single && players.length ? standoutsHtml(players) : ""}
+          ${single ? shotMapsHtml(stats.shotMaps, fixture) : ""}
           <div class="ba-players__grid ${single ? "ba-players__grid--six" : ""}">${boards}</div>
         </div>
         <footer class="ba-sheet__bar"><span>Port Vale Analysis</span><span>Live after full time</span></footer>
