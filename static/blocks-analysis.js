@@ -239,6 +239,69 @@ function kpiCard(label, value, hint, tone, bench) {
   `;
 }
 
+function unitValueText(metricKey, row) {
+  if (metricKey === "duelRate") {
+    return row?.duelRate == null ? "—" : `${fmtNum(row.duelRate, 1)}%`;
+  }
+  return fmtNum(row?.defendersBypassed);
+}
+
+function unitSubText(metricKey, row) {
+  if (metricKey === "duelRate" && row?.duelTotal) {
+    return `${fmtNum(row.duelWon)} / ${fmtNum(row.duelTotal)}`;
+  }
+  return "";
+}
+
+function unitBenchText(metricKey, unit, single, played) {
+  const spec = state.payload?.benchmarks?.units?.[unit]?.[metricKey];
+  if (!spec) return { team: "—", top7: "—" };
+  const games = spec.rate ? 1 : (single ? 1 : Math.max(Number(played) || 0, 5));
+  const team = spec.team == null ? null : spec.team * games;
+  const top7 = spec.top7 == null ? null : spec.top7 * games;
+  return {
+    team: formatBenchValue(team, spec),
+    top7: formatBenchValue(top7, spec),
+  };
+}
+
+function unitCard(title, metricKey, hint, stats, single) {
+  const units = stats.units || {};
+  const rows = ["DEF", "MID", "ATT"].map((unit) => {
+    const row = units[unit] || {};
+    const bench = unitBenchText(metricKey, unit, single, stats.played);
+    const extra = unitSubText(metricKey, row);
+    return `
+      <tr>
+        <th scope="row">${unit}</th>
+        <td>
+          <span class="ba-unit__val">${escapeHtml(unitValueText(metricKey, row))}</span>
+          ${extra ? `<span class="ba-unit__sub">${escapeHtml(extra)}</span>` : ""}
+        </td>
+        <td>${escapeHtml(bench.team)}</td>
+        <td>${escapeHtml(bench.top7)}</td>
+      </tr>
+    `;
+  }).join("");
+  return `
+    <article class="ba-kpi ba-kpi--units">
+      <p class="ba-kpi__label">${escapeHtml(title)}</p>
+      <table class="ba-unit">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Value</th>
+            <th>Team avg</th>
+            <th>Top 7 req</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p class="ba-kpi__hint">${escapeHtml(hint)}</p>
+    </article>
+  `;
+}
+
 function dashHtml(block) {
   const { stats, label, single } = selectedStats(block);
   const filterId = state.filters[block.id] || "all";
@@ -267,12 +330,16 @@ function dashHtml(block) {
     kpiCard("Goals", fmtNum(stats.goals), single ? "For" : "Scored in block"),
     kpiCard("Goals against", fmtNum(stats.goalsAgainst), single ? "Against" : "Conceded in block", "", benchHtml("goalsAgainst", stats, single)),
     kpiCard("Clean sheets", fmtNum(stats.cleanSheets), csHint, kpiTone("cleanSheets", stats, target, single, scheduled), benchHtml("cleanSheets", stats, single)),
-    kpiCard("Defenders bypassed", fmtNum(stats.defendersBypassed), "Impect packing", "", benchHtml("defendersBypassed", stats, single)),
     kpiCard("Offensive interventions", fmtNum(stats.offensiveInterventions), "Ball wins by action", "", benchHtml("offensiveInterventions", stats, single)),
-    kpiCard("Duel rate", stats.duelRate == null ? "—" : `${fmtNum(stats.duelRate, 1)}%`, stats.duelTotal ? `${fmtNum(stats.duelWon)} / ${fmtNum(stats.duelTotal)}` : "Won / attempted", "", benchHtml("duelRate", stats, single)),
     kpiCard("Ball wins vs defenders", fmtNum(stats.ballWinsFromOppDefenders), "Removed opposition defenders", "", benchHtml("ballWinsFromOppDefenders", stats, single)),
     kpiCard("Team xG", fmtNum(stats.xg, 2), "Shot xG", "", benchHtml("xg", stats, single)),
   ].join("");
+  const unitCards = `
+    <div class="ba-unit-pair">
+      ${unitCard("Defenders bypassed", "defendersBypassed", "Impect packing by unit", stats, single)}
+      ${unitCard("Duel rate", "duelRate", "Won / attempted by unit", stats, single)}
+    </div>
+  `;
 
   return `
     <section class="ba-dash">
@@ -283,7 +350,7 @@ function dashHtml(block) {
         </div>
         <div class="ba-filter" role="group" aria-label="Filter block ${block.id} to one game">${pills}</div>
       </div>
-      <div class="ba-kpis">${cards}</div>
+      <div class="ba-kpis">${cards}${unitCards}</div>
     </section>
   `;
 }

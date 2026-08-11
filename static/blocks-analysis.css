@@ -646,6 +646,74 @@ a:hover { text-decoration: underline; }
 .ba-kpi--cold .ba-kpi__value { color: #fca5a5; }
 .ba-kpi--warn .ba-kpi__value { color: #fcd34d; }
 
+.ba-unit-pair {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .7rem;
+}
+
+.ba-kpi--units {
+  min-height: 0;
+}
+
+.ba-unit {
+  width: 100%;
+  margin-top: .45rem;
+  border-collapse: collapse;
+}
+
+.ba-unit th,
+.ba-unit td {
+  padding: .28rem .15rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.ba-unit thead th {
+  color: var(--text-muted);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+
+.ba-unit tbody th {
+  color: #e8edf4;
+  font-family: var(--display);
+  font-size: .95rem;
+  font-weight: 800;
+  letter-spacing: .04em;
+  width: 3.2rem;
+  padding-top: .42rem;
+}
+
+.ba-unit tbody td {
+  color: #e8edf4;
+  font-family: var(--display);
+  font-size: .95rem;
+  font-weight: 700;
+}
+
+.ba-unit__val {
+  display: block;
+  font-size: 1.2rem;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: .02em;
+}
+
+.ba-unit__sub {
+  display: block;
+  margin-top: .12rem;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
 .ba-footer {
   margin-top: 1.4rem;
   color: var(--text-muted);
@@ -658,6 +726,7 @@ body.is-exporting .ba-aim__cs-print { display: inline-block; }
 
 @media (max-width: 900px) {
   .ba-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ba-unit-pair { grid-template-columns: 1fr; }
   .ba-fix { width: calc(50% - 10px); min-width: 160px; }
   .ba-poster__kicker { font-size: 1.05rem; }
 }

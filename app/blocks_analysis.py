@@ -27,7 +27,12 @@ from app.post_match.duels import (
     OFFENSIVE_INTERVENTION_ACTION_KPIS,
 )
 from app.post_match.impect_client import extract_rows, impect_get, v5_path
-from app.post_match.report import KPI_BYPASSED_DEFENDERS_RAW, _flatten_squad_kpis
+from app.post_match.report import (
+    KPI_BYPASSED_DEFENDERS_RAW,
+    _consolidate_player_match_rows,
+    _flatten_player_kpis,
+    _flatten_squad_kpis,
+)
 from app.post_match.season_matches import build_season_matches
 from app.scouting import SCOUTING_DIR
 
@@ -42,8 +47,25 @@ BLOCK_COUNT = 9
 GAMES_PER_BLOCK = 5
 KPI_SHOT_XG = 82
 MATCH_KPI_CACHE_TTL = 6 * 3600
+MATCH_STATS_CACHE_VERSION = 2
 PAYLOAD_CACHE_TTL = 45
 BENCHMARK_CACHE_TTL = 600
+UNIT_TOP7_TTL = 24 * 3600
+UNIT_TOP7_SAMPLE_MATCHES = 24
+UNITS: tuple[str, ...] = ("DEF", "MID", "ATT")
+POSITION_TO_UNIT: dict[str, str | None] = {
+    "GOALKEEPER": None,
+    "CENTRAL_DEFENDER": "DEF",
+    "LEFT_WINGBACK_DEFENDER": "DEF",
+    "RIGHT_WINGBACK_DEFENDER": "DEF",
+    "DEFENSE_MIDFIELD": "MID",
+    "CENTRAL_MIDFIELD": "MID",
+    "ATTACKING_MIDFIELD": "ATT",
+    "LEFT_WINGER": "ATT",
+    "RIGHT_WINGER": "ATT",
+    "CENTER_FORWARD": "ATT",
+    "SECOND_STRIKER": "ATT",
+}
 LEAGUE_LABEL = "League Two"
 LEAGUE_SHORT = "LG2"
 
@@ -51,6 +73,7 @@ DATA_DIR = BLOCKS_ANALYSIS_DATA_DIR
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 TARGETS_PATH = DATA_DIR / "targets.json"
 KPI_CACHE_PATH = DATA_DIR / "match-kpis.json"
+UNIT_TOP7_PATH = DATA_DIR / "unit-top7.json"
 
 _store_lock = threading.Lock()
 _payload_cache: dict[str, tuple[float, dict[str, Any]]] = {}
@@ -230,6 +253,88 @@ def _save_kpi_disk_cache(cache: dict[str, Any]) -> None:
         temp_path.replace(KPI_CACHE_PATH)
 
 
+def _load_unit_top7_disk() -> dict[str, Any]:
+    if not UNIT_TOP7_PATH.exists():
+        return {}
+    try:
+        payload = json.loads(UNIT_TOP7_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _save_unit_top7_disk(payload: dict[str, Any]) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    temp_path = UNIT_TOP7_PATH.with_suffix(".json.tmp")
+    with _store_lock:
+        temp_path.write_text(json.dumps(payload), encoding="utf-8")
+        temp_path.replace(UNIT_TOP7_PATH)
+
+
+def _unit_for_position(position: Any) -> str | None:
+    text = str(position or "").strip().upper().replace("-", "_").replace(" ", "_")
+    if text in POSITION_TO_UNIT:
+        return POSITION_TO_UNIT[text]
+    if not text or "GOAL" in text:
+        return None
+    if "WINGER" in text or "FORWARD" in text or "STRIKER" in text:
+        return "ATT"
+    if "DEFEND" in text or "WINGBACK" in text or "FULL_BACK" in text or "FULLBACK" in text:
+        return "DEF"
+    if "MID" in text:
+        return "MID"
+    return None
+
+
+def _empty_unit_row() -> dict[str, Any]:
+    return {
+        "defendersBypassed": None,
+        "duelWon": None,
+        "duelTotal": None,
+        "duelRate": None,
+    }
+
+
+def _empty_units() -> dict[str, dict[str, Any]]:
+    return {unit: _empty_unit_row() for unit in UNITS}
+
+
+def _finalize_unit_row(row: dict[str, float]) -> dict[str, Any]:
+    won = float(row.get("duelWon") or 0)
+    total = float(row.get("duelTotal") or 0)
+    bypassed = float(row.get("defendersBypassed") or 0)
+    return {
+        "defendersBypassed": int(round(bypassed)) if bypassed or total or won else None,
+        "duelWon": int(round(won)) if total or won else None,
+        "duelTotal": int(round(total)) if total or won else None,
+        "duelRate": round((won / total) * 100, 1) if total > 0 else None,
+    }
+
+
+def _units_from_players(players: list[dict[str, Any]], squad_id: int) -> dict[str, dict[str, Any]]:
+    buckets: dict[str, dict[str, float]] = {
+        unit: {"defendersBypassed": 0.0, "duelWon": 0.0, "duelTotal": 0.0}
+        for unit in UNITS
+    }
+    seen = False
+    for row in _consolidate_player_match_rows(
+        [item for item in players if int(item.get("squadId") or 0) == int(squad_id)]
+    ):
+        unit = _unit_for_position(row.get("position"))
+        if unit not in buckets:
+            continue
+        kpis = row.get("kpis") or {}
+        won = _kpi_value(kpis, KPI_WON_GROUND_DUELS) + _kpi_value(kpis, KPI_WON_AERIAL_DUELS)
+        lost = _kpi_value(kpis, KPI_LOST_GROUND_DUELS) + _kpi_value(kpis, KPI_LOST_AERIAL_DUELS)
+        buckets[unit]["defendersBypassed"] += _kpi_value(kpis, KPI_BYPASSED_DEFENDERS_RAW)
+        buckets[unit]["duelWon"] += won
+        buckets[unit]["duelTotal"] += won + lost
+        seen = True
+    if not seen:
+        return _empty_units()
+    return {unit: _finalize_unit_row(values) for unit, values in buckets.items()}
+
+
 def _kpi_value(kpis: dict[int, float], kpi_id: int) -> float:
     raw = kpis.get(kpi_id)
     if raw is None:
@@ -276,6 +381,7 @@ def _extract_match_kpis(kpis: dict[int, float]) -> dict[str, Any]:
             round(_kpi_value(kpis, KPI_BALL_WIN_REMOVED_OPPONENTS_DEFENDERS))
         ),
         "xg": round(_kpi_value(kpis, KPI_SHOT_XG), 2),
+        "units": _empty_units(),
     }
 
 
@@ -456,6 +562,20 @@ def _fetch_squad_kpis(match_id: int) -> dict[int, float]:
     return lookup.get(PORT_VALE_SQUAD_ID) or {}
 
 
+def _fetch_match_stats(match_id: int, squad_id: int = PORT_VALE_SQUAD_ID) -> dict[str, Any]:
+    kpis = _fetch_squad_kpis(match_id)
+    stats = _extract_match_kpis(kpis) if kpis else _empty_kpi_stats()
+    try:
+        players = _flatten_player_kpis(
+            impect_get(v5_path(f"/matches/{match_id}/player-kpis"))["data"],
+            {},
+        )
+        stats["units"] = _units_from_players(players, squad_id)
+    except Exception:  # noqa: BLE001
+        stats["units"] = _empty_units()
+    return stats
+
+
 def _score_fingerprint(match: dict[str, Any]) -> str:
     home = (match.get("home") or {}).get("score")
     away = (match.get("away") or {}).get("score")
@@ -472,6 +592,7 @@ def _empty_kpi_stats() -> dict[str, Any]:
         "duelRate": None,
         "ballWinsFromOppDefenders": None,
         "xg": None,
+        "units": _empty_units(),
     }
 
 
@@ -495,9 +616,11 @@ def _load_match_kpis(
         cached = disk.get(str(match_id))
         if (
             isinstance(cached, dict)
+            and cached.get("v") == MATCH_STATS_CACHE_VERSION
             and cached.get("fingerprint") == fingerprint
             and now - float(cached.get("fetchedAt") or 0) < MATCH_KPI_CACHE_TTL
             and cached.get("stats")
+            and isinstance((cached.get("stats") or {}).get("units"), dict)
         ):
             result[match_id] = cached["stats"]
             continue
@@ -507,19 +630,19 @@ def _load_match_kpis(
         workers = min(8, len(to_fetch))
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = {
-                pool.submit(_fetch_squad_kpis, int(match["matchId"])): match
+                pool.submit(_fetch_match_stats, int(match["matchId"])): match
                 for match in to_fetch
             }
             for future in as_completed(futures):
                 match = futures[future]
                 match_id = int(match["matchId"])
                 try:
-                    kpis = future.result()
-                    stats = _extract_match_kpis(kpis) if kpis else _empty_kpi_stats()
+                    stats = future.result()
                 except Exception:  # noqa: BLE001 — keep the poster live if one match fails
                     stats = _empty_kpi_stats()
                 result[match_id] = stats
                 disk[str(match_id)] = {
+                    "v": MATCH_STATS_CACHE_VERSION,
                     "fingerprint": _score_fingerprint(match),
                     "fetchedAt": now,
                     "stats": stats,
@@ -527,6 +650,242 @@ def _load_match_kpis(
         _save_kpi_disk_cache(disk)
 
     return result
+
+
+def _iteration_recent_completed_matches(
+    iteration_id: int,
+    limit: int = UNIT_TOP7_SAMPLE_MATCHES,
+) -> list[dict[str, Any]]:
+    rows = extract_rows(impect_get(v5_path(f"/iterations/{iteration_id}/matches"))["data"])
+    completed: list[dict[str, Any]] = []
+    for row in rows:
+        goals = row.get("goals") or {}
+        home_ft = (goals.get("home") or {}).get("fullTime")
+        away_ft = (goals.get("away") or {}).get("fullTime")
+        if home_ft is None or away_ft is None:
+            continue
+        match_id = int(row.get("id") or 0)
+        home_id = int(row.get("homeSquadId") or 0)
+        away_id = int(row.get("awaySquadId") or 0)
+        if not match_id or home_id <= 0 or away_id <= 0:
+            continue
+        completed.append(
+            {
+                "matchId": match_id,
+                "scheduledDate": str(row.get("scheduledDate") or ""),
+                "homeSquadId": home_id,
+                "awaySquadId": away_id,
+            }
+        )
+    completed.sort(key=lambda item: item["scheduledDate"], reverse=True)
+    return completed[:limit]
+
+
+def _fetch_match_player_units(
+    match_id: int,
+    squad_ids: list[int],
+) -> dict[int, dict[str, dict[str, Any]]]:
+    players = _flatten_player_kpis(
+        impect_get(v5_path(f"/matches/{match_id}/player-kpis"))["data"],
+        {},
+    )
+    return {int(squad_id): _units_from_players(players, int(squad_id)) for squad_id in squad_ids}
+
+
+def _empty_unit_benchmarks() -> dict[str, dict[str, Any]]:
+    return {
+        unit: {
+            "defendersBypassed": {
+                "team": None,
+                "top7": None,
+                "higherBetter": True,
+                "rate": False,
+                "digits": 1,
+            },
+            "duelRate": {
+                "team": None,
+                "top7": None,
+                "higherBetter": True,
+                "rate": True,
+                "digits": 1,
+            },
+        }
+        for unit in UNITS
+    }
+
+
+def _unit_averages_from_stats_list(
+    stats_list: list[dict[str, Any]],
+) -> dict[str, dict[str, float | None]]:
+    bypass: dict[str, list[float]] = {unit: [] for unit in UNITS}
+    won: dict[str, float] = {unit: 0.0 for unit in UNITS}
+    total: dict[str, float] = {unit: 0.0 for unit in UNITS}
+    for stats in stats_list:
+        units = (stats or {}).get("units") or {}
+        for unit in UNITS:
+            row = units.get(unit) or {}
+            if row.get("defendersBypassed") is not None:
+                bypass[unit].append(float(row["defendersBypassed"]))
+            duel_total = row.get("duelTotal")
+            if duel_total:
+                won[unit] += float(row.get("duelWon") or 0)
+                total[unit] += float(duel_total)
+    out: dict[str, dict[str, float | None]] = {}
+    for unit in UNITS:
+        out[unit] = {
+            "defendersBypassed": _round_or_none(
+                (sum(bypass[unit]) / len(bypass[unit])) if bypass[unit] else None,
+                1,
+            ),
+            "duelRate": _round_or_none(
+                (100.0 * won[unit] / total[unit]) if total[unit] > 0 else None,
+                1,
+            ),
+        }
+    return out
+
+
+def _build_unit_top7_from_sample(
+    iteration_id: int,
+) -> tuple[dict[str, dict[str, float | None]], dict[str, dict[str, float | None]]]:
+    matches = _iteration_recent_completed_matches(iteration_id)
+    acc: dict[int, dict[str, dict[str, Any]]] = {}
+
+    def cell(squad_id: int, unit: str) -> dict[str, Any]:
+        squad = acc.setdefault(squad_id, {})
+        return squad.setdefault(unit, {"bypass": [], "won": 0.0, "total": 0.0})
+
+    if matches:
+        workers = min(8, len(matches))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {
+                pool.submit(
+                    _fetch_match_player_units,
+                    int(match["matchId"]),
+                    [int(match["homeSquadId"]), int(match["awaySquadId"])],
+                ): match
+                for match in matches
+            }
+            for future in as_completed(futures):
+                match = futures[future]
+                try:
+                    by_squad = future.result()
+                except Exception:  # noqa: BLE001
+                    continue
+                for squad_id in (int(match["homeSquadId"]), int(match["awaySquadId"])):
+                    units = by_squad.get(squad_id) or {}
+                    for unit in UNITS:
+                        row = units.get(unit) or {}
+                        bucket = cell(squad_id, unit)
+                        if row.get("defendersBypassed") is not None:
+                            bucket["bypass"].append(float(row["defendersBypassed"]))
+                        if row.get("duelTotal"):
+                            bucket["won"] += float(row.get("duelWon") or 0)
+                            bucket["total"] += float(row["duelTotal"])
+
+    per_squad: dict[int, dict[str, dict[str, float | None]]] = {}
+    for squad_id, units in acc.items():
+        per_squad[squad_id] = {}
+        for unit in UNITS:
+            bucket = units.get(unit) or {}
+            bypass_vals = bucket.get("bypass") or []
+            duel_total = float(bucket.get("total") or 0)
+            duel_won = float(bucket.get("won") or 0)
+            per_squad[squad_id][unit] = {
+                "defendersBypassed": (
+                    sum(bypass_vals) / len(bypass_vals) if bypass_vals else None
+                ),
+                "duelRate": (100.0 * duel_won / duel_total) if duel_total > 0 else None,
+            }
+
+    top7: dict[str, dict[str, float | None]] = {}
+    for unit in UNITS:
+        bypass_col = {
+            squad_id: row[unit]["defendersBypassed"]
+            for squad_id, row in per_squad.items()
+            if row.get(unit, {}).get("defendersBypassed") is not None
+        }
+        duel_col = {
+            squad_id: row[unit]["duelRate"]
+            for squad_id, row in per_squad.items()
+            if row.get(unit, {}).get("duelRate") is not None
+        }
+        top7[unit] = {
+            "defendersBypassed": _round_or_none(
+                _top7_average(bypass_col, higher_is_better=True), 1
+            ),
+            "duelRate": _round_or_none(_top7_average(duel_col, higher_is_better=True), 1),
+        }
+
+    pv_raw = per_squad.get(PORT_VALE_SQUAD_ID) or {}
+    pv_avg = {
+        unit: {
+            "defendersBypassed": _round_or_none(
+                (pv_raw.get(unit) or {}).get("defendersBypassed"), 1
+            ),
+            "duelRate": _round_or_none((pv_raw.get(unit) or {}).get("duelRate"), 1),
+        }
+        for unit in UNITS
+    }
+    return top7, pv_avg
+
+
+def build_unit_benchmarks(
+    kpi_by_match: dict[int, dict[str, Any]],
+    *,
+    force_refresh: bool = False,
+) -> dict[str, dict[str, Any]]:
+    payload = _empty_unit_benchmarks()
+    pv_now = _unit_averages_from_stats_list(list(kpi_by_match.values()))
+    disk = {} if force_refresh else _load_unit_top7_disk()
+    now = time.time()
+    top7 = disk.get("top7") if isinstance(disk.get("top7"), dict) else None
+    pv_prev = disk.get("teamPrevious") if isinstance(disk.get("teamPrevious"), dict) else None
+    fresh = (
+        not force_refresh
+        and disk.get("iterationId") == PREVIOUS_LEAGUE_TWO_ITERATION_ID
+        and now - float(disk.get("fetchedAt") or 0) < UNIT_TOP7_TTL
+        and isinstance(top7, dict)
+        and top7
+    )
+    if not fresh:
+        try:
+            top7, pv_prev = _build_unit_top7_from_sample(PREVIOUS_LEAGUE_TWO_ITERATION_ID)
+            _save_unit_top7_disk(
+                {
+                    "fetchedAt": now,
+                    "iterationId": PREVIOUS_LEAGUE_TWO_ITERATION_ID,
+                    "top7": top7,
+                    "teamPrevious": pv_prev,
+                }
+            )
+        except Exception:  # noqa: BLE001 — keep the dashboard live without unit top-7
+            top7 = top7 or {}
+            pv_prev = pv_prev or {}
+
+    for unit in UNITS:
+        team_row = pv_now.get(unit) or {}
+        prev_row = (pv_prev or {}).get(unit) or {}
+        top_row = (top7 or {}).get(unit) or {}
+        team_bypass = team_row.get("defendersBypassed")
+        team_duel = team_row.get("duelRate")
+        if team_bypass is None:
+            team_bypass = prev_row.get("defendersBypassed")
+            if team_bypass is not None:
+                payload[unit]["defendersBypassed"]["teamFrom"] = "previous"
+        if team_duel is None:
+            team_duel = prev_row.get("duelRate")
+            if team_duel is not None:
+                payload[unit]["duelRate"]["teamFrom"] = "previous"
+        payload[unit]["defendersBypassed"]["team"] = team_bypass
+        payload[unit]["defendersBypassed"]["top7"] = top_row.get("defendersBypassed")
+        payload[unit]["duelRate"]["team"] = team_duel
+        payload[unit]["duelRate"]["top7"] = top_row.get("duelRate")
+        if top_row.get("defendersBypassed") is not None:
+            payload[unit]["defendersBypassed"]["top7From"] = "previous"
+        if top_row.get("duelRate") is not None:
+            payload[unit]["duelRate"]["top7From"] = "previous"
+    return payload
 
 
 def _parse_kickoff(value: str | None) -> datetime | None:
@@ -713,7 +1072,53 @@ def _aggregate_stats(fixtures: list[dict[str, Any]]) -> dict[str, Any]:
             else None
         ),
         "xg": round(xg, 2) if xg is not None else None,
+        "units": _aggregate_units(played),
     }
+
+
+def _aggregate_units(played: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    if not played:
+        return _empty_units()
+    totals = {
+        unit: {
+            "defendersBypassed": 0.0,
+            "duelWon": 0.0,
+            "duelTotal": 0.0,
+            "seenBypass": False,
+            "seenDuel": False,
+        }
+        for unit in UNITS
+    }
+    for row in played:
+        units = (row.get("stats") or {}).get("units") or {}
+        for unit in UNITS:
+            data = units.get(unit) or {}
+            if data.get("defendersBypassed") is not None:
+                totals[unit]["defendersBypassed"] += float(data["defendersBypassed"])
+                totals[unit]["seenBypass"] = True
+            if data.get("duelWon") is not None or data.get("duelTotal") is not None:
+                totals[unit]["duelWon"] += float(data.get("duelWon") or 0)
+                totals[unit]["duelTotal"] += float(data.get("duelTotal") or 0)
+                totals[unit]["seenDuel"] = True
+    result: dict[str, dict[str, Any]] = {}
+    for unit in UNITS:
+        bucket = totals[unit]
+        if not bucket["seenBypass"] and not bucket["seenDuel"]:
+            result[unit] = _empty_unit_row()
+            continue
+        won = float(bucket["duelWon"])
+        total = float(bucket["duelTotal"])
+        result[unit] = {
+            "defendersBypassed": (
+                int(round(bucket["defendersBypassed"])) if bucket["seenBypass"] else None
+            ),
+            "duelWon": int(round(won)) if bucket["seenDuel"] else None,
+            "duelTotal": int(round(total)) if bucket["seenDuel"] else None,
+            "duelRate": (
+                round((won / total) * 100, 1) if bucket["seenDuel"] and total > 0 else None
+            ),
+        }
+    return result
 
 
 def _target_payload(block_id: int, saved: dict[str, Any]) -> dict[str, Any]:
@@ -758,6 +1163,12 @@ def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, A
     )
     kpi_by_match = _load_match_kpis(matches, force_refresh=force_refresh)
     benchmarks = build_block_benchmarks(BLOCKS_ITERATION_ID, force_refresh=force_refresh)
+    try:
+        benchmarks["units"] = build_unit_benchmarks(
+            kpi_by_match, force_refresh=force_refresh
+        )
+    except Exception:  # noqa: BLE001
+        benchmarks["units"] = _empty_unit_benchmarks()
     saved = _load_targets()
     chunks = _chunk_matches(matches)
 
