@@ -426,17 +426,36 @@ function playerBoardHtml(spec, players) {
   `;
 }
 
-function playersHtml(block, label, single, fixture) {
-  const players = playersForView(block, single, fixture);
-  const boards = PLAYER_BOARDS.map((spec) => playerBoardHtml(spec, players)).join("");
-  return `
-    <section class="ba-players">
-      <div class="ba-players__head">
-        <h3 class="ba-dash__title">Players Report</h3>
-        <p class="ba-dash__sub">Top 5 · ${escapeHtml(label)} · outfield players</p>
+function sheetHeader({ title, kicker, label, page, single, fixture }) {
+  let match = `<p class="ba-sheet__meta">${escapeHtml(label)}</p>`;
+  if (single && fixture) {
+    const badge = fixture.badgeUrl
+      ? `<img class="ba-sheet__badge" src="${escapeHtml(fixture.badgeUrl)}" alt="" crossorigin="anonymous" />`
+      : "";
+    const ha = fixture.isHome == null ? "" : (fixture.isHome ? "Home" : "Away");
+    const score = fixture.played ? scoreLine(fixture) : (fixture.dateLabel || "Not played");
+    match = `
+      <div class="ba-sheet__match">
+        ${badge}
+        <div>
+          <p class="ba-sheet__opp">${escapeHtml(fixture.opponentName || "TBC")}</p>
+          <p class="ba-sheet__meta">${escapeHtml([ha, score].filter(Boolean).join(" · "))}</p>
+        </div>
       </div>
-      <div class="ba-players__grid">${boards}</div>
-    </section>
+    `;
+  }
+  return `
+    <header class="ba-sheet__head">
+      <div class="ba-sheet__brand">
+        <img class="ba-sheet__crest" src="/standalone/port-vale-badge.png?v=2" alt="Port Vale" />
+        <div>
+          <p class="ba-sheet__kicker">${escapeHtml(kicker)}</p>
+          <h3 class="ba-sheet__title">${escapeHtml(title)}</h3>
+        </div>
+      </div>
+      ${match}
+      <p class="ba-sheet__page">${page} / 2</p>
+    </header>
   `;
 }
 
@@ -474,22 +493,31 @@ function dashHtml(block) {
   ].join("");
   const unitCards = `
     <div class="ba-unit-pair">
-      ${unitCard("Defenders bypassed", "defendersBypassed", "Impect packing by unit · WB split 50/50 DEF and ATT", stats, single)}
-      ${unitCard("Duel rate", "duelRate", "Won / attempted by unit · WB split 50/50 DEF and ATT", stats, single)}
+      ${unitCard("Defenders bypassed", "defendersBypassed", "Impect packing · WB 50/50 DEF and ATT", stats, single)}
+      ${unitCard("Duel rate", "duelRate", "Won / attempted · WB 50/50 DEF and ATT", stats, single)}
     </div>
   `;
+  const payload = state.payload || {};
+  const kicker = `Block ${block.id} of 9 · ${payload.competition || "League Two"} ${payload.season || ""}`.trim();
+  const pageTitle = single ? "Match Report" : "Block Report";
+  const header = { kicker, label, single, fixture };
+  const boards = PLAYER_BOARDS.map((spec) => playerBoardHtml(spec, playersForView(block, single, fixture))).join("");
 
   return `
-    <section class="ba-dash">
-      <div class="ba-dash__head">
-        <div>
-          <h3 class="ba-dash__title">Block Analysis</h3>
-          <p class="ba-dash__sub">${escapeHtml(label)} · live after full time</p>
-        </div>
+    <section class="ba-report">
+      <div class="ba-report__chrome ba-export-hide">
         <div class="ba-filter" role="group" aria-label="Filter block ${block.id} to one game">${pills}</div>
+        <button type="button" class="ba-btn" data-print-report="${block.id}">Print 2-page report</button>
       </div>
-      <div class="ba-kpis">${cards}${unitCards}</div>
-      ${playersHtml(block, label, single, fixture)}
+      <article class="ba-sheet" data-sheet="1">
+        ${sheetHeader({ ...header, title: pageTitle, page: 1 })}
+        <div class="ba-kpis">${cards}${unitCards}</div>
+      </article>
+      <article class="ba-sheet" data-sheet="2">
+        ${sheetHeader({ ...header, title: "Players Report", page: 2 })}
+        <div class="ba-players__grid">${boards}</div>
+        <p class="ba-sheet__foot">Top 5 outfield · live after full time</p>
+      </article>
     </section>
   `;
 }
@@ -609,6 +637,22 @@ function slug(value) {
     .replace(/^-|-$/g, "");
 }
 
+function printReport(blockId) {
+  const block = document.getElementById(`block-${blockId}`);
+  if (!block) return;
+  document.querySelectorAll(".ba-block.is-print-target").forEach((el) => el.classList.remove("is-print-target"));
+  block.classList.add("is-print-target");
+  document.body.classList.add("is-printing");
+  const tidy = () => {
+    document.body.classList.remove("is-printing");
+    block.classList.remove("is-print-target");
+    window.removeEventListener("afterprint", tidy);
+  };
+  window.addEventListener("afterprint", tidy);
+  window.print();
+  setTimeout(tidy, 1500);
+}
+
 async function exportPoster(blockId) {
   await loadScript("https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js");
   if (typeof html2canvas !== "function") throw new Error("PNG export failed to load");
@@ -674,6 +718,11 @@ els.blocksRoot.addEventListener("click", async (event) => {
     const blockId = Number(filterBtn.dataset.block);
     state.filters[blockId] = filterBtn.dataset.filter;
     render();
+    return;
+  }
+  const printBtn = event.target.closest("[data-print-report]");
+  if (printBtn) {
+    printReport(Number(printBtn.dataset.printReport));
     return;
   }
   const exportBtn = event.target.closest("[data-export]");
