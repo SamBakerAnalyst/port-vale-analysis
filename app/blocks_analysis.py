@@ -16,12 +16,8 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from app.paths import BLOCKS_ANALYSIS_DATA_DIR
+from app.post_match.ball_progression import _top7_average
 from app.post_match.config import PORT_VALE_SQUAD_ID
-
-# League Two 26/27. Keep these here — post-match DEFAULT_ITERATION_ID may still
-# point at a previous season on some deploys.
-BLOCKS_ITERATION_ID = 2120
-BLOCKS_SEASON_LABEL = "26/27"
 from app.post_match.duels import (
     KPI_BALL_WIN_REMOVED_OPPONENTS_DEFENDERS,
     KPI_LOST_AERIAL_DUELS,
@@ -30,10 +26,16 @@ from app.post_match.duels import (
     KPI_WON_GROUND_DUELS,
     OFFENSIVE_INTERVENTION_ACTION_KPIS,
 )
-from app.post_match.impect_client import impect_get, v5_path
+from app.post_match.impect_client import extract_rows, impect_get, v5_path
 from app.post_match.report import KPI_BYPASSED_DEFENDERS_RAW, _flatten_squad_kpis
 from app.post_match.season_matches import build_season_matches
 from app.scouting import SCOUTING_DIR
+
+# League Two 26/27. Keep these here — post-match DEFAULT_ITERATION_ID may still
+# point at a previous season on some deploys.
+BLOCKS_ITERATION_ID = 2120
+BLOCKS_SEASON_LABEL = "26/27"
+PREVIOUS_LEAGUE_TWO_ITERATION_ID = 1464  # 25/26 — top-7 requirement until 26/27 has games
 
 LONDON = ZoneInfo("Europe/London")
 BLOCK_COUNT = 9
@@ -41,6 +43,7 @@ GAMES_PER_BLOCK = 5
 KPI_SHOT_XG = 82
 MATCH_KPI_CACHE_TTL = 6 * 3600
 PAYLOAD_CACHE_TTL = 45
+BENCHMARK_CACHE_TTL = 600
 LEAGUE_LABEL = "League Two"
 LEAGUE_SHORT = "LG2"
 
@@ -51,6 +54,7 @@ KPI_CACHE_PATH = DATA_DIR / "match-kpis.json"
 
 _store_lock = threading.Lock()
 _payload_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+_benchmark_cache: tuple[float, dict[str, Any]] | None = None
 
 MEDAL_DEFAULTS: dict[str, dict[str, Any]] = {
     "gold": {
@@ -236,6 +240,24 @@ def _kpi_value(kpis: dict[int, float], kpi_id: int) -> float:
         return 0.0
 
 
+def _extract_rate_kpis(kpis: dict[int, float]) -> dict[str, Any]:
+    """Per-match rates from iteration squad-kpis — keep decimals for averages."""
+    won = _kpi_value(kpis, KPI_WON_GROUND_DUELS) + _kpi_value(kpis, KPI_WON_AERIAL_DUELS)
+    lost = _kpi_value(kpis, KPI_LOST_GROUND_DUELS) + _kpi_value(kpis, KPI_LOST_AERIAL_DUELS)
+    duel_total = won + lost
+    duel_rate = (won / duel_total) * 100 if duel_total > 0 else None
+    offensive = sum(_kpi_value(kpis, kpi_id) for kpi_id in OFFENSIVE_INTERVENTION_ACTION_KPIS)
+    return {
+        "defendersBypassed": _kpi_value(kpis, KPI_BYPASSED_DEFENDERS_RAW),
+        "offensiveInterventions": offensive,
+        "duelRate": duel_rate,
+        "ballWinsFromOppDefenders": _kpi_value(
+            kpis, KPI_BALL_WIN_REMOVED_OPPONENTS_DEFENDERS
+        ),
+        "xg": _kpi_value(kpis, KPI_SHOT_XG),
+    }
+
+
 def _extract_match_kpis(kpis: dict[int, float]) -> dict[str, Any]:
     won = _kpi_value(kpis, KPI_WON_GROUND_DUELS) + _kpi_value(kpis, KPI_WON_AERIAL_DUELS)
     lost = _kpi_value(kpis, KPI_LOST_GROUND_DUELS) + _kpi_value(kpis, KPI_LOST_AERIAL_DUELS)
@@ -255,6 +277,177 @@ def _extract_match_kpis(kpis: dict[int, float]) -> dict[str, Any]:
         ),
         "xg": round(_kpi_value(kpis, KPI_SHOT_XG), 2),
     }
+
+
+def _round_or_none(value: float | None, digits: int) -> float | None:
+    if value is None:
+        return None
+    return round(float(value), digits)
+
+
+def _benchmark_entry(
+    per_squad: dict[int, float],
+    *,
+    higher_better: bool,
+    digits: int,
+    rate: bool = False,
+) -> dict[str, Any]:
+    team = per_squad.get(PORT_VALE_SQUAD_ID)
+    top7 = _top7_average(per_squad, higher_is_better=higher_better)
+    return {
+        "team": _round_or_none(team, digits),
+        "top7": _round_or_none(top7, digits),
+        "higherBetter": higher_better,
+        "rate": rate,
+        "digits": digits,
+    }
+
+
+def _iteration_all_squad_kpis(iteration_id: int) -> dict[int, dict[int, float]]:
+    rows = extract_rows(impect_get(v5_path(f"/iterations/{iteration_id}/squad-kpis"))["data"])
+    lookup: dict[int, dict[int, float]] = {}
+    for row in rows:
+        squad_id = int(row.get("squadId") or 0)
+        if not squad_id:
+            continue
+        parsed: dict[int, float] = {}
+        for item in row.get("kpis") or []:
+            if not isinstance(item, dict):
+                continue
+            raw_id = item.get("kpiId")
+            value = item.get("value")
+            if raw_id is None or value is None:
+                continue
+            try:
+                parsed[int(raw_id)] = float(value)
+            except (TypeError, ValueError):
+                continue
+        if parsed:
+            lookup[squad_id] = parsed
+    return lookup
+
+
+def _league_defensive_rates(iteration_id: int) -> dict[int, dict[str, float]]:
+    rows = extract_rows(impect_get(v5_path(f"/iterations/{iteration_id}/matches"))["data"])
+    table: dict[int, dict[str, int]] = {}
+
+    def bucket(squad_id: int) -> dict[str, int]:
+        return table.setdefault(squad_id, {"played": 0, "ga": 0, "cs": 0})
+
+    for row in rows:
+        home_id = int(row.get("homeSquadId") or 0)
+        away_id = int(row.get("awaySquadId") or 0)
+        goals = row.get("goals") or {}
+        home_ft = (goals.get("home") or {}).get("fullTime")
+        away_ft = (goals.get("away") or {}).get("fullTime")
+        if home_id <= 0 or away_id <= 0 or home_ft is None or away_ft is None:
+            continue
+        home_goals = int(home_ft)
+        away_goals = int(away_ft)
+        bucket(home_id)["played"] += 1
+        bucket(away_id)["played"] += 1
+        bucket(home_id)["ga"] += away_goals
+        bucket(away_id)["ga"] += home_goals
+        if away_goals == 0:
+            bucket(home_id)["cs"] += 1
+        if home_goals == 0:
+            bucket(away_id)["cs"] += 1
+
+    rates: dict[int, dict[str, float]] = {}
+    for squad_id, row in table.items():
+        played = int(row["played"])
+        if played <= 0:
+            continue
+        rates[squad_id] = {
+            "goalsAgainst": row["ga"] / played,
+            "cleanSheets": row["cs"] / played,
+        }
+    return rates
+
+
+def _empty_benchmarks() -> dict[str, Any]:
+    return {
+        "goalsAgainst": _benchmark_entry({}, higher_better=False, digits=1),
+        "cleanSheets": _benchmark_entry({}, higher_better=True, digits=1),
+        "defendersBypassed": _benchmark_entry({}, higher_better=True, digits=1),
+        "offensiveInterventions": _benchmark_entry({}, higher_better=True, digits=1),
+        "duelRate": _benchmark_entry({}, higher_better=True, digits=1, rate=True),
+        "ballWinsFromOppDefenders": _benchmark_entry({}, higher_better=True, digits=1),
+        "xg": _benchmark_entry({}, higher_better=True, digits=2),
+    }
+
+
+def _benchmarks_for_iteration(iteration_id: int) -> dict[str, Any]:
+    try:
+        kpi_lookup = _iteration_all_squad_kpis(iteration_id)
+        defence = _league_defensive_rates(iteration_id)
+    except Exception:  # noqa: BLE001
+        return _empty_benchmarks()
+
+    extracted: dict[int, dict[str, Any]] = {
+        squad_id: _extract_rate_kpis(kpis) for squad_id, kpis in kpi_lookup.items()
+    }
+
+    def column(key: str) -> dict[int, float]:
+        values: dict[int, float] = {}
+        for squad_id, row in extracted.items():
+            value = row.get(key)
+            if value is None:
+                continue
+            values[squad_id] = float(value)
+        return values
+
+    return {
+        "goalsAgainst": _benchmark_entry(
+            {sid: row["goalsAgainst"] for sid, row in defence.items()},
+            higher_better=False,
+            digits=1,
+        ),
+        "cleanSheets": _benchmark_entry(
+            {sid: row["cleanSheets"] for sid, row in defence.items()},
+            higher_better=True,
+            digits=1,
+        ),
+        "defendersBypassed": _benchmark_entry(
+            column("defendersBypassed"), higher_better=True, digits=1
+        ),
+        "offensiveInterventions": _benchmark_entry(
+            column("offensiveInterventions"), higher_better=True, digits=1
+        ),
+        "duelRate": _benchmark_entry(
+            column("duelRate"), higher_better=True, digits=1, rate=True
+        ),
+        "ballWinsFromOppDefenders": _benchmark_entry(
+            column("ballWinsFromOppDefenders"), higher_better=True, digits=1
+        ),
+        "xg": _benchmark_entry(column("xg"), higher_better=True, digits=2),
+    }
+
+
+def build_block_benchmarks(
+    iteration_id: int = BLOCKS_ITERATION_ID,
+    *,
+    force_refresh: bool = False,
+) -> dict[str, Any]:
+    global _benchmark_cache
+    now = time.time()
+    if (
+        not force_refresh
+        and _benchmark_cache
+        and now - _benchmark_cache[0] < BENCHMARK_CACHE_TTL
+    ):
+        return _benchmark_cache[1]
+
+    payload = _benchmarks_for_iteration(iteration_id)
+    if all(row.get("top7") is None for row in payload.values()):
+        older = _benchmarks_for_iteration(PREVIOUS_LEAGUE_TWO_ITERATION_ID)
+        for key, row in payload.items():
+            if row.get("top7") is None and older.get(key, {}).get("top7") is not None:
+                row["top7"] = older[key]["top7"]
+                row["top7From"] = "previous"
+
+    _benchmark_cache = (now, payload)
+    return payload
 
 
 def _fetch_squad_kpis(match_id: int) -> dict[int, float]:
@@ -564,6 +757,7 @@ def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, A
         season_label=BLOCKS_SEASON_LABEL,
     )
     kpi_by_match = _load_match_kpis(matches, force_refresh=force_refresh)
+    benchmarks = build_block_benchmarks(BLOCKS_ITERATION_ID, force_refresh=force_refresh)
     saved = _load_targets()
     chunks = _chunk_matches(matches)
 
@@ -641,6 +835,7 @@ def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, A
             for key, spec in MEDAL_DEFAULTS.items()
         ],
         "blocks": blocks,
+        "benchmarks": benchmarks,
         "matchCount": len(matches),
         "playedCount": sum(1 for match in matches if match.get("outcome")),
     }

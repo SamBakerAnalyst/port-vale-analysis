@@ -207,11 +207,33 @@ function kpiTone(key, stats, target, single, scheduled) {
   return "";
 }
 
-function kpiCard(label, value, hint, tone) {
+function formatBenchValue(raw, spec) {
+  if (raw == null || Number.isNaN(Number(raw))) return "—";
+  const digits = spec?.digits ?? 1;
+  if (spec?.rate) return `${fmtNum(raw, digits)}%`;
+  return fmtNum(raw, digits);
+}
+
+function benchHtml(key, stats, single) {
+  const spec = state.payload?.benchmarks?.[key];
+  if (!spec) return "";
+  const games = spec.rate ? 1 : (single ? 1 : Math.max(Number(stats.played) || 0, 5));
+  const team = spec.team == null ? null : spec.team * games;
+  const top7 = spec.top7 == null ? null : spec.top7 * games;
+  return `
+    <div class="ba-kpi__bench">
+      <span>Team avg <b>${formatBenchValue(team, spec)}</b></span>
+      <span>Top 7 req <b>${formatBenchValue(top7, spec)}</b></span>
+    </div>
+  `;
+}
+
+function kpiCard(label, value, hint, tone, bench) {
   return `
     <article class="ba-kpi ${tone ? `ba-kpi--${tone}` : ""}">
       <p class="ba-kpi__label">${escapeHtml(label)}</p>
       <p class="ba-kpi__value">${escapeHtml(value)}</p>
+      ${bench || ""}
       ${hint ? `<p class="ba-kpi__hint">${escapeHtml(hint)}</p>` : ""}
     </article>
   `;
@@ -243,13 +265,13 @@ function dashHtml(block) {
   const cards = [
     kpiCard("Points", fmtNum(stats.points), pointsHint, kpiTone("points", stats, target, single, scheduled)),
     kpiCard("Goals", fmtNum(stats.goals), single ? "For" : "Scored in block"),
-    kpiCard("Goals against", fmtNum(stats.goalsAgainst), single ? "Against" : "Conceded in block"),
-    kpiCard("Clean sheets", fmtNum(stats.cleanSheets), csHint, kpiTone("cleanSheets", stats, target, single, scheduled)),
-    kpiCard("Defenders bypassed", fmtNum(stats.defendersBypassed), "Impect packing"),
-    kpiCard("Offensive interventions", fmtNum(stats.offensiveInterventions), "Ball wins by action"),
-    kpiCard("Duel rate", stats.duelRate == null ? "—" : `${fmtNum(stats.duelRate, 1)}%`, stats.duelTotal ? `${fmtNum(stats.duelWon)} / ${fmtNum(stats.duelTotal)}` : "Won / attempted"),
-    kpiCard("Ball wins vs defenders", fmtNum(stats.ballWinsFromOppDefenders), "Removed opposition defenders"),
-    kpiCard("Team xG", fmtNum(stats.xg, 2), "Shot xG"),
+    kpiCard("Goals against", fmtNum(stats.goalsAgainst), single ? "Against" : "Conceded in block", "", benchHtml("goalsAgainst", stats, single)),
+    kpiCard("Clean sheets", fmtNum(stats.cleanSheets), csHint, kpiTone("cleanSheets", stats, target, single, scheduled), benchHtml("cleanSheets", stats, single)),
+    kpiCard("Defenders bypassed", fmtNum(stats.defendersBypassed), "Impect packing", "", benchHtml("defendersBypassed", stats, single)),
+    kpiCard("Offensive interventions", fmtNum(stats.offensiveInterventions), "Ball wins by action", "", benchHtml("offensiveInterventions", stats, single)),
+    kpiCard("Duel rate", stats.duelRate == null ? "—" : `${fmtNum(stats.duelRate, 1)}%`, stats.duelTotal ? `${fmtNum(stats.duelWon)} / ${fmtNum(stats.duelTotal)}` : "Won / attempted", "", benchHtml("duelRate", stats, single)),
+    kpiCard("Ball wins vs defenders", fmtNum(stats.ballWinsFromOppDefenders), "Removed opposition defenders", "", benchHtml("ballWinsFromOppDefenders", stats, single)),
+    kpiCard("Team xG", fmtNum(stats.xg, 2), "Shot xG", "", benchHtml("xg", stats, single)),
   ].join("");
 
   return `
