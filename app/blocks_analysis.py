@@ -92,8 +92,8 @@ PAYLOAD_CACHE_TTL = 45
 PLAYER_NAMES_TTL = 6 * 3600
 BENCHMARK_CACHE_TTL = 600
 UNIT_TOP7_TTL = 24 * 3600
-UNIT_TOP7_VERSION = 2
-UNIT_TOP7_SAMPLE_MATCHES = 24
+UNIT_TOP7_VERSION = 3
+UNIT_TOP7_GAMES_PER_SQUAD = 8
 FORM_BASELINE_GAMES = 7
 UNITS: tuple[str, ...] = ("DEF", "MID", "ATT")
 POSITION_TO_UNIT: dict[str, str | None] = {
@@ -542,15 +542,63 @@ def _round_or_none(value: float | None, digits: int) -> float | None:
     return round(float(value), digits)
 
 
+def _mean_or_none(values: list[float]) -> float | None:
+    if not values:
+        return None
+    return sum(values) / len(values)
+
+
+def _average_for_squads(per_squad: dict[int, float], squad_ids: list[int]) -> float | None:
+    values = [float(per_squad[squad_id]) for squad_id in squad_ids if squad_id in per_squad]
+    return _mean_or_none(values)
+
+
+def _iteration_table_top7_ids(iteration_id: int) -> list[int]:
+    """League-table top 7 (points, then goal difference) — not the best at one KPI."""
+    rows = extract_rows(impect_get(v5_path(f"/iterations/{iteration_id}/matches"))["data"])
+    points: dict[int, int] = {}
+    goal_diff: dict[int, int] = {}
+    for row in rows:
+        home_id = int(row.get("homeSquadId") or 0)
+        away_id = int(row.get("awaySquadId") or 0)
+        goals = row.get("goals") or {}
+        home_ft = (goals.get("home") or {}).get("fullTime")
+        away_ft = (goals.get("away") or {}).get("fullTime")
+        if home_ft is None or away_ft is None or home_id <= 0 or away_id <= 0:
+            continue
+        home_goals = int(home_ft)
+        away_goals = int(away_ft)
+        if home_goals > away_goals:
+            points[home_id] = points.get(home_id, 0) + 3
+        elif away_goals > home_goals:
+            points[away_id] = points.get(away_id, 0) + 3
+        else:
+            points[home_id] = points.get(home_id, 0) + 1
+            points[away_id] = points.get(away_id, 0) + 1
+        goal_diff[home_id] = goal_diff.get(home_id, 0) + home_goals - away_goals
+        goal_diff[away_id] = goal_diff.get(away_id, 0) + away_goals - home_goals
+    ordered = sorted(
+        points,
+        key=lambda squad_id: (points.get(squad_id, 0), goal_diff.get(squad_id, 0)),
+        reverse=True,
+    )
+    return ordered[:7]
+
+
 def _benchmark_entry(
     per_squad: dict[int, float],
     *,
     higher_better: bool,
     digits: int,
     rate: bool = False,
+    top7_ids: list[int] | None = None,
 ) -> dict[str, Any]:
     team = per_squad.get(PORT_VALE_SQUAD_ID)
-    top7 = _top7_average(per_squad, higher_is_better=higher_better)
+    top7 = (
+        _average_for_squads(per_squad, top7_ids)
+        if top7_ids
+        else _top7_average(per_squad, higher_is_better=higher_better)
+    )
     return {
         "team": _round_or_none(team, digits),
         "top7": _round_or_none(top7, digits),
@@ -644,6 +692,10 @@ def _benchmarks_for_iteration(iteration_id: int) -> dict[str, Any]:
     extracted: dict[int, dict[str, Any]] = {
         squad_id: _extract_rate_kpis(kpis) for squad_id, kpis in kpi_lookup.items()
     }
+    try:
+        top7_ids = _iteration_table_top7_ids(iteration_id)
+    except Exception:  # noqa: BLE001
+        top7_ids = []
 
     def column(key: str) -> dict[int, float]:
         values: dict[int, float] = {}
@@ -654,30 +706,35 @@ def _benchmarks_for_iteration(iteration_id: int) -> dict[str, Any]:
             values[squad_id] = float(value)
         return values
 
+    def entry(values: dict[int, float], *, higher_better: bool, digits: int, rate: bool = False) -> dict[str, Any]:
+        return _benchmark_entry(
+            values,
+            higher_better=higher_better,
+            digits=digits,
+            rate=rate,
+            top7_ids=top7_ids,
+        )
+
     return {
-        "goalsAgainst": _benchmark_entry(
+        "goalsAgainst": entry(
             {sid: row["goalsAgainst"] for sid, row in defence.items()},
             higher_better=False,
             digits=1,
         ),
-        "cleanSheets": _benchmark_entry(
+        "cleanSheets": entry(
             {sid: row["cleanSheets"] for sid, row in defence.items()},
             higher_better=True,
             digits=1,
         ),
-        "defendersBypassed": _benchmark_entry(
-            column("defendersBypassed"), higher_better=True, digits=1
-        ),
-        "offensiveInterventions": _benchmark_entry(
+        "defendersBypassed": entry(column("defendersBypassed"), higher_better=True, digits=1),
+        "offensiveInterventions": entry(
             column("offensiveInterventions"), higher_better=True, digits=1
         ),
-        "duelRate": _benchmark_entry(
-            column("duelRate"), higher_better=True, digits=1, rate=True
-        ),
-        "ballWinsFromOppDefenders": _benchmark_entry(
+        "duelRate": entry(column("duelRate"), higher_better=True, digits=1, rate=True),
+        "ballWinsFromOppDefenders": entry(
             column("ballWinsFromOppDefenders"), higher_better=True, digits=1
         ),
-        "xg": _benchmark_entry(column("xg"), higher_better=True, digits=2),
+        "xg": entry(column("xg"), higher_better=True, digits=2),
     }
 
 
@@ -1274,10 +1331,7 @@ def _load_match_kpis(
     return result
 
 
-def _iteration_recent_completed_matches(
-    iteration_id: int,
-    limit: int = UNIT_TOP7_SAMPLE_MATCHES,
-) -> list[dict[str, Any]]:
+def _iteration_completed_matches(iteration_id: int) -> list[dict[str, Any]]:
     rows = extract_rows(impect_get(v5_path(f"/iterations/{iteration_id}/matches"))["data"])
     completed: list[dict[str, Any]] = []
     for row in rows:
@@ -1300,7 +1354,29 @@ def _iteration_recent_completed_matches(
             }
         )
     completed.sort(key=lambda item: item["scheduledDate"], reverse=True)
-    return completed[:limit]
+    return completed
+
+
+def _iteration_top7_sample_matches(
+    iteration_id: int,
+    top7_ids: set[int],
+    *,
+    games_per_squad: int = UNIT_TOP7_GAMES_PER_SQUAD,
+) -> list[dict[str, Any]]:
+    if not top7_ids:
+        return []
+    picked: dict[int, list[dict[str, Any]]] = {squad_id: [] for squad_id in top7_ids}
+    for match in _iteration_completed_matches(iteration_id):
+        for squad_id in (int(match["homeSquadId"]), int(match["awaySquadId"])):
+            if squad_id in top7_ids and len(picked[squad_id]) < games_per_squad:
+                picked[squad_id].append(match)
+        if all(len(rows) >= games_per_squad for rows in picked.values()):
+            break
+    unique: dict[int, dict[str, Any]] = {}
+    for rows in picked.values():
+        for match in rows:
+            unique[int(match["matchId"])] = match
+    return list(unique.values())
 
 
 def _fetch_match_player_units(
@@ -1370,7 +1446,8 @@ def _unit_averages_from_stats_list(
 def _build_unit_top7_from_sample(
     iteration_id: int,
 ) -> tuple[dict[str, dict[str, float | None]], dict[str, dict[str, float | None]]]:
-    matches = _iteration_recent_completed_matches(iteration_id)
+    top7_ids = set(_iteration_table_top7_ids(iteration_id))
+    matches = _iteration_top7_sample_matches(iteration_id, top7_ids)
     acc: dict[int, dict[str, dict[str, Any]]] = {}
 
     def cell(squad_id: int, unit: str) -> dict[str, Any]:
@@ -1384,7 +1461,7 @@ def _build_unit_top7_from_sample(
                 pool.submit(
                     _fetch_match_player_units,
                     int(match["matchId"]),
-                    [int(match["homeSquadId"]), int(match["awaySquadId"])],
+                    [sid for sid in (int(match["homeSquadId"]), int(match["awaySquadId"])) if sid in top7_ids],
                 ): match
                 for match in matches
             }
@@ -1395,6 +1472,8 @@ def _build_unit_top7_from_sample(
                 except Exception:  # noqa: BLE001
                     continue
                 for squad_id in (int(match["homeSquadId"]), int(match["awaySquadId"])):
+                    if squad_id not in top7_ids:
+                        continue
                     units = by_squad.get(squad_id) or {}
                     for unit in UNITS:
                         row = units.get(unit) or {}
@@ -1422,21 +1501,19 @@ def _build_unit_top7_from_sample(
 
     top7: dict[str, dict[str, float | None]] = {}
     for unit in UNITS:
-        bypass_col = {
-            squad_id: row[unit]["defendersBypassed"]
-            for squad_id, row in per_squad.items()
+        bypass_vals = [
+            float(row[unit]["defendersBypassed"])
+            for row in per_squad.values()
             if row.get(unit, {}).get("defendersBypassed") is not None
-        }
-        duel_col = {
-            squad_id: row[unit]["duelRate"]
-            for squad_id, row in per_squad.items()
+        ]
+        duel_vals = [
+            float(row[unit]["duelRate"])
+            for row in per_squad.values()
             if row.get(unit, {}).get("duelRate") is not None
-        }
+        ]
         top7[unit] = {
-            "defendersBypassed": _round_or_none(
-                _top7_average(bypass_col, higher_is_better=True), 1
-            ),
-            "duelRate": _round_or_none(_top7_average(duel_col, higher_is_better=True), 1),
+            "defendersBypassed": _round_or_none(_mean_or_none(bypass_vals), 1),
+            "duelRate": _round_or_none(_mean_or_none(duel_vals), 1),
         }
 
     pv_raw = per_squad.get(PORT_VALE_SQUAD_ID) or {}
