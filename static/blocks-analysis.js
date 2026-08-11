@@ -693,6 +693,30 @@ function racePolyline(series, endMinute, maxXg, box) {
   }).join(" ");
 }
 
+function footballIconSvg() {
+  return `
+    <svg class="ba-ball" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="10.5" fill="#fff" stroke="#111" stroke-width="1.45"/>
+      <polygon points="12,7.15 15.25,9.55 14,13.65 10,13.65 8.75,9.55" fill="#111"/>
+      <path d="M8.75 9.55 4.45 8.15M15.25 9.55 19.55 8.15M14 13.65 16.15 18.55M10 13.65 7.85 18.55M12 7.15V3.9M4.45 8.15 3.85 12.15 7.85 18.55M19.55 8.15 20.15 12.15 16.15 18.55"
+        fill="none" stroke="#111" stroke-width="1.15" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>
+  `;
+}
+
+function raceGoalBalls(side, series, endMinute, maxXg, box, vb) {
+  return (series || [])
+    .filter((point) => point.isGoal)
+    .map((point) => {
+      const x = box.l + (Number(point.minute) / endMinute) * box.w;
+      const y = box.t + box.h - (Number(point.xg) / maxXg) * box.h;
+      const left = (x / vb.w) * 100;
+      const top = (y / vb.h) * 100;
+      return `<span class="ba-race__ball ba-race__ball--${side}" style="left:${left.toFixed(2)}%;top:${top.toFixed(2)}%">${footballIconSvg()}</span>`;
+    })
+    .join("");
+}
+
 function xgRaceHtml(race) {
   if (!race?.vale?.series || !race?.opp?.series) return "";
   const endMinute = Math.max(Number(race.endMinute) || 90, 90);
@@ -705,14 +729,8 @@ function xgRaceHtml(race) {
   const htX = box.l + (htMinute / endMinute) * box.w;
   const yTicks = maxXg <= 1.5 ? [0, 0.5, 1, maxXg] : [0, maxXg / 2, maxXg];
   const uniqueTicks = [...new Set(yTicks.map((n) => Number(n.toFixed(2))))];
-  const goalDots = (side, cls) => (side.series || [])
-    .filter((point) => point.isGoal)
-    .map((point) => {
-      const x = box.l + (Number(point.minute) / endMinute) * box.w;
-      const y = box.t + box.h - (Number(point.xg) / maxXg) * box.h;
-      return `<circle class="${cls}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5" />`;
-    })
-    .join("");
+  const colour = opponentBarColour(race.opp.name);
+  const oppStroke = colour.light ? "#c9a227" : colour.fill;
   const yGrid = uniqueTicks.map((tick) => {
     const y = box.t + box.h - (tick / maxXg) * box.h;
     return `
@@ -720,29 +738,42 @@ function xgRaceHtml(race) {
       <text class="ba-race__tick" x="${box.l - 6}" y="${y.toFixed(1)}" text-anchor="end" dominant-baseline="middle">${tick}</text>
     `;
   }).join("");
+  const balls = raceGoalBalls("opp", race.opp.series, endMinute, maxXg, box, vb)
+    + raceGoalBalls("vale", race.vale.series, endMinute, maxXg, box, vb);
   return `
-    <article class="ba-chart ba-race">
-      <header class="ba-chart__head">
+    <article class="ba-chart ba-race" style="--race-opp:${oppStroke};--opp-fill:${colour.fill}">
+      <header class="ba-chart__head ba-race__head">
         <div>
           <h4>Chance race</h4>
-          <p>Expected goals over time · dots are goals</p>
+          <p>Expected goals over time</p>
         </div>
-        <p class="ba-chart__legend">
-          <span class="ba-race__swatch ba-race__swatch--vale"></span>
-          Vale ${escapeHtml(fmtNum(race.vale.totalXg, 2))}
-          <span class="ba-race__swatch ba-race__swatch--opp"></span>
-          ${escapeHtml(shortOpponent(race.opp.name))} ${escapeHtml(fmtNum(race.opp.totalXg, 2))}
-        </p>
+        <div class="ba-race__key">
+          <p class="ba-race__key-item">
+            <i class="ba-race__key-line ba-race__key-line--vale"></i>
+            <span>Vale</span>
+            <b>${escapeHtml(fmtNum(race.vale.totalXg, 2))}</b>
+          </p>
+          <p class="ba-race__key-item">
+            <i class="ba-race__key-line ba-race__key-line--opp"></i>
+            <span>${escapeHtml(shortOpponent(race.opp.name))}</span>
+            <b>${escapeHtml(fmtNum(race.opp.totalXg, 2))}</b>
+          </p>
+          <p class="ba-race__key-item ba-race__key-item--goal">
+            <span class="ba-race__key-ball">${footballIconSvg()}</span>
+            <span>Goal</span>
+          </p>
+        </div>
       </header>
-      <svg class="ba-race__svg" viewBox="0 0 ${vb.w} ${vb.h}" preserveAspectRatio="none" role="img" aria-label="Expected goals race">
-        ${yGrid}
-        <line class="ba-race__ht" x1="${htX.toFixed(1)}" y1="${box.t}" x2="${htX.toFixed(1)}" y2="${box.t + box.h}" />
-        <text class="ba-race__ht-label" x="${htX.toFixed(1)}" y="${vb.h - 6}" text-anchor="middle">HT</text>
-        <polyline class="ba-race__line ba-race__line--opp" points="${oppPts}" />
-        <polyline class="ba-race__line ba-race__line--vale" points="${valePts}" />
-        ${goalDots(race.opp, "ba-race__goal ba-race__goal--opp")}
-        ${goalDots(race.vale, "ba-race__goal ba-race__goal--vale")}
-      </svg>
+      <div class="ba-race__plot">
+        <svg class="ba-race__svg" viewBox="0 0 ${vb.w} ${vb.h}" preserveAspectRatio="none" role="img" aria-label="Expected goals race">
+          ${yGrid}
+          <line class="ba-race__ht" x1="${htX.toFixed(1)}" y1="${box.t}" x2="${htX.toFixed(1)}" y2="${box.t + box.h}" />
+          <text class="ba-race__ht-label" x="${htX.toFixed(1)}" y="${vb.h - 6}" text-anchor="middle">HT</text>
+          <polyline class="ba-race__line ba-race__line--opp" points="${oppPts}" />
+          <polyline class="ba-race__line ba-race__line--vale" points="${valePts}" />
+        </svg>
+        <div class="ba-race__balls">${balls}</div>
+      </div>
     </article>
   `;
 }
