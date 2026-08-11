@@ -16,7 +16,12 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from app.paths import BLOCKS_ANALYSIS_DATA_DIR
-from app.post_match.config import DEFAULT_ITERATION_ID, DEFAULT_SEASON_LABEL, PORT_VALE_SQUAD_ID
+from app.post_match.config import PORT_VALE_SQUAD_ID
+
+# League Two 26/27. Keep these here — post-match DEFAULT_ITERATION_ID may still
+# point at a previous season on some deploys.
+BLOCKS_ITERATION_ID = 2120
+BLOCKS_SEASON_LABEL = "26/27"
 from app.post_match.duels import (
     KPI_BALL_WIN_REMOVED_OPPONENTS_DEFENDERS,
     KPI_LOST_AERIAL_DUELS,
@@ -551,12 +556,12 @@ def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, A
             return cached[1]
 
     matches = build_season_matches(
-        DEFAULT_ITERATION_ID,
+        BLOCKS_ITERATION_ID,
         PORT_VALE_SQUAD_ID,
         include_upcoming=True,
         competition_label=LEAGUE_LABEL,
         competition_short=LEAGUE_SHORT,
-        season_label=DEFAULT_SEASON_LABEL,
+        season_label=BLOCKS_SEASON_LABEL,
     )
     kpi_by_match = _load_match_kpis(matches, force_refresh=force_refresh)
     saved = _load_targets()
@@ -620,9 +625,9 @@ def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, A
 
     payload = {
         "generatedAt": datetime.now(UTC).isoformat(),
-        "season": DEFAULT_SEASON_LABEL,
+        "season": BLOCKS_SEASON_LABEL,
         "competition": LEAGUE_LABEL,
-        "iterationId": DEFAULT_ITERATION_ID,
+        "iterationId": BLOCKS_ITERATION_ID,
         "focusSquadId": PORT_VALE_SQUAD_ID,
         "currentBlockId": current_block_id,
         "medals": [
