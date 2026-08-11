@@ -521,7 +521,7 @@ function clubBadge(src, initials, alt) {
   return `<span class="ba-sheet__club-init">${escapeHtml(initials || "?")}</span>`;
 }
 
-function sheetMasthead({ title, kicker, page, single, fixture, stats, block }) {
+function sheetMasthead({ title, kicker, page, single, fixture, stats, block, phases }) {
   let center = "";
   if (single && fixture) {
     const gf = fixture.played ? fmtNum(stats.goals) : "–";
@@ -569,8 +569,9 @@ function sheetMasthead({ title, kicker, page, single, fixture, stats, block }) {
     if (fixture.demo) meta.push("Cup demo · not in league totals");
   }
 
+  const phaseBar = phases ? mastPhasesHtml(phases) : "";
   return `
-    <header class="ba-sheet__mast">
+    <header class="ba-sheet__mast ${phaseBar ? "ba-sheet__mast--phases" : ""}">
       <div class="ba-sheet__brand">
         <p class="ba-sheet__kicker">${escapeHtml(kicker)}</p>
         <h3 class="ba-sheet__title">${escapeHtml(title)}</h3>
@@ -578,6 +579,7 @@ function sheetMasthead({ title, kicker, page, single, fixture, stats, block }) {
       </div>
       ${center}
       <p class="ba-sheet__page"><b>${page}</b><span>/2</span></p>
+      ${phaseBar}
     </header>
   `;
 }
@@ -849,24 +851,21 @@ function fieldTiltHtml(tilt, fixture) {
   const oppName = shortOpponent(fixture?.opponentName || "Opp");
   const colour = opponentBarColour(fixture?.opponentName);
   const light = colour.light ? " is-light" : "";
-  const cols = (tilt.blocks || []).map((block) => {
+  const rows = (tilt.blocks || []).map((block) => {
     const value = Math.min(100, Math.max(0, Number(block.focus) || 0));
     const blockAvg = block.avg == null ? null : Math.min(100, Math.max(0, Number(block.avg)));
     return `
-      <div class="ba-tilt__col">
-        <span class="ba-tilt__col-val">${escapeHtml(fmtNum(value, 0))}</span>
-        <div class="ba-tilt__col-track${light}">
-          ${blockAvg == null ? "" : `<i class="ba-tilt__col-avg" style="bottom:${blockAvg}%"></i>`}
-          <span class="ba-tilt__col-opp" style="flex:${Math.max(100 - value, 0.01)} 0 0"></span>
-          <span class="ba-tilt__col-fill" style="flex:${Math.max(value, 0.01)} 0 0"></span>
+      <div class="ba-tilt__row">
+        <span class="ba-tilt__row-lab">${escapeHtml(block.label || "")}</span>
+        <div class="ba-tilt__row-track${light}">
+          <span class="ba-tilt__row-vale" style="width:${value}%"></span>
+          <span class="ba-tilt__row-opp" style="width:${Math.max(0, 100 - value)}%"></span>
+          ${blockAvg == null ? "" : `<i class="ba-tilt__row-avg" style="left:${blockAvg}%"></i>`}
         </div>
-        <span class="ba-tilt__col-lab">${escapeHtml(block.label || "")}</span>
+        <span class="ba-tilt__row-val">${escapeHtml(fmtNum(value, 0))}</span>
       </div>
     `;
   }).join("");
-  const avgMark = avg == null
-    ? ""
-    : `<i class="ba-tilt__meter-avg" style="bottom:${Math.min(100, Math.max(0, avg))}%" title="Average ${fmtNum(avg, 1)}%"></i>`;
   return `
     <article class="ba-chart ba-tilt" style="--opp-fill:${colour.fill};--opp-ink:${colour.ink}">
       <header class="ba-chart__head">
@@ -874,23 +873,13 @@ function fieldTiltHtml(tilt, fixture) {
           <h4>Territory</h4>
           <p>Attacking-third share · ${escapeHtml(avgGamesLabel(tilt.avgGames))}</p>
         </div>
-        <p class="ba-chart__legend">
-          Vale ${escapeHtml(fmtNum(focus, 1))}%
+        <p class="ba-chart__legend ba-tilt__legend">
+          <span><i class="ba-tilt__swatch ba-tilt__swatch--vale"></i> Vale ${escapeHtml(fmtNum(focus, 1))}%</span>
+          <span><i class="ba-tilt__swatch ba-tilt__swatch--opp"></i> ${escapeHtml(oppName)} ${escapeHtml(fmtNum(opp, 0))}%</span>
           ${avg == null ? "" : `<span class="ba-chart__avg">avg ${escapeHtml(fmtNum(avg, 1))}%</span>`}
         </p>
       </header>
-      <div class="ba-tilt__body">
-        <div class="ba-tilt__meter">
-          <span class="ba-tilt__meter-lab ba-tilt__meter-lab--opp">${escapeHtml(oppName)} ${escapeHtml(fmtNum(opp, 0))}%</span>
-          <div class="ba-tilt__meter-track${light}">
-            <span class="ba-tilt__meter-opp" style="flex:${Math.max(opp, 0.01)} 0 0"></span>
-            <span class="ba-tilt__meter-vale" style="flex:${Math.max(focus, 0.01)} 0 0"></span>
-            ${avgMark}
-          </div>
-          <span class="ba-tilt__meter-lab">Vale</span>
-        </div>
-        <div class="ba-tilt__cols">${cols}</div>
-      </div>
+      <div class="ba-tilt__rows">${rows}</div>
     </article>
   `;
 }
@@ -903,82 +892,42 @@ function phaseStripSegments(rows, key) {
   }).join("");
 }
 
-function phasesHtml(phases) {
+const MAST_PHASE_LABELS = {
+  IN_POSSESSION: "In poss",
+  ATTACKING_TRANSITION: "Att trans",
+  SECOND_BALL: "2nd ball",
+  SET_PIECE: "Set piece",
+  DEFENSIVE_TRANSITION: "Def trans",
+  OUT_OF_POSSESSION: "Out poss",
+};
+
+function mastPhasesHtml(phases) {
   if (!phases?.phases?.length) return "";
   const byId = Object.fromEntries((phases.phases || []).map((row) => [row.id, row]));
   const rows = PHASE_STRIP_ORDER.map((id) => byId[id]).filter(Boolean);
   if (!rows.length) return "";
-  const hasAvg = rows.some((row) => row.avg != null);
-  const legend = rows.map((row) => {
-    const value = Number(row.percent) || 0;
-    const avg = row.avg == null ? null : Number(row.avg);
-    const delta = avg == null ? null : value - avg;
-    const deltaText = delta == null
-      ? ""
-      : `<span class="ba-phasestrip__delta ${delta >= 0.5 ? "is-up" : delta <= -0.5 ? "is-down" : ""}">${delta >= 0 ? "+" : ""}${fmtNum(delta, 0)}</span>`;
-    return `
-      <li>
-        <i class="ba-phase__fill--${escapeHtml(row.id)}"></i>
-        <span>${escapeHtml(row.label)}</span>
-        <b>${escapeHtml(fmtNum(value, 0))}%</b>
-        ${avg == null ? "" : `<em>avg ${escapeHtml(fmtNum(avg, 0))} ${deltaText}</em>`}
-      </li>
-    `;
-  }).join("");
+  const legend = rows.map((row) => `
+    <li>
+      <i class="ba-phase__fill--${escapeHtml(row.id)}"></i>
+      <span>${escapeHtml(MAST_PHASE_LABELS[row.id] || row.label)}</span>
+      <b>${escapeHtml(fmtNum(row.percent, 0))}%</b>
+    </li>
+  `).join("");
   return `
-    <article class="ba-phasestrip">
-      <header class="ba-phasestrip__head">
-        <div>
-          <h4>How the game was spent</h4>
-          <p>Share of time in each phase · ${escapeHtml(avgGamesLabel(phases.avgGames))}</p>
-        </div>
-      </header>
-      <div class="ba-phasestrip__bars">
-        <div class="ba-phasestrip__row">
-          <span>This match</span>
-          <div class="ba-phasestrip__track">${phaseStripSegments(rows, "percent")}</div>
-        </div>
-        ${hasAvg ? `
-          <div class="ba-phasestrip__row">
-            <span>Vale avg</span>
-            <div class="ba-phasestrip__track">${phaseStripSegments(rows, "avg")}</div>
-          </div>
-        ` : ""}
+    <div class="ba-mastphase">
+      <p class="ba-mastphase__label">Time in phase</p>
+      <div class="ba-mastphase__main">
+        <div class="ba-mastphase__track">${phaseStripSegments(rows, "percent")}</div>
+        <ul class="ba-mastphase__legend">${legend}</ul>
       </div>
-      <ul class="ba-phasestrip__legend">${legend}</ul>
-    </article>
+    </div>
   `;
 }
 
-const BA_PITCH = { mx: 120, lx: 48, rx: 192, top: 14, seam: 90, amBase: 126 };
-BA_PITCH.ibTop = BA_PITCH.top + 8;
-BA_PITCH.seamCurve = BA_PITCH.seam - 6;
-
-const BA_ZONE_LAYOUT = {
-  IBWL: {
-    d: `M8,${BA_PITCH.ibTop} Q18,${BA_PITCH.top} ${BA_PITCH.lx},${BA_PITCH.ibTop} L${BA_PITCH.lx},${BA_PITCH.seam} L8,${BA_PITCH.seam} Z`,
-    cx: 28, valY: 52, name: "L", variant: "ib",
-  },
-  IBWR: {
-    d: `M${BA_PITCH.rx},${BA_PITCH.ibTop} Q222,${BA_PITCH.top} 232,${BA_PITCH.ibTop} L232,${BA_PITCH.seam} L${BA_PITCH.rx},${BA_PITCH.seam} Z`,
-    cx: 212, valY: 52, name: "R", variant: "ib",
-  },
-  IB: {
-    d: `M${BA_PITCH.lx},${BA_PITCH.ibTop} Q${BA_PITCH.mx},${BA_PITCH.top} ${BA_PITCH.rx},${BA_PITCH.ibTop} L${BA_PITCH.rx},${BA_PITCH.seam} Q${BA_PITCH.mx},${BA_PITCH.seamCurve} ${BA_PITCH.lx},${BA_PITCH.seam} Z`,
-    cx: BA_PITCH.mx, valY: 52, name: "C", variant: "ib",
-  },
-  WL: {
-    d: `M8,${BA_PITCH.seam} L${BA_PITCH.lx},${BA_PITCH.seam} L${BA_PITCH.lx},162 L8,162 Z`,
-    cx: 28, valY: 124, name: "WL", variant: "pass",
-  },
-  WR: {
-    d: `M${BA_PITCH.rx},${BA_PITCH.seam} L232,${BA_PITCH.seam} L232,162 L${BA_PITCH.rx},162 Z`,
-    cx: 212, valY: 124, name: "WR", variant: "pass",
-  },
-  AM: {
-    d: `M${BA_PITCH.lx},${BA_PITCH.seam} Q${BA_PITCH.mx},${BA_PITCH.seamCurve} ${BA_PITCH.rx},${BA_PITCH.seam} L${BA_PITCH.rx},${BA_PITCH.amBase} Q${BA_PITCH.mx},136 ${BA_PITCH.lx},${BA_PITCH.amBase} Z`,
-    cx: BA_PITCH.mx, valY: 104, name: "AM", variant: "pass",
-  },
+const BA_IB_LAYOUT = {
+  IBWL: { x: 10, y: 14, w: 70, h: 142, cx: 45, valY: 86, name: "Left" },
+  IB: { x: 80, y: 14, w: 80, h: 142, cx: 120, valY: 86, name: "Centre" },
+  IBWR: { x: 160, y: 14, w: 70, h: 142, cx: 195, valY: 86, name: "Right" },
 };
 
 function behindHeat(value, maxVal, variant) {
@@ -1018,7 +967,7 @@ function behindHtml(data) {
         <header class="ba-chart__head">
           <div>
             <h4>Balls in behind</h4>
-            <p>Touches and passes into the last line</p>
+            <p>Touches beyond the last line</p>
           </div>
         </header>
         <p class="ba-chart__empty">No in-behind data</p>
@@ -1026,56 +975,40 @@ function behindHtml(data) {
     `;
   }
   const ibById = Object.fromEntries((data.ibZones || []).map((z) => [z.id, z]));
-  const fromById = Object.fromEntries((data.fromZones || []).map((z) => [z.id, z]));
   const maxTouch = Math.max(1, ...(data.ibZones || []).map((z) => Number(z.value) || 0));
-  const maxPass = Math.max(1, ...(data.fromZones || []).map((z) => Number(z.value) || 0));
-  const zones = ["WL", "WR", "AM", "IBWL", "IBWR", "IB"].map((id) => {
-    const layout = BA_ZONE_LAYOUT[id];
-    const row = layout.variant === "ib" ? ibById[id] : fromById[id];
-    const value = Number(row?.value) || 0;
-    const colors = behindHeat(value, layout.variant === "ib" ? maxTouch : maxPass, layout.variant);
+  const zones = ["IBWL", "IB", "IBWR"].map((id) => {
+    const layout = BA_IB_LAYOUT[id];
+    const value = Number(ibById[id]?.value) || 0;
+    const colors = behindHeat(value, maxTouch, "ib");
     const shown = fmtNum(value, Number.isInteger(value) ? 0 : 1);
     return `
       <g>
-        <path d="${layout.d}" fill="${colors.fill}" stroke="rgba(255,255,255,.18)" stroke-width="0.6"/>
+        <rect x="${layout.x}" y="${layout.y}" width="${layout.w}" height="${layout.h}" fill="${colors.fill}" stroke="rgba(255,255,255,.2)" stroke-width="0.7"/>
         <text x="${layout.cx}" y="${layout.valY}" text-anchor="middle" fill="${colors.text}" class="ba-behind__zval">${shown}</text>
-        <text x="${layout.cx}" y="${layout.valY + 11}" text-anchor="middle" fill="${colors.text}" class="ba-behind__zname">${layout.name}</text>
+        <text x="${layout.cx}" y="${layout.valY + 16}" text-anchor="middle" fill="${colors.text}" class="ba-behind__zname">${layout.name}</text>
       </g>
     `;
   }).join("");
-  const how = (data.fromZones || []).map((row) => `
-    <span class="ba-behind__how-chip">
-      ${escapeHtml(row.label)} <b>${escapeHtml(fmtNum(row.value, Number.isInteger(Number(row.value)) ? 0 : 1))}</b>
-    </span>
-  `).join("");
   return `
     <article class="ba-chart ba-behind">
       <header class="ba-chart__head">
         <div>
           <h4>Balls in behind</h4>
-          <p>Green = who received · gold = where the pass came from</p>
+          <p>Touches beyond the last line</p>
         </div>
-        <p class="ba-chart__legend">
-          ${escapeHtml(fmtNum(data.touches))} touches
-          <span class="ba-chart__avg">${escapeHtml(fmtNum(data.passes))} passes in</span>
-        </p>
+        <p class="ba-chart__legend">${escapeHtml(fmtNum(data.touches))} touches</p>
       </header>
       <div class="ba-behind__body">
         <div class="ba-behind__pitch">
-          <svg class="ba-behind__svg" viewBox="0 0 240 170" preserveAspectRatio="xMidYMid meet" role="img" aria-label="In-behind touches and pass origins">
-            <rect x="6" y="6" width="228" height="158" rx="8" fill="#145a35"/>
-            <rect x="6" y="6" width="228" height="158" rx="8" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="0.8"/>
+          <svg class="ba-behind__svg" viewBox="0 0 240 170" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Balls in behind">
+            <rect x="6" y="6" width="228" height="158" rx="6" fill="#145a35"/>
             ${zones}
+            <rect x="88" y="14" width="64" height="52" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1"/>
+            <rect x="102" y="14" width="36" height="18" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="0.8"/>
+            <rect x="6" y="6" width="228" height="158" rx="6" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1.1"/>
           </svg>
-          <div class="ba-behind__how">
-            <p>How the passes were played</p>
-            <div class="ba-behind__how-row">${how || `<span class="ba-behind__empty">No passes into in-behind</span>`}</div>
-          </div>
         </div>
-        <div class="ba-behind__lists">
-          ${behindPlayerList("Who received", data.touchPlayers, "Nobody recorded")}
-          ${behindPlayerList("Who played the pass", data.passPlayers, "Nobody recorded")}
-        </div>
+        ${behindPlayerList("Who received", data.touchPlayers, "Nobody recorded")}
       </div>
     </article>
   `;
@@ -1104,10 +1037,73 @@ function shotToSvg(x, y, plot) {
   };
 }
 
-function shotPitchHtml(title, points, totalXg, goals, side) {
-  const W = 360;
-  const H = 210;
-  const pad = 8;
+function shotXgGoldStroke(xg, maxXg) {
+  if (!xg || xg <= 0.04) return { width: 0, opacity: 0 };
+  const ref = Math.max(maxXg || xg, 0.12);
+  const ratio = Math.min(1, xg / ref);
+  if (ratio < 0.2) return { width: 0, opacity: 0 };
+  return {
+    width: 0.55 + ratio * 2.15,
+    opacity: 0.45 + ratio * 0.55,
+  };
+}
+
+function shotLegendShapeSvg(shape, fill = "#d1d5db") {
+  if (shape === "diamond") {
+    return `<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2.2" y="2.2" width="7.6" height="7.6" fill="${fill}" stroke="#111" stroke-width="0.8" transform="rotate(45 6 6)"/></svg>`;
+  }
+  if (shape === "square") {
+    return `<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2" y="2" width="8" height="8" rx="0.8" fill="${fill}" stroke="#111" stroke-width="0.8"/></svg>`;
+  }
+  return `<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.8" fill="${fill}" stroke="#111" stroke-width="0.8"/></svg>`;
+}
+
+function renderShotMarker(x, y, outcome, phase, initials, xgDisplay, xgValue, maxXg) {
+  const colors = {
+    scored: "#22c55e",
+    saved: "#facc15",
+    off_target: "#ef4444",
+  };
+  const fill = colors[outcome] || (outcome === "goal" ? colors.scored : "#9ca3af");
+  const gold = shotXgGoldStroke(Number(xgValue) || 0, maxXg);
+  const baseStroke = "#111";
+  const baseStrokeWidth = 0.85;
+  const init = initials || "";
+  const xg = xgDisplay || "";
+  let shape = "";
+  if (phase === "Transition") {
+    shape = `<rect x="-10" y="-10" width="20" height="20" fill="${fill}" stroke="${baseStroke}" stroke-width="${baseStrokeWidth}" transform="rotate(45)"/>`;
+  } else if (phase === "Set Play") {
+    shape = `<rect x="-10" y="-10" width="20" height="20" rx="1.4" fill="${fill}" stroke="${baseStroke}" stroke-width="${baseStrokeWidth}"/>`;
+  } else {
+    shape = `<circle r="10.5" fill="${fill}" stroke="${baseStroke}" stroke-width="${baseStrokeWidth}"/>`;
+  }
+  const goldRing = gold.width > 0
+    ? (phase === "Transition"
+      ? `<rect x="-10" y="-10" width="20" height="20" fill="none" stroke="#fbbf24" stroke-width="${gold.width}" opacity="${gold.opacity}" transform="rotate(45)"/>`
+      : phase === "Set Play"
+        ? `<rect x="-10" y="-10" width="20" height="20" rx="1.4" fill="none" stroke="#fbbf24" stroke-width="${gold.width}" opacity="${gold.opacity}"/>`
+        : `<circle r="10.5" fill="none" stroke="#fbbf24" stroke-width="${gold.width}" opacity="${gold.opacity}"/>`)
+    : "";
+  const xgText = xg
+    ? `<text y="1" text-anchor="middle" dominant-baseline="middle" fill="#fff" stroke="#111" stroke-width="0.45" paint-order="stroke fill" font-family="Barlow Condensed, sans-serif" font-size="9.2" font-weight="800">${escapeHtml(xg)}</text>`
+    : "";
+  const initialsText = init
+    ? `<text y="18" text-anchor="middle" dominant-baseline="middle" fill="#111" font-family="Barlow Condensed, sans-serif" font-size="9.5" font-weight="800" letter-spacing="0.04em">${escapeHtml(init)}</text>`
+    : "";
+  return `
+    <g transform="translate(${x}, ${y - 4})">
+      ${shape}
+      ${goldRing}
+      ${xgText}
+      ${initialsText}
+    </g>`;
+}
+
+function shotPitchHtml(title, points, totalXg, goals) {
+  const W = 640;
+  const H = 268;
+  const pad = 14;
   const plot = {
     pad,
     plotW: W - pad * 2,
@@ -1127,60 +1123,64 @@ function shotPitchHtml(title, points, totalXg, goals, side) {
   const penX = pitchX + (drawW - penWidth) / 2;
   const sixX = pitchX + (drawW - sixWidth) / 2;
   const cx = pitchX + drawW / 2;
-  const heatFill = side === "against" ? "rgba(180,35,24,.22)" : "rgba(245,197,24,.26)";
   const rows = points || [];
-  const heats = rows.map((pt) => {
-    const { cx: hx, cy: hy } = shotToSvg(pt.x, pt.y, plot);
-    const r = 11 + Math.min(1.2, Number(pt.xg) || 0) * 36;
-    return `<circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="${r.toFixed(1)}" fill="${heatFill}" />`;
-  }).join("");
-  const dots = rows.map((pt) => {
+  const maxXg = rows.reduce((max, pt) => Math.max(max, Number(pt.xg) || 0), 0);
+  const markers = rows.map((pt) => {
     const { cx: dx, cy: dy } = shotToSvg(pt.x, pt.y, plot);
-    const r = 3.1 + Math.sqrt(Math.max(0, Number(pt.xg) || 0)) * 6.2;
-    const fill = pt.goal ? "#22c55e" : pt.on ? "#f5c518" : "#fff";
-    const ring = Number(pt.xg) >= 0.2
-      ? `<circle cx="${dx.toFixed(1)}" cy="${dy.toFixed(1)}" r="${(r + 1.6).toFixed(1)}" fill="none" stroke="#f5c518" stroke-width="1.4" opacity=".85" />`
-      : "";
-    return `${ring}<circle cx="${dx.toFixed(1)}" cy="${dy.toFixed(1)}" r="${r.toFixed(1)}" fill="${fill}" stroke="#111" stroke-width=".85" />`;
+    const outcome = pt.outcome || (pt.goal ? "scored" : pt.on ? "saved" : "off_target");
+    return renderShotMarker(
+      dx,
+      dy,
+      outcome,
+      pt.phase || "Possession",
+      pt.playerInitials || "",
+      pt.xgDisplay || fmtNum(pt.xg, 2),
+      pt.xg,
+      maxXg,
+    );
   }).join("");
   const count = rows.length;
   const xgText = fmtNum(totalXg, 2);
   const goalText = `${fmtNum(goals)} goal${Number(goals) === 1 ? "" : "s"}`;
   return `
-    <article class="ba-shotmap ba-shotmap--${side}">
+    <article class="ba-shotmap ba-shotmap--xg">
       <header class="ba-shotmap__head">
         <h4>${escapeHtml(title)}</h4>
         <p class="ba-shotmap__meta"><b>${escapeHtml(fmtNum(count))}</b> shots · <b>${escapeHtml(xgText)}</b> xG · ${escapeHtml(goalText)}</p>
       </header>
       <div class="ba-shotmap__pitch">
         <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${escapeHtml(title)}">
-          <rect x="${pitchX}" y="${pitchY}" width="${drawW}" height="${drawH}" fill="#2f8a3a" />
-          <rect x="${pitchX}" y="${pitchY}" width="${drawW}" height="${drawH}" fill="none" stroke="#fff" stroke-width="1.2" />
-          <rect x="${penX}" y="${pitchY}" width="${penWidth}" height="${penDepth}" fill="none" stroke="#fff" stroke-width=".95" opacity=".92" />
-          <rect x="${sixX}" y="${pitchY}" width="${sixWidth}" height="${sixDepth}" fill="none" stroke="#fff" stroke-width=".8" opacity=".85" />
-          <path d="M ${cx - 22} ${pitchY + penDepth} A 22 ${((9.15 / 35) * drawH).toFixed(1)} 0 0 1 ${cx + 22} ${pitchY + penDepth}" fill="none" stroke="#fff" stroke-width=".8" opacity=".85" />
+          <rect x="${pitchX}" y="${pitchY}" width="${drawW}" height="${drawH}" fill="#3f9f45" />
+          <rect x="${pitchX}" y="${pitchY}" width="${drawW}" height="${drawH}" fill="none" stroke="#fff" stroke-width="1.4" />
+          <rect x="${penX}" y="${pitchY}" width="${penWidth}" height="${penDepth}" fill="none" stroke="#fff" stroke-width="1" opacity=".9" />
+          <rect x="${sixX}" y="${pitchY}" width="${sixWidth}" height="${sixDepth}" fill="none" stroke="#fff" stroke-width=".85" opacity=".8" />
+          <path d="M ${cx - 22} ${pitchY + penDepth} A 22 ${((9.15 / 35) * drawH).toFixed(1)} 0 0 1 ${cx + 22} ${pitchY + penDepth}" fill="none" stroke="#fff" stroke-width=".9" opacity=".9" />
           <circle cx="${cx}" cy="${pitchY + (11 / 35) * drawH}" r="1.6" fill="#fff" />
-          <g class="ba-shotmap__heat">${heats}</g>
-          <g class="ba-shotmap__dots">${dots}</g>
+          <g class="ba-shotmap__dots">${markers}</g>
         </svg>
       </div>
-      <p class="ba-shotmap__legend">
-        <span><i class="ba-shotmap__swatch is-goal"></i>Goal</span>
-        <span><i class="ba-shotmap__swatch is-on"></i>On target</span>
-        <span><i class="ba-shotmap__swatch is-off"></i>Off</span>
-        <span>Size = xG</span>
-      </p>
+      <div class="ba-shotmap__legend">
+        <p>
+          <span><i class="ba-shotmap__shape">${shotLegendShapeSvg("circle", "#22c55e")}</i>Goal</span>
+          <span><i class="ba-shotmap__shape">${shotLegendShapeSvg("circle", "#facc15")}</i>Saved</span>
+          <span><i class="ba-shotmap__shape">${shotLegendShapeSvg("circle", "#ef4444")}</i>Off / blocked</span>
+        </p>
+        <p>
+          <span><i class="ba-shotmap__shape">${shotLegendShapeSvg("circle")}</i>Possession</span>
+          <span><i class="ba-shotmap__shape">${shotLegendShapeSvg("diamond")}</i>Transition</span>
+          <span><i class="ba-shotmap__shape">${shotLegendShapeSvg("square")}</i>Set play</span>
+          <span><i class="ba-shotmap__shape ba-shotmap__shape--xg">${shotLegendShapeSvg("circle", "#fff")}</i>Gold ring = higher xG</span>
+        </p>
+      </div>
     </article>
   `;
 }
 
-function shotMapsHtml(maps, fixture) {
+function shotMapsHtml(maps) {
   if (!maps) return "";
-  const opp = shortOpponent(fixture?.opponentName || "Opp");
   return `
     <div class="ba-shots">
-      ${shotPitchHtml("Shots for", maps.for, maps.forXg, maps.forGoals, "for")}
-      ${shotPitchHtml(`Shots against · ${opp}`, maps.against, maps.againstXg, maps.againstGoals, "against")}
+      ${shotPitchHtml("xG", maps.for, maps.forXg, maps.forGoals)}
     </div>
   `;
 }
@@ -1254,10 +1254,9 @@ function dashHtml(block) {
       </div>
       <p class="ba-print-hint ba-export-hide">A4 landscape · two pages</p>
       <article class="ba-sheet ba-sheet--team ${outcome ? `ba-sheet--${outcome}` : ""}" data-sheet="1">
-        ${sheetMasthead({ ...mast, title: pageTitle, page: 1 })}
+        ${sheetMasthead({ ...mast, title: pageTitle, page: 1, phases: single ? stats.phases : null })}
         <div class="ba-sheet__body">
           ${metricStrip(stats, single, fixture)}
-          ${single ? phasesHtml(stats.phases) : ""}
           ${single ? `
             <div class="ba-charts">
               ${xgRaceHtml(stats.xgRace) || `<article class="ba-chart ba-race"><header class="ba-chart__head"><div><h4>Chance race</h4><p>Expected goals over time</p></div></header><p class="ba-chart__empty">No shot data</p></article>`}
