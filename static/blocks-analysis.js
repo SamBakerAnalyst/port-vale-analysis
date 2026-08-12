@@ -584,76 +584,201 @@ function sheetMasthead({ title, kicker, page, totalPages = 2, single, fixture, s
   `;
 }
 
-function guideItem(title, text) {
+function guideNum(n) {
+  return `<span class="ba-gnum">${n}</span>`;
+}
+
+function guideCard(n, title, text) {
   return `
-    <div class="ba-guide__item">
-      <h5>${escapeHtml(title)}</h5>
-      <p>${escapeHtml(text)}</p>
+    <article class="ba-gcard">
+      ${guideNum(n)}
+      <div class="ba-gcard__body">
+        <h5>${escapeHtml(title)}</h5>
+        <p>${escapeHtml(text)}</p>
+      </div>
+    </article>
+  `;
+}
+
+function guideMapPage1() {
+  return `
+    <div class="ba-gmap ba-gmap--p1" aria-hidden="true">
+      <div class="ba-gmap__label">Page 1 layout</div>
+      <div class="ba-gmap__mast">
+        ${guideNum(1)}
+        <span class="ba-gmap__mast-score">Port Vale <b>1 – 2</b> Wolves</span>
+        ${guideNum(2)}
+        <span class="ba-gmap__mast-phase">
+          <i class="ba-phase__fill ba-phase__fill--IN_POSSESSION"></i>
+          <i class="ba-phase__fill ba-phase__fill--OUT_OF_POSSESSION"></i>
+          <i class="ba-phase__fill ba-phase__fill--ATTACKING_TRANSITION"></i>
+        </span>
+      </div>
+      <div class="ba-gmap__strip">
+        ${guideNum(3)}
+        <span class="ba-gmap__pill">xG</span>
+        <span class="ba-gmap__pill">Regains</span>
+        <span class="ba-gmap__pill">Backline</span>
+        <span class="ba-gmap__pill">Duels</span>
+      </div>
+      <div class="ba-gmap__charts">
+        <div class="ba-gmap__chart">${guideNum(4)}<span>Chance race</span><svg viewBox="0 0 80 36"><polyline points="2,34 40,20 78,8" fill="none" stroke="#111" stroke-width="2"/><polyline points="2,34 40,28 78,22" fill="none" stroke="#FDB913" stroke-width="2"/></svg></div>
+        <div class="ba-gmap__chart">${guideNum(5)}<span>Territory</span><div class="ba-gmap__bars"><i></i><i></i><i></i></div></div>
+        <div class="ba-gmap__chart ba-gmap__chart--pitch">${guideNum(6)}<span>In behind</span><div class="ba-gmap__pitch"><b></b><b class="hot"></b><b></b></div></div>
+      </div>
+      <div class="ba-gmap__units">
+        <div class="ba-gmap__unit">${guideNum(7)}<em>Backline beaten</em><span>DEF · MID · ATT</span></div>
+        <div class="ba-gmap__unit">${guideNum(8)}<em>Duels won</em><span>DEF · MID · ATT</span></div>
+      </div>
     </div>
   `;
 }
 
-function guideSection(title, items) {
+function guideMapPage2() {
   return `
-    <section class="ba-guide__section">
-      <h4>${escapeHtml(title)}</h4>
-      ${items.map(([t, body]) => guideItem(t, body)).join("")}
-    </section>
+    <div class="ba-gmap ba-gmap--p2" aria-hidden="true">
+      <div class="ba-gmap__label">Page 2 layout</div>
+      <div class="ba-gmap__stars">
+        ${guideNum(1)}
+        <div class="ba-gmap__star"></div>
+        <div class="ba-gmap__star"></div>
+        <div class="ba-gmap__star"></div>
+        <span class="ba-gmap__stars-cap">Standouts</span>
+      </div>
+      <div class="ba-gmap__boards">
+        ${guideNum(2)}
+        <div class="ba-gmap__board"><em>xG</em><i>1.</i><i>2.</i><i>3.</i></div>
+        <div class="ba-gmap__board"><em>Regains</em><i>1.</i><i>2.</i></div>
+        <div class="ba-gmap__board"><em>Def wins</em><i>1.</i><i>2.</i></div>
+        <div class="ba-gmap__board"><em>Opp DEF</em><i>1.</i><i>2.</i></div>
+        <div class="ba-gmap__board"><em>Backline</em><i>1.</i><i>2.</i></div>
+        <div class="ba-gmap__board"><em>Duels</em><i>1.</i><i>2.</i></div>
+      </div>
+    </div>
   `;
 }
 
-function guideSheetHtml({ kicker, fixture, totalPages = 3 }) {
-  const opp = shortOpponent(fixture?.opponentName || "the opponent");
-  const page1 = guideSection("Page 1 — the match at a glance", [
-    ["Scoreboard", "Final score, badges and whether we won, drew or lost."],
-    ["Time in phase", "How the 90 minutes split between having the ball, defending, transitions, set pieces and second balls. Shows the shape of the game."],
-    ["Expected goals", "Chance quality — not just shots, but how dangerous they were. Higher is better. The bar shows our share of total chance quality in the game."],
-    ["Vale avg & Req", "Avg is our typical number in recent league games. Req is what the top 7 in the table average — our benchmark for promotion football."],
-    ["Aggressive regains", "Times we won the ball back quickly in their half. Good sign of pressing and starting attacks early."],
-    ["Regains from opp defenders", "Ball wins against their centre-backs and full-backs — shows we got on top of their back line."],
-    ["Backline beaten", "Passes or dribbles that took opposition defenders out of the play — breaking lines and creating overloads."],
-    ["Duels won", "Percentage of 50-50s and individual contests we won — physical dominance in the game."],
-    ["Chance race", "Running total of expected goals through the match. A steeper line means a stronger spell. Football icons mark goals. The HT line is half-time."],
-    ["Territory", `Share of attacking-third actions — who lived in the final third. Each row is a 15-minute block vs ${opp}.`],
-    ["Balls in behind", "Touches beyond their last line (left, centre, right). Brighter green = more activity. The list shows who received those balls."],
-    ["DEF / MID / ATT panels", "Same metrics split by unit. Wing-backs count half as DEF and half as ATT."],
-  ]);
-  const page2 = guideSection("Page 2 — who stood out", [
-    ["Standouts", "The player who led the team in expected goals, backline beaten and duel success this game."],
-    ["Expected goals board", "Who created the best chances — shot quality added up."],
-    ["Aggressive regains", "Who won the ball back high up the pitch most often."],
-    ["Defensive ball wins", "Who added teammates by winning the ball in defensive actions."],
-    ["Regains from opp defenders", "Who stole it most often off opposition defenders."],
-    ["Backline beaten", "Who took the most defenders out of the game with their passing and runs."],
-    ["Duels won", "Top duel success in the match. Only players with at least 3 duels are ranked."],
-  ]);
-  const keys = guideSection("Reading the coloured numbers & bars", [
-    ["Green number", "At or above Req — hitting promotion-level standard this game."],
-    ["Amber number", "Close to Req — nearly there, worth a conversation."],
-    ["Red number", "Below Req — area to improve or context to discuss."],
-    ["Req flag on the bar", "Yellow marker — league top-7 average for that stat."],
-    ["Avg tick on the bar", "Our usual level across recent games."],
-    ["Filled bar", "This game's number on the same scale as Req and Avg."],
-  ]);
+function guideMeterDemo() {
   return `
-    <article class="ba-sheet ba-sheet--guide" data-sheet="3">
+    <div class="ba-gdemo">
+      <p class="ba-gdemo__title">The bars on every number</p>
+      <div class="ba-gdemo__meters">
+        <div class="ba-gdemo__meter">
+          <span class="ba-gdemo__val is-hot">52%</span>
+          <div class="ba-meter ba-meter--hot ba-gdemo__bar">
+            <div class="ba-meter__rail ba-meter__rail--req"><span class="ba-meter__flag ba-meter__flag--req is-end" style="left:72%"><em>Req</em><b>45%</b></span></div>
+            <span class="ba-meter__track"><span class="ba-meter__fill" style="width:82%"></span><i class="ba-meter__tick ba-meter__tick--req" style="left:72%"></i><i class="ba-meter__tick ba-meter__tick--avg" style="left:58%"></i></span>
+            <div class="ba-meter__rail ba-meter__rail--avg"><span class="ba-meter__flag ba-meter__flag--avg" style="left:58%"><em>Avg</em><b>38%</b></span></div>
+          </div>
+          <span class="ba-gdemo__cap is-hot">Green = at or above Req</span>
+        </div>
+        <div class="ba-gdemo__meter">
+          <span class="ba-gdemo__val is-warn">41%</span>
+          <div class="ba-meter ba-meter--warn ba-gdemo__bar">
+            <div class="ba-meter__rail ba-meter__rail--req"><span class="ba-meter__flag ba-meter__flag--req is-end" style="left:72%"><em>Req</em><b>45%</b></span></div>
+            <span class="ba-meter__track"><span class="ba-meter__fill" style="width:65%"></span><i class="ba-meter__tick ba-meter__tick--req" style="left:72%"></i></span>
+            <div class="ba-meter__rail"></div>
+          </div>
+          <span class="ba-gdemo__cap is-warn">Amber = close to Req</span>
+        </div>
+        <div class="ba-gdemo__meter">
+          <span class="ba-gdemo__val is-cold">28%</span>
+          <div class="ba-meter ba-meter--cold ba-gdemo__bar">
+            <div class="ba-meter__rail ba-meter__rail--req"><span class="ba-meter__flag ba-meter__flag--req is-end" style="left:72%"><em>Req</em><b>45%</b></span></div>
+            <span class="ba-meter__track"><span class="ba-meter__fill" style="width:44%"></span><i class="ba-meter__tick ba-meter__tick--req" style="left:72%"></i></span>
+            <div class="ba-meter__rail"></div>
+          </div>
+          <span class="ba-gdemo__cap is-cold">Red = below Req</span>
+        </div>
+      </div>
+      <div class="ba-gdemo__keys">
+        <p><strong>Req</strong> — what the top 7 in League Two average. Our promotion benchmark.</p>
+        <p><strong>Avg</strong> — what we usually do in recent league games.</p>
+        <p><strong>Wing-backs</strong> — count half DEF, half ATT on unit panels.</p>
+      </div>
+    </div>
+  `;
+}
+
+function guideSheetShell({ kicker, page, totalPages, title, bodyHtml, footNote }) {
+  return `
+    <article class="ba-sheet ba-sheet--guide" data-sheet="guide-${page}">
       <header class="ba-sheet__mast ba-sheet__mast--guide">
         <div class="ba-sheet__brand">
           <p class="ba-sheet__kicker">${escapeHtml(kicker)}</p>
-          <h3 class="ba-sheet__title">How to read this report</h3>
-          <p class="ba-sheet__meta">Plain-English guide for coaching staff</p>
+          <h3 class="ba-sheet__title">${escapeHtml(title)}</h3>
+          <p class="ba-sheet__meta">Staff guide · follow the numbers on the map</p>
         </div>
-        <p class="ba-sheet__page"><b>3</b><span>/${totalPages}</span></p>
+        <p class="ba-sheet__page"><b>${page}</b><span>/${totalPages}</span></p>
       </header>
-      <div class="ba-sheet__body ba-sheet__body--guide">
-        <div class="ba-guide">
-          <div class="ba-guide__col">${page1}</div>
-          <div class="ba-guide__col">${page2}${keys}</div>
-        </div>
-      </div>
-      <footer class="ba-sheet__bar"><span>Port Vale Analysis</span><span>Print pages 1–3 for the full match pack</span></footer>
+      <div class="ba-sheet__body ba-sheet__body--guide">${bodyHtml}</div>
+      <footer class="ba-sheet__bar"><span>Port Vale Analysis</span><span>${escapeHtml(footNote)}</span></footer>
     </article>
   `;
+}
+
+function guideSheetsHtml({ kicker, fixture, totalPages = 4 }) {
+  const opp = shortOpponent(fixture?.opponentName || "the opponent");
+  const page1Body = `
+    <div class="ba-guide ba-guide--visual">
+      ${guideMapPage1()}
+      <div class="ba-guide__legend">
+        <h4 class="ba-guide__legend-head">What each box means</h4>
+        <div class="ba-guide__cards">
+          ${guideCard(1, "Scoreboard", "Final score, club badges and Win / Draw / Loss.")}
+          ${guideCard(2, "Time in phase", "How the 90 minutes split — in possession, out of possession, transitions, set pieces and second balls.")}
+          ${guideCard(3, "Headline numbers", "Expected goals plus four KPIs: aggressive regains, regains off their defenders, backline beaten, duels won %. Each has Req and Avg bars.")}
+        </div>
+        <h4 class="ba-guide__legend-head ba-guide__legend-head--charts">The three charts</h4>
+        <div class="ba-guide__cards ba-guide__cards--3">
+          ${guideCard(4, "Chance race", "Running xG through the game. Steeper line = stronger spell. Football icons = goals. HT = half-time.")}
+          ${guideCard(5, "Territory", `Who had the ball in the attacking third — overall and in 15-minute blocks vs ${opp}.`)}
+          ${guideCard(6, "Balls in behind", "Touches beyond their last line (left / centre / right). Brighter = more. Names underneath = who received them.")}
+        </div>
+        <h4 class="ba-guide__legend-head">By unit</h4>
+        <div class="ba-guide__cards ba-guide__cards--2">
+          ${guideCard(7, "Backline beaten", "How many defenders each unit took out of the game.")}
+          ${guideCard(8, "Duels won", "Physical battle success by DEF, MID and ATT.")}
+        </div>
+      </div>
+    </div>
+  `;
+  const page2Body = `
+    <div class="ba-guide ba-guide--visual">
+      ${guideMapPage2()}
+      <div class="ba-guide__legend">
+        <h4 class="ba-guide__legend-head">Page 2 — players</h4>
+        <div class="ba-guide__cards">
+          ${guideCard(1, "Standouts", "Three quick picks: highest xG, most backline beaten, best duel % this game.")}
+          ${guideCard(2, "Six leaderboards", "Top 5 in the match for xG, aggressive regains, defensive ball wins, regains off opp defenders, backline beaten and duels won.")}
+        </div>
+        <div class="ba-guide__board-key">
+          <p><strong>Expected goals</strong> — shot quality added up</p>
+          <p><strong>Aggressive regains</strong> — won it back high up the pitch</p>
+          <p><strong>Defensive ball wins</strong> — won it and added a teammate</p>
+          <p><strong>Regains from opp defenders</strong> — stole it off their back line</p>
+          <p><strong>Backline beaten</strong> — took defenders out of the play</p>
+          <p><strong>Duels won</strong> — need 3+ duels to appear on the board</p>
+        </div>
+        ${guideMeterDemo()}
+      </div>
+    </div>
+  `;
+  return guideSheetShell({
+    kicker,
+    page: 3,
+    totalPages,
+    title: "Guide · match overview (page 1)",
+    bodyHtml: page1Body,
+    footNote: "Turn to page 4 for player page + colour key",
+  }) + guideSheetShell({
+    kicker,
+    page: 4,
+    totalPages,
+    title: "Guide · players & colours (page 2)",
+    bodyHtml: page2Body,
+    footNote: "Print all 4 pages for the full match pack",
+  });
 }
 
 function xgVsHtml(stats, fixture) {
@@ -1151,7 +1276,7 @@ function dashHtml(block) {
     ? `EFL Cup · ${payload.season || ""}`.trim()
     : `Block ${block.id} of 9 · ${payload.competition || "League Two"} ${payload.season || ""}`.trim();
   const pageTitle = single ? "Match Report" : "Block Report";
-  const sheetPages = single ? 3 : 2;
+  const sheetPages = single ? 4 : 2;
   const mast = { kicker, single, fixture, stats, block, totalPages: sheetPages };
   const players = playersForView(block, single, fixture);
   const boards = (single ? PLAYER_BOARDS.filter((spec) => spec.key !== "ppg") : PLAYER_BOARDS)
@@ -1171,7 +1296,7 @@ function dashHtml(block) {
           <button type="button" class="ba-btn ba-btn--print" data-pdf-report="${block.id}">Export PDF</button>
         </div>
       </div>
-      <p class="ba-print-hint ba-export-hide">A4 landscape · ${single ? "three pages (includes staff guide)" : "two pages"}</p>
+      <p class="ba-print-hint ba-export-hide">A4 landscape · ${single ? "four pages (match + staff guide)" : "two pages"}</p>
       <article class="ba-sheet ba-sheet--team ${outcome ? `ba-sheet--${outcome}` : ""}" data-sheet="1">
         ${sheetMasthead({ ...mast, title: pageTitle, page: 1, phases: single ? stats.phases : null })}
         <div class="ba-sheet__body">
@@ -1198,7 +1323,7 @@ function dashHtml(block) {
         </div>
         <footer class="ba-sheet__bar"><span>Port Vale Analysis</span><span>Live after full time</span></footer>
       </article>
-      ${single ? guideSheetHtml({ kicker, fixture, totalPages: sheetPages }) : ""}
+      ${single ? guideSheetsHtml({ kicker, fixture, totalPages: sheetPages }) : ""}
     </section>
   `;
 }
