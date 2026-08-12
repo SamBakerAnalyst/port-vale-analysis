@@ -390,7 +390,7 @@ const PLAYER_BOARDS = [
   { key: "offensiveInterventions", label: "Aggressive regains", hint: "Turnovers in attacking areas", digits: 0 },
   { key: "defensiveInterventions", label: "Defensive ball wins", hint: "Teammates added by winning it", digits: 0 },
   { key: "regainsFromDefenders", label: "Regains from opp defenders", hint: "Won it against opposition defenders", digits: 0 },
-  { key: "defendersBypassed", label: "Backline beaten", hint: "Opponents taken out of the game", digits: 1 },
+  { key: "defendersBypassed", label: "Backline beaten", hint: "Passes or dribbles that beat a defender", digits: 1 },
   { key: "duelRate", label: "Duels won", hint: "Won of attempted", digits: 1, rate: true, minDuels: 3 },
 ];
 
@@ -739,7 +739,7 @@ function guideSheetsHtml({ kicker, fixture, totalPages = 4 }) {
           ${guideCard(4, "Chance race", "Who built the better chances.", "Two lines through the game. Steeper = stronger spell. Football icons = goals.")}
           ${guideCard(5, "Territory", "Who lived in the final third.", `Attacking-third share overall and in 15-minute blocks vs ${opp}.`)}
           ${guideCard(6, "Balls in behind", "Did we get in behind their back four?", "Three pitch zones — left, centre, right. Brighter = more. Names = who received.")}
-          ${guideCard(7, "Backline beaten", "Who broke their shape?", "Defenders taken out of the play — split by DEF, MID and ATT.")}
+          ${guideCard(7, "Backline beaten", "Who broke their shape?", "Passes or dribbles that beat a defender — split by DEF, MID and ATT.")}
           ${guideCard(8, "Duels won", "Who won the physical battle?", "Duel success % for defenders, midfielders and attackers.")}
         </div>
       </div>
@@ -759,7 +759,7 @@ function guideSheetsHtml({ kicker, fixture, totalPages = 4 }) {
           ${guideDef("Aggressive regains", "Won the ball back quickly in their half — pressing and counter-pressing.")}
           ${guideDef("Defensive ball wins", "Won it in a defensive action and added a teammate to the play.")}
           ${guideDef("Regains from opp defenders", "Stole it off their centre-backs or full-backs.")}
-          ${guideDef("Backline beaten", "Passes or runs that took opposition defenders out of the game.")}
+          ${guideDef("Backline beaten", "Line-breaking passes and dribbles — each time you beat a defender and take them out of the play.")}
           ${guideDef("Duels won", "Need at least 3 duels in the game to make the board.")}
         </div>
       </div>
@@ -1311,7 +1311,7 @@ function dashHtml(block) {
             </div>
           ` : ""}
           <div class="ba-sheet__main ${single ? "ba-sheet__main--compact" : ""}">
-            ${unitPanelHtml("Backline beaten", "defendersBypassed", "Opponents taken out of the play", stats, single)}
+            ${unitPanelHtml("Backline beaten", "defendersBypassed", "Passes or dribbles that beat a defender", stats, single)}
             ${unitPanelHtml("Duels won", "duelRate", "Success rate by unit", stats, single)}
           </div>
         </div>
