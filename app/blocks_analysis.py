@@ -21,12 +21,12 @@ from app.post_match.ball_progression import _top7_average
 from app.post_match.config import PORT_VALE_SQUAD_ID
 from app.post_match.duels import (
     KPI_BALL_WIN_ADDED_TEAMMATES,
+    KPI_BALL_WIN_REMOVED_OPPONENTS,
     KPI_BALL_WIN_REMOVED_OPPONENTS_DEFENDERS,
     KPI_LOST_AERIAL_DUELS,
     KPI_LOST_GROUND_DUELS,
     KPI_WON_AERIAL_DUELS,
     KPI_WON_GROUND_DUELS,
-    OFFENSIVE_INTERVENTION_ACTION_KPIS,
 )
 from app.post_match.impect_client import extract_rows, impect_get, v5_path
 from app.post_match.report import (
@@ -71,7 +71,7 @@ LEAGUE_TABLE_GAMES = 46
 KPI_BYPASSED_DEFENDERS = 2
 KPI_SHOT_XG = 82
 MATCH_KPI_CACHE_TTL = 6 * 3600
-MATCH_STATS_CACHE_VERSION = 10
+MATCH_STATS_CACHE_VERSION = 11
 PHASE_SHORT_LABELS = {
     "IN_POSSESSION": "In possession",
     "OUT_OF_POSSESSION": "Out of possession",
@@ -465,9 +465,7 @@ def _player_match_report(
                 "minutes": round(minutes, 1),
                 "xg": round(_kpi_value(kpis, KPI_SHOT_XG), 2),
                 "offensiveInterventions": int(
-                    round(
-                        sum(_kpi_value(kpis, kpi_id) for kpi_id in OFFENSIVE_INTERVENTION_ACTION_KPIS)
-                    )
+                    round(_kpi_value(kpis, KPI_BALL_WIN_REMOVED_OPPONENTS))
                 ),
                 "defensiveInterventions": int(round(_kpi_value(kpis, KPI_BALL_WIN_ADDED_TEAMMATES))),
                 "regainsFromDefenders": int(
@@ -499,7 +497,7 @@ def _extract_rate_kpis(kpis: dict[int, float]) -> dict[str, Any]:
     lost = _kpi_value(kpis, KPI_LOST_GROUND_DUELS) + _kpi_value(kpis, KPI_LOST_AERIAL_DUELS)
     duel_total = won + lost
     duel_rate = (won / duel_total) * 100 if duel_total > 0 else None
-    offensive = sum(_kpi_value(kpis, kpi_id) for kpi_id in OFFENSIVE_INTERVENTION_ACTION_KPIS)
+    offensive = _kpi_value(kpis, KPI_BALL_WIN_REMOVED_OPPONENTS)
     return {
         "defendersBypassed": _kpi_value(kpis, KPI_BYPASSED_DEFENDERS),
         "offensiveInterventions": offensive,
@@ -516,9 +514,7 @@ def _extract_match_kpis(kpis: dict[int, float]) -> dict[str, Any]:
     lost = _kpi_value(kpis, KPI_LOST_GROUND_DUELS) + _kpi_value(kpis, KPI_LOST_AERIAL_DUELS)
     duel_total = won + lost
     duel_rate = round((won / duel_total) * 100, 1) if duel_total > 0 else None
-    offensive = sum(
-        int(round(_kpi_value(kpis, kpi_id))) for kpi_id in OFFENSIVE_INTERVENTION_ACTION_KPIS
-    )
+    offensive = int(round(_kpi_value(kpis, KPI_BALL_WIN_REMOVED_OPPONENTS)))
     return {
         "defendersBypassed": round(_kpi_value(kpis, KPI_BYPASSED_DEFENDERS), 1),
         "offensiveInterventions": offensive,

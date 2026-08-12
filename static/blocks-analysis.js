@@ -387,9 +387,9 @@ function unitPanelHtml(title, metricKey, hint, stats, single) {
 const PLAYER_BOARDS = [
   { key: "ppg", label: "Points per game", hint: "Team points when they played", digits: 2 },
   { key: "xg", label: "Expected goals", hint: "Shot xG created", digits: 2 },
-  { key: "offensiveInterventions", label: "Aggressive regains", hint: "Turnovers in attacking areas", digits: 0 },
-  { key: "defensiveInterventions", label: "Defensive ball wins", hint: "Teammates added by winning it", digits: 0 },
-  { key: "regainsFromDefenders", label: "Regains from opp defenders", hint: "Won it against opposition defenders", digits: 0 },
+  { key: "offensiveInterventions", label: "Aggressive regains", hint: "Opponents removed when you win the ball", digits: 0 },
+  { key: "defensiveInterventions", label: "Defensive ball wins", hint: "Teammates added when you win the ball", digits: 0 },
+  { key: "regainsFromDefenders", label: "Regains from opp defenders", hint: "Won it vs one of their four deepest", digits: 0 },
   { key: "defendersBypassed", label: "Backline beaten", hint: "Passes or dribbles that beat a defender", digits: 1 },
   { key: "duelRate", label: "Duels won", hint: "Won of attempted", digits: 1, rate: true, minDuels: 3 },
 ];
@@ -735,7 +735,7 @@ function guideSheetsHtml({ kicker, fixture, totalPages = 4 }) {
         <div class="ba-guide__cards ba-guide__cards--2 ba-guide__cards--fill">
           ${guideCard(1, "Scoreboard", "Who won and the final score.", "Club badges, goals and Win / Draw / Loss.")}
           ${guideCard(2, "Time in phase", "How the game actually felt.", "Coloured bar — in possession, defending, transitions, set pieces and second balls.")}
-          ${guideCard(3, "Headline numbers", "Our five key team stats.", "xG plus regains, regains off their defenders, backline beaten and duels won — each with Req and Avg bars.")}
+          ${guideCard(3, "Headline numbers", "Our five key team stats.", "xG, aggressive regains (opponents removed on ball wins), regains vs their back four, backline beaten and duels won — each with Req and Avg bars.")}
           ${guideCard(4, "Chance race", "Who built the better chances.", "Two lines through the game. Steeper = stronger spell. Football icons = goals.")}
           ${guideCard(5, "Territory", "Who lived in the final third.", `Attacking-third share overall and in 15-minute blocks vs ${opp}.`)}
           ${guideCard(6, "Balls in behind", "Did we get in behind their back four?", "Three pitch zones — left, centre, right. Brighter = more. Names = who received.")}
@@ -756,9 +756,9 @@ function guideSheetsHtml({ kicker, fixture, totalPages = 4 }) {
         </div>
         <div class="ba-guide__defs ba-guide__defs--fill">
           ${guideDef("Expected goals", "Shot quality added up — not just who shot, but how good the chances were.")}
-          ${guideDef("Aggressive regains", "Won the ball back quickly in their half — pressing and counter-pressing.")}
-          ${guideDef("Defensive ball wins", "Won it in a defensive action and added a teammate to the play.")}
-          ${guideDef("Regains from opp defenders", "Stole it off their centre-backs or full-backs.")}
+          ${guideDef("Aggressive regains", "Win the ball and remove opponents from the play — who you take out when you win it, not just the turnover.")}
+          ${guideDef("Defensive ball wins", "Win the ball and add a teammate to the play.")}
+          ${guideDef("Regains from opp defenders", "Ball wins where you beat one of their four deepest players — not only centre-backs and full-backs.")}
           ${guideDef("Backline beaten", "Line-breaking passes and dribbles — each time you beat a defender and take them out of the play.")}
           ${guideDef("Duels won", "Need at least 3 duels in the game to make the board.")}
         </div>
