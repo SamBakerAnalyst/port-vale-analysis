@@ -735,10 +735,10 @@ function guideSheetsHtml({ kicker, fixture, totalPages = 4 }) {
         <div class="ba-guide__cards ba-guide__cards--2 ba-guide__cards--fill">
           ${guideCard(1, "Scoreboard", "Who won and the final score.", "Club badges, goals and Win / Draw / Loss.")}
           ${guideCard(2, "Time in phase", "How the game actually felt.", "Coloured bar — in possession, defending, transitions, set pieces and second balls.")}
-          ${guideCard(3, "Headline numbers", "Our five key team stats.", "xG, aggressive regains (opponents removed on ball wins), regains vs their back four, backline beaten and duels won — each with Req and Avg bars.")}
+          ${guideCard(3, "Headline numbers", "Our five key team stats.", "xG, aggressive regains (opponents removed on ball wins), regains vs their deepest players, backline beaten and duels won — each with Req and Avg bars.")}
           ${guideCard(4, "Chance race", "Who built the better chances.", "Two lines through the game. Steeper = stronger spell. Football icons = goals.")}
           ${guideCard(5, "Territory", "Who lived in the final third.", `Attacking-third share overall and in 15-minute blocks vs ${opp}.`)}
-          ${guideCard(6, "Balls in behind", "Did we get in behind their back four?", "Three pitch zones — left, centre, right. Brighter = more. Names = who received.")}
+          ${guideCard(6, "Balls in behind", "Did we get in behind their last line?", "Touches beyond their deepest defenders — left, centre, right. Brighter = more. Names = who received.")}
           ${guideCard(7, "Backline beaten", "Who broke their shape?", "Passes or dribbles that beat a defender — split by DEF, MID and ATT.")}
           ${guideCard(8, "Duels won", "Who won the physical battle?", "Duel success % for defenders, midfielders and attackers.")}
         </div>
