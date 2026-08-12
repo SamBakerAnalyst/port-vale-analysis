@@ -521,7 +521,7 @@ function clubBadge(src, initials, alt) {
   return `<span class="ba-sheet__club-init">${escapeHtml(initials || "?")}</span>`;
 }
 
-function sheetMasthead({ title, kicker, page, single, fixture, stats, block, phases }) {
+function sheetMasthead({ title, kicker, page, totalPages = 2, single, fixture, stats, block, phases }) {
   let center = "";
   if (single && fixture) {
     const gf = fixture.played ? fmtNum(stats.goals) : "–";
@@ -578,9 +578,81 @@ function sheetMasthead({ title, kicker, page, single, fixture, stats, block, pha
         ${meta.filter(Boolean).length ? `<p class="ba-sheet__meta">${escapeHtml(meta.filter(Boolean).join("  ·  "))}</p>` : ""}
       </div>
       ${center}
-      <p class="ba-sheet__page"><b>${page}</b><span>/2</span></p>
+      <p class="ba-sheet__page"><b>${page}</b><span>/${totalPages}</span></p>
       ${phaseBar}
     </header>
+  `;
+}
+
+function guideItem(title, text) {
+  return `
+    <div class="ba-guide__item">
+      <h5>${escapeHtml(title)}</h5>
+      <p>${escapeHtml(text)}</p>
+    </div>
+  `;
+}
+
+function guideSection(title, items) {
+  return `
+    <section class="ba-guide__section">
+      <h4>${escapeHtml(title)}</h4>
+      ${items.map(([t, body]) => guideItem(t, body)).join("")}
+    </section>
+  `;
+}
+
+function guideSheetHtml({ kicker, fixture, totalPages = 3 }) {
+  const opp = shortOpponent(fixture?.opponentName || "the opponent");
+  const page1 = guideSection("Page 1 — the match at a glance", [
+    ["Scoreboard", "Final score, badges and whether we won, drew or lost."],
+    ["Time in phase", "How the 90 minutes split between having the ball, defending, transitions, set pieces and second balls. Shows the shape of the game."],
+    ["Expected goals", "Chance quality — not just shots, but how dangerous they were. Higher is better. The bar shows our share of total chance quality in the game."],
+    ["Vale avg & Req", "Avg is our typical number in recent league games. Req is what the top 7 in the table average — our benchmark for promotion football."],
+    ["Aggressive regains", "Times we won the ball back quickly in their half. Good sign of pressing and starting attacks early."],
+    ["Regains from opp defenders", "Ball wins against their centre-backs and full-backs — shows we got on top of their back line."],
+    ["Backline beaten", "Passes or dribbles that took opposition defenders out of the play — breaking lines and creating overloads."],
+    ["Duels won", "Percentage of 50-50s and individual contests we won — physical dominance in the game."],
+    ["Chance race", "Running total of expected goals through the match. A steeper line means a stronger spell. Football icons mark goals. The HT line is half-time."],
+    ["Territory", `Share of attacking-third actions — who lived in the final third. Each row is a 15-minute block vs ${opp}.`],
+    ["Balls in behind", "Touches beyond their last line (left, centre, right). Brighter green = more activity. The list shows who received those balls."],
+    ["DEF / MID / ATT panels", "Same metrics split by unit. Wing-backs count half as DEF and half as ATT."],
+  ]);
+  const page2 = guideSection("Page 2 — who stood out", [
+    ["Standouts", "The player who led the team in expected goals, backline beaten and duel success this game."],
+    ["Expected goals board", "Who created the best chances — shot quality added up."],
+    ["Aggressive regains", "Who won the ball back high up the pitch most often."],
+    ["Defensive ball wins", "Who added teammates by winning the ball in defensive actions."],
+    ["Regains from opp defenders", "Who stole it most often off opposition defenders."],
+    ["Backline beaten", "Who took the most defenders out of the game with their passing and runs."],
+    ["Duels won", "Top duel success in the match. Only players with at least 3 duels are ranked."],
+  ]);
+  const keys = guideSection("Reading the coloured numbers & bars", [
+    ["Green number", "At or above Req — hitting promotion-level standard this game."],
+    ["Amber number", "Close to Req — nearly there, worth a conversation."],
+    ["Red number", "Below Req — area to improve or context to discuss."],
+    ["Req flag on the bar", "Yellow marker — league top-7 average for that stat."],
+    ["Avg tick on the bar", "Our usual level across recent games."],
+    ["Filled bar", "This game's number on the same scale as Req and Avg."],
+  ]);
+  return `
+    <article class="ba-sheet ba-sheet--guide" data-sheet="3">
+      <header class="ba-sheet__mast ba-sheet__mast--guide">
+        <div class="ba-sheet__brand">
+          <p class="ba-sheet__kicker">${escapeHtml(kicker)}</p>
+          <h3 class="ba-sheet__title">How to read this report</h3>
+          <p class="ba-sheet__meta">Plain-English guide for coaching staff</p>
+        </div>
+        <p class="ba-sheet__page"><b>3</b><span>/${totalPages}</span></p>
+      </header>
+      <div class="ba-sheet__body ba-sheet__body--guide">
+        <div class="ba-guide">
+          <div class="ba-guide__col">${page1}</div>
+          <div class="ba-guide__col">${page2}${keys}</div>
+        </div>
+      </div>
+      <footer class="ba-sheet__bar"><span>Port Vale Analysis</span><span>Print pages 1–3 for the full match pack</span></footer>
+    </article>
   `;
 }
 
@@ -1079,7 +1151,8 @@ function dashHtml(block) {
     ? `EFL Cup · ${payload.season || ""}`.trim()
     : `Block ${block.id} of 9 · ${payload.competition || "League Two"} ${payload.season || ""}`.trim();
   const pageTitle = single ? "Match Report" : "Block Report";
-  const mast = { kicker, single, fixture, stats, block };
+  const sheetPages = single ? 3 : 2;
+  const mast = { kicker, single, fixture, stats, block, totalPages: sheetPages };
   const players = playersForView(block, single, fixture);
   const boards = (single ? PLAYER_BOARDS.filter((spec) => spec.key !== "ppg") : PLAYER_BOARDS)
     .map((spec) => playerBoardHtml(spec, players))
@@ -1098,7 +1171,7 @@ function dashHtml(block) {
           <button type="button" class="ba-btn ba-btn--print" data-pdf-report="${block.id}">Export PDF</button>
         </div>
       </div>
-      <p class="ba-print-hint ba-export-hide">A4 landscape · two pages</p>
+      <p class="ba-print-hint ba-export-hide">A4 landscape · ${single ? "three pages (includes staff guide)" : "two pages"}</p>
       <article class="ba-sheet ba-sheet--team ${outcome ? `ba-sheet--${outcome}` : ""}" data-sheet="1">
         ${sheetMasthead({ ...mast, title: pageTitle, page: 1, phases: single ? stats.phases : null })}
         <div class="ba-sheet__body">
@@ -1125,6 +1198,7 @@ function dashHtml(block) {
         </div>
         <footer class="ba-sheet__bar"><span>Port Vale Analysis</span><span>Live after full time</span></footer>
       </article>
+      ${single ? guideSheetHtml({ kicker, fixture, totalPages: sheetPages }) : ""}
     </section>
   `;
 }
