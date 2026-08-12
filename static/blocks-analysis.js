@@ -390,7 +390,7 @@ const PLAYER_BOARDS = [
   { key: "offensiveInterventions", label: "Aggressive regains", hint: "Turnovers in attacking areas", digits: 0 },
   { key: "defensiveInterventions", label: "Defensive ball wins", hint: "Teammates added by winning it", digits: 0 },
   { key: "regainsFromDefenders", label: "Regains from opp defenders", hint: "Won it against opposition defenders", digits: 0 },
-  { key: "defendersBypassed", label: "Backline beaten", hint: "Opponents taken out of the game", digits: 0 },
+  { key: "defendersBypassed", label: "Backline beaten", hint: "Opponents taken out of the game", digits: 1 },
   { key: "duelRate", label: "Duels won", hint: "Won of attempted", digits: 1, rate: true, minDuels: 3 },
 ];
 
@@ -631,14 +631,14 @@ function metricStrip(stats, single, fixture) {
     ? [
         { label: "Aggressive regains", key: "offensiveInterventions", digits: 0 },
         { label: "Regains from opp defenders", key: "ballWinsFromOppDefenders", digits: 0 },
-        { label: "Backline beaten", key: "defendersBypassed", digits: 0 },
+        { label: "Backline beaten", key: "defendersBypassed", digits: 1 },
         { label: "Duels won", key: "duelRate", digits: 1, rate: true },
       ]
     : [
         { label: "Our xG", key: "xg", digits: 2 },
         { label: "Aggressive regains", key: "offensiveInterventions", digits: 0 },
         { label: "Regains from opp defenders", key: "ballWinsFromOppDefenders", digits: 0 },
-        { label: "Backline beaten", key: "defendersBypassed", digits: 0 },
+        { label: "Backline beaten", key: "defendersBypassed", digits: 1 },
         { label: "Duels won", key: "duelRate", digits: 1, rate: true },
         { label: "Goals against", key: "goalsAgainst", digits: 0, invert: true },
       ];
@@ -1020,7 +1020,7 @@ function behindHtml(data) {
 function playerStandouts(players) {
   const specs = [
     { key: "xg", label: "Highest expected goals", digits: 2 },
-    { key: "defendersBypassed", label: "Most backline beaten", digits: 0 },
+    { key: "defendersBypassed", label: "Most backline beaten", digits: 1 },
     { key: "duelRate", label: "Best duel success", digits: 1, rate: true, minDuels: 3 },
   ];
   const used = new Set();
@@ -1029,140 +1029,6 @@ function playerStandouts(players) {
     if (player) used.add(player.playerId);
     return { spec, player };
   });
-}
-
-function shotToSvg(x, y, plot) {
-  const clampedX = Math.min(plot.goalX, Math.max(plot.minX, Number(x) || plot.minX));
-  const clampedY = Math.min(plot.halfW, Math.max(-plot.halfW, Number(y) || 0));
-  return {
-    cx: plot.pad + ((clampedY + plot.halfW) / (plot.halfW * 2)) * plot.plotW,
-    cy: plot.pad + ((plot.goalX - clampedX) / (plot.goalX - plot.minX)) * plot.plotH,
-  };
-}
-
-function shotXgGoldStroke(xg, maxXg) {
-  if (!xg || xg <= 0.04) return { width: 0, opacity: 0 };
-  const ref = Math.max(maxXg || xg, 0.12);
-  const ratio = Math.min(1, xg / ref);
-  if (ratio < 0.2) return { width: 0, opacity: 0 };
-  return {
-    width: 0.55 + ratio * 2.15,
-    opacity: 0.45 + ratio * 0.55,
-  };
-}
-
-function renderShotMarker(x, y, outcome, phase, initials, xgDisplay, xgValue, maxXg) {
-  const colors = {
-    scored: "#22c55e",
-    saved: "#facc15",
-    off_target: "#ef4444",
-  };
-  const fill = colors[outcome] || (outcome === "goal" ? colors.scored : "#9ca3af");
-  const gold = shotXgGoldStroke(Number(xgValue) || 0, maxXg);
-  const baseStroke = "#111";
-  const baseStrokeWidth = 0.85;
-  const init = initials || "";
-  const xg = xgDisplay || "";
-  let shape = "";
-  if (phase === "Transition") {
-    shape = `<rect x="-10" y="-10" width="20" height="20" fill="${fill}" stroke="${baseStroke}" stroke-width="${baseStrokeWidth}" transform="rotate(45)"/>`;
-  } else if (phase === "Set Play") {
-    shape = `<rect x="-10" y="-10" width="20" height="20" rx="1.4" fill="${fill}" stroke="${baseStroke}" stroke-width="${baseStrokeWidth}"/>`;
-  } else {
-    shape = `<circle r="10.5" fill="${fill}" stroke="${baseStroke}" stroke-width="${baseStrokeWidth}"/>`;
-  }
-  const goldRing = gold.width > 0
-    ? (phase === "Transition"
-      ? `<rect x="-10" y="-10" width="20" height="20" fill="none" stroke="#fbbf24" stroke-width="${gold.width}" opacity="${gold.opacity}" transform="rotate(45)"/>`
-      : phase === "Set Play"
-        ? `<rect x="-10" y="-10" width="20" height="20" rx="1.4" fill="none" stroke="#fbbf24" stroke-width="${gold.width}" opacity="${gold.opacity}"/>`
-        : `<circle r="10.5" fill="none" stroke="#fbbf24" stroke-width="${gold.width}" opacity="${gold.opacity}"/>`)
-    : "";
-  const xgText = xg
-    ? `<text y="1" text-anchor="middle" dominant-baseline="middle" fill="#fff" stroke="#111" stroke-width="0.45" paint-order="stroke fill" font-family="Barlow Condensed, sans-serif" font-size="9.2" font-weight="800">${escapeHtml(xg)}</text>`
-    : "";
-  const initialsText = init
-    ? `<text y="18" text-anchor="middle" dominant-baseline="middle" fill="#111" font-family="Barlow Condensed, sans-serif" font-size="9.5" font-weight="800" letter-spacing="0.04em">${escapeHtml(init)}</text>`
-    : "";
-  return `
-    <g transform="translate(${x}, ${y - 4})">
-      ${shape}
-      ${goldRing}
-      ${xgText}
-      ${initialsText}
-    </g>`;
-}
-
-function shotPitchHtml(title, points, totalXg, goals) {
-  const W = 640;
-  const H = 268;
-  const pad = 14;
-  const plot = {
-    pad,
-    plotW: W - pad * 2,
-    plotH: H - pad * 2,
-    goalX: 52.5,
-    minX: 17.5,
-    halfW: 34,
-  };
-  const pitchX = pad;
-  const pitchY = pad;
-  const drawW = plot.plotW;
-  const drawH = plot.plotH;
-  const penDepth = (16.5 / 35) * drawH;
-  const penWidth = (40.32 / 68) * drawW;
-  const sixDepth = (5.5 / 35) * drawH;
-  const sixWidth = (18.32 / 68) * drawW;
-  const penX = pitchX + (drawW - penWidth) / 2;
-  const sixX = pitchX + (drawW - sixWidth) / 2;
-  const cx = pitchX + drawW / 2;
-  const rows = points || [];
-  const maxXg = rows.reduce((max, pt) => Math.max(max, Number(pt.xg) || 0), 0);
-  const markers = rows.map((pt) => {
-    const { cx: dx, cy: dy } = shotToSvg(pt.x, pt.y, plot);
-    const outcome = pt.outcome || (pt.goal ? "scored" : pt.on ? "saved" : "off_target");
-    return renderShotMarker(
-      dx,
-      dy,
-      outcome,
-      pt.phase || "Possession",
-      pt.playerInitials || "",
-      pt.xgDisplay || fmtNum(pt.xg, 2),
-      pt.xg,
-      maxXg,
-    );
-  }).join("");
-  const count = rows.length;
-  const xgText = fmtNum(totalXg, 2);
-  const goalText = `${fmtNum(goals)} goal${Number(goals) === 1 ? "" : "s"}`;
-  return `
-    <article class="ba-shotmap ba-shotmap--xg">
-      <header class="ba-shotmap__head">
-        <h4>${escapeHtml(title)}</h4>
-        <p class="ba-shotmap__meta"><b>${escapeHtml(fmtNum(count))}</b> shots · <b>${escapeHtml(xgText)}</b> xG · ${escapeHtml(goalText)}</p>
-      </header>
-      <div class="ba-shotmap__pitch">
-        <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${escapeHtml(title)}">
-          <rect x="${pitchX}" y="${pitchY}" width="${drawW}" height="${drawH}" fill="#3f9f45" />
-          <rect x="${pitchX}" y="${pitchY}" width="${drawW}" height="${drawH}" fill="none" stroke="#fff" stroke-width="1.4" />
-          <rect x="${penX}" y="${pitchY}" width="${penWidth}" height="${penDepth}" fill="none" stroke="#fff" stroke-width="1" opacity=".9" />
-          <rect x="${sixX}" y="${pitchY}" width="${sixWidth}" height="${sixDepth}" fill="none" stroke="#fff" stroke-width=".85" opacity=".8" />
-          <path d="M ${cx - 22} ${pitchY + penDepth} A 22 ${((9.15 / 35) * drawH).toFixed(1)} 0 0 1 ${cx + 22} ${pitchY + penDepth}" fill="none" stroke="#fff" stroke-width=".9" opacity=".9" />
-          <circle cx="${cx}" cy="${pitchY + (11 / 35) * drawH}" r="1.6" fill="#fff" />
-          <g class="ba-shotmap__dots">${markers}</g>
-        </svg>
-      </div>
-    </article>
-  `;
-}
-
-function shotMapsHtml(maps) {
-  if (!maps) return "";
-  return `
-    <div class="ba-shots">
-      ${shotPitchHtml("xG", maps.for, maps.forXg, maps.forGoals)}
-    </div>
-  `;
 }
 
 function standoutsHtml(players) {
@@ -1255,7 +1121,6 @@ function dashHtml(block) {
         ${sheetMasthead({ ...mast, title: "Players", page: 2 })}
         <div class="ba-sheet__body">
           ${single && players.length ? standoutsHtml(players) : ""}
-          ${single ? shotMapsHtml(stats.shotMaps, fixture) : ""}
           <div class="ba-players__grid ${single ? "ba-players__grid--six" : ""}">${boards}</div>
         </div>
         <footer class="ba-sheet__bar"><span>Port Vale Analysis</span><span>Live after full time</span></footer>

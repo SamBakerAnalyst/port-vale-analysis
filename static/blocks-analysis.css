@@ -978,71 +978,6 @@ a:hover { text-decoration: underline; }
   flex: 0 0 auto;
 }
 
-.ba-shots {
-  flex: 1 1 auto;
-  min-height: 0;
-  width: min(100%, 920px);
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: .5rem;
-  align-content: stretch;
-}
-
-.ba-shotmap {
-  min-height: 0;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: #fff;
-  border: 1px solid var(--rule);
-  border-radius: 2px;
-  padding: .28rem .38rem .3rem;
-}
-
-.ba-shotmap__head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: .45rem;
-  margin: 0 0 .18rem;
-  min-width: 0;
-}
-
-.ba-shotmap__head h4 {
-  margin: 0;
-  font-family: var(--display);
-  font-size: .72rem;
-  font-weight: 800;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.ba-shotmap__meta {
-  margin: 0;
-  color: var(--ink-muted);
-  font-size: .58rem;
-  font-weight: 700;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.ba-shotmap__meta b { color: #111; }
-
-.ba-shotmap__pitch {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-}
-
-.ba-shotmap__pitch svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
 .ba-sheet__bar {
   display: flex;
   justify-content: space-between;
@@ -2715,13 +2650,6 @@ body.is-printing .ba-sheet:last-of-type {
   .ba-behind__list { width: 100%; }
   .ba-players__grid,
   .ba-players__grid--six { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .ba-shots {
-    flex: none;
-    width: 100%;
-    grid-template-columns: 1fr;
-  }
-  .ba-shotmap { height: auto; }
-  .ba-shotmap__pitch { min-height: 160px; }
 }
 
 @media (max-width: 620px) {

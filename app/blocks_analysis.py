@@ -30,7 +30,6 @@ from app.post_match.duels import (
 )
 from app.post_match.impect_client import extract_rows, impect_get, v5_path
 from app.post_match.report import (
-    KPI_BYPASSED_DEFENDERS_RAW,
     _consolidate_player_match_rows,
     _flatten_player_kpis,
     _flatten_squad_kpis,
@@ -44,12 +43,6 @@ from app.post_match.field_tilt import (
     build_field_tilt,
 )
 from app.post_match.offensive_touches_zones import build_offensive_touches_zones
-from app.post_match.shots import (
-    _format_shot_xg,
-    _player_initials,
-    _shot_outcome,
-    _shot_phase_bucket,
-)
 from app.post_match.phase_analysis import (
     PHASE_ORDER,
     _fetch_match_events,
@@ -72,9 +65,13 @@ DEMO_MATCH_ID = 285444  # Wolves 7 Aug — demo until League Two is played
 LONDON = ZoneInfo("Europe/London")
 BLOCK_COUNT = 9
 GAMES_PER_BLOCK = 5
+LEAGUE_TABLE_GAMES = 46
+# Impect weighted bypassed defenders — matches platform league averages (~45/game).
+# KPI 1400 (raw) reads ~65/game and must not be used for Req / team backline beaten.
+KPI_BYPASSED_DEFENDERS = 2
 KPI_SHOT_XG = 82
 MATCH_KPI_CACHE_TTL = 6 * 3600
-MATCH_STATS_CACHE_VERSION = 9
+MATCH_STATS_CACHE_VERSION = 10
 PHASE_SHORT_LABELS = {
     "IN_POSSESSION": "In possession",
     "OUT_OF_POSSESSION": "Out of possession",
@@ -92,7 +89,7 @@ PAYLOAD_CACHE_TTL = 45
 PLAYER_NAMES_TTL = 6 * 3600
 BENCHMARK_CACHE_TTL = 600
 UNIT_TOP7_TTL = 24 * 3600
-UNIT_TOP7_VERSION = 3
+UNIT_TOP7_VERSION = 4
 UNIT_TOP7_GAMES_PER_SQUAD = 8
 FORM_BASELINE_GAMES = 7
 UNITS: tuple[str, ...] = ("DEF", "MID", "ATT")
@@ -407,7 +404,7 @@ def _units_from_players(players: list[dict[str, Any]], squad_id: int) -> dict[st
         kpis = row.get("kpis") or {}
         won = _kpi_value(kpis, KPI_WON_GROUND_DUELS) + _kpi_value(kpis, KPI_WON_AERIAL_DUELS)
         lost = _kpi_value(kpis, KPI_LOST_GROUND_DUELS) + _kpi_value(kpis, KPI_LOST_AERIAL_DUELS)
-        bypassed = _kpi_value(kpis, KPI_BYPASSED_DEFENDERS_RAW)
+        bypassed = _kpi_value(kpis, KPI_BYPASSED_DEFENDERS)
         duel_total = won + lost
         for unit, share in shares:
             buckets[unit]["defendersBypassed"] += bypassed * share
@@ -476,7 +473,7 @@ def _player_match_report(
                 "regainsFromDefenders": int(
                     round(_kpi_value(kpis, KPI_BALL_WIN_REMOVED_OPPONENTS_DEFENDERS))
                 ),
-                "defendersBypassed": int(round(_kpi_value(kpis, KPI_BYPASSED_DEFENDERS_RAW))),
+                "defendersBypassed": round(_kpi_value(kpis, KPI_BYPASSED_DEFENDERS), 1),
                 "duelWon": int(round(won)),
                 "duelTotal": int(round(total)),
                 "duelRate": round((won / total) * 100, 1) if total > 0 else None,
@@ -504,7 +501,7 @@ def _extract_rate_kpis(kpis: dict[int, float]) -> dict[str, Any]:
     duel_rate = (won / duel_total) * 100 if duel_total > 0 else None
     offensive = sum(_kpi_value(kpis, kpi_id) for kpi_id in OFFENSIVE_INTERVENTION_ACTION_KPIS)
     return {
-        "defendersBypassed": _kpi_value(kpis, KPI_BYPASSED_DEFENDERS_RAW),
+        "defendersBypassed": _kpi_value(kpis, KPI_BYPASSED_DEFENDERS),
         "offensiveInterventions": offensive,
         "duelRate": duel_rate,
         "ballWinsFromOppDefenders": _kpi_value(
@@ -523,7 +520,7 @@ def _extract_match_kpis(kpis: dict[int, float]) -> dict[str, Any]:
         int(round(_kpi_value(kpis, kpi_id))) for kpi_id in OFFENSIVE_INTERVENTION_ACTION_KPIS
     )
     return {
-        "defendersBypassed": int(round(_kpi_value(kpis, KPI_BYPASSED_DEFENDERS_RAW))),
+        "defendersBypassed": round(_kpi_value(kpis, KPI_BYPASSED_DEFENDERS), 1),
         "offensiveInterventions": offensive,
         "duelWon": int(round(won)),
         "duelTotal": int(round(duel_total)),
@@ -554,29 +551,37 @@ def _average_for_squads(per_squad: dict[int, float], squad_ids: list[int]) -> fl
 
 
 def _iteration_table_top7_ids(iteration_id: int) -> list[int]:
-    """League-table top 7 (points, then goal difference) — not the best at one KPI."""
+    """League-table top 7 (points, then GD) — first 46 league games per club."""
     rows = extract_rows(impect_get(v5_path(f"/iterations/{iteration_id}/matches"))["data"])
+    completed = [
+        row
+        for row in rows
+        if (row.get("goals") or {}).get("home", {}).get("fullTime") is not None
+    ]
+    completed.sort(key=lambda row: str(row.get("scheduledDate") or ""))
     points: dict[int, int] = {}
     goal_diff: dict[int, int] = {}
-    for row in rows:
+    played: dict[int, int] = defaultdict(int)
+    for row in completed:
         home_id = int(row.get("homeSquadId") or 0)
         away_id = int(row.get("awaySquadId") or 0)
         goals = row.get("goals") or {}
-        home_ft = (goals.get("home") or {}).get("fullTime")
-        away_ft = (goals.get("away") or {}).get("fullTime")
-        if home_ft is None or away_ft is None or home_id <= 0 or away_id <= 0:
-            continue
-        home_goals = int(home_ft)
-        away_goals = int(away_ft)
-        if home_goals > away_goals:
-            points[home_id] = points.get(home_id, 0) + 3
-        elif away_goals > home_goals:
-            points[away_id] = points.get(away_id, 0) + 3
-        else:
-            points[home_id] = points.get(home_id, 0) + 1
-            points[away_id] = points.get(away_id, 0) + 1
-        goal_diff[home_id] = goal_diff.get(home_id, 0) + home_goals - away_goals
-        goal_diff[away_id] = goal_diff.get(away_id, 0) + away_goals - home_goals
+        home_goals = int((goals.get("home") or {}).get("fullTime") or 0)
+        away_goals = int((goals.get("away") or {}).get("fullTime") or 0)
+        for squad_id, gf, ga in (
+            (home_id, home_goals, away_goals),
+            (away_id, away_goals, home_goals),
+        ):
+            if squad_id <= 0 or played[squad_id] >= LEAGUE_TABLE_GAMES:
+                continue
+            played[squad_id] += 1
+            if gf > ga:
+                points[squad_id] = points.get(squad_id, 0) + 3
+            elif gf < ga:
+                pass
+            else:
+                points[squad_id] = points.get(squad_id, 0) + 1
+            goal_diff[squad_id] = goal_diff.get(squad_id, 0) + gf - ga
     ordered = sorted(
         points,
         key=lambda squad_id: (points.get(squad_id, 0), goal_diff.get(squad_id, 0)),
@@ -1040,70 +1045,6 @@ def _compact_players(rows: list[dict[str, Any]], count_key: str, limit: int = 6)
     return compact
 
 
-def _compact_shot_points(events: list[dict[str, Any]], xg_by_event: dict[int, float], squad_id: int) -> list[dict[str, Any]]:
-    points: list[dict[str, Any]] = []
-    for event in events:
-        if str(event.get("actionType") or "") != "SHOT":
-            continue
-        if int(event.get("squadId") or 0) != squad_id:
-            continue
-        start = event.get("start") or {}
-        coords = start.get("adjCoordinates") or start.get("coordinates") or {}
-        try:
-            impect_x = float(coords.get("x"))
-            impect_y = float(coords.get("y"))
-        except (TypeError, ValueError):
-            continue
-        event_id = int(event.get("id") or 0)
-        outcome = _shot_outcome(event)
-        xg = round(float(xg_by_event.get(event_id) or 0), 3)
-        player = event.get("player") or {}
-        player_name = str(player.get("commonname") or player.get("name") or "").strip()
-        points.append(
-            {
-                "x": round(impect_x, 2),
-                "y": round(impect_y, 2),
-                "xg": xg,
-                "xgDisplay": _format_shot_xg(xg),
-                "outcome": outcome,
-                "phase": _shot_phase_bucket(
-                    str(event.get("phase") or ""),
-                    str(event.get("action") or ""),
-                ),
-                "playerInitials": _player_initials(player_name),
-                "goal": outcome == "scored",
-                "on": outcome == "saved",
-            }
-        )
-    return points
-
-
-def _compact_shot_maps(
-    match_id: int,
-    squad_id: int,
-    opp_squad_id: int,
-) -> dict[str, Any] | None:
-    if not squad_id:
-        return None
-    events = _fetch_match_events(match_id)
-    ekpi_payload = impect_get(v5_path(f"/matches/{match_id}/event-kpis"))["data"]
-    ekpi_rows = ekpi_payload.get("data") if isinstance(ekpi_payload, dict) else ekpi_payload
-    xg_by_event: dict[int, float] = defaultdict(float)
-    if isinstance(ekpi_rows, list):
-        for row in ekpi_rows:
-            if int(row.get("kpiId") or -1) != KPI_SHOT_XG:
-                continue
-            event_id = int(row.get("eventId") or 0)
-            if event_id:
-                xg_by_event[event_id] += float(row.get("value") or 0)
-    vale = _compact_shot_points(events, xg_by_event, squad_id)
-    return {
-        "for": vale,
-        "forXg": round(sum(row["xg"] for row in vale), 2),
-        "forGoals": sum(1 for row in vale if row["goal"]),
-    }
-
-
 def _compact_in_behind(data: dict[str, Any] | None) -> dict[str, Any] | None:
     if not data:
         return None
@@ -1190,7 +1131,6 @@ def _fetch_match_stats(
     stats["fieldTilt"] = None
     stats["phases"] = None
     stats["inBehind"] = None
-    stats["shotMaps"] = None
     if home_squad_id and away_squad_id:
         try:
             stats["fieldTilt"] = _compact_field_tilt(
@@ -1223,11 +1163,6 @@ def _fetch_match_stats(
             )
         except Exception:  # noqa: BLE001
             stats["inBehind"] = None
-        try:
-            opp_id = away_squad_id if int(squad_id) == int(home_squad_id) else home_squad_id
-            stats["shotMaps"] = _compact_shot_maps(match_id, squad_id, opp_id)
-        except Exception:  # noqa: BLE001
-            stats["shotMaps"] = None
     return stats
 
 
@@ -1254,7 +1189,6 @@ def _empty_kpi_stats() -> dict[str, Any]:
         "fieldTilt": None,
         "phases": None,
         "inBehind": None,
-        "shotMaps": None,
     }
 
 
@@ -1502,14 +1436,16 @@ def _build_unit_top7_from_sample(
     top7: dict[str, dict[str, float | None]] = {}
     for unit in UNITS:
         bypass_vals = [
-            float(row[unit]["defendersBypassed"])
-            for row in per_squad.values()
-            if row.get(unit, {}).get("defendersBypassed") is not None
+            float(per_squad[squad_id][unit]["defendersBypassed"])
+            for squad_id in top7_ids
+            if squad_id in per_squad
+            and per_squad[squad_id].get(unit, {}).get("defendersBypassed") is not None
         ]
         duel_vals = [
-            float(row[unit]["duelRate"])
-            for row in per_squad.values()
-            if row.get(unit, {}).get("duelRate") is not None
+            float(per_squad[squad_id][unit]["duelRate"])
+            for squad_id in top7_ids
+            if squad_id in per_squad
+            and per_squad[squad_id].get(unit, {}).get("duelRate") is not None
         ]
         top7[unit] = {
             "defendersBypassed": _round_or_none(_mean_or_none(bypass_vals), 1),
@@ -1755,7 +1691,7 @@ def _aggregate_stats(fixtures: list[dict[str, Any]]) -> dict[str, Any]:
             1 for row in played if (row.get("stats") or {}).get("cleanSheet")
         ),
         "defendersBypassed": (
-            int(round(_sum_optional([(row.get("stats") or {}).get("defendersBypassed") for row in played]) or 0))
+            round(_sum_optional([(row.get("stats") or {}).get("defendersBypassed") for row in played]) or 0, 1)
             if any((row.get("stats") or {}).get("defendersBypassed") is not None for row in played)
             else None
         ),
