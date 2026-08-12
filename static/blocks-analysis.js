@@ -588,15 +588,25 @@ function guideNum(n) {
   return `<span class="ba-gnum">${n}</span>`;
 }
 
-function guideCard(n, title, text) {
+function guideCard(n, title, lead, text) {
   return `
     <article class="ba-gcard">
       ${guideNum(n)}
       <div class="ba-gcard__body">
         <h5>${escapeHtml(title)}</h5>
+        <p class="ba-gcard__lead">${escapeHtml(lead)}</p>
         <p>${escapeHtml(text)}</p>
       </div>
     </article>
+  `;
+}
+
+function guideDef(title, text) {
+  return `
+    <div class="ba-gdef">
+      <strong>${escapeHtml(title)}</strong>
+      <span>${escapeHtml(text)}</span>
+    </div>
   `;
 }
 
@@ -668,7 +678,8 @@ function guideMapPage2() {
 function guideMeterDemo() {
   return `
     <div class="ba-gdemo">
-      <p class="ba-gdemo__title">The bars on every number</p>
+      <p class="ba-gdemo__title">Reading the colours</p>
+      <p class="ba-gdemo__intro">Every headline number has a bar underneath. Compare this game to our usual level and the promotion standard.</p>
       <div class="ba-gdemo__meters">
         <div class="ba-gdemo__meter">
           <span class="ba-gdemo__val is-hot">52%</span>
@@ -677,7 +688,7 @@ function guideMeterDemo() {
             <span class="ba-meter__track"><span class="ba-meter__fill" style="width:82%"></span><i class="ba-meter__tick ba-meter__tick--req" style="left:72%"></i><i class="ba-meter__tick ba-meter__tick--avg" style="left:58%"></i></span>
             <div class="ba-meter__rail ba-meter__rail--avg"><span class="ba-meter__flag ba-meter__flag--avg" style="left:58%"><em>Avg</em><b>38%</b></span></div>
           </div>
-          <span class="ba-gdemo__cap is-hot">Green = at or above Req</span>
+          <span class="ba-gdemo__cap is-hot"><b>Green</b> — at or above Req. Hitting promotion pace.</span>
         </div>
         <div class="ba-gdemo__meter">
           <span class="ba-gdemo__val is-warn">41%</span>
@@ -686,7 +697,7 @@ function guideMeterDemo() {
             <span class="ba-meter__track"><span class="ba-meter__fill" style="width:65%"></span><i class="ba-meter__tick ba-meter__tick--req" style="left:72%"></i></span>
             <div class="ba-meter__rail"></div>
           </div>
-          <span class="ba-gdemo__cap is-warn">Amber = close to Req</span>
+          <span class="ba-gdemo__cap is-warn"><b>Amber</b> — close to Req. Nearly there.</span>
         </div>
         <div class="ba-gdemo__meter">
           <span class="ba-gdemo__val is-cold">28%</span>
@@ -695,13 +706,13 @@ function guideMeterDemo() {
             <span class="ba-meter__track"><span class="ba-meter__fill" style="width:44%"></span><i class="ba-meter__tick ba-meter__tick--req" style="left:72%"></i></span>
             <div class="ba-meter__rail"></div>
           </div>
-          <span class="ba-gdemo__cap is-cold">Red = below Req</span>
+          <span class="ba-gdemo__cap is-cold"><b>Red</b> — below Req. Worth a debrief.</span>
         </div>
       </div>
       <div class="ba-gdemo__keys">
-        <p><strong>Req</strong> — what the top 7 in League Two average. Our promotion benchmark.</p>
-        <p><strong>Avg</strong> — what we usually do in recent league games.</p>
-        <p><strong>Wing-backs</strong> — count half DEF, half ATT on unit panels.</p>
+        <p><strong>Req</strong> Top 7 in League Two — our promotion benchmark.</p>
+        <p><strong>Avg</strong> What we normally do in recent league games.</p>
+        <p><strong>Wing-backs</strong> Split 50/50 between DEF and ATT on unit panels.</p>
       </div>
     </div>
   `;
@@ -714,7 +725,7 @@ function guideSheetShell({ kicker, page, totalPages, title, bodyHtml, footNote }
         <div class="ba-sheet__brand">
           <p class="ba-sheet__kicker">${escapeHtml(kicker)}</p>
           <h3 class="ba-sheet__title">${escapeHtml(title)}</h3>
-          <p class="ba-sheet__meta">Staff guide · follow the numbers on the map</p>
+          <p class="ba-sheet__meta">Match the yellow numbers on the map</p>
         </div>
         <p class="ba-sheet__page"><b>${page}</b><span>/${totalPages}</span></p>
       </header>
@@ -730,41 +741,39 @@ function guideSheetsHtml({ kicker, fixture, totalPages = 4 }) {
     <div class="ba-guide ba-guide--visual">
       ${guideMapPage1()}
       <div class="ba-guide__legend ba-guide__legend--fill">
-        <h4 class="ba-guide__legend-head">What each box means — follow the numbers on the map</h4>
+        <h4 class="ba-guide__legend-head">Match page 1 — what to look at</h4>
         <div class="ba-guide__cards ba-guide__cards--2 ba-guide__cards--fill">
-          ${guideCard(1, "Scoreboard", "Final score, club badges and Win / Draw / Loss.")}
-          ${guideCard(2, "Time in phase", "How the 90 minutes split — in possession, out of possession, transitions, set pieces and second balls.")}
-          ${guideCard(3, "Headline numbers", "Expected goals plus four KPIs: aggressive regains, regains off their defenders, backline beaten, duels won %. Each has Req and Avg bars.")}
-          ${guideCard(4, "Chance race", "Running xG through the game. Steeper line = stronger spell. Football icons = goals. HT = half-time.")}
-          ${guideCard(5, "Territory", `Who had the ball in the attacking third — overall and in 15-minute blocks vs ${opp}.`)}
-          ${guideCard(6, "Balls in behind", "Touches beyond their last line (left / centre / right). Brighter = more. Names underneath = who received them.")}
-          ${guideCard(7, "Backline beaten", "How many defenders each unit took out of the game.")}
-          ${guideCard(8, "Duels won", "Physical battle success by DEF, MID and ATT.")}
+          ${guideCard(1, "Scoreboard", "Who won and the final score.", "Club badges, goals and a Win / Draw / Loss tag. Start here.")}
+          ${guideCard(2, "Time in phase", "How the game actually felt.", "The coloured bar shows where the minutes went — in possession, defending, transitions, set pieces and second balls.")}
+          ${guideCard(3, "Headline numbers", "Our five key team stats.", "Expected goals plus aggressive regains, regains off their defenders, backline beaten and duels won. Each number has Req and Avg bars underneath.")}
+          ${guideCard(4, "Chance race", "Who built the better chances over 90 minutes.", "Two lines climbing through the game. Steeper = stronger spell. Football icons mark goals. Dashed line = half-time.")}
+          ${guideCard(5, "Territory", "Who lived in the final third.", `Attacking-third share overall and in 15-minute blocks vs ${opp}. Black = us, their colour = them.`)}
+          ${guideCard(6, "Balls in behind", "Did we get in behind their back four?", "Three zones on the pitch — left, centre, right. Brighter green = more touches. Names below = who received them.")}
+          ${guideCard(7, "Backline beaten", "Who broke their shape?", "Defenders taken out of the play, split by DEF, MID and ATT. Shows which unit broke lines.")}
+          ${guideCard(8, "Duels won", "Who won the physical battle?", "Duel success % for defenders, midfielders and attackers. Higher = more 50-50s and individual contests won.")}
         </div>
       </div>
     </div>
   `;
   const page2Body = `
-    <div class="ba-guide ba-guide--stacked">
-      <div class="ba-guide__top">
-        ${guideMapPage2()}
-        <div class="ba-guide__legend ba-guide__legend--fill">
-          <h4 class="ba-guide__legend-head">Page 2 — players</h4>
-          <div class="ba-guide__cards ba-guide__cards--2">
-            ${guideCard(1, "Standouts", "Three quick picks: highest xG, most backline beaten, best duel % this game.")}
-            ${guideCard(2, "Six leaderboards", "Top 5 in the match for xG, aggressive regains, defensive ball wins, regains off opp defenders, backline beaten and duels won.")}
-          </div>
-          <div class="ba-guide__board-key ba-guide__board-key--fill">
-            <p><strong>Expected goals</strong> — shot quality added up</p>
-            <p><strong>Aggressive regains</strong> — won it back high up the pitch</p>
-            <p><strong>Defensive ball wins</strong> — won it and added a teammate</p>
-            <p><strong>Regains from opp defenders</strong> — stole it off their back line</p>
-            <p><strong>Backline beaten</strong> — took defenders out of the play</p>
-            <p><strong>Duels won</strong> — need 3+ duels to appear on the board</p>
-          </div>
+    <div class="ba-guide ba-guide--triple">
+      ${guideMapPage2()}
+      <div class="ba-guide__legend ba-guide__legend--fill">
+        <h4 class="ba-guide__legend-head">Player page — who stood out</h4>
+        <div class="ba-guide__cards ba-guide__cards--1">
+          ${guideCard(1, "Standouts", "Three names to discuss first.", "Best expected goals, most backline beaten and best duel % in this match — with photos.")}
+          ${guideCard(2, "Six leaderboards", "Full top-five lists.", "Every player ranked for xG, aggressive regains, defensive ball wins, regains off opp defenders, backline beaten and duels won.")}
+        </div>
+        <div class="ba-guide__defs ba-guide__defs--fill">
+          ${guideDef("Expected goals", "Shot quality added up — not just who shot, but how good the chances were.")}
+          ${guideDef("Aggressive regains", "Won the ball back quickly in their half — pressing and counter-pressing.")}
+          ${guideDef("Defensive ball wins", "Won it in a defensive action and added a teammate to the play.")}
+          ${guideDef("Regains from opp defenders", "Stole it off their centre-backs or full-backs.")}
+          ${guideDef("Backline beaten", "Passes or runs that took opposition defenders out of the game.")}
+          ${guideDef("Duels won", "Need at least 3 duels in the game to make the board.")}
         </div>
       </div>
-      ${guideMeterDemo()}
+      <div class="ba-guide__meter-col">${guideMeterDemo()}</div>
     </div>
   `;
   return guideSheetShell({
