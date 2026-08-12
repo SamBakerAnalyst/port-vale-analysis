@@ -621,8 +621,9 @@ function guideMapPage1() {
       <div class="ba-gmap__mast">
         ${guideNum(1)}
         <span class="ba-gmap__mast-score">Port Vale <b>1 – 2</b> Wolves</span>
-        ${guideNum(2)}
-        <span class="ba-gmap__mast-phase">
+        <div class="ba-gmap__mast-phase-wrap">
+          ${guideNum(2)}
+          <span class="ba-gmap__mast-phase">
           <i class="ba-phase__fill ba-phase__fill--IN_POSSESSION"></i>
           <i class="ba-phase__fill ba-phase__fill--ATTACKING_TRANSITION"></i>
           <i class="ba-phase__fill ba-phase__fill--SECOND_BALL"></i>
@@ -630,6 +631,7 @@ function guideMapPage1() {
           <i class="ba-phase__fill ba-phase__fill--DEFENSIVE_TRANSITION"></i>
           <i class="ba-phase__fill ba-phase__fill--OUT_OF_POSSESSION"></i>
         </span>
+        </div>
       </div>
       <div class="ba-gmap__strip">
         ${guideNum(3)}
@@ -679,40 +681,28 @@ function guideMeterDemo() {
   return `
     <div class="ba-gdemo">
       <p class="ba-gdemo__title">Reading the colours</p>
-      <p class="ba-gdemo__intro">Every headline number has a bar underneath. Compare this game to our usual level and the promotion standard.</p>
-      <div class="ba-gdemo__meters">
-        <div class="ba-gdemo__meter">
-          <span class="ba-gdemo__val is-hot">52%</span>
-          <div class="ba-meter ba-meter--hot ba-gdemo__bar">
-            <div class="ba-meter__rail ba-meter__rail--req"><span class="ba-meter__flag ba-meter__flag--req is-end" style="left:72%"><em>Req</em><b>45%</b></span></div>
-            <span class="ba-meter__track"><span class="ba-meter__fill" style="width:82%"></span><i class="ba-meter__tick ba-meter__tick--req" style="left:72%"></i><i class="ba-meter__tick ba-meter__tick--avg" style="left:58%"></i></span>
-            <div class="ba-meter__rail ba-meter__rail--avg"><span class="ba-meter__flag ba-meter__flag--avg" style="left:58%"><em>Avg</em><b>38%</b></span></div>
-          </div>
-          <span class="ba-gdemo__cap is-hot"><b>Green</b> — at or above Req. Hitting promotion pace.</span>
+      <p class="ba-gdemo__intro">Every headline number has a bar underneath — compare this game to our usual level and the promotion standard.</p>
+      <div class="ba-gdemo__samples">
+        <div class="ba-gdemo__sample">
+          <span class="ba-gdemo__sample-val is-hot">52%</span>
+          <span class="ba-gdemo__sample-track is-hot"><i style="width:82%"></i></span>
+          <span class="ba-gdemo__sample-cap is-hot"><b>Green</b> — at or above Req</span>
         </div>
-        <div class="ba-gdemo__meter">
-          <span class="ba-gdemo__val is-warn">41%</span>
-          <div class="ba-meter ba-meter--warn ba-gdemo__bar">
-            <div class="ba-meter__rail ba-meter__rail--req"><span class="ba-meter__flag ba-meter__flag--req is-end" style="left:72%"><em>Req</em><b>45%</b></span></div>
-            <span class="ba-meter__track"><span class="ba-meter__fill" style="width:65%"></span><i class="ba-meter__tick ba-meter__tick--req" style="left:72%"></i></span>
-            <div class="ba-meter__rail"></div>
-          </div>
-          <span class="ba-gdemo__cap is-warn"><b>Amber</b> — close to Req. Nearly there.</span>
+        <div class="ba-gdemo__sample">
+          <span class="ba-gdemo__sample-val is-warn">41%</span>
+          <span class="ba-gdemo__sample-track is-warn"><i style="width:65%"></i></span>
+          <span class="ba-gdemo__sample-cap is-warn"><b>Amber</b> — close to Req</span>
         </div>
-        <div class="ba-gdemo__meter">
-          <span class="ba-gdemo__val is-cold">28%</span>
-          <div class="ba-meter ba-meter--cold ba-gdemo__bar">
-            <div class="ba-meter__rail ba-meter__rail--req"><span class="ba-meter__flag ba-meter__flag--req is-end" style="left:72%"><em>Req</em><b>45%</b></span></div>
-            <span class="ba-meter__track"><span class="ba-meter__fill" style="width:44%"></span><i class="ba-meter__tick ba-meter__tick--req" style="left:72%"></i></span>
-            <div class="ba-meter__rail"></div>
-          </div>
-          <span class="ba-gdemo__cap is-cold"><b>Red</b> — below Req. Worth a debrief.</span>
+        <div class="ba-gdemo__sample">
+          <span class="ba-gdemo__sample-val is-cold">28%</span>
+          <span class="ba-gdemo__sample-track is-cold"><i style="width:44%"></i></span>
+          <span class="ba-gdemo__sample-cap is-cold"><b>Red</b> — below Req</span>
         </div>
       </div>
-      <div class="ba-gdemo__keys">
-        <p><strong>Req</strong> Top 7 in League Two — our promotion benchmark.</p>
-        <p><strong>Avg</strong> What we normally do in recent league games.</p>
-        <p><strong>Wing-backs</strong> Split 50/50 between DEF and ATT on unit panels.</p>
+      <div class="ba-gdemo__ref">
+        <p><span class="ba-gdemo__pill ba-gdemo__pill--req">Req</span> Top 7 in League Two — promotion benchmark.</p>
+        <p><span class="ba-gdemo__pill ba-gdemo__pill--avg">Avg</span> Our usual level in recent league games.</p>
+        <p><span class="ba-gdemo__pill ba-gdemo__pill--wb">WB</span> Wing-backs split 50/50 DEF and ATT.</p>
       </div>
     </div>
   `;
@@ -743,14 +733,14 @@ function guideSheetsHtml({ kicker, fixture, totalPages = 4 }) {
       <div class="ba-guide__legend ba-guide__legend--fill">
         <h4 class="ba-guide__legend-head">Match page 1 — what to look at</h4>
         <div class="ba-guide__cards ba-guide__cards--2 ba-guide__cards--fill">
-          ${guideCard(1, "Scoreboard", "Who won and the final score.", "Club badges, goals and a Win / Draw / Loss tag. Start here.")}
-          ${guideCard(2, "Time in phase", "How the game actually felt.", "The coloured bar shows where the minutes went — in possession, defending, transitions, set pieces and second balls.")}
-          ${guideCard(3, "Headline numbers", "Our five key team stats.", "Expected goals plus aggressive regains, regains off their defenders, backline beaten and duels won. Each number has Req and Avg bars underneath.")}
-          ${guideCard(4, "Chance race", "Who built the better chances over 90 minutes.", "Two lines climbing through the game. Steeper = stronger spell. Football icons mark goals. Dashed line = half-time.")}
-          ${guideCard(5, "Territory", "Who lived in the final third.", `Attacking-third share overall and in 15-minute blocks vs ${opp}. Black = us, their colour = them.`)}
-          ${guideCard(6, "Balls in behind", "Did we get in behind their back four?", "Three zones on the pitch — left, centre, right. Brighter green = more touches. Names below = who received them.")}
-          ${guideCard(7, "Backline beaten", "Who broke their shape?", "Defenders taken out of the play, split by DEF, MID and ATT. Shows which unit broke lines.")}
-          ${guideCard(8, "Duels won", "Who won the physical battle?", "Duel success % for defenders, midfielders and attackers. Higher = more 50-50s and individual contests won.")}
+          ${guideCard(1, "Scoreboard", "Who won and the final score.", "Club badges, goals and Win / Draw / Loss.")}
+          ${guideCard(2, "Time in phase", "How the game actually felt.", "Coloured bar — in possession, defending, transitions, set pieces and second balls.")}
+          ${guideCard(3, "Headline numbers", "Our five key team stats.", "xG plus regains, regains off their defenders, backline beaten and duels won — each with Req and Avg bars.")}
+          ${guideCard(4, "Chance race", "Who built the better chances.", "Two lines through the game. Steeper = stronger spell. Football icons = goals.")}
+          ${guideCard(5, "Territory", "Who lived in the final third.", `Attacking-third share overall and in 15-minute blocks vs ${opp}.`)}
+          ${guideCard(6, "Balls in behind", "Did we get in behind their back four?", "Three pitch zones — left, centre, right. Brighter = more. Names = who received.")}
+          ${guideCard(7, "Backline beaten", "Who broke their shape?", "Defenders taken out of the play — split by DEF, MID and ATT.")}
+          ${guideCard(8, "Duels won", "Who won the physical battle?", "Duel success % for defenders, midfielders and attackers.")}
         </div>
       </div>
     </div>
@@ -1462,6 +1452,26 @@ const SHEET_EXPORT_WIDTH = 1123;
 const SHEET_EXPORT_HEIGHT = 794;
 const SHEET_EXPORT_SCALE = 2;
 
+function tidyMetersForPdf(root) {
+  root.querySelectorAll(".ba-meter").forEach((meter) => {
+    const reqFlag = meter.querySelector(".ba-meter__flag--req");
+    const avgFlag = meter.querySelector(".ba-meter__flag--avg");
+    if (!reqFlag || !avgFlag) return;
+    const reqLeft = parseFloat(reqFlag.style.left);
+    const avgLeft = parseFloat(avgFlag.style.left);
+    if (!Number.isFinite(reqLeft) || !Number.isFinite(avgLeft)) return;
+    if (Math.abs(reqLeft - avgLeft) >= 14) return;
+    const nudged = Math.max(6, Math.min(avgLeft, reqLeft - 20));
+    avgFlag.style.left = `${nudged}%`;
+    avgFlag.classList.remove("is-end");
+    avgFlag.classList.add("is-start");
+    if (reqLeft > 78) {
+      reqFlag.classList.add("is-end");
+      reqFlag.classList.remove("is-start");
+    }
+  });
+}
+
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -1510,6 +1520,7 @@ async function exportReportPdf(blockId) {
         scrollY: 0,
         onclone: (_doc, cloned) => {
           cloned.classList.add("ba-sheet--pdf-capture");
+          tidyMetersForPdf(cloned);
           cloned.style.width = `${SHEET_EXPORT_WIDTH}px`;
           cloned.style.maxWidth = `${SHEET_EXPORT_WIDTH}px`;
           cloned.style.height = `${SHEET_EXPORT_HEIGHT}px`;

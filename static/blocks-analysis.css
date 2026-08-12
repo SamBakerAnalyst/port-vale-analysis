@@ -2673,7 +2673,20 @@ a:hover { text-decoration: underline; }
 }
 
 .ba-gmap__mast .ba-gnum { position: absolute; top: -.35rem; left: -.35rem; }
-.ba-gmap__mast .ba-gnum:nth-of-type(2) { left: auto; right: -.35rem; top: auto; bottom: -.35rem; }
+
+.ba-gmap__mast-phase-wrap {
+  grid-column: 1 / -1;
+  position: relative;
+  margin-top: .12rem;
+  padding-left: .55rem;
+}
+
+.ba-gmap__mast-phase-wrap > .ba-gnum {
+  position: absolute;
+  left: -.35rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
 
 .ba-gmap__mast-score {
   grid-column: 1 / -1;
@@ -2687,12 +2700,10 @@ a:hover { text-decoration: underline; }
 .ba-gmap__mast-score b { color: #f5c518; margin: 0 .25rem; }
 
 .ba-gmap__mast-phase {
-  grid-column: 1 / -1;
   display: flex;
   height: .35rem;
   border-radius: 2px;
   overflow: hidden;
-  margin-top: .15rem;
 }
 
 .ba-gmap__mast-phase i { flex: 1; display: block; }
@@ -3045,6 +3056,7 @@ a:hover { text-decoration: underline; }
   border-radius: 2px;
   min-height: 0;
   height: 100%;
+  overflow: hidden;
 }
 
 .ba-gcard__body { min-width: 0; }
@@ -3146,72 +3158,100 @@ a:hover { text-decoration: underline; }
   color: rgba(255,255,255,.88);
 }
 
-.ba-gdemo__meters {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: .3rem;
-  flex: 1;
-  align-content: center;
-}
-
-.ba-guide__meter-col .ba-gdemo__meters {
-  grid-template-columns: 1fr;
-  align-content: stretch;
-}
-
-.ba-gdemo__meter {
+.ba-gdemo__samples {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: .14rem;
+  gap: .28rem;
   flex: 1;
+  justify-content: space-evenly;
 }
 
-.ba-gdemo__val {
+.ba-gdemo__sample {
+  display: grid;
+  grid-template-columns: 2.4rem 1fr;
+  grid-template-rows: auto auto;
+  gap: .08rem .35rem;
+  align-items: center;
+}
+
+.ba-gdemo__sample-val {
+  grid-row: 1 / span 2;
   font-family: "Barlow Condensed", sans-serif;
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   font-weight: 800;
   line-height: 1;
+  text-align: center;
 }
 
-.ba-gdemo__val.is-hot { color: #4ade80; }
-.ba-gdemo__val.is-warn { color: #f5c518; }
-.ba-gdemo__val.is-cold { color: #f87171; }
+.ba-gdemo__sample-val.is-hot { color: #4ade80; }
+.ba-gdemo__sample-val.is-warn { color: #f5c518; }
+.ba-gdemo__sample-val.is-cold { color: #f87171; }
 
-.ba-gdemo__bar { margin: 0; }
-
-.ba-gdemo__cap {
-  font-size: .64rem;
-  line-height: 1.3;
-  color: rgba(255,255,255,.82);
+.ba-gdemo__sample-track {
+  display: block;
+  height: .55rem;
+  background: rgba(255,255,255,.15);
+  border-radius: 99px;
+  overflow: hidden;
 }
 
-.ba-gdemo__cap b { font-weight: 800; }
+.ba-gdemo__sample-track i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+}
 
-.ba-gdemo__cap.is-hot { color: #4ade80; }
-.ba-gdemo__cap.is-warn { color: #f5c518; }
-.ba-gdemo__cap.is-cold { color: #f87171; }
+.ba-gdemo__sample-track.is-hot i { background: #1f7a3f; }
+.ba-gdemo__sample-track.is-warn i { background: #c9a227; }
+.ba-gdemo__sample-track.is-cold i { background: #b42318; }
 
-.ba-gdemo__keys {
+.ba-gdemo__sample-cap {
+  font-size: .62rem;
+  line-height: 1.28;
+  color: rgba(255,255,255,.85);
+}
+
+.ba-gdemo__sample-cap b { font-weight: 800; }
+.ba-gdemo__sample-cap.is-hot { color: #4ade80; }
+.ba-gdemo__sample-cap.is-warn { color: #f5c518; }
+.ba-gdemo__sample-cap.is-cold { color: #f87171; }
+
+.ba-gdemo__ref {
   margin-top: auto;
-  padding-top: .24rem;
+  padding-top: .22rem;
   border-top: 1px solid rgba(255,255,255,.15);
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: .16rem;
+  display: flex;
+  flex-direction: column;
+  gap: .14rem;
 }
 
-.ba-gdemo__keys p {
+.ba-gdemo__ref p {
   margin: 0;
-  font-size: .64rem;
+  font-size: .62rem;
   line-height: 1.32;
   color: rgba(255,255,255,.88);
+  display: flex;
+  align-items: baseline;
+  gap: .35rem;
 }
 
-.ba-gdemo__keys strong {
-  color: #f5c518;
+.ba-gdemo__pill {
+  flex-shrink: 0;
+  display: inline-block;
+  min-width: 2rem;
+  padding: .1rem .28rem;
+  border-radius: 2px;
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: .58rem;
   font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  text-align: center;
 }
+
+.ba-gdemo__pill--req { background: #111; color: #f5c518; box-shadow: 0 0 0 1px #f5c518; }
+.ba-gdemo__pill--avg { background: #f5c518; color: #111; }
+.ba-gdemo__pill--wb { background: rgba(255,255,255,.12); color: #fff; }
 
 .ba-sheet--guide .ba-sheet__bar {
   font-size: .58rem;
@@ -3219,31 +3259,59 @@ a:hover { text-decoration: underline; }
 
 .ba-sheet--pdf-capture.ba-sheet--guide .ba-guide--visual,
 .ba-sheet--pdf-capture.ba-sheet--guide .ba-guide--triple {
-  padding: .42rem .55rem .36rem;
+  padding: .38rem .5rem .32rem;
+}
+
+.ba-sheet--pdf-capture.ba-sheet--guide .ba-guide__cards--fill,
+.ba-sheet--pdf-capture.ba-sheet--guide .ba-guide__defs--fill {
+  grid-auto-rows: auto;
+  align-content: start;
+}
+
+.ba-sheet--pdf-capture.ba-sheet--guide .ba-gcard {
+  height: auto;
 }
 
 .ba-sheet--pdf-capture.ba-sheet--guide .ba-gcard p,
 .ba-sheet--pdf-capture.ba-sheet--guide .ba-gcard__lead {
-  font-size: 13px;
-  line-height: 1.38;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .ba-sheet--pdf-capture.ba-sheet--guide .ba-gcard h5 {
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .ba-sheet--pdf-capture.ba-sheet--guide .ba-gdef span {
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.32;
 }
 
 .ba-sheet--pdf-capture.ba-sheet--guide .ba-gdef strong {
-  font-size: 13px;
+  font-size: 12px;
 }
 
-.ba-sheet--pdf-capture.ba-sheet--guide .ba-gdemo__cap,
+.ba-sheet--pdf-capture.ba-sheet--guide .ba-gdemo__ref p,
 .ba-sheet--pdf-capture.ba-sheet--guide .ba-gdemo__intro,
-.ba-sheet--pdf-capture.ba-sheet--guide .ba-gdemo__keys p {
-  font-size: 12px;
+.ba-sheet--pdf-capture.ba-sheet--guide .ba-gdemo__sample-cap {
+  font-size: 11px;
+}
+
+.ba-sheet--pdf-capture .ba-meter__flag {
+  padding: .12rem .32rem .1rem;
+}
+
+.ba-sheet--pdf-capture .ba-meter__flag b {
+  font-size: .82rem;
+}
+
+.ba-sheet--pdf-capture .ba-meter__flag em {
+  font-size: .52rem;
+}
+
+.ba-sheet--pdf-capture .ba-meter__rail--req,
+.ba-sheet--pdf-capture .ba-meter__rail--avg {
+  height: 20px;
 }
 
 body.is-exporting .ba-export-hide { display: none !important; }
