@@ -600,6 +600,10 @@ function guideCard(n, title, text) {
   `;
 }
 
+function guideBoardRows(count = 5) {
+  return Array.from({ length: count }, (_, i) => `<i>${i + 1}.</i>`).join("");
+}
+
 function guideMapPage1() {
   return `
     <div class="ba-gmap ba-gmap--p1" aria-hidden="true">
@@ -610,25 +614,29 @@ function guideMapPage1() {
         ${guideNum(2)}
         <span class="ba-gmap__mast-phase">
           <i class="ba-phase__fill ba-phase__fill--IN_POSSESSION"></i>
-          <i class="ba-phase__fill ba-phase__fill--OUT_OF_POSSESSION"></i>
           <i class="ba-phase__fill ba-phase__fill--ATTACKING_TRANSITION"></i>
+          <i class="ba-phase__fill ba-phase__fill--SECOND_BALL"></i>
+          <i class="ba-phase__fill ba-phase__fill--SET_PIECE"></i>
+          <i class="ba-phase__fill ba-phase__fill--DEFENSIVE_TRANSITION"></i>
+          <i class="ba-phase__fill ba-phase__fill--OUT_OF_POSSESSION"></i>
         </span>
       </div>
       <div class="ba-gmap__strip">
         ${guideNum(3)}
-        <span class="ba-gmap__pill">xG</span>
+        <span class="ba-gmap__pill ba-gmap__pill--xg">xG VS</span>
         <span class="ba-gmap__pill">Regains</span>
+        <span class="ba-gmap__pill">Opp DEF</span>
         <span class="ba-gmap__pill">Backline</span>
         <span class="ba-gmap__pill">Duels</span>
       </div>
       <div class="ba-gmap__charts">
-        <div class="ba-gmap__chart">${guideNum(4)}<span>Chance race</span><svg viewBox="0 0 80 36"><polyline points="2,34 40,20 78,8" fill="none" stroke="#111" stroke-width="2"/><polyline points="2,34 40,28 78,22" fill="none" stroke="#FDB913" stroke-width="2"/></svg></div>
-        <div class="ba-gmap__chart">${guideNum(5)}<span>Territory</span><div class="ba-gmap__bars"><i></i><i></i><i></i></div></div>
-        <div class="ba-gmap__chart ba-gmap__chart--pitch">${guideNum(6)}<span>In behind</span><div class="ba-gmap__pitch"><b></b><b class="hot"></b><b></b></div></div>
+        <div class="ba-gmap__chart">${guideNum(4)}<span>Chance race</span><svg viewBox="0 0 80 48"><polyline points="2,46 22,38 40,20 58,14 78,8" fill="none" stroke="#111" stroke-width="2.2"/><polyline points="2,46 22,42 40,28 58,24 78,22" fill="none" stroke="#FDB913" stroke-width="2.2"/><line x1="40" y1="4" x2="40" y2="46" stroke="#c5bfb2" stroke-dasharray="3 3"/></svg></div>
+        <div class="ba-gmap__chart">${guideNum(5)}<span>Territory</span><div class="ba-gmap__bars"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+        <div class="ba-gmap__chart ba-gmap__chart--pitch">${guideNum(6)}<span>In behind</span><div class="ba-gmap__pitch"><b></b><b class="hot"></b><b></b></div><div class="ba-gmap__recv"><span>Receiver</span><span>Receiver</span></div></div>
       </div>
       <div class="ba-gmap__units">
-        <div class="ba-gmap__unit">${guideNum(7)}<em>Backline beaten</em><span>DEF · MID · ATT</span></div>
-        <div class="ba-gmap__unit">${guideNum(8)}<em>Duels won</em><span>DEF · MID · ATT</span></div>
+        <div class="ba-gmap__unit">${guideNum(7)}<em>Backline beaten</em><div class="ba-gmap__unit-bars"><span style="width:72%"></span><span style="width:55%"></span><span style="width:48%"></span></div><span>DEF · MID · ATT</span></div>
+        <div class="ba-gmap__unit">${guideNum(8)}<em>Duels won</em><div class="ba-gmap__unit-bars"><span style="width:58%"></span><span style="width:62%"></span><span style="width:44%"></span></div><span>DEF · MID · ATT</span></div>
       </div>
     </div>
   `;
@@ -640,19 +648,18 @@ function guideMapPage2() {
       <div class="ba-gmap__label">Page 2 layout</div>
       <div class="ba-gmap__stars">
         ${guideNum(1)}
-        <div class="ba-gmap__star"></div>
-        <div class="ba-gmap__star"></div>
-        <div class="ba-gmap__star"></div>
-        <span class="ba-gmap__stars-cap">Standouts</span>
+        <div class="ba-gmap__star"><span></span><b>Player</b><em>xG</em></div>
+        <div class="ba-gmap__star"><span></span><b>Player</b><em>Backline</em></div>
+        <div class="ba-gmap__star"><span></span><b>Player</b><em>Duels</em></div>
       </div>
       <div class="ba-gmap__boards">
         ${guideNum(2)}
-        <div class="ba-gmap__board"><em>xG</em><i>1.</i><i>2.</i><i>3.</i></div>
-        <div class="ba-gmap__board"><em>Regains</em><i>1.</i><i>2.</i></div>
-        <div class="ba-gmap__board"><em>Def wins</em><i>1.</i><i>2.</i></div>
-        <div class="ba-gmap__board"><em>Opp DEF</em><i>1.</i><i>2.</i></div>
-        <div class="ba-gmap__board"><em>Backline</em><i>1.</i><i>2.</i></div>
-        <div class="ba-gmap__board"><em>Duels</em><i>1.</i><i>2.</i></div>
+        <div class="ba-gmap__board"><em>xG</em>${guideBoardRows()}</div>
+        <div class="ba-gmap__board"><em>Regains</em>${guideBoardRows()}</div>
+        <div class="ba-gmap__board"><em>Def wins</em>${guideBoardRows()}</div>
+        <div class="ba-gmap__board"><em>Opp DEF</em>${guideBoardRows()}</div>
+        <div class="ba-gmap__board"><em>Backline</em>${guideBoardRows()}</div>
+        <div class="ba-gmap__board"><em>Duels</em>${guideBoardRows()}</div>
       </div>
     </div>
   `;
@@ -722,21 +729,15 @@ function guideSheetsHtml({ kicker, fixture, totalPages = 4 }) {
   const page1Body = `
     <div class="ba-guide ba-guide--visual">
       ${guideMapPage1()}
-      <div class="ba-guide__legend">
-        <h4 class="ba-guide__legend-head">What each box means</h4>
-        <div class="ba-guide__cards">
+      <div class="ba-guide__legend ba-guide__legend--fill">
+        <h4 class="ba-guide__legend-head">What each box means — follow the numbers on the map</h4>
+        <div class="ba-guide__cards ba-guide__cards--2 ba-guide__cards--fill">
           ${guideCard(1, "Scoreboard", "Final score, club badges and Win / Draw / Loss.")}
           ${guideCard(2, "Time in phase", "How the 90 minutes split — in possession, out of possession, transitions, set pieces and second balls.")}
           ${guideCard(3, "Headline numbers", "Expected goals plus four KPIs: aggressive regains, regains off their defenders, backline beaten, duels won %. Each has Req and Avg bars.")}
-        </div>
-        <h4 class="ba-guide__legend-head ba-guide__legend-head--charts">The three charts</h4>
-        <div class="ba-guide__cards ba-guide__cards--3">
           ${guideCard(4, "Chance race", "Running xG through the game. Steeper line = stronger spell. Football icons = goals. HT = half-time.")}
           ${guideCard(5, "Territory", `Who had the ball in the attacking third — overall and in 15-minute blocks vs ${opp}.`)}
           ${guideCard(6, "Balls in behind", "Touches beyond their last line (left / centre / right). Brighter = more. Names underneath = who received them.")}
-        </div>
-        <h4 class="ba-guide__legend-head">By unit</h4>
-        <div class="ba-guide__cards ba-guide__cards--2">
           ${guideCard(7, "Backline beaten", "How many defenders each unit took out of the game.")}
           ${guideCard(8, "Duels won", "Physical battle success by DEF, MID and ATT.")}
         </div>
@@ -744,24 +745,26 @@ function guideSheetsHtml({ kicker, fixture, totalPages = 4 }) {
     </div>
   `;
   const page2Body = `
-    <div class="ba-guide ba-guide--visual">
-      ${guideMapPage2()}
-      <div class="ba-guide__legend">
-        <h4 class="ba-guide__legend-head">Page 2 — players</h4>
-        <div class="ba-guide__cards">
-          ${guideCard(1, "Standouts", "Three quick picks: highest xG, most backline beaten, best duel % this game.")}
-          ${guideCard(2, "Six leaderboards", "Top 5 in the match for xG, aggressive regains, defensive ball wins, regains off opp defenders, backline beaten and duels won.")}
+    <div class="ba-guide ba-guide--stacked">
+      <div class="ba-guide__top">
+        ${guideMapPage2()}
+        <div class="ba-guide__legend ba-guide__legend--fill">
+          <h4 class="ba-guide__legend-head">Page 2 — players</h4>
+          <div class="ba-guide__cards ba-guide__cards--2">
+            ${guideCard(1, "Standouts", "Three quick picks: highest xG, most backline beaten, best duel % this game.")}
+            ${guideCard(2, "Six leaderboards", "Top 5 in the match for xG, aggressive regains, defensive ball wins, regains off opp defenders, backline beaten and duels won.")}
+          </div>
+          <div class="ba-guide__board-key ba-guide__board-key--fill">
+            <p><strong>Expected goals</strong> — shot quality added up</p>
+            <p><strong>Aggressive regains</strong> — won it back high up the pitch</p>
+            <p><strong>Defensive ball wins</strong> — won it and added a teammate</p>
+            <p><strong>Regains from opp defenders</strong> — stole it off their back line</p>
+            <p><strong>Backline beaten</strong> — took defenders out of the play</p>
+            <p><strong>Duels won</strong> — need 3+ duels to appear on the board</p>
+          </div>
         </div>
-        <div class="ba-guide__board-key">
-          <p><strong>Expected goals</strong> — shot quality added up</p>
-          <p><strong>Aggressive regains</strong> — won it back high up the pitch</p>
-          <p><strong>Defensive ball wins</strong> — won it and added a teammate</p>
-          <p><strong>Regains from opp defenders</strong> — stole it off their back line</p>
-          <p><strong>Backline beaten</strong> — took defenders out of the play</p>
-          <p><strong>Duels won</strong> — need 3+ duels to appear on the board</p>
-        </div>
-        ${guideMeterDemo()}
       </div>
+      ${guideMeterDemo()}
     </div>
   `;
   return guideSheetShell({
