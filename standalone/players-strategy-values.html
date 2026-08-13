@@ -1030,52 +1030,41 @@
       stroke-linejoin: round;
     }
     .vb-foot {
-      position: relative;
-      overflow: hidden;
-      border-top: 1.5px solid var(--vb-gold);
-      min-height: 0;
-    }
-    .vb-foot img {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      object-position: 58% 28%;
-      filter: saturate(0.85) contrast(1.05) brightness(0.72);
-    }
-    .vb-foot__veil {
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.55) 45%, rgba(0,0,0,0.88) 100%);
-    }
-    .vb-foot__motto {
-      position: absolute;
-      inset: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 0.55rem;
-      z-index: 1;
+      border-top: 1.5px solid var(--vb-gold);
+      min-height: 0;
+      background: #050505;
     }
-    .vb-foot__motto span {
+    .vb-foot__motto {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.85rem;
+      width: 100%;
+      padding: 0 1rem;
+    }
+    .vb-foot__motto > span:not([class]) {
       font-family: "Black Ops One", "Barlow Condensed", sans-serif;
-      font-size: clamp(1.1rem, 2.6cqw, 1.7rem);
+      font-size: clamp(1.85rem, 5.2cqw, 3.4rem);
       font-weight: 400;
-      letter-spacing: 0.14em;
+      letter-spacing: 0.16em;
       text-transform: uppercase;
       color: var(--vb-gold);
-      text-shadow: 0 2px 14px rgba(0,0,0,0.75);
+      line-height: 1;
+      white-space: nowrap;
     }
     .vb-foot__chevs {
       display: flex;
-      gap: 0.28rem;
+      gap: 0.4rem;
       align-items: center;
+      flex: 0 0 auto;
     }
     .vb-foot__chevs i {
       display: block;
-      width: 0.55rem;
-      height: 1.15rem;
+      width: clamp(0.7rem, 1.6cqw, 1.1rem);
+      height: clamp(1.5rem, 3.4cqw, 2.4rem);
       background: var(--vb-gold);
       clip-path: polygon(0 0, 100% 50%, 0 100%);
       opacity: 0.95;
@@ -1110,6 +1099,10 @@
     body.is-present .vb-behaviours li,
     body.is-pdf-view .vb-behaviours li {
       font-size: clamp(0.95rem, 1.8vmin, 1.2rem);
+    }
+    body.is-present .vb-foot__motto > span:not([class]),
+    body.is-pdf-view .vb-foot__motto > span:not([class]) {
+      font-size: clamp(2.4rem, 6.2vmin, 4rem);
     }
     body.is-exporting .slide.is-export-capture.slide--values-board .values-board {
       height: 100% !important;
@@ -5183,7 +5176,6 @@
             </ul>
           </article>`;
       }).join("");
-      const footSrc = TITLE_PHOTOS[s.photo] || TITLE_PHOTOS.embrace;
       const motto = s.motto || "He who dares wins";
       return `
         <div class="values-board" aria-label="SAS values">
@@ -5197,8 +5189,6 @@
           </header>
           <div class="vb-rows">${rows}</div>
           <footer class="vb-foot">
-            <img src="${footSrc}" alt="" />
-            <div class="vb-foot__veil"></div>
             <div class="vb-foot__motto">
               <span class="vb-foot__chevs vb-foot__chevs--left" aria-hidden="true"><i></i><i></i><i></i></span>
               <span>${motto}</span>
