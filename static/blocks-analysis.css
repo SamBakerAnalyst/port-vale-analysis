@@ -1555,9 +1555,9 @@ a:hover { text-decoration: underline; }
 }
 
 .ba-sheet__main--compact .ba-unitrow {
-  padding: .02rem 0;
-  gap: .35rem;
-  grid-template-columns: 2rem minmax(0, 1fr);
+  padding: .06rem 0;
+  gap: .55rem;
+  grid-template-columns: 2.35rem minmax(0, 1fr);
 }
 
 .ba-sheet__main--compact .ba-unitrow__unit {
@@ -1570,8 +1570,8 @@ a:hover { text-decoration: underline; }
 }
 
 .ba-sheet__main--compact .ba-unitrow__nums {
-  margin-bottom: .08rem;
-  gap: .22rem;
+  margin-bottom: .1rem;
+  gap: .38rem;
 }
 
 .ba-sheet__main--compact .ba-unitrow__sub {
@@ -1580,6 +1580,7 @@ a:hover { text-decoration: underline; }
 }
 
 .ba-sheet__main--compact .ba-unitrow__req {
+  margin-left: 0;
   padding: .1rem .26rem .08rem;
 }
 
@@ -2154,7 +2155,7 @@ a:hover { text-decoration: underline; }
 .ba-unitrow__nums {
   display: flex;
   align-items: center;
-  gap: .28rem;
+  gap: .4rem;
   margin-bottom: .1rem;
   flex-wrap: wrap;
 }
@@ -2204,7 +2205,7 @@ a:hover { text-decoration: underline; }
   display: inline-flex;
   align-items: baseline;
   gap: .18rem;
-  margin-left: auto;
+  margin-left: 0;
   padding: .14rem .32rem .12rem;
   border-radius: 2px;
   background: #111;
@@ -2258,7 +2259,7 @@ a:hover { text-decoration: underline; }
 
 .ba-star {
   background: #fff;
-  border: 1px solid var(--rule);
+  border: 1.5px solid #b7afa0;
   border-radius: 2px;
   padding: .4rem .55rem .45rem;
   text-align: left;
@@ -2274,10 +2275,13 @@ a:hover { text-decoration: underline; }
 
 .ba-star__label {
   grid-area: label;
-  margin: 0 0 .28rem;
-  color: var(--ink-muted);
-  font-size: .58rem;
-  font-weight: 700;
+  margin: 0 0 .32rem;
+  padding-bottom: .22rem;
+  border-bottom: 2px solid #111;
+  color: #111;
+  font-family: var(--display);
+  font-size: .68rem;
+  font-weight: 800;
   letter-spacing: .1em;
   text-transform: uppercase;
 }
@@ -2510,7 +2514,7 @@ a:hover { text-decoration: underline; }
 
 .ba-lead {
   background: #fff;
-  border: 1px solid var(--rule, #d4cfc3);
+  border: 1.5px solid #b7afa0;
   border-radius: 2px;
   padding: .4rem .5rem .4rem;
   min-height: 0;
@@ -2520,12 +2524,13 @@ a:hover { text-decoration: underline; }
 
 .ba-lead__label {
   margin: 0;
-  padding-bottom: .22rem;
-  border-bottom: 2px solid #111;
+  padding-bottom: .28rem;
+  border-bottom: 2.5px solid #111;
+  color: #111;
   font-family: var(--display);
-  font-size: .78rem;
+  font-size: .86rem;
   font-weight: 800;
-  letter-spacing: .08em;
+  letter-spacing: .09em;
   text-transform: uppercase;
 }
 
