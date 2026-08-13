@@ -1074,7 +1074,7 @@
     }
     body.is-present .values-board,
     body.is-pdf-view .values-board {
-      grid-template-rows: auto minmax(0, 1fr) minmax(6rem, 22%);
+      grid-template-rows: auto minmax(0, 1fr) minmax(7.5rem, 28%);
     }
     body.is-present .vb-head,
     body.is-pdf-view .vb-head {
@@ -1100,9 +1100,19 @@
     body.is-pdf-view .vb-behaviours li {
       font-size: clamp(0.95rem, 1.8vmin, 1.2rem);
     }
+    body.is-present .vb-foot__motto,
+    body.is-pdf-view .vb-foot__motto {
+      gap: 1.1rem;
+    }
     body.is-present .vb-foot__motto > span:not([class]),
     body.is-pdf-view .vb-foot__motto > span:not([class]) {
-      font-size: clamp(2.4rem, 6.2vmin, 4rem);
+      font-size: clamp(3.2rem, 8.5vmin, 6.2rem);
+      letter-spacing: 0.14em;
+    }
+    body.is-present .vb-foot__chevs i,
+    body.is-pdf-view .vb-foot__chevs i {
+      width: clamp(1rem, 2.2vmin, 1.55rem);
+      height: clamp(2.2rem, 5vmin, 3.6rem);
     }
     body.is-exporting .slide.is-export-capture.slide--values-board .values-board {
       height: 100% !important;
