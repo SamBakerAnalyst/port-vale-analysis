@@ -835,6 +835,261 @@
       line-height: 0.92;
     }
 
+    /* Port Vale values board — SAS-style values | behaviours, club colours */
+    .slide.slide--values-board {
+      background: #0a0a0a;
+      color: #f5f5f5;
+    }
+    .slide__inner--values-board {
+      display: block !important;
+      height: 100%;
+      padding: 0 !important;
+      overflow: hidden;
+    }
+    .values-board {
+      height: 100%;
+      display: grid;
+      grid-template-rows: auto 1fr minmax(4.8rem, 18%);
+      min-height: 0;
+      background: #0a0a0a;
+    }
+    .vb-head {
+      padding: 0.7rem 1.15rem 0.45rem;
+      text-align: center;
+      border-bottom: 1px solid rgba(245, 197, 24, 0.28);
+    }
+    .vb-head__brand {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      text-align: left;
+    }
+    .vb-head__brand img {
+      width: clamp(2.6rem, 5.2cqw, 3.6rem);
+      height: auto;
+      flex: 0 0 auto;
+      filter: drop-shadow(0 4px 10px rgba(0,0,0,0.45));
+    }
+    .vb-head__kicker {
+      margin: 0;
+      font-family: "DM Sans", sans-serif;
+      font-size: clamp(0.62rem, 1.35cqw, 0.78rem);
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--gold);
+    }
+    .vb-head__title {
+      margin: 0.08rem 0 0;
+      font-family: "Barlow Condensed", sans-serif;
+      font-size: clamp(1.9rem, 4.8cqw, 3rem);
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      line-height: 0.92;
+      color: #fff;
+    }
+    .vb-head__motto {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.7rem;
+      margin: 0.4rem 0 0.2rem;
+    }
+    .vb-head__motto span {
+      font-family: "Barlow Condensed", sans-serif;
+      font-size: clamp(0.95rem, 2.2cqw, 1.25rem);
+      font-weight: 800;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--gold);
+    }
+    .vb-head__motto i {
+      display: block;
+      width: clamp(2.8rem, 7cqw, 5rem);
+      height: 1px;
+      background: var(--gold);
+    }
+    .vb-head__tag {
+      margin: 0;
+      font-family: "DM Sans", sans-serif;
+      font-size: clamp(0.62rem, 1.35cqw, 0.78rem);
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.82);
+    }
+    .vb-rows {
+      display: grid;
+      grid-template-rows: repeat(6, 1fr);
+      min-height: 0;
+      padding: 0.2rem 1.05rem 0.15rem;
+    }
+    .vb-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) 1px minmax(0, 1fr);
+      gap: 0.7rem;
+      align-items: center;
+      min-height: 0;
+      padding: 0.18rem 0;
+      border-bottom: 1px solid rgba(245, 197, 24, 0.16);
+    }
+    .vb-row:last-child { border-bottom: none; }
+    .vb-value {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.55rem;
+      align-items: center;
+      min-width: 0;
+    }
+    .vb-hex {
+      width: clamp(1.7rem, 3.4cqw, 2.35rem);
+      height: clamp(1.7rem, 3.4cqw, 2.35rem);
+      display: grid;
+      place-items: center;
+      clip-path: polygon(25% 4%, 75% 4%, 96% 50%, 75% 96%, 25% 96%, 4% 50%);
+      background: rgba(245, 197, 24, 0.12);
+      border: 1.5px solid var(--gold);
+      color: var(--gold);
+      font-family: "Barlow Condensed", sans-serif;
+      font-size: clamp(0.95rem, 2cqw, 1.25rem);
+      font-weight: 800;
+      line-height: 1;
+    }
+    .vb-value__copy {
+      min-width: 0;
+    }
+    .vb-value__copy h3 {
+      margin: 0;
+      font-family: "Barlow Condensed", sans-serif;
+      font-size: clamp(1.05rem, 2.5cqw, 1.55rem);
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      line-height: 1;
+      color: #fff;
+    }
+    .vb-value__copy h3 em {
+      font-style: normal;
+      color: var(--gold);
+      margin-right: 0.2rem;
+    }
+    .vb-value__copy p {
+      margin: 0.18rem 0 0;
+      font-family: "DM Sans", sans-serif;
+      font-size: clamp(0.68rem, 1.45cqw, 0.88rem);
+      font-weight: 600;
+      line-height: 1.2;
+      color: rgba(245, 197, 24, 0.92);
+    }
+    .vb-rule {
+      width: 1px;
+      height: 70%;
+      background: rgba(245, 197, 24, 0.55);
+      justify-self: center;
+    }
+    .vb-behaviours {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 0.18rem;
+      min-width: 0;
+    }
+    .vb-behaviours li {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.45rem;
+      align-items: center;
+      font-family: "DM Sans", sans-serif;
+      font-size: clamp(0.72rem, 1.55cqw, 0.95rem);
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.15;
+    }
+    .vb-behaviours li span {
+      width: 0.45rem;
+      height: 0.45rem;
+      border-radius: 50%;
+      background: var(--gold);
+      box-shadow: 0 0 0 2px rgba(245, 197, 24, 0.18);
+    }
+    .vb-foot {
+      position: relative;
+      overflow: hidden;
+      border-top: 1px solid rgba(245, 197, 24, 0.35);
+    }
+    .vb-foot img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: 58% 28%;
+      filter: grayscale(0.15) contrast(1.05);
+    }
+    .vb-foot__veil {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(10,10,10,0.2) 0%, rgba(10,10,10,0.72) 55%, rgba(10,10,10,0.92) 100%);
+    }
+    .vb-foot__motto {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.45rem;
+      z-index: 1;
+    }
+    .vb-foot__motto span {
+      font-family: "Barlow Condensed", sans-serif;
+      font-size: clamp(1.15rem, 2.8cqw, 1.8rem);
+      font-weight: 800;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--gold);
+      text-shadow: 0 2px 12px rgba(0,0,0,0.65);
+    }
+    .vb-foot__motto i {
+      display: block;
+      width: 1.1rem;
+      height: 1px;
+      background: var(--gold);
+    }
+    body.is-present .values-board,
+    body.is-pdf-view .values-board {
+      grid-template-rows: auto 1fr minmax(5.2rem, 17%);
+    }
+    body.is-present .vb-head,
+    body.is-pdf-view .vb-head {
+      padding: 0.85rem 1.4rem 0.55rem;
+    }
+    body.is-present .vb-rows,
+    body.is-pdf-view .vb-rows {
+      padding: 0.25rem 1.35rem 0.2rem;
+    }
+    body.is-present .vb-head__title,
+    body.is-pdf-view .vb-head__title {
+      font-size: clamp(2.4rem, 5.2vmin, 3.4rem);
+    }
+    body.is-present .vb-value__copy h3,
+    body.is-pdf-view .vb-value__copy h3 {
+      font-size: clamp(1.25rem, 2.6vmin, 1.7rem);
+    }
+    body.is-present .vb-value__copy p,
+    body.is-pdf-view .vb-value__copy p {
+      font-size: clamp(0.82rem, 1.6vmin, 1.05rem);
+    }
+    body.is-present .vb-behaviours li,
+    body.is-pdf-view .vb-behaviours li {
+      font-size: clamp(0.88rem, 1.7vmin, 1.12rem);
+    }
+    body.is-exporting .slide.is-export-capture.slide--values-board .values-board {
+      height: 100% !important;
+    }
+
     /* NN: photo-led split, one-line title, thin rules between points */
     .slide--has-photo.slide--nn .slide__inner {
       grid-template-columns: 0.9fr 1.1fr;
@@ -4320,17 +4575,43 @@
         type: "hero",
         label: "Non-negotiables",
         kicker: "How we carry ourselves",
-        title: "Non-negotiables",
-        lede: "Six rules. No debate. Everyone in the room owns them.",
+        title: "Port Vale Values",
+        motto: "Badge over ego",
+        tagline: "Our values define us. Our behaviours show them.",
         footer: "Culture first · then the numbers",
         photo: "nonnegotiables",
+        valuesBoard: true,
         values: [
-          { lead: "Respect", line: "The badge, each other, every opponent." },
-          { lead: "Coachable", line: "Take the detail. Apply it. Get better." },
-          { lead: "Character", line: "No dickheads. No passengers." },
-          { lead: "Graft", line: "Win the ugly moments first." },
-          { lead: "Standards", line: "100% — session, match, recovery." },
-          { lead: "Hunger", line: "Want promotion more than anyone. Nothing hurts more than losing." },
+          {
+            lead: "Respect",
+            line: "The badge, each other, every opponent.",
+            behaviours: ["Respect the badge", "Respect each other", "Respect every opponent"],
+          },
+          {
+            lead: "Coachable",
+            line: "Take the detail. Apply it. Get better.",
+            behaviours: ["Take the detail", "Apply it", "Get better"],
+          },
+          {
+            lead: "Character",
+            line: "No dickheads. No passengers.",
+            behaviours: ["No dickheads", "No passengers", "Own your actions"],
+          },
+          {
+            lead: "Graft",
+            line: "Win the ugly moments first.",
+            behaviours: ["Win the ugly moments", "Do the hard yards", "Never hide"],
+          },
+          {
+            lead: "Standards",
+            line: "100% — session, match, recovery.",
+            behaviours: ["Session 100%", "Match 100%", "Recovery 100%"],
+          },
+          {
+            lead: "Hunger",
+            line: "Want promotion more than anyone. Nothing hurts more than losing.",
+            behaviours: ["Want it more", "Hate losing", "Keep pushing"],
+          },
         ],
       },
       {
@@ -4835,7 +5116,64 @@
         </div>`;
     }
 
+    function renderValuesBoard(s) {
+      const rows = (s.values || []).map((v, n) => {
+        const lead = typeof v === "string" ? v : (v.lead || "");
+        const line = typeof v === "string" ? "" : (v.line || "");
+        const behaviours = Array.isArray(v.behaviours) ? v.behaviours : [];
+        const num = String(n + 1).padStart(2, "0");
+        const initial = (lead || "?").charAt(0).toUpperCase();
+        return `
+          <article class="vb-row">
+            <div class="vb-value">
+              <span class="vb-hex" aria-hidden="true">${initial}</span>
+              <div class="vb-value__copy">
+                <h3><em>${num}</em> ${lead}</h3>
+                <p>${line}</p>
+              </div>
+            </div>
+            <div class="vb-rule" aria-hidden="true"></div>
+            <ul class="vb-behaviours" aria-label="${lead} behaviours">
+              ${behaviours.map((b) => `<li><span></span>${b}</li>`).join("")}
+            </ul>
+          </article>`;
+      }).join("");
+      const footSrc = TITLE_PHOTOS[s.photo] || TITLE_PHOTOS.embrace;
+      return `
+        <div class="values-board" aria-label="Port Vale values and behaviours">
+          <header class="vb-head">
+            <div class="vb-head__brand">
+              <img src="${BADGE}" width="72" height="82" alt="Port Vale FC" />
+              <div>
+                <p class="vb-head__kicker">${s.kicker || "How we carry ourselves"}</p>
+                <h2 class="vb-head__title">${s.title || "Port Vale Values"}</h2>
+              </div>
+            </div>
+            <div class="vb-head__motto">
+              <i></i><span>${s.motto || "Badge over ego"}</span><i></i>
+            </div>
+            <p class="vb-head__tag">${s.tagline || "Our values define us. Our behaviours show them."}</p>
+          </header>
+          <div class="vb-rows">${rows}</div>
+          <footer class="vb-foot">
+            <img src="${footSrc}" alt="" />
+            <div class="vb-foot__veil"></div>
+            <div class="vb-foot__motto">
+              <i></i><i></i><span>${s.motto || "Badge over ego"}</span><i></i><i></i>
+            </div>
+          </footer>
+        </div>`;
+    }
+
     function renderSlide(s, i) {
+      if (s.valuesBoard) {
+        return `
+          <section class="slide slide--hero slide--values-board" data-slide="${i + 1}" data-label="${s.label}">
+            <div class="slide__corner slide__corner--left"></div>
+            <div class="slide__corner slide__corner--right"></div>
+            <div class="slide__inner slide__inner--values-board">${renderValuesBoard(s)}</div>
+          </section>`;
+      }
       if (s.type === "hero" || s.type === "chapter" || s.type === "bridge") {
         const hasPhoto = !!(s.photo && !s.close);
         const cls = `slide slide--${s.type}${s.close ? " slide--close" : ""}${hasPhoto ? " slide--has-photo" : ""}${Array.isArray(s.values) ? " slide--nn" : ""}${s.ask ? " slide--ask" : ""}`;
@@ -5558,6 +5896,10 @@
       root.querySelectorAll(".nn-list").forEach(planFreeze);
       root.querySelectorAll(".nn-list li").forEach(planFreeze);
       root.querySelectorAll(".nn-list li > div").forEach(planFreeze);
+      root.querySelectorAll(".values-board").forEach(planFreeze);
+      root.querySelectorAll(".vb-head, .vb-rows, .vb-foot").forEach(planFreeze);
+      root.querySelectorAll(".vb-row").forEach(planFreeze);
+      root.querySelectorAll(".vb-value, .vb-behaviours").forEach(planFreeze);
       root.querySelectorAll(".keynote__body").forEach(planFreeze);
 
       plans.forEach(({ box, height, width, kids }) => {
