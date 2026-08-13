@@ -492,7 +492,7 @@ function topPlayers(players, spec) {
 }
 
 function playerPhotoUrl(name) {
-  return `/api/player-photo?name=${encodeURIComponent(name || "")}`;
+  return `/api/player-photo?name=${encodeURIComponent(name || "")}&v=43`;
 }
 
 function playerPhotoHtml(name, className) {
