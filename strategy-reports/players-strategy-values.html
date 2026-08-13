@@ -1043,16 +1043,17 @@
       justify-content: center;
       gap: 0.85rem;
       width: 100%;
+      height: 100%;
       padding: 0 1rem;
     }
-    .vb-foot__motto > span:not([class]) {
+    .vb-foot__text {
       font-family: "Black Ops One", "Barlow Condensed", sans-serif;
       font-size: clamp(1.85rem, 5.2cqw, 3.4rem);
       font-weight: 400;
       letter-spacing: 0.16em;
       text-transform: uppercase;
       color: var(--vb-gold);
-      line-height: 1;
+      line-height: 0.95;
       white-space: nowrap;
     }
     .vb-foot__chevs {
@@ -1074,7 +1075,7 @@
     }
     body.is-present .values-board,
     body.is-pdf-view .values-board {
-      grid-template-rows: auto minmax(0, 1fr) minmax(7.5rem, 28%);
+      grid-template-rows: auto minmax(0, 1fr) minmax(10rem, 34%);
     }
     body.is-present .vb-head,
     body.is-pdf-view .vb-head {
@@ -1102,17 +1103,22 @@
     }
     body.is-present .vb-foot__motto,
     body.is-pdf-view .vb-foot__motto {
-      gap: 1.1rem;
+      gap: clamp(1rem, 2.5vw, 2rem);
+      padding: 0 1.5rem;
     }
-    body.is-present .vb-foot__motto > span:not([class]),
-    body.is-pdf-view .vb-foot__motto > span:not([class]) {
-      font-size: clamp(3.2rem, 8.5vmin, 6.2rem);
-      letter-spacing: 0.14em;
+    body.is-present .vb-foot__text,
+    body.is-pdf-view .vb-foot__text {
+      font-size: clamp(4.5rem, 11vw, 9.5rem);
+      letter-spacing: 0.1em;
+    }
+    body.is-present .vb-foot__chevs,
+    body.is-pdf-view .vb-foot__chevs {
+      gap: clamp(0.45rem, 1vw, 0.85rem);
     }
     body.is-present .vb-foot__chevs i,
     body.is-pdf-view .vb-foot__chevs i {
-      width: clamp(1rem, 2.2vmin, 1.55rem);
-      height: clamp(2.2rem, 5vmin, 3.6rem);
+      width: clamp(1.4rem, 2.8vw, 2.6rem);
+      height: clamp(3.2rem, 7vw, 6.5rem);
     }
     body.is-exporting .slide.is-export-capture.slide--values-board .values-board {
       height: 100% !important;
@@ -5242,7 +5248,7 @@
           <footer class="vb-foot">
             <div class="vb-foot__motto">
               <span class="vb-foot__chevs vb-foot__chevs--left" aria-hidden="true"><i></i><i></i><i></i></span>
-              <span>${motto}</span>
+              <span class="vb-foot__text">${motto}</span>
               <span class="vb-foot__chevs" aria-hidden="true"><i></i><i></i><i></i></span>
             </div>
           </footer>
