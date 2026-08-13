@@ -1625,7 +1625,7 @@
     .group-task {
       display: grid;
       grid-template-columns: 1fr;
-      grid-template-rows: auto 1fr auto;
+      grid-template-rows: auto minmax(0, 1fr) auto;
       gap: 0.65rem;
       width: 100%;
       height: 100%;
@@ -1633,7 +1633,7 @@
     }
     .group-task__step {
       display: grid;
-      grid-template-columns: auto 1fr;
+      grid-template-columns: auto minmax(0, 1fr);
       align-items: center;
       gap: 0.85rem;
       padding: 0.75rem 1.1rem;
@@ -1647,14 +1647,18 @@
       background: linear-gradient(135deg, #fff8d6 0%, #ffe56a 55%, var(--gold) 100%);
     }
     .group-task__step--write {
-      align-items: start;
+      align-items: stretch;
+      height: 100%;
       min-height: 0;
       padding-top: 0.9rem;
       padding-bottom: 0.9rem;
     }
     .group-task__step--write .group-task__copy {
-      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
       min-height: 0;
+      height: 100%;
     }
     .group-task__num {
       font-family: "Barlow Condensed", sans-serif;
@@ -1663,6 +1667,8 @@
       line-height: 0.9;
       letter-spacing: -0.02em;
       color: var(--ink);
+      align-self: start;
+      padding-top: 0.15rem;
     }
     .group-task__copy {
       min-width: 0;
@@ -1694,13 +1700,15 @@
       gap: 0.75rem;
       margin-top: 0.7rem;
       min-height: 0;
-      flex: 1;
+      flex: 1 1 0;
+      align-items: stretch;
     }
     .group-task__panel {
       display: flex;
       flex-direction: column;
       gap: 0.45rem;
       min-height: 0;
+      height: 100%;
       padding: 0.65rem 0.8rem 0.75rem;
       border-radius: 12px;
       border: 2px solid rgba(17,17,17,0.85);
@@ -1708,6 +1716,7 @@
     }
     .group-task__panel h4 {
       margin: 0;
+      flex: 0 0 auto;
       font-family: "Barlow Condensed", sans-serif;
       font-size: clamp(1.05rem, 2.6cqw, 1.45rem);
       font-weight: 800;
@@ -1716,7 +1725,7 @@
       color: var(--ink);
     }
     .group-task__lines {
-      flex: 1;
+      flex: 1 1 0;
       min-height: 4.8rem;
       background:
         repeating-linear-gradient(
@@ -1727,16 +1736,29 @@
           rgba(15, 23, 42, 0.18) 1.45rem
         );
     }
+    .slide--content:has(.group-task) .keynote__body {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      min-height: 0;
+    }
+    .slide--content:has(.group-task) .keynote__canvas {
+      min-height: 0;
+      height: 100%;
+      align-self: stretch;
+    }
+    .slide--content:has(.group-task) .keynote__canvas > .group-task {
+      height: 100%;
+    }
     body.is-present .group-task {
-      gap: 0.75rem;
+      gap: 0.7rem;
     }
     body.is-present .group-task__step {
       gap: 1.1rem;
-      padding: 0.95rem 1.25rem;
+      padding: 0.85rem 1.25rem;
     }
     body.is-present .group-task__step--write {
-      padding-top: 1.05rem;
-      padding-bottom: 1.05rem;
+      padding-top: 0.95rem;
+      padding-bottom: 0.95rem;
     }
     body.is-present .group-task__num {
       font-size: clamp(3.2rem, 6.5vmin, 5.2rem);
@@ -1749,23 +1771,23 @@
     }
     body.is-present .group-task__write {
       gap: 1rem;
-      margin-top: 0.85rem;
+      margin-top: 0.75rem;
     }
     body.is-present .group-task__panel {
-      padding: 0.8rem 0.95rem 0.9rem;
+      padding: 0.85rem 1rem 1rem;
     }
     body.is-present .group-task__panel h4 {
       font-size: clamp(1.35rem, 2.4vmin, 1.9rem);
     }
     body.is-present .group-task__lines {
-      min-height: 7.5rem;
+      min-height: 0;
       background:
         repeating-linear-gradient(
           to bottom,
           transparent 0,
-          transparent calc(1.7rem - 1px),
-          rgba(15, 23, 42, 0.18) calc(1.7rem - 1px),
-          rgba(15, 23, 42, 0.18) 1.7rem
+          transparent calc(1.85rem - 1px),
+          rgba(15, 23, 42, 0.18) calc(1.85rem - 1px),
+          rgba(15, 23, 42, 0.18) 1.85rem
         );
     }
     body.is-present .slide--content:has(.group-task) .keynote__headline {
@@ -1773,8 +1795,8 @@
       white-space: normal;
     }
     body.is-present .slide--content:has(.group-task) .keynote__body {
-      gap: 0.45rem;
-      padding: 0.45rem 1rem 0.45rem;
+      gap: 0.4rem;
+      padding: 0.4rem 1rem 0.5rem;
     }
 
     /* Break into groups — one clear instruction slide */
