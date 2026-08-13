@@ -238,7 +238,7 @@ function setAssignment(id, patch) {
   }
   saveAssignments();
   renderSummary();
-  renderView();
+  renderView({ preserveScroll: true });
   persistAssignment(id);
 }
 
@@ -1608,7 +1608,7 @@ function bindAssignmentEvents(root) {
       } else {
         state.expandedFixtureIds[id] = true;
       }
-      renderView();
+      renderView({ preserveScroll: true });
     });
   });
 
@@ -1633,7 +1633,7 @@ function bindAssignmentEvents(root) {
 
       openAssignModal(id, next, [...withoutTeam, next]);
       // Keep showing the previous assignees until modal confirms
-      renderView();
+      renderView({ preserveScroll: true });
     });
   });
 
@@ -2036,6 +2036,13 @@ function scrollListToUpcoming() {
     target?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 }
+
+function restoreScrollPosition(scrollY) {
+  if (scrollY == null || Number.isNaN(scrollY)) return;
+  const apply = () => window.scrollTo(0, scrollY);
+  apply();
+  requestAnimationFrame(apply);
+}
 function renderSummary() {
   const fixtures = visibleFixtures();
   const all = state.payload?.fixtures || [];
@@ -2338,7 +2345,7 @@ function renderLeagueColumn(league, fixtures, { showDate = false } = {}) {
   `;
 }
 
-function renderList() {
+function renderList({ scrollToUpcoming = false } = {}) {
   const fixtures = visibleFixtures();
   const hint = visibleFixtureHint();
   if (!fixtures.length) {
@@ -2377,7 +2384,7 @@ function renderList() {
         })
         .join("");
     bindAssignmentEvents(els.listRoot);
-    if (!IS_PLAYED_APP) {
+    if (!IS_PLAYED_APP && scrollToUpcoming) {
       scrollListToUpcoming();
     }
     return;
@@ -2404,17 +2411,21 @@ function renderList() {
       .join("");
 
   bindAssignmentEvents(els.listRoot);
-  if (!IS_PLAYED_APP) {
+  if (!IS_PLAYED_APP && scrollToUpcoming) {
     scrollListToUpcoming();
   }
 }
 
-function renderView() {
+function renderView({ preserveScroll = false, scrollToUpcoming = false } = {}) {
+  const scrollY = preserveScroll ? window.scrollY : null;
   const isMonth = state.view === "month";
   els.calendarRoot.classList.toggle("hidden", !isMonth);
   els.listRoot.classList.toggle("hidden", isMonth);
   if (isMonth) renderCalendar();
-  else renderList();
+  else renderList({ scrollToUpcoming: scrollToUpcoming && !preserveScroll });
+  if (preserveScroll) {
+    restoreScrollPosition(scrollY);
+  }
 }
 
 async function loadFixtures({ forceRefresh = true } = {}) {
@@ -2441,7 +2452,7 @@ async function loadFixtures({ forceRefresh = true } = {}) {
     await loadAssignmentsFromServer();
     renderMonthFilter();
     renderSummary();
-    renderView();
+    renderView({ scrollToUpcoming: true });
     setStatus("");
     const coverage = state.payload?.coverage || {};
     const cupCount = cupFixturesInPayload().length;
