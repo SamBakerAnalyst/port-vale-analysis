@@ -810,14 +810,13 @@ function xgVsHtml(stats, fixture) {
         <div class="ba-xgvs__side ba-xgvs__side--vale ${valeAhead ? "is-ahead" : ""}">
           <span class="ba-xgvs__who">Vale</span>
           <span class="ba-xgvs__num">${escapeHtml(fmtNum(vale, 2))}</span>
-          ${bench?.top7 == null ? "" : `<span class="ba-xgvs__req">Req ${escapeHtml(formatBench(bench.top7, { digits: 2 }))}</span>`}
           ${bench?.team == null ? "" : `<span class="ba-xgvs__avg">Avg ${escapeHtml(formatBench(bench.team, { digits: 2 }))}</span>`}
         </div>
         <span class="ba-xgvs__badge">VS</span>
         <div class="ba-xgvs__side ba-xgvs__side--opp ${oppAhead ? "is-ahead" : ""}">
           <span class="ba-xgvs__who">${escapeHtml(oppName)}</span>
           <span class="ba-xgvs__num">${escapeHtml(fmtNum(opp, 2))}</span>
-          <span class="ba-xgvs__req ba-xgvs__req--ghost">&nbsp;</span>
+          ${bench?.top7 == null ? "" : `<span class="ba-xgvs__req">Req against ${escapeHtml(formatBench(bench.top7, { digits: 2 }))}</span>`}
         </div>
       </div>
       <div class="ba-xgvs__bar" aria-hidden="true">
