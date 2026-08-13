@@ -4924,13 +4924,13 @@ def _lineup_from_detail(
     squad_id: int,
     player_names: dict[int, str],
 ) -> dict[str, Any] | None:
-    from app.pre_match import _match_squad_block
-    from app.pre_match_handout import _position_abbr, _shirt_map
+    from app.match_player_utils import _position_abbr
+    from app.pre_match import _match_squad_block, _shirt_map_from_squad_block
 
     squad = _match_squad_block(detail, squad_id)
     if not squad:
         return None
-    shirts = _shirt_map(squad)
+    shirts = _shirt_map_from_squad_block(squad)
     players: list[dict[str, Any]] = []
     for row in squad.get("startingPositions") or []:
         if not isinstance(row, dict):
@@ -5010,7 +5010,7 @@ def _finalize_lineup_layout(lineup: dict[str, Any] | None) -> dict[str, Any] | N
     if not isinstance(lineup, dict):
         return None
     from app.pre_match import assign_lineup_formation_slots, _normalize_formation_key
-    from app.pre_match_handout import _position_abbr
+    from app.match_player_utils import _position_abbr
 
     pool: list[dict[str, Any]] = []
     for player in lineup.get("players") or []:
