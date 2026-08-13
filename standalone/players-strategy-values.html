@@ -6,7 +6,7 @@
   <title>Project Promotion · Values · v20260811c-group-fill</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Black+Ops+One&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
   <style>
     :root {
       --gold: #f5c518;
@@ -835,11 +835,12 @@
       line-height: 0.92;
     }
 
-    /* Port Vale values board — SAS-style values | behaviours, club colours */
+    /* Port Vale values board — clone SAS VALUES layout, club colours */
     .slide.slide--values-board {
-      background: #0a0a0a;
-      color: #f5f5f5;
+      background: #000;
+      color: #fff;
     }
+    .slide.slide--values-board .slide__corner { display: none; }
     .slide__inner--values-board {
       display: block !important;
       height: 100%;
@@ -847,178 +848,193 @@
       overflow: hidden;
     }
     .values-board {
+      --vb-gold: #f5c518;
       height: 100%;
       display: grid;
-      grid-template-rows: auto 1fr minmax(4.8rem, 18%);
+      grid-template-rows: auto minmax(0, 1fr) minmax(4.2rem, 14%);
       min-height: 0;
-      background: #0a0a0a;
+      background:
+        radial-gradient(ellipse 90% 60% at 50% 0%, rgba(245,197,24,0.07), transparent 55%),
+        #050505;
+      color: #fff;
     }
     .vb-head {
-      padding: 0.7rem 1.15rem 0.45rem;
-      text-align: center;
-      border-bottom: 1px solid rgba(245, 197, 24, 0.28);
-    }
-    .vb-head__brand {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.75rem;
+      padding: 0.4rem 1.2rem 0.35rem;
       text-align: left;
     }
-    .vb-head__brand img {
-      width: clamp(2.6rem, 5.2cqw, 3.6rem);
+    .vb-head__logo {
+      display: block;
+      width: clamp(2rem, 3.8cqw, 2.7rem);
       height: auto;
-      flex: 0 0 auto;
-      filter: drop-shadow(0 4px 10px rgba(0,0,0,0.45));
-    }
-    .vb-head__kicker {
-      margin: 0;
-      font-family: "DM Sans", sans-serif;
-      font-size: clamp(0.62rem, 1.35cqw, 0.78rem);
-      font-weight: 700;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--gold);
+      margin: 0 0 0.22rem;
+      filter: drop-shadow(0 2px 8px rgba(0,0,0,0.5));
     }
     .vb-head__title {
-      margin: 0.08rem 0 0;
-      font-family: "Barlow Condensed", sans-serif;
-      font-size: clamp(1.9rem, 4.8cqw, 3rem);
-      font-weight: 800;
-      letter-spacing: 0.04em;
+      margin: 0;
+      font-family: "Black Ops One", "Barlow Condensed", sans-serif;
+      font-size: clamp(1.55rem, 3.8cqw, 2.35rem);
+      font-weight: 400;
+      letter-spacing: 0.06em;
       text-transform: uppercase;
-      line-height: 0.92;
+      line-height: 0.95;
       color: #fff;
     }
     .vb-head__motto {
       display: flex;
       align-items: center;
-      justify-content: center;
-      gap: 0.7rem;
-      margin: 0.4rem 0 0.2rem;
+      gap: 0.65rem;
+      margin: 0.28rem 0 0.18rem;
+      max-width: 24rem;
     }
     .vb-head__motto span {
+      flex: 0 0 auto;
       font-family: "Barlow Condensed", sans-serif;
-      font-size: clamp(0.95rem, 2.2cqw, 1.25rem);
+      font-size: clamp(0.82rem, 1.8cqw, 1.05rem);
       font-weight: 800;
-      letter-spacing: 0.16em;
+      letter-spacing: 0.18em;
       text-transform: uppercase;
-      color: var(--gold);
+      color: var(--vb-gold);
+      white-space: nowrap;
     }
     .vb-head__motto i {
       display: block;
-      width: clamp(2.8rem, 7cqw, 5rem);
-      height: 1px;
-      background: var(--gold);
+      flex: 1 1 auto;
+      height: 1.5px;
+      background: var(--vb-gold);
+      opacity: 0.9;
     }
     .vb-head__tag {
       margin: 0;
       font-family: "DM Sans", sans-serif;
-      font-size: clamp(0.62rem, 1.35cqw, 0.78rem);
+      font-size: clamp(0.52rem, 1.05cqw, 0.64rem);
       font-weight: 700;
-      letter-spacing: 0.14em;
+      letter-spacing: 0.16em;
       text-transform: uppercase;
-      color: rgba(255,255,255,0.82);
+      color: rgba(255,255,255,0.88);
     }
     .vb-rows {
-      display: grid;
-      grid-template-rows: repeat(6, 1fr);
+      display: flex;
+      flex-direction: column;
       min-height: 0;
-      padding: 0.2rem 1.05rem 0.15rem;
+      padding: 0 1.2rem;
+      border-top: 1.5px solid var(--vb-gold);
+      overflow: hidden;
     }
     .vb-row {
+      flex: 1 1 0;
       display: grid;
-      grid-template-columns: minmax(0, 1.15fr) 1px minmax(0, 1fr);
-      gap: 0.7rem;
+      grid-template-columns: minmax(0, 1.28fr) 1.5px minmax(0, 1fr);
+      gap: 0.35rem 0.85rem;
       align-items: center;
       min-height: 0;
-      padding: 0.18rem 0;
-      border-bottom: 1px solid rgba(245, 197, 24, 0.16);
+      padding: 0.12rem 0;
+      border-bottom: 1.5px solid var(--vb-gold);
+      overflow: hidden;
     }
     .vb-row:last-child { border-bottom: none; }
     .vb-value {
       display: grid;
-      grid-template-columns: auto 1fr;
+      grid-template-columns: auto minmax(0, 1fr);
       gap: 0.55rem;
       align-items: center;
       min-width: 0;
+      min-height: 0;
     }
     .vb-hex {
-      width: clamp(1.7rem, 3.4cqw, 2.35rem);
-      height: clamp(1.7rem, 3.4cqw, 2.35rem);
+      position: relative;
+      width: clamp(1.85rem, 3.4cqw, 2.45rem);
+      height: clamp(1.85rem, 3.4cqw, 2.45rem);
       display: grid;
       place-items: center;
-      clip-path: polygon(25% 4%, 75% 4%, 96% 50%, 75% 96%, 25% 96%, 4% 50%);
-      background: rgba(245, 197, 24, 0.12);
-      border: 1.5px solid var(--gold);
-      color: var(--gold);
-      font-family: "Barlow Condensed", sans-serif;
-      font-size: clamp(0.95rem, 2cqw, 1.25rem);
-      font-weight: 800;
-      line-height: 1;
+      flex: 0 0 auto;
+      color: var(--vb-gold);
     }
-    .vb-value__copy {
-      min-width: 0;
+    .vb-hex__frame {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 3.5;
     }
+    .vb-hex__icon {
+      position: relative;
+      z-index: 1;
+      width: 48%;
+      height: 48%;
+      fill: currentColor;
+      stroke: none;
+    }
+    .vb-value__copy { min-width: 0; }
     .vb-value__copy h3 {
       margin: 0;
-      font-family: "Barlow Condensed", sans-serif;
-      font-size: clamp(1.05rem, 2.5cqw, 1.55rem);
-      font-weight: 800;
+      font-family: "Black Ops One", "Barlow Condensed", sans-serif;
+      font-size: clamp(0.92rem, 2cqw, 1.25rem);
+      font-weight: 400;
       letter-spacing: 0.04em;
       text-transform: uppercase;
       line-height: 1;
       color: #fff;
     }
-    .vb-value__copy h3 em {
-      font-style: normal;
-      color: var(--gold);
-      margin-right: 0.2rem;
-    }
     .vb-value__copy p {
-      margin: 0.18rem 0 0;
+      margin: 0.12rem 0 0;
       font-family: "DM Sans", sans-serif;
-      font-size: clamp(0.68rem, 1.45cqw, 0.88rem);
+      font-size: clamp(0.58rem, 1.15cqw, 0.74rem);
       font-weight: 600;
-      line-height: 1.2;
-      color: rgba(245, 197, 24, 0.92);
+      line-height: 1.15;
+      color: var(--vb-gold);
+      max-width: 38ch;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
     }
     .vb-rule {
-      width: 1px;
-      height: 70%;
-      background: rgba(245, 197, 24, 0.55);
+      width: 1.5px;
+      align-self: stretch;
+      background: var(--vb-gold);
+      opacity: 0.85;
       justify-self: center;
+      margin: 0.1rem 0;
     }
     .vb-behaviours {
       list-style: none;
       margin: 0;
       padding: 0;
       display: grid;
-      gap: 0.18rem;
+      gap: 0.1rem;
       min-width: 0;
+      min-height: 0;
+      align-content: center;
     }
     .vb-behaviours li {
       display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 0.45rem;
+      grid-template-columns: 0.9rem 1fr;
+      gap: 0.4rem;
       align-items: center;
       font-family: "DM Sans", sans-serif;
-      font-size: clamp(0.72rem, 1.55cqw, 0.95rem);
-      font-weight: 700;
+      font-size: clamp(0.62rem, 1.25cqw, 0.8rem);
+      font-weight: 600;
       color: #fff;
-      line-height: 1.15;
+      line-height: 1.1;
+      min-height: 0;
     }
-    .vb-behaviours li span {
-      width: 0.45rem;
-      height: 0.45rem;
-      border-radius: 50%;
-      background: var(--gold);
-      box-shadow: 0 0 0 2px rgba(245, 197, 24, 0.18);
+    .vb-behaviours li svg {
+      width: 0.85rem;
+      height: 0.85rem;
+      color: var(--vb-gold);
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.7;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
     .vb-foot {
       position: relative;
       overflow: hidden;
-      border-top: 1px solid rgba(245, 197, 24, 0.35);
+      border-top: 1.5px solid var(--vb-gold);
+      min-height: 0;
     }
     .vb-foot img {
       position: absolute;
@@ -1027,12 +1043,12 @@
       height: 100%;
       object-fit: cover;
       object-position: 58% 28%;
-      filter: grayscale(0.15) contrast(1.05);
+      filter: saturate(0.85) contrast(1.05) brightness(0.72);
     }
     .vb-foot__veil {
       position: absolute;
       inset: 0;
-      background: linear-gradient(180deg, rgba(10,10,10,0.2) 0%, rgba(10,10,10,0.72) 55%, rgba(10,10,10,0.92) 100%);
+      background: linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.55) 45%, rgba(0,0,0,0.88) 100%);
     }
     .vb-foot__motto {
       position: absolute;
@@ -1040,51 +1056,61 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 0.45rem;
+      gap: 0.55rem;
       z-index: 1;
     }
     .vb-foot__motto span {
-      font-family: "Barlow Condensed", sans-serif;
-      font-size: clamp(1.15rem, 2.8cqw, 1.8rem);
-      font-weight: 800;
-      letter-spacing: 0.18em;
+      font-family: "Black Ops One", "Barlow Condensed", sans-serif;
+      font-size: clamp(1.1rem, 2.6cqw, 1.7rem);
+      font-weight: 400;
+      letter-spacing: 0.14em;
       text-transform: uppercase;
-      color: var(--gold);
-      text-shadow: 0 2px 12px rgba(0,0,0,0.65);
+      color: var(--vb-gold);
+      text-shadow: 0 2px 14px rgba(0,0,0,0.75);
     }
-    .vb-foot__motto i {
+    .vb-foot__chevs {
+      display: flex;
+      gap: 0.28rem;
+      align-items: center;
+    }
+    .vb-foot__chevs i {
       display: block;
-      width: 1.1rem;
-      height: 1px;
-      background: var(--gold);
+      width: 0.55rem;
+      height: 1.15rem;
+      background: var(--vb-gold);
+      clip-path: polygon(0 0, 100% 50%, 0 100%);
+      opacity: 0.95;
+    }
+    .vb-foot__chevs--left i {
+      clip-path: polygon(100% 0, 0 50%, 100% 100%);
     }
     body.is-present .values-board,
     body.is-pdf-view .values-board {
-      grid-template-rows: auto 1fr minmax(5.2rem, 17%);
+      grid-template-rows: auto minmax(0, 1fr) minmax(4.6rem, 14%);
     }
     body.is-present .vb-head,
     body.is-pdf-view .vb-head {
-      padding: 0.85rem 1.4rem 0.55rem;
+      padding: 0.5rem 1.45rem 0.4rem;
     }
     body.is-present .vb-rows,
     body.is-pdf-view .vb-rows {
-      padding: 0.25rem 1.35rem 0.2rem;
+      padding: 0 1.45rem;
     }
     body.is-present .vb-head__title,
     body.is-pdf-view .vb-head__title {
-      font-size: clamp(2.4rem, 5.2vmin, 3.4rem);
+      font-size: clamp(2rem, 4.4vmin, 2.8rem);
     }
     body.is-present .vb-value__copy h3,
     body.is-pdf-view .vb-value__copy h3 {
-      font-size: clamp(1.25rem, 2.6vmin, 1.7rem);
+      font-size: clamp(1.05rem, 2.2vmin, 1.4rem);
     }
     body.is-present .vb-value__copy p,
     body.is-pdf-view .vb-value__copy p {
-      font-size: clamp(0.82rem, 1.6vmin, 1.05rem);
+      font-size: clamp(0.7rem, 1.35vmin, 0.88rem);
     }
     body.is-present .vb-behaviours li,
     body.is-pdf-view .vb-behaviours li {
-      font-size: clamp(0.88rem, 1.7vmin, 1.12rem);
+      font-size: clamp(0.75rem, 1.45vmin, 0.95rem);
     }
     body.is-exporting .slide.is-export-capture.slide--values-board .values-board {
       height: 100% !important;
@@ -5117,40 +5143,50 @@
     }
 
     function renderValuesBoard(s) {
+      const hexFrame = `<svg class="vb-hex__frame" viewBox="0 0 100 100" aria-hidden="true"><polygon points="50 4, 90 27, 90 73, 50 96, 10 73, 10 27"/></svg>`;
+      const valueIcons = {
+        Respect: `<svg class="vb-hex__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l7 3v6c0 5-3 8-7 11-4-3-7-6-7-11V5l7-3zm0 4.2L8 7.8v3.4c0 2.8 1.5 4.7 4 6.8 2.5-2.1 4-4 4-6.8V7.8L12 6.2z"/></svg>`,
+        Coachable: `<svg class="vb-hex__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v2H4V5zm1 4h14v11H5V9zm3 2v2h8v-2H8zm0 4v2h8v-2H8z"/></svg>`,
+        Character: `<svg class="vb-hex__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a4.5 4.5 0 0 1 4.5 4.5V8a5.5 5.5 0 0 1 3.5 5.1V15l2 4H4l2-4v-1.9A5.5 5.5 0 0 1 9.5 8V6.5A4.5 4.5 0 0 1 12 2z"/></svg>`,
+        Graft: `<svg class="vb-hex__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.2 3.2l1.6 1.6-1.8 1.8 3.2 3.2 1.8-1.8 1.6 1.6-1.6 1.6-9.4 9.4H5.2v-4.4l9.4-9.4 1.6-1.6z"/></svg>`,
+        Standards: `<svg class="vb-hex__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.2 6.8H22l-5.5 4 2.1 6.7L12 16.2 5.4 20l2.1-6.7L2 9.3h7.8L12 2.5z"/></svg>`,
+        Hunger: `<svg class="vb-hex__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5c1.8 2.8 4.5 4.8 4.5 8.2a4.5 4.5 0 1 1-9 0c0-3.4 2.7-5.4 4.5-8.2z"/></svg>`,
+      };
+      const behaviourIcons = [
+        `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>`,
+        `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M5 10l7-7 7 7"/></svg>`,
+        `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7L10 17l-5-5"/></svg>`,
+      ];
       const rows = (s.values || []).map((v, n) => {
         const lead = typeof v === "string" ? v : (v.lead || "");
         const line = typeof v === "string" ? "" : (v.line || "");
         const behaviours = Array.isArray(v.behaviours) ? v.behaviours : [];
-        const num = String(n + 1).padStart(2, "0");
-        const initial = (lead || "?").charAt(0).toUpperCase();
+        const num = n + 1;
+        const icon = valueIcons[lead] || valueIcons.Respect;
         return `
           <article class="vb-row">
             <div class="vb-value">
-              <span class="vb-hex" aria-hidden="true">${initial}</span>
+              <span class="vb-hex" aria-hidden="true">${hexFrame}${icon}</span>
               <div class="vb-value__copy">
-                <h3><em>${num}</em> ${lead}</h3>
+                <h3>${num}. ${lead}</h3>
                 <p>${line}</p>
               </div>
             </div>
             <div class="vb-rule" aria-hidden="true"></div>
             <ul class="vb-behaviours" aria-label="${lead} behaviours">
-              ${behaviours.map((b) => `<li><span></span>${b}</li>`).join("")}
+              ${behaviours.map((b, bi) => `<li>${behaviourIcons[bi % behaviourIcons.length]}${b}</li>`).join("")}
             </ul>
           </article>`;
       }).join("");
       const footSrc = TITLE_PHOTOS[s.photo] || TITLE_PHOTOS.embrace;
+      const motto = s.motto || "Badge over ego";
       return `
         <div class="values-board" aria-label="Port Vale values and behaviours">
           <header class="vb-head">
-            <div class="vb-head__brand">
-              <img src="${BADGE}" width="72" height="82" alt="Port Vale FC" />
-              <div>
-                <p class="vb-head__kicker">${s.kicker || "How we carry ourselves"}</p>
-                <h2 class="vb-head__title">${s.title || "Port Vale Values"}</h2>
-              </div>
-            </div>
+            <img class="vb-head__logo" src="${BADGE}" width="72" height="82" alt="Port Vale FC" />
+            <h2 class="vb-head__title">${s.title || "Port Vale Values"}</h2>
             <div class="vb-head__motto">
-              <i></i><span>${s.motto || "Badge over ego"}</span><i></i>
+              <i></i><span>${motto}</span><i></i>
             </div>
             <p class="vb-head__tag">${s.tagline || "Our values define us. Our behaviours show them."}</p>
           </header>
@@ -5159,7 +5195,9 @@
             <img src="${footSrc}" alt="" />
             <div class="vb-foot__veil"></div>
             <div class="vb-foot__motto">
-              <i></i><i></i><span>${s.motto || "Badge over ego"}</span><i></i><i></i>
+              <span class="vb-foot__chevs vb-foot__chevs--left" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span>${motto}</span>
+              <span class="vb-foot__chevs" aria-hidden="true"><i></i><i></i><i></i></span>
             </div>
           </footer>
         </div>`;
@@ -5897,9 +5935,6 @@
       root.querySelectorAll(".nn-list li").forEach(planFreeze);
       root.querySelectorAll(".nn-list li > div").forEach(planFreeze);
       root.querySelectorAll(".values-board").forEach(planFreeze);
-      root.querySelectorAll(".vb-head, .vb-rows, .vb-foot").forEach(planFreeze);
-      root.querySelectorAll(".vb-row").forEach(planFreeze);
-      root.querySelectorAll(".vb-value, .vb-behaviours").forEach(planFreeze);
       root.querySelectorAll(".keynote__body").forEach(planFreeze);
 
       plans.forEach(({ box, height, width, kids }) => {
