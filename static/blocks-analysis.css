@@ -1580,15 +1580,63 @@ a:hover { text-decoration: underline; }
 }
 
 .ba-sheet__main--compact .ba-meter__rail--req {
-  height: 24px;
+  height: 16px;
 }
 
 .ba-sheet__main--compact .ba-meter__rail--avg {
-  height: 16px;
+  height: 12px;
 }
 
 .ba-sheet__main--compact .ba-meter__track {
   height: 8px;
+}
+
+.ba-sheet__main--compact .ba-meter__flag {
+  top: auto;
+  bottom: 1px;
+  padding: .1rem .28rem .08rem;
+  gap: .14rem;
+}
+
+.ba-sheet__main--compact .ba-meter__flag em {
+  font-size: .48rem;
+}
+
+.ba-sheet__main--compact .ba-meter__flag b {
+  font-size: .78rem;
+}
+
+.ba-sheet__main--compact .ba-meter__tick--req {
+  top: -2px;
+  height: 12px;
+}
+
+.ba-unitpanel .ba-meter__rail--req {
+  height: 15px;
+}
+
+.ba-unitpanel .ba-meter__rail--avg {
+  height: 10px;
+}
+
+.ba-unitpanel .ba-meter__flag {
+  top: auto;
+  bottom: 0;
+  padding: .1rem .3rem .08rem;
+  gap: .14rem;
+}
+
+.ba-unitpanel .ba-meter__flag em {
+  font-size: .48rem;
+  letter-spacing: .06em;
+}
+
+.ba-unitpanel .ba-meter__flag b {
+  font-size: .82rem;
+}
+
+.ba-unitpanel .ba-unitrow__nums {
+  margin-bottom: .06rem;
 }
 
 .ba-chart {
