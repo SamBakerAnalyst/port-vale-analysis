@@ -71,8 +71,8 @@ LEAGUE_TABLE_GAMES = 46
 KPI_BYPASSED_DEFENDERS = 2
 KPI_SHOT_XG = 82
 MATCH_KPI_CACHE_TTL = 6 * 3600
-MATCH_STATS_CACHE_VERSION = 12
-# Shot actions stripped from the match xG VS card (open-play / set-piece delivery only).
+MATCH_STATS_CACHE_VERSION = 13
+# Shot actions stripped from match + player xG boards (open-play / set-piece delivery only).
 XG_VS_EXCLUDED_ACTIONS = frozenset({
     "PENALTY",
     "PENALTY_KICK",
@@ -784,6 +784,54 @@ def _fetch_squad_kpis(match_id: int) -> dict[int, float]:
     return lookup.get(PORT_VALE_SQUAD_ID) or {}
 
 
+def _open_play_xg_total(rows: list[dict[str, Any]]) -> float:
+    total = 0.0
+    for row in rows:
+        action = str(row.get("action") or "").upper()
+        if action in XG_VS_EXCLUDED_ACTIONS:
+            continue
+        total += float(row.get("xg") or 0)
+    return round(total, 2)
+
+
+def _player_open_play_xg(shots: list[dict[str, Any]], squad_id: int) -> dict[int, float]:
+    """Per-player shot xG excluding penalties and direct free kicks."""
+    totals: dict[int, float] = {}
+    for row in shots:
+        if int(row.get("squadId") or 0) != int(squad_id):
+            continue
+        if str(row.get("action") or "").upper() in XG_VS_EXCLUDED_ACTIONS:
+            continue
+        try:
+            player_id = int(row.get("playerId") or 0)
+        except (TypeError, ValueError):
+            continue
+        if not player_id:
+            continue
+        totals[player_id] = totals.get(player_id, 0.0) + float(row.get("xg") or 0)
+    return {pid: round(value, 2) for pid, value in totals.items()}
+
+
+def _apply_open_play_player_xg(
+    players: list[dict[str, Any]],
+    shots: list[dict[str, Any]],
+    squad_id: int,
+) -> None:
+    if not players or not shots:
+        return
+    if not any(row.get("playerId") for row in shots):
+        return
+    open_xg = _player_open_play_xg(shots, squad_id)
+    for player in players:
+        try:
+            player_id = int(player.get("playerId") or 0)
+        except (TypeError, ValueError):
+            continue
+        if not player_id:
+            continue
+        player["xg"] = open_xg.get(player_id, 0.0)
+
+
 def _half_time_xg(series: list[dict[str, Any]]) -> float:
     first = [row for row in series if row.get("half") == "first"]
     if first:
@@ -835,17 +883,8 @@ def _match_story(
     vale_shots = [row for row in shots if int(row.get("squadId") or 0) == squad_id]
     opp_shots = [row for row in shots if int(row.get("squadId") or 0) != squad_id]
 
-    def _open_play_xg(rows: list[dict[str, Any]]) -> float:
-        total = 0.0
-        for row in rows:
-            action = str(row.get("action") or "").upper()
-            if action in XG_VS_EXCLUDED_ACTIONS:
-                continue
-            total += float(row.get("xg") or 0)
-        return round(total, 2)
-
-    vale_open_xg = _open_play_xg(vale_shots)
-    opp_open_xg = _open_play_xg(opp_shots)
+    vale_open_xg = _open_play_xg_total(vale_shots)
+    opp_open_xg = _open_play_xg_total(opp_shots)
     open_shots = [
         row for row in shots
         if str(row.get("action") or "").upper() not in XG_VS_EXCLUDED_ACTIONS
@@ -1150,6 +1189,11 @@ def _fetch_match_stats(
     )
     stats["xgRace"] = race
     stats["facts"] = facts
+    if race and facts:
+        _apply_open_play_player_xg(stats.get("players") or [], race.get("shots") or [], squad_id)
+        # Keep team xG aligned with the VS card / player boards.
+        if facts.get("valeXg") is not None:
+            stats["xg"] = facts["valeXg"]
     stats["fieldTilt"] = None
     stats["phases"] = None
     stats["inBehind"] = None

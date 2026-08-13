@@ -407,7 +407,7 @@ function unitPanelHtml(title, metricKey, hint, stats, single) {
 
 const PLAYER_BOARDS = [
   { key: "ppg", label: "Points per game", hint: "Team points when they played", digits: 2 },
-  { key: "xg", label: "Expected goals", hint: "Shot xG created", digits: 2 },
+  { key: "xg", label: "Expected goals", hint: "Open-play shot xG (excl. pens & DFKs)", digits: 2 },
   { key: "offensiveInterventions", label: "Aggressive regains", hint: "Opponents removed when you win the ball", digits: 0 },
   { key: "defensiveInterventions", label: "Defensive ball wins", hint: "Teammates added when you win the ball", digits: 0 },
   { key: "regainsFromDefenders", label: "Regains from opp defenders", hint: "Won it vs one of their four deepest", digits: 0 },
@@ -784,7 +784,7 @@ function guideSheetsHtml({ kicker, fixture, totalPages = 4 }) {
           ${guideCard(2, "Six leaderboards", "Full top-five lists.", "Every player ranked for xG, aggressive regains, defensive ball wins, regains off opp defenders, backline beaten and duels won.")}
         </div>
         <div class="ba-guide__defs ba-guide__defs--fill">
-          ${guideDef("Expected goals", "Shot quality added up — open play only on the VS card (penalties and direct free kicks excluded).")}
+          ${guideDef("Expected goals", "Shot quality added up — open play only (penalties and direct free kicks excluded), same as the VS card.")}
           ${guideDef("Aggressive regains", "Win the ball and remove opponents from the play — who you take out when you win it, not just the turnover.")}
           ${guideDef("Defensive ball wins", "Win the ball and add a teammate to the play.")}
           ${guideDef("Regains from opp defenders", "Ball wins where you beat one of their four deepest players — not only centre-backs and full-backs.")}

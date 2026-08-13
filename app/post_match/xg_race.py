@@ -129,10 +129,16 @@ def _fetch_shots_with_xg(match_id: int) -> tuple[list[dict[str, Any]], list[dict
         except (TypeError, ValueError):
             continue
         minute = round(parse_impect_minute(game_time), 2)
+        player = event.get("player") or {}
+        try:
+            player_id = int(player.get("id") or 0) or None
+        except (TypeError, ValueError):
+            player_id = None
         shots.append(
             {
                 "eventId": int(event_id) if event_id is not None else None,
                 "squadId": squad_id,
+                "playerId": player_id,
                 "minute": minute,
                 "seconds": seconds,
                 "isFirstHalf": _is_first_half(game_time),
