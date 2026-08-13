@@ -286,7 +286,7 @@ function meterFlagAlign(pct) {
   return "";
 }
 
-function meterHtml(value, bench, { higherBetter = true, rate = false, digits = 1 } = {}) {
+function meterHtml(value, bench, { higherBetter = true, rate = false, digits = 1, compact = false } = {}) {
   const team = bench?.team;
   const top7 = bench?.top7;
   if (value == null || (team == null && top7 == null)) return "";
@@ -300,6 +300,17 @@ function meterHtml(value, bench, { higherBetter = true, rate = false, digits = 1
   const avgPct = team == null ? null : pct(team);
   const reqLabel = top7 == null ? "" : escapeHtml(formatBench(top7, { rate, digits }));
   const avgLabel = team == null ? "" : escapeHtml(formatBench(team, { rate, digits }));
+  if (compact) {
+    return `
+      <div class="ba-meter ba-meter--compact ba-meter--${tone}">
+        <span class="ba-meter__track">
+          <span class="ba-meter__fill" style="width:${pct(value)}%"></span>
+          ${avgPct == null ? "" : `<i class="ba-meter__tick ba-meter__tick--avg" style="left:${avgPct}%"></i>`}
+          ${reqPct == null ? "" : `<i class="ba-meter__tick ba-meter__tick--req" style="left:${reqPct}%"></i>`}
+        </span>
+      </div>
+    `;
+  }
   return `
     <div class="ba-meter ba-meter--${tone}">
       ${reqPct == null ? `<div class="ba-meter__rail"></div>` : `
@@ -354,12 +365,16 @@ function unitBenchValues(metricKey, unit, single, played) {
 function unitPanelHtml(title, metricKey, hint, stats, single) {
   const units = stats.units || {};
   const rate = metricKey === "duelRate";
+  const digits = rate ? 1 : 1;
   const rows = ["DEF", "MID", "ATT"].map((unit) => {
     const row = units[unit] || {};
     const bench = unitBenchValues(metricKey, unit, single, stats.played);
     const value = rate ? row.duelRate : row.defendersBypassed;
     const extra = unitSubText(metricKey, row);
     const tone = meterTone(value, bench.top7, true);
+    const reqText = bench.top7 == null
+      ? ""
+      : `<span class="ba-unitrow__req"><em>Req</em><b>${escapeHtml(formatBench(bench.top7, { rate, digits }))}</b></span>`;
     return `
       <div class="ba-unitrow">
         <span class="ba-unitrow__unit">${unit}</span>
@@ -367,8 +382,14 @@ function unitPanelHtml(title, metricKey, hint, stats, single) {
           <div class="ba-unitrow__nums">
             <span class="ba-unitrow__val ${tone ? `is-${tone}` : ""}">${escapeHtml(unitValueText(metricKey, row))}</span>
             ${extra ? `<span class="ba-unitrow__sub">${escapeHtml(extra)}</span>` : ""}
+            ${reqText}
           </div>
-          ${meterHtml(value, bench, { higherBetter: true, rate, digits: rate ? 1 : 1 })}
+          ${meterHtml(value, bench, {
+            higherBetter: true,
+            rate,
+            digits,
+            compact: true,
+          })}
         </div>
       </div>
     `;

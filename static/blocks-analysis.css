@@ -1570,8 +1570,8 @@ a:hover { text-decoration: underline; }
 }
 
 .ba-sheet__main--compact .ba-unitrow__nums {
-  margin-bottom: .1rem;
-  gap: .28rem;
+  margin-bottom: .08rem;
+  gap: .22rem;
 }
 
 .ba-sheet__main--compact .ba-unitrow__sub {
@@ -1579,64 +1579,27 @@ a:hover { text-decoration: underline; }
   padding: .08rem .22rem;
 }
 
-.ba-sheet__main--compact .ba-meter__rail--req {
-  height: 16px;
+.ba-sheet__main--compact .ba-unitrow__req {
+  padding: .1rem .26rem .08rem;
 }
 
-.ba-sheet__main--compact .ba-meter__rail--avg {
-  height: 12px;
+.ba-sheet__main--compact .ba-unitrow__req em {
+  font-size: .46rem;
 }
 
-.ba-sheet__main--compact .ba-meter__track {
-  height: 8px;
+.ba-sheet__main--compact .ba-unitrow__req b {
+  font-size: .74rem;
 }
 
-.ba-sheet__main--compact .ba-meter__flag {
-  top: auto;
-  bottom: 1px;
-  padding: .1rem .28rem .08rem;
-  gap: .14rem;
+.ba-sheet__main--compact .ba-meter--compact .ba-meter__track {
+  height: 9px;
 }
 
-.ba-sheet__main--compact .ba-meter__flag em {
-  font-size: .48rem;
-}
-
-.ba-sheet__main--compact .ba-meter__flag b {
-  font-size: .78rem;
-}
-
-.ba-sheet__main--compact .ba-meter__tick--req {
-  top: -2px;
-  height: 12px;
-}
-
-.ba-unitpanel .ba-meter__rail--req {
-  height: 15px;
-}
-
+.ba-sheet__main--compact .ba-meter__rail--req,
+.ba-sheet__main--compact .ba-meter__rail--avg,
+.ba-unitpanel .ba-meter__rail--req,
 .ba-unitpanel .ba-meter__rail--avg {
-  height: 10px;
-}
-
-.ba-unitpanel .ba-meter__flag {
-  top: auto;
-  bottom: 0;
-  padding: .1rem .3rem .08rem;
-  gap: .14rem;
-}
-
-.ba-unitpanel .ba-meter__flag em {
-  font-size: .48rem;
-  letter-spacing: .06em;
-}
-
-.ba-unitpanel .ba-meter__flag b {
-  font-size: .82rem;
-}
-
-.ba-unitpanel .ba-unitrow__nums {
-  margin-bottom: .06rem;
+  display: none;
 }
 
 .ba-chart {
@@ -2191,8 +2154,9 @@ a:hover { text-decoration: underline; }
 .ba-unitrow__nums {
   display: flex;
   align-items: center;
-  gap: .35rem;
-  margin-bottom: .18rem;
+  gap: .28rem;
+  margin-bottom: .1rem;
+  flex-wrap: wrap;
 }
 
 .ba-unitrow__val {
@@ -2234,6 +2198,56 @@ a:hover { text-decoration: underline; }
   background: #ece7dc;
   border-radius: 2px;
   white-space: nowrap;
+}
+
+.ba-unitrow__req {
+  display: inline-flex;
+  align-items: baseline;
+  gap: .18rem;
+  margin-left: auto;
+  padding: .14rem .32rem .12rem;
+  border-radius: 2px;
+  background: #111;
+  color: #f5c518;
+  font-family: var(--display);
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.ba-unitrow__req em {
+  font-style: normal;
+  font-size: .5rem;
+  letter-spacing: .08em;
+  color: #fff;
+}
+
+.ba-unitrow__req b {
+  font-size: .82rem;
+  letter-spacing: .02em;
+}
+
+.ba-meter--compact {
+  margin-top: 0;
+}
+
+.ba-meter--compact .ba-meter__track {
+  height: 10px;
+}
+
+.ba-meter--compact .ba-meter__tick--req {
+  top: -4px;
+  height: 18px;
+  width: 2px;
+  transform: translateX(-1px);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.9);
+}
+
+.ba-meter--compact .ba-meter__tick--avg {
+  top: 1px;
+  height: 8px;
 }
 
 .ba-stars {
