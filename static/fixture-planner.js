@@ -472,7 +472,22 @@ async function confirmTicketRequest() {
   }
 }
 
-function formatTime(iso) {
+function isPlaceholderKickoff(iso) {
+  const token = String(iso || "").trim();
+  if (!token || !token.includes("T")) return true;
+  const stamp = new Date(token);
+  if (Number.isNaN(stamp.getTime())) return true;
+  const hour = stamp.getUTCHours();
+  const minute = stamp.getUTCMinutes();
+  const day = stamp.getUTCDay(); // 0 Sun … 6 Sat
+  if (minute === 0 && (hour === 0 || hour === 22 || hour === 23)) return true;
+  // Mon–Fri midday UTC dumps from FotMob (14:00Z → 15:00 UK in summer).
+  if (day >= 1 && day <= 5 && minute === 0 && hour >= 12 && hour <= 14) return true;
+  return false;
+}
+
+function formatTime(iso, fixture) {
+  if (fixture?.kickoff_tbc || isPlaceholderKickoff(iso)) return "TBC";
   if (!iso) return "TBC";
   return new Date(iso).toLocaleTimeString("en-GB", {
     hour: "2-digit",
@@ -480,6 +495,10 @@ function formatTime(iso) {
     hour12: false,
     timeZone: "Europe/London",
   });
+}
+
+function formatFixtureKickoff(fixture) {
+  return formatTime(fixture?.kickoff_utc || fixture?.scheduled_date, fixture);
 }
 
 function formatDateLabel(dateKey) {
@@ -967,7 +986,7 @@ async function openMatchDetailsModal(fixtureIdValue) {
     const bits = [
       fixture.league || "",
       formatShortDate(fixtureDateKey(fixture)),
-      formatTime(fixture.kickoff_utc || fixture.scheduled_date),
+      formatTime(fixture.kickoff_utc || fixture.scheduled_date, fixture),
       isManualFixture(fixture) ? "Manual" : "",
     ].filter(Boolean);
     els.matchDetailsMeta.textContent = bits.join(" · ");
@@ -1514,7 +1533,7 @@ function renderAssignModalChrome() {
     els.assignModalTitle.textContent = `${home} vs ${away}`;
   }
   if (els.assignModalMeta) {
-    const kickoff = formatTime(fixture?.kickoff_utc || fixture?.scheduled_date);
+    const kickoff = formatTime(fixture?.kickoff_utc || fixture?.scheduled_date, fixture);
     const dateLabel = formatShortDate(fixtureDateKey(fixture) || modal.date || "");
     els.assignModalMeta.textContent = `${fixture?.league || modal.league || ""} · ${dateLabel} · ${kickoff} · Assigning ${staffLabel(modal.staffList || modal.staff)}`;
   }
@@ -2206,7 +2225,7 @@ function buildMonthGrid(monthKey, fixtures) {
                 <div class="fp-fixture__teams">${fixtureTeams(fixture)}</div>
                 <div class="fp-fixture__meta">
                   <span class="fp-fixture__league">${fixture.league}</span>
-                  <span>${formatTime(fixture.kickoff_utc || fixture.scheduled_date)}</span>
+                  <span>${formatTime(fixture.kickoff_utc || fixture.scheduled_date, fixture)}</span>
                 </div>
                 ${assignmentBadge(fixture)}
               </article>
@@ -2311,7 +2330,7 @@ function renderFixtureCard(fixture, { showDate = false } = {}) {
   return `
     <article class="fp-list-fixture fp-list-fixture--stacked${completed ? " fp-list-fixture--completed" : ""}${usesStackedCompLayout() ? " fp-list-fixture--cup" : ""}${expanded ? " fp-list-fixture--expanded" : ""}" style="--league-color:${color}" data-fixture-card="${id}">
       <div class="fp-list-fixture__schedule">
-        <span class="fp-list-fixture__time">${formatTime(fixture.kickoff_utc || fixture.scheduled_date)}</span>
+        <span class="fp-list-fixture__time">${formatTime(fixture.kickoff_utc || fixture.scheduled_date, fixture)}</span>
         ${dateLine}
         ${cupBadge}
       </div>

@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_SEASON = "26/27"
 ALLOWED_FIXTURE_SEASONS: tuple[str, ...] = ("26/27", "25/26")
 FIXTURE_CACHE_TTL_SECONDS = 1800
-FIXTURE_CACHE_VERSION = "v14"
+FIXTURE_CACHE_VERSION = "v15"
 
 FIXTURE_STAFF_TEAMS: tuple[dict[str, Any], ...] = (
     {
@@ -1214,6 +1214,41 @@ def _row_source_priority(row: dict[str, Any]) -> int:
     return max(SOURCE_PRIORITY.get(str(source), 0) for source in sources)
 
 
+def _parse_kickoff_utc(value: Any) -> datetime | None:
+    token = str(value or "").strip()
+    if not token or "T" not in token:
+        return None
+    try:
+        stamp = datetime.fromisoformat(token.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=UTC)
+    return stamp.astimezone(UTC)
+
+
+def _is_placeholder_kickoff(value: Any) -> bool:
+    """True when a source stamped a date with a fake kick-off time.
+
+    FotMob often uses 12:00–14:00Z on midweek cup ties before real KOs are
+    published — that shows as 13:00–15:00 UK and looks like a confirmed 3pm.
+    Saturday/Sunday 14:00Z (traditional 3pm) is left alone.
+    """
+    stamp = _parse_kickoff_utc(value)
+    if stamp is None:
+        token = str(value or "").strip()
+        return not token or "T" not in token
+    minute = stamp.minute
+    hour = stamp.hour
+    # Midnight-ish UTC dumps.
+    if minute == 0 and hour in (0, 22, 23):
+        return True
+    # Mon–Fri midday UTC placeholders (Tue cup round = classic 14:00Z → 15:00 UK).
+    if stamp.weekday() <= 4 and minute == 0 and hour in (12, 13, 14):
+        return True
+    return False
+
+
 def _kickoff_time_quality(value: Any) -> int:
     """Rank how likely an ISO kickoff is a real time vs a date-only placeholder.
 
@@ -1225,15 +1260,14 @@ def _kickoff_time_quality(value: Any) -> int:
         return 0
     if "T" not in token:
         return 1
+    if _is_placeholder_kickoff(token):
+        return 2
     try:
         time_part = token.split("T", 1)[1]
         hour = int(time_part[0:2])
         minute = int(time_part[3:5]) if len(time_part) >= 5 and time_part[2] == ":" else 0
     except (TypeError, ValueError):
         return 0
-    # Common date-only placeholders (midnight-ish UTC).
-    if minute == 0 and hour in (0, 22, 23):
-        return 2
     if minute in (15, 45):
         return 8
     if minute in (0, 30):
@@ -2069,6 +2103,9 @@ def _build_league_bundle(league_ui: str, season: str) -> dict[str, Any]:
         row["sources"] = sources
         row["source_count"] = len(sources)
         row["verified"] = bool(row.get("match_id"))
+        row["kickoff_tbc"] = _is_placeholder_kickoff(
+            row.get("kickoff_utc") or row.get("scheduled_date")
+        )
         row["fixture_id"] = _fixture_id(
             str(row.get("league") or league_ui),
             str((row.get("home") or {}).get("name") or ""),
