@@ -1565,7 +1565,8 @@ a:hover { text-decoration: underline; }
 }
 
 .ba-sheet__main--compact .ba-unitrow__val {
-  font-size: 1rem;
+  font-size: .92rem;
+  padding: .14rem .32rem .12rem;
 }
 
 .ba-sheet__main--compact .ba-unitrow__nums {
@@ -1574,7 +1575,8 @@ a:hover { text-decoration: underline; }
 }
 
 .ba-sheet__main--compact .ba-unitrow__sub {
-  font-size: .55rem;
+  font-size: .52rem;
+  padding: .08rem .22rem;
 }
 
 .ba-sheet__main--compact .ba-meter__rail--req {
@@ -2140,26 +2142,50 @@ a:hover { text-decoration: underline; }
 
 .ba-unitrow__nums {
   display: flex;
-  align-items: baseline;
-  gap: .4rem;
+  align-items: center;
+  gap: .35rem;
   margin-bottom: .18rem;
 }
 
 .ba-unitrow__val {
   font-family: var(--display);
-  font-size: 1.35rem;
+  font-size: 1.05rem;
   font-weight: 800;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  padding: .18rem .38rem .14rem;
+  border-radius: 2px;
+  background: #111;
+  color: #fff;
+  letter-spacing: .02em;
+  white-space: nowrap;
 }
 
-.ba-unitrow__val.is-hot { color: #1f7a3f; }
-.ba-unitrow__val.is-warn { color: #9a7b12; }
-.ba-unitrow__val.is-cold { color: #b42318; }
+.ba-unitrow__val.is-hot {
+  background: #1f7a3f;
+  color: #fff;
+}
+
+.ba-unitrow__val.is-warn {
+  background: #c9a227;
+  color: #111;
+}
+
+.ba-unitrow__val.is-cold {
+  background: #b42318;
+  color: #fff;
+}
 
 .ba-unitrow__sub {
   color: var(--ink-muted);
-  font-size: .68rem;
-  font-weight: 600;
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  padding: .12rem .28rem;
+  background: #ece7dc;
+  border-radius: 2px;
+  white-space: nowrap;
 }
 
 .ba-stars {
