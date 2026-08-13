@@ -2529,6 +2529,16 @@ a:hover { text-decoration: underline; }
   text-transform: uppercase;
 }
 
+.ba-lead__min {
+  margin-left: .35rem;
+  color: #7a7368;
+  font-family: var(--body);
+  font-size: .58rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: none;
+}
+
 .ba-lead__list {
   list-style: none;
   margin: 0;

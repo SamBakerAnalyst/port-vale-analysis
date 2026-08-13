@@ -528,9 +528,12 @@ function playerBoardHtml(spec, players) {
         `;
       }).join("")
     : `<li class="ba-lead__empty">No player data yet</li>`;
+  const minNote = spec.minDuels
+    ? `<span class="ba-lead__min">min. ${escapeHtml(String(spec.minDuels))} duels</span>`
+    : "";
   return `
     <article class="ba-lead">
-      <p class="ba-lead__label">${escapeHtml(spec.label)}</p>
+      <p class="ba-lead__label">${escapeHtml(spec.label)}${minNote}</p>
       <ol class="ba-lead__list">${items}</ol>
     </article>
   `;
