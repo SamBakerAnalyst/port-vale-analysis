@@ -474,6 +474,14 @@ function playerPhotoUrl(name) {
   return `/api/player-photo?name=${encodeURIComponent(name || "")}`;
 }
 
+function playerPhotoHtml(name, className) {
+  return `
+    <span class="${escapeHtml(className)}" aria-hidden="true">
+      <img src="${escapeHtml(playerPhotoUrl(name))}" alt="" onerror="this.closest('.ba-photo')?.classList.add('is-empty')" />
+    </span>
+  `;
+}
+
 function formatPlayerValue(row, spec) {
   const value = row[spec.key];
   if (value == null || Number.isNaN(Number(value))) return "—";
@@ -491,7 +499,7 @@ function playerBoardHtml(spec, players) {
         return `
           <li class="ba-lead__row ${index === 0 ? "is-first" : ""}">
             <span class="ba-lead__rank">${index + 1}</span>
-            <img class="ba-lead__photo" src="${escapeHtml(playerPhotoUrl(row.name))}" alt="" onerror="this.removeAttribute('src')" />
+            ${playerPhotoHtml(row.name, "ba-photo ba-lead__photo")}
             <span class="ba-lead__name">${escapeHtml(row.name)}</span>
             ${extra}
             <span class="ba-lead__val">${escapeHtml(formatPlayerValue(row, spec))}</span>
@@ -1243,7 +1251,7 @@ function standoutsHtml(players) {
     return `
       <article class="ba-star">
         <p class="ba-star__label">${escapeHtml(spec.label)}</p>
-        <img class="ba-star__photo" src="${escapeHtml(playerPhotoUrl(player.name))}" alt="" onerror="this.removeAttribute('src')" />
+        ${playerPhotoHtml(player.name, "ba-photo ba-star__photo")}
         <div class="ba-star__copy">
           <p class="ba-star__name">${escapeHtml(player.name)}</p>
           <p class="ba-star__val">${escapeHtml(formatPlayerValue(player, spec))}</p>
