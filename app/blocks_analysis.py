@@ -71,7 +71,13 @@ LEAGUE_TABLE_GAMES = 46
 KPI_BYPASSED_DEFENDERS = 2
 KPI_SHOT_XG = 82
 MATCH_KPI_CACHE_TTL = 6 * 3600
-MATCH_STATS_CACHE_VERSION = 11
+MATCH_STATS_CACHE_VERSION = 12
+# Shot actions stripped from the match xG VS card (open-play / set-piece delivery only).
+XG_VS_EXCLUDED_ACTIONS = frozenset({
+    "PENALTY",
+    "PENALTY_KICK",
+    "DIRECT_FREE_KICK",
+})
 PHASE_SHORT_LABELS = {
     "IN_POSSESSION": "In possession",
     "OUT_OF_POSSESSION": "Out of possession",
@@ -828,7 +834,23 @@ def _match_story(
     shots = race.get("shots") or []
     vale_shots = [row for row in shots if int(row.get("squadId") or 0) == squad_id]
     opp_shots = [row for row in shots if int(row.get("squadId") or 0) != squad_id]
-    biggest = max(shots, key=lambda row: float(row.get("xg") or 0), default=None)
+
+    def _open_play_xg(rows: list[dict[str, Any]]) -> float:
+        total = 0.0
+        for row in rows:
+            action = str(row.get("action") or "").upper()
+            if action in XG_VS_EXCLUDED_ACTIONS:
+                continue
+            total += float(row.get("xg") or 0)
+        return round(total, 2)
+
+    vale_open_xg = _open_play_xg(vale_shots)
+    opp_open_xg = _open_play_xg(opp_shots)
+    open_shots = [
+        row for row in shots
+        if str(row.get("action") or "").upper() not in XG_VS_EXCLUDED_ACTIONS
+    ]
+    biggest = max(open_shots, key=lambda row: float(row.get("xg") or 0), default=None)
     goals = [row for row in shots if row.get("isGoal")]
     first_goal = min(goals, key=lambda row: float(row.get("minute") or 0), default=None)
     timeline = race.get("timeline") or {}
@@ -850,8 +872,12 @@ def _match_story(
         },
     }
     facts = {
-        "valeXg": compact["vale"]["totalXg"],
-        "oppXg": compact["opp"]["totalXg"],
+        # VS card uses open-play xG (excl. penalties + direct free kicks).
+        "valeXg": vale_open_xg,
+        "oppXg": opp_open_xg,
+        "valeXgAll": compact["vale"]["totalXg"],
+        "oppXgAll": compact["opp"]["totalXg"],
+        "xgExcludes": "PK & DFK",
         "valeShots": len(vale_shots),
         "oppShots": len(opp_shots),
         "valeGoals": vale_goals,

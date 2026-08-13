@@ -755,7 +755,7 @@ function guideSheetsHtml({ kicker, fixture, totalPages = 4 }) {
           ${guideCard(2, "Six leaderboards", "Full top-five lists.", "Every player ranked for xG, aggressive regains, defensive ball wins, regains off opp defenders, backline beaten and duels won.")}
         </div>
         <div class="ba-guide__defs ba-guide__defs--fill">
-          ${guideDef("Expected goals", "Shot quality added up — not just who shot, but how good the chances were.")}
+          ${guideDef("Expected goals", "Shot quality added up — open play only on the VS card (penalties and direct free kicks excluded).")}
           ${guideDef("Aggressive regains", "Win the ball and remove opponents from the play — who you take out when you win it, not just the turnover.")}
           ${guideDef("Defensive ball wins", "Win the ball and add a teammate to the play.")}
           ${guideDef("Regains from opp defenders", "Ball wins where you beat one of their four deepest players — not only centre-backs and full-backs.")}
@@ -784,8 +784,9 @@ function guideSheetsHtml({ kicker, fixture, totalPages = 4 }) {
 }
 
 function xgVsHtml(stats, fixture) {
-  const vale = stats.xg;
-  const opp = stats.facts?.oppXg;
+  const facts = stats.facts || {};
+  const vale = facts.valeXg != null ? facts.valeXg : stats.xg;
+  const opp = facts.oppXg;
   if (vale == null && opp == null) return "";
   const v = Number(vale) || 0;
   const o = Number(opp) || 0;
@@ -799,18 +800,24 @@ function xgVsHtml(stats, fixture) {
   const edge = total <= 0
     ? "No shots"
     : `${delta >= 0 ? "Vale" : oppName} +${fmtNum(Math.abs(delta), 2)}`;
+  const exclNote = facts.xgExcludes
+    ? `(excl. ${escapeHtml(facts.xgExcludes)})`
+    : "(excl. PK &amp; DFK)";
   return `
     <article class="ba-xgvs">
-      <p class="ba-xgvs__label">Expected goals</p>
+      <p class="ba-xgvs__label">Expected goals <span class="ba-xgvs__excl">${exclNote}</span></p>
       <div class="ba-xgvs__fight">
         <div class="ba-xgvs__side ba-xgvs__side--vale ${valeAhead ? "is-ahead" : ""}">
           <span class="ba-xgvs__who">Vale</span>
           <span class="ba-xgvs__num">${escapeHtml(fmtNum(vale, 2))}</span>
+          ${bench?.top7 == null ? "" : `<span class="ba-xgvs__req">Req ${escapeHtml(formatBench(bench.top7, { digits: 2 }))}</span>`}
+          ${bench?.team == null ? "" : `<span class="ba-xgvs__avg">Avg ${escapeHtml(formatBench(bench.team, { digits: 2 }))}</span>`}
         </div>
         <span class="ba-xgvs__badge">VS</span>
         <div class="ba-xgvs__side ba-xgvs__side--opp ${oppAhead ? "is-ahead" : ""}">
           <span class="ba-xgvs__who">${escapeHtml(oppName)}</span>
           <span class="ba-xgvs__num">${escapeHtml(fmtNum(opp, 2))}</span>
+          <span class="ba-xgvs__req ba-xgvs__req--ghost">&nbsp;</span>
         </div>
       </div>
       <div class="ba-xgvs__bar" aria-hidden="true">
@@ -818,8 +825,7 @@ function xgVsHtml(stats, fixture) {
       </div>
       <div class="ba-xgvs__foot">
         <span class="ba-xgvs__edge">${escapeHtml(edge)}</span>
-        ${bench?.team == null ? "" : `<span class="ba-xgvs__key ba-xgvs__key--avg">Vale avg ${escapeHtml(formatBench(bench.team, { digits: 2 }))}</span>`}
-        ${bench?.top7 == null ? "" : `<span class="ba-xgvs__key ba-xgvs__key--req">Req ${escapeHtml(formatBench(bench.top7, { digits: 2 }))}</span>`}
+        <span class="ba-xgvs__scope">Open play · no pens / direct free kicks</span>
       </div>
     </article>
   `;
