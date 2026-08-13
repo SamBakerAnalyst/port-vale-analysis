@@ -842,23 +842,31 @@
     }
     .slide.slide--values-board .slide__corner { display: none; }
     .slide__inner--values-board {
-      display: block !important;
-      height: 100%;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: stretch !important;
+      justify-content: stretch !important;
+      height: 100% !important;
+      min-height: 0 !important;
       padding: 0 !important;
-      overflow: hidden;
+      overflow: hidden !important;
+      text-align: left !important;
     }
     .values-board {
       --vb-gold: #f5c518;
+      flex: 1 1 auto;
+      width: 100%;
       height: 100%;
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr) minmax(5.6rem, 22%);
       min-height: 0;
+      display: flex;
+      flex-direction: column;
       background:
         radial-gradient(ellipse 90% 60% at 50% 0%, rgba(245,197,24,0.07), transparent 55%),
         #050505;
       color: #fff;
     }
     .vb-head {
+      flex: 0 0 auto;
       padding: 0.55rem 1.4rem 0.45rem;
       text-align: left;
     }
@@ -913,9 +921,11 @@
       color: rgba(255,255,255,0.88);
     }
     .vb-rows {
+      flex: 1 1 0;
       display: flex;
       flex-direction: column;
       min-height: 0;
+      height: auto;
       padding: 0 1.4rem;
       border-top: 1.5px solid var(--vb-gold);
       overflow: hidden;
@@ -1030,6 +1040,7 @@
       stroke-linejoin: round;
     }
     .vb-foot {
+      flex: 0 0 auto;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -1073,52 +1084,140 @@
     .vb-foot__chevs--left i {
       clip-path: polygon(100% 0, 0 50%, 100% 100%);
     }
+    body.is-present .slide.slide--values-board,
+    body.is-pdf-view .slide.slide--values-board {
+      background: #050505;
+      display: flex !important;
+      flex-direction: column !important;
+    }
+    body.is-present .slide.slide--values-board .slide__inner--values-board,
+    body.is-pdf-view .slide.slide--values-board .slide__inner--values-board {
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: stretch !important;
+      flex: 1 1 auto !important;
+      height: 100% !important;
+      min-height: 0 !important;
+      padding: 0 !important;
+    }
     body.is-present .values-board,
     body.is-pdf-view .values-board {
-      grid-template-rows: auto minmax(0, 1fr) minmax(10rem, 34%);
+      display: flex !important;
+      flex-direction: column !important;
+      flex: 1 1 auto !important;
+      width: 100% !important;
+      height: 100% !important;
+      min-height: 0 !important;
     }
     body.is-present .vb-head,
     body.is-pdf-view .vb-head {
-      padding: 0.65rem 1.55rem 0.5rem;
+      flex: 0 0 auto !important;
+      padding: 0.55vh 2vw 0.35vh !important;
     }
-    body.is-present .vb-rows,
-    body.is-pdf-view .vb-rows {
-      padding: 0 1.55rem;
+    body.is-present .vb-head__logo,
+    body.is-pdf-view .vb-head__logo {
+      width: clamp(2.4rem, 3.6vw, 3.4rem) !important;
+      margin-bottom: 0.15vh !important;
     }
     body.is-present .vb-head__title,
     body.is-pdf-view .vb-head__title {
-      font-size: clamp(2.6rem, 5.5vmin, 3.5rem);
+      font-size: clamp(2.2rem, 4vw, 3.6rem) !important;
+    }
+    body.is-present .vb-head__motto,
+    body.is-pdf-view .vb-head__motto {
+      max-width: 30vw !important;
+      margin: 0.25vh 0 0.15vh !important;
+      gap: 0.8vw !important;
+    }
+    body.is-present .vb-head__motto span,
+    body.is-pdf-view .vb-head__motto span {
+      font-size: clamp(0.95rem, 1.45vw, 1.25rem) !important;
+    }
+    body.is-present .vb-head__tag,
+    body.is-pdf-view .vb-head__tag {
+      font-size: clamp(0.62rem, 0.95vw, 0.85rem) !important;
+    }
+    body.is-present .vb-rows,
+    body.is-pdf-view .vb-rows {
+      flex: 1 1 0 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      min-height: 0 !important;
+      height: auto !important;
+      padding: 0 2vw !important;
+    }
+    body.is-present .vb-row,
+    body.is-pdf-view .vb-row {
+      flex: 1 1 0 !important;
+      gap: 0.6vh 1.8vw !important;
+      padding: 0.8vh 0 !important;
+      grid-template-columns: minmax(0, 1.35fr) 2px minmax(0, 1fr) !important;
+      align-items: center !important;
+    }
+    body.is-present .vb-value,
+    body.is-pdf-view .vb-value {
+      gap: 1.5vw !important;
+      align-items: center !important;
+    }
+    body.is-present .vb-hex,
+    body.is-pdf-view .vb-hex {
+      width: clamp(6rem, 9.5vw, 9.5rem) !important;
+      height: clamp(6rem, 9.5vw, 9.5rem) !important;
     }
     body.is-present .vb-value__copy h3,
     body.is-pdf-view .vb-value__copy h3 {
-      font-size: clamp(1.55rem, 3.2vmin, 2.1rem);
+      font-size: clamp(3.2rem, 6.2vw, 6rem) !important;
     }
     body.is-present .vb-value__copy p,
     body.is-pdf-view .vb-value__copy p {
-      font-size: clamp(0.9rem, 1.7vmin, 1.15rem);
+      margin-top: 1vh !important;
+      font-size: clamp(1.55rem, 2.7vw, 2.55rem) !important;
+      max-width: 32ch !important;
+      line-height: 1.2 !important;
+    }
+    body.is-present .vb-behaviours,
+    body.is-pdf-view .vb-behaviours {
+      gap: 0 !important;
+      height: 100% !important;
+      align-content: space-evenly !important;
+      align-self: stretch !important;
     }
     body.is-present .vb-behaviours li,
     body.is-pdf-view .vb-behaviours li {
-      font-size: clamp(0.95rem, 1.8vmin, 1.2rem);
+      grid-template-columns: 1.9rem 1fr !important;
+      gap: 1vw !important;
+      font-size: clamp(1.7rem, 2.9vw, 2.8rem) !important;
+    }
+    body.is-present .vb-behaviours li svg,
+    body.is-pdf-view .vb-behaviours li svg {
+      width: 1.7rem !important;
+      height: 1.7rem !important;
+      stroke-width: 1.8;
+    }
+    body.is-present .vb-foot,
+    body.is-pdf-view .vb-foot {
+      flex: 0 0 auto !important;
+      min-height: 0 !important;
+      padding: 0.9vh 0 1.2vh !important;
     }
     body.is-present .vb-foot__motto,
     body.is-pdf-view .vb-foot__motto {
-      gap: clamp(1rem, 2.5vw, 2rem);
-      padding: 0 1.5rem;
+      gap: clamp(0.9rem, 2.2vw, 1.8rem) !important;
+      padding: 0 1.2rem !important;
     }
     body.is-present .vb-foot__text,
     body.is-pdf-view .vb-foot__text {
-      font-size: clamp(4.5rem, 11vw, 9.5rem);
-      letter-spacing: 0.1em;
+      font-size: clamp(3rem, 7.2vw, 6.6rem) !important;
+      letter-spacing: 0.1em !important;
     }
     body.is-present .vb-foot__chevs,
     body.is-pdf-view .vb-foot__chevs {
-      gap: clamp(0.45rem, 1vw, 0.85rem);
+      gap: clamp(0.4rem, 0.9vw, 0.75rem) !important;
     }
     body.is-present .vb-foot__chevs i,
     body.is-pdf-view .vb-foot__chevs i {
-      width: clamp(1.4rem, 2.8vw, 2.6rem);
-      height: clamp(3.2rem, 7vw, 6.5rem);
+      width: clamp(1.15rem, 2.3vw, 2.1rem) !important;
+      height: clamp(2.5rem, 5.4vw, 5rem) !important;
     }
     body.is-exporting .slide.is-export-capture.slide--values-board .values-board {
       height: 100% !important;
