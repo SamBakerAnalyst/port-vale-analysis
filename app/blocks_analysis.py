@@ -71,7 +71,7 @@ LEAGUE_TABLE_GAMES = 46
 KPI_BYPASSED_DEFENDERS = 2
 KPI_SHOT_XG = 82
 MATCH_KPI_CACHE_TTL = 6 * 3600
-MATCH_STATS_CACHE_VERSION = 13
+MATCH_STATS_CACHE_VERSION = 14
 # Shot actions stripped from match + player xG boards (open-play / set-piece delivery only).
 XG_VS_EXCLUDED_ACTIONS = frozenset({
     "PENALTY",
@@ -95,10 +95,25 @@ PAYLOAD_CACHE_TTL = 45
 PLAYER_NAMES_TTL = 6 * 3600
 BENCHMARK_CACHE_TTL = 600
 UNIT_TOP7_TTL = 24 * 3600
-UNIT_TOP7_VERSION = 4
+UNIT_TOP7_VERSION = 5
 UNIT_TOP7_GAMES_PER_SQUAD = 8
 FORM_BASELINE_GAMES = 7
 UNITS: tuple[str, ...] = ("DEF", "MID", "ATT")
+UNIT_METRIC_SPECS: dict[str, dict[str, Any]] = {
+    "defendersBypassed": {"higherBetter": True, "rate": False, "digits": 1},
+    "duelRate": {"higherBetter": True, "rate": True, "digits": 1},
+    "offensiveInterventions": {"higherBetter": True, "rate": False, "digits": 1},
+    "defensiveInterventions": {"higherBetter": True, "rate": False, "digits": 1},
+    "regainsFromDefenders": {"higherBetter": True, "rate": False, "digits": 1},
+    "xg": {"higherBetter": True, "rate": False, "digits": 2},
+}
+UNIT_COUNT_KEYS: tuple[str, ...] = (
+    "defendersBypassed",
+    "offensiveInterventions",
+    "defensiveInterventions",
+    "regainsFromDefenders",
+    "xg",
+)
 POSITION_TO_UNIT: dict[str, str | None] = {
     "GOALKEEPER": None,
     "CENTRAL_DEFENDER": "DEF",
@@ -376,6 +391,10 @@ def _empty_unit_row() -> dict[str, Any]:
         "duelWon": None,
         "duelTotal": None,
         "duelRate": None,
+        "offensiveInterventions": None,
+        "defensiveInterventions": None,
+        "regainsFromDefenders": None,
+        "xg": None,
     }
 
 
@@ -386,18 +405,32 @@ def _empty_units() -> dict[str, dict[str, Any]]:
 def _finalize_unit_row(row: dict[str, float]) -> dict[str, Any]:
     won = float(row.get("duelWon") or 0)
     total = float(row.get("duelTotal") or 0)
-    bypassed = float(row.get("defendersBypassed") or 0)
+    seen = any(float(row.get(key) or 0) for key in (*UNIT_COUNT_KEYS, "duelWon", "duelTotal"))
+    if not seen:
+        return _empty_unit_row()
     return {
-        "defendersBypassed": round(bypassed, 1) if bypassed or total or won else None,
+        "defendersBypassed": round(float(row.get("defendersBypassed") or 0), 1),
         "duelWon": round(won, 1) if total or won else None,
         "duelTotal": round(total, 1) if total or won else None,
         "duelRate": round((won / total) * 100, 1) if total > 0 else None,
+        "offensiveInterventions": round(float(row.get("offensiveInterventions") or 0), 1),
+        "defensiveInterventions": round(float(row.get("defensiveInterventions") or 0), 1),
+        "regainsFromDefenders": round(float(row.get("regainsFromDefenders") or 0), 1),
+        "xg": round(float(row.get("xg") or 0), 2),
     }
 
 
 def _units_from_players(players: list[dict[str, Any]], squad_id: int) -> dict[str, dict[str, Any]]:
     buckets: dict[str, dict[str, float]] = {
-        unit: {"defendersBypassed": 0.0, "duelWon": 0.0, "duelTotal": 0.0}
+        unit: {
+            "defendersBypassed": 0.0,
+            "duelWon": 0.0,
+            "duelTotal": 0.0,
+            "offensiveInterventions": 0.0,
+            "defensiveInterventions": 0.0,
+            "regainsFromDefenders": 0.0,
+            "xg": 0.0,
+        }
         for unit in UNITS
     }
     seen = False
@@ -411,11 +444,19 @@ def _units_from_players(players: list[dict[str, Any]], squad_id: int) -> dict[st
         won = _kpi_value(kpis, KPI_WON_GROUND_DUELS) + _kpi_value(kpis, KPI_WON_AERIAL_DUELS)
         lost = _kpi_value(kpis, KPI_LOST_GROUND_DUELS) + _kpi_value(kpis, KPI_LOST_AERIAL_DUELS)
         bypassed = _kpi_value(kpis, KPI_BYPASSED_DEFENDERS)
+        offensive = _kpi_value(kpis, KPI_BALL_WIN_REMOVED_OPPONENTS)
+        defensive = _kpi_value(kpis, KPI_BALL_WIN_ADDED_TEAMMATES)
+        deepest = _kpi_value(kpis, KPI_BALL_WIN_REMOVED_OPPONENTS_DEFENDERS)
+        xg = _kpi_value(kpis, KPI_SHOT_XG)
         duel_total = won + lost
         for unit, share in shares:
             buckets[unit]["defendersBypassed"] += bypassed * share
             buckets[unit]["duelWon"] += won * share
             buckets[unit]["duelTotal"] += duel_total * share
+            buckets[unit]["offensiveInterventions"] += offensive * share
+            buckets[unit]["defensiveInterventions"] += defensive * share
+            buckets[unit]["regainsFromDefenders"] += deepest * share
+            buckets[unit]["xg"] += xg * share
         seen = True
     if not seen:
         return _empty_units()
@@ -832,6 +873,25 @@ def _apply_open_play_player_xg(
         player["xg"] = open_xg.get(player_id, 0.0)
 
 
+def _apply_open_play_unit_xg(stats: dict[str, Any], players: list[dict[str, Any]]) -> None:
+    units = stats.get("units")
+    if not isinstance(units, dict) or not players:
+        return
+    totals: dict[str, float] = {unit: 0.0 for unit in UNITS}
+    for player in players:
+        unit = str(player.get("unit") or "")
+        xg = float(player.get("xg") or 0)
+        if unit == "WB":
+            totals["DEF"] += xg * 0.5
+            totals["ATT"] += xg * 0.5
+        elif unit in totals:
+            totals[unit] += xg
+    for unit, value in totals.items():
+        row = units.get(unit)
+        if isinstance(row, dict):
+            row["xg"] = round(value, 2)
+
+
 def _half_time_xg(series: list[dict[str, Any]]) -> float:
     first = [row for row in series if row.get("half") == "first"]
     if first:
@@ -1191,6 +1251,7 @@ def _fetch_match_stats(
     stats["facts"] = facts
     if race and facts:
         _apply_open_play_player_xg(stats.get("players") or [], race.get("shots") or [], squad_id)
+        _apply_open_play_unit_xg(stats, stats.get("players") or [])
         # Keep team xG aligned with the VS card / player boards.
         if facts.get("valeXg") is not None:
             stats["xg"] = facts["valeXg"]
@@ -1393,20 +1454,14 @@ def _fetch_match_player_units(
 def _empty_unit_benchmarks() -> dict[str, dict[str, Any]]:
     return {
         unit: {
-            "defendersBypassed": {
+            key: {
                 "team": None,
                 "top7": None,
-                "higherBetter": True,
-                "rate": False,
-                "digits": 1,
-            },
-            "duelRate": {
-                "team": None,
-                "top7": None,
-                "higherBetter": True,
-                "rate": True,
-                "digits": 1,
-            },
+                "higherBetter": spec["higherBetter"],
+                "rate": spec["rate"],
+                "digits": spec["digits"],
+            }
+            for key, spec in UNIT_METRIC_SPECS.items()
         }
         for unit in UNITS
     }
@@ -1415,31 +1470,36 @@ def _empty_unit_benchmarks() -> dict[str, dict[str, Any]]:
 def _unit_averages_from_stats_list(
     stats_list: list[dict[str, Any]],
 ) -> dict[str, dict[str, float | None]]:
-    bypass: dict[str, list[float]] = {unit: [] for unit in UNITS}
+    counts: dict[str, dict[str, list[float]]] = {
+        unit: {key: [] for key in UNIT_COUNT_KEYS} for unit in UNITS
+    }
     won: dict[str, float] = {unit: 0.0 for unit in UNITS}
     total: dict[str, float] = {unit: 0.0 for unit in UNITS}
     for stats in stats_list:
         units = (stats or {}).get("units") or {}
         for unit in UNITS:
             row = units.get(unit) or {}
-            if row.get("defendersBypassed") is not None:
-                bypass[unit].append(float(row["defendersBypassed"]))
+            for key in UNIT_COUNT_KEYS:
+                if row.get(key) is not None:
+                    counts[unit][key].append(float(row[key]))
             duel_total = row.get("duelTotal")
             if duel_total:
                 won[unit] += float(row.get("duelWon") or 0)
                 total[unit] += float(duel_total)
     out: dict[str, dict[str, float | None]] = {}
     for unit in UNITS:
-        out[unit] = {
-            "defendersBypassed": _round_or_none(
-                (sum(bypass[unit]) / len(bypass[unit])) if bypass[unit] else None,
-                1,
-            ),
-            "duelRate": _round_or_none(
-                (100.0 * won[unit] / total[unit]) if total[unit] > 0 else None,
-                1,
-            ),
+        row: dict[str, float | None] = {
+            key: _round_or_none(
+                (sum(counts[unit][key]) / len(counts[unit][key])) if counts[unit][key] else None,
+                UNIT_METRIC_SPECS[key]["digits"],
+            )
+            for key in UNIT_COUNT_KEYS
         }
+        row["duelRate"] = _round_or_none(
+            (100.0 * won[unit] / total[unit]) if total[unit] > 0 else None,
+            1,
+        )
+        out[unit] = row
     return out
 
 
@@ -1452,7 +1512,14 @@ def _build_unit_top7_from_sample(
 
     def cell(squad_id: int, unit: str) -> dict[str, Any]:
         squad = acc.setdefault(squad_id, {})
-        return squad.setdefault(unit, {"bypass": [], "won": 0.0, "total": 0.0})
+        return squad.setdefault(
+            unit,
+            {
+                "counts": {key: [] for key in UNIT_COUNT_KEYS},
+                "won": 0.0,
+                "total": 0.0,
+            },
+        )
 
     if matches:
         workers = min(8, len(matches))
@@ -1478,53 +1545,49 @@ def _build_unit_top7_from_sample(
                     for unit in UNITS:
                         row = units.get(unit) or {}
                         bucket = cell(squad_id, unit)
-                        if row.get("defendersBypassed") is not None:
-                            bucket["bypass"].append(float(row["defendersBypassed"]))
+                        for key in UNIT_COUNT_KEYS:
+                            if row.get(key) is not None:
+                                bucket["counts"][key].append(float(row[key]))
                         if row.get("duelTotal"):
                             bucket["won"] += float(row.get("duelWon") or 0)
                             bucket["total"] += float(row["duelTotal"])
 
+    def _squad_unit_avgs(bucket: dict[str, Any]) -> dict[str, float | None]:
+        counts = bucket.get("counts") or {}
+        duel_total = float(bucket.get("total") or 0)
+        duel_won = float(bucket.get("won") or 0)
+        out: dict[str, float | None] = {}
+        for key in UNIT_COUNT_KEYS:
+            vals = counts.get(key) or []
+            out[key] = (sum(vals) / len(vals)) if vals else None
+        out["duelRate"] = (100.0 * duel_won / duel_total) if duel_total > 0 else None
+        return out
+
     per_squad: dict[int, dict[str, dict[str, float | None]]] = {}
     for squad_id, units in acc.items():
-        per_squad[squad_id] = {}
-        for unit in UNITS:
-            bucket = units.get(unit) or {}
-            bypass_vals = bucket.get("bypass") or []
-            duel_total = float(bucket.get("total") or 0)
-            duel_won = float(bucket.get("won") or 0)
-            per_squad[squad_id][unit] = {
-                "defendersBypassed": (
-                    sum(bypass_vals) / len(bypass_vals) if bypass_vals else None
-                ),
-                "duelRate": (100.0 * duel_won / duel_total) if duel_total > 0 else None,
-            }
+        per_squad[squad_id] = {
+            unit: _squad_unit_avgs(units.get(unit) or {}) for unit in UNITS
+        }
+
+    def _metric_mean(unit: str, key: str) -> float | None:
+        values = [
+            float(per_squad[squad_id][unit][key])
+            for squad_id in top7_ids
+            if squad_id in per_squad
+            and per_squad[squad_id].get(unit, {}).get(key) is not None
+        ]
+        digits = UNIT_METRIC_SPECS[key]["digits"]
+        return _round_or_none(_mean_or_none(values), digits)
 
     top7: dict[str, dict[str, float | None]] = {}
     for unit in UNITS:
-        bypass_vals = [
-            float(per_squad[squad_id][unit]["defendersBypassed"])
-            for squad_id in top7_ids
-            if squad_id in per_squad
-            and per_squad[squad_id].get(unit, {}).get("defendersBypassed") is not None
-        ]
-        duel_vals = [
-            float(per_squad[squad_id][unit]["duelRate"])
-            for squad_id in top7_ids
-            if squad_id in per_squad
-            and per_squad[squad_id].get(unit, {}).get("duelRate") is not None
-        ]
-        top7[unit] = {
-            "defendersBypassed": _round_or_none(_mean_or_none(bypass_vals), 1),
-            "duelRate": _round_or_none(_mean_or_none(duel_vals), 1),
-        }
+        top7[unit] = {key: _metric_mean(unit, key) for key in UNIT_METRIC_SPECS}
 
     pv_raw = per_squad.get(PORT_VALE_SQUAD_ID) or {}
     pv_avg = {
         unit: {
-            "defendersBypassed": _round_or_none(
-                (pv_raw.get(unit) or {}).get("defendersBypassed"), 1
-            ),
-            "duelRate": _round_or_none((pv_raw.get(unit) or {}).get("duelRate"), 1),
+            key: _round_or_none((pv_raw.get(unit) or {}).get(key), spec["digits"])
+            for key, spec in UNIT_METRIC_SPECS.items()
         }
         for unit in UNITS
     }
@@ -1570,24 +1633,19 @@ def build_unit_benchmarks(
         team_row = pv_now.get(unit) or {}
         prev_row = (pv_prev or {}).get(unit) or {}
         top_row = (top7 or {}).get(unit) or {}
-        team_bypass = team_row.get("defendersBypassed")
-        team_duel = team_row.get("duelRate")
-        if team_bypass is None:
-            team_bypass = prev_row.get("defendersBypassed")
-            if team_bypass is not None:
-                payload[unit]["defendersBypassed"]["teamFrom"] = "previous"
-        if team_duel is None:
-            team_duel = prev_row.get("duelRate")
-            if team_duel is not None:
-                payload[unit]["duelRate"]["teamFrom"] = "previous"
-        payload[unit]["defendersBypassed"]["team"] = team_bypass
-        payload[unit]["defendersBypassed"]["top7"] = top_row.get("defendersBypassed")
-        payload[unit]["duelRate"]["team"] = team_duel
-        payload[unit]["duelRate"]["top7"] = top_row.get("duelRate")
-        if top_row.get("defendersBypassed") is not None:
-            payload[unit]["defendersBypassed"]["top7From"] = "previous"
-        if top_row.get("duelRate") is not None:
-            payload[unit]["duelRate"]["top7From"] = "previous"
+        for key, spec in UNIT_METRIC_SPECS.items():
+            team_val = team_row.get(key)
+            if team_val is None:
+                team_val = prev_row.get(key)
+                if team_val is not None:
+                    payload[unit][key]["teamFrom"] = "previous"
+            payload[unit][key]["team"] = team_val
+            payload[unit][key]["top7"] = top_row.get(key)
+            payload[unit][key]["higherBetter"] = spec["higherBetter"]
+            payload[unit][key]["rate"] = spec["rate"]
+            payload[unit][key]["digits"] = spec["digits"]
+            if top_row.get(key) is not None:
+                payload[unit][key]["top7From"] = "previous"
     return payload
 
 
@@ -1787,7 +1845,11 @@ def _aggregate_units(played: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             "defendersBypassed": 0.0,
             "duelWon": 0.0,
             "duelTotal": 0.0,
-            "seenBypass": False,
+            "offensiveInterventions": 0.0,
+            "defensiveInterventions": 0.0,
+            "regainsFromDefenders": 0.0,
+            "xg": 0.0,
+            "seen": False,
             "seenDuel": False,
         }
         for unit in UNITS
@@ -1796,30 +1858,35 @@ def _aggregate_units(played: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         units = (row.get("stats") or {}).get("units") or {}
         for unit in UNITS:
             data = units.get(unit) or {}
-            if data.get("defendersBypassed") is not None:
-                totals[unit]["defendersBypassed"] += float(data["defendersBypassed"])
-                totals[unit]["seenBypass"] = True
+            bucket = totals[unit]
+            for key in UNIT_COUNT_KEYS:
+                if data.get(key) is not None:
+                    bucket[key] += float(data[key])
+                    bucket["seen"] = True
             if data.get("duelWon") is not None or data.get("duelTotal") is not None:
-                totals[unit]["duelWon"] += float(data.get("duelWon") or 0)
-                totals[unit]["duelTotal"] += float(data.get("duelTotal") or 0)
-                totals[unit]["seenDuel"] = True
+                bucket["duelWon"] += float(data.get("duelWon") or 0)
+                bucket["duelTotal"] += float(data.get("duelTotal") or 0)
+                bucket["seenDuel"] = True
+                bucket["seen"] = True
     result: dict[str, dict[str, Any]] = {}
     for unit in UNITS:
         bucket = totals[unit]
-        if not bucket["seenBypass"] and not bucket["seenDuel"]:
+        if not bucket["seen"]:
             result[unit] = _empty_unit_row()
             continue
         won = float(bucket["duelWon"])
         total = float(bucket["duelTotal"])
         result[unit] = {
-            "defendersBypassed": (
-                round(bucket["defendersBypassed"], 1) if bucket["seenBypass"] else None
-            ),
+            "defendersBypassed": round(bucket["defendersBypassed"], 1),
             "duelWon": round(won, 1) if bucket["seenDuel"] else None,
             "duelTotal": round(total, 1) if bucket["seenDuel"] else None,
             "duelRate": (
                 round((won / total) * 100, 1) if bucket["seenDuel"] and total > 0 else None
             ),
+            "offensiveInterventions": round(bucket["offensiveInterventions"], 1),
+            "defensiveInterventions": round(bucket["defensiveInterventions"], 1),
+            "regainsFromDefenders": round(bucket["regainsFromDefenders"], 1),
+            "xg": round(bucket["xg"], 2),
         }
     return result
 

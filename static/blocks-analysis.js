@@ -341,7 +341,9 @@ function unitValueText(metricKey, row) {
   if (metricKey === "duelRate") {
     return row?.duelRate == null ? "—" : `${fmtNum(row.duelRate, 1)}%`;
   }
-  return fmtNum(row?.defendersBypassed, 1);
+  if (metricKey === "xg") return fmtNum(row?.xg, 2);
+  if (metricKey === "defendersBypassed") return fmtNum(row?.defendersBypassed, 1);
+  return fmtNum(row?.[metricKey], 1);
 }
 
 function unitSubText(metricKey, row) {
@@ -415,6 +417,63 @@ const PLAYER_BOARDS = [
   { key: "duelRate", label: "Duels won", hint: "Won of attempted", digits: 1, rate: true, minDuels: 3 },
 ];
 
+const UNIT_SLIDES = [
+  {
+    id: "DEF",
+    title: "Defence",
+    kicker: "Unit targets",
+    blurb: "Centre-backs and full-backs. Wing-backs count half here.",
+    metrics: [
+      { key: "duelRate", label: "Duels won", hint: "Ground + aerial success", digits: 1, rate: true },
+      { key: "defensiveInterventions", label: "Defensive ball wins", hint: "Teammates added when we win it", digits: 1 },
+      { key: "offensiveInterventions", label: "Aggressive regains", hint: "Opponents removed on ball wins", digits: 1 },
+      { key: "regainsFromDefenders", label: "Regains from opp defenders", hint: "Won it vs their four deepest", digits: 1 },
+      { key: "defendersBypassed", label: "Backline beaten", hint: "Passes or dribbles that beat a defender", digits: 1 },
+    ],
+    boards: [
+      { key: "duelRate", label: "Duels won", digits: 1, rate: true, minDuels: 3 },
+      { key: "defensiveInterventions", label: "Defensive ball wins", digits: 0 },
+      { key: "offensiveInterventions", label: "Aggressive regains", digits: 0 },
+    ],
+  },
+  {
+    id: "MID",
+    title: "Midfield",
+    kicker: "Unit targets",
+    blurb: "Holding and central midfielders.",
+    metrics: [
+      { key: "offensiveInterventions", label: "Aggressive regains", hint: "Opponents removed on ball wins", digits: 1 },
+      { key: "duelRate", label: "Duels won", hint: "Ground + aerial success", digits: 1, rate: true },
+      { key: "defensiveInterventions", label: "Defensive ball wins", hint: "Teammates added when we win it", digits: 1 },
+      { key: "defendersBypassed", label: "Backline beaten", hint: "Passes or dribbles that beat a defender", digits: 1 },
+      { key: "regainsFromDefenders", label: "Regains from opp defenders", hint: "Won it vs their four deepest", digits: 1 },
+    ],
+    boards: [
+      { key: "offensiveInterventions", label: "Aggressive regains", digits: 0 },
+      { key: "duelRate", label: "Duels won", digits: 1, rate: true, minDuels: 3 },
+      { key: "defendersBypassed", label: "Backline beaten", digits: 1 },
+    ],
+  },
+  {
+    id: "ATT",
+    title: "Attack",
+    kicker: "Unit targets",
+    blurb: "Forwards and wingers. Wing-backs count half here. xG excludes pens and DFKs.",
+    metrics: [
+      { key: "xg", label: "Expected goals", hint: "Open play · no pens / DFKs", digits: 2 },
+      { key: "defendersBypassed", label: "Backline beaten", hint: "Passes or dribbles that beat a defender", digits: 1 },
+      { key: "duelRate", label: "Duels won", hint: "Ground + aerial success", digits: 1, rate: true },
+      { key: "offensiveInterventions", label: "Aggressive regains", hint: "Opponents removed on ball wins", digits: 1 },
+      { key: "regainsFromDefenders", label: "Regains from opp defenders", hint: "Won it vs their four deepest", digits: 1 },
+    ],
+    boards: [
+      { key: "xg", label: "Expected goals", digits: 2 },
+      { key: "defendersBypassed", label: "Backline beaten", digits: 1 },
+      { key: "duelRate", label: "Duels won", digits: 1, rate: true, minDuels: 3 },
+    ],
+  },
+];
+
 function aggregatePlayers(fixtures) {
   const byId = {};
   (fixtures || []).filter((row) => row.played).forEach((fixture) => {
@@ -458,6 +517,60 @@ function aggregatePlayers(fixtures) {
     row.duelRate = row.duelTotal > 0 ? Math.round((row.duelWon / row.duelTotal) * 1000) / 10 : null;
     return row;
   });
+}
+
+function playersForUnit(players, unit) {
+  return (players || []).filter((row) => {
+    const value = row.unit;
+    if (value === unit) return true;
+    if (unit === "DEF" && value === "WB") return true;
+    if (unit === "ATT" && value === "WB") return true;
+    return false;
+  });
+}
+
+function unitMetricRowHtml(unit, spec, stats, single) {
+  const row = (stats.units || {})[unit] || {};
+  const value = spec.rate ? row.duelRate : row[spec.key];
+  const extra = spec.key === "duelRate" ? unitSubText("duelRate", row) : "";
+  const bench = unitBenchValues(spec.key, unit, single, stats.played);
+  const higherBetter = bench?.spec?.higherBetter !== false;
+  const tone = meterTone(value, bench?.top7, higherBetter);
+  return `
+    <article class="ba-unitstat">
+      <div class="ba-unitstat__head">
+        <p class="ba-unitstat__label">${escapeHtml(spec.label)}</p>
+        <p class="ba-unitstat__hint">${escapeHtml(spec.hint || "")}</p>
+      </div>
+      <div class="ba-unitstat__nums">
+        <span class="ba-unitstat__val ${tone ? `is-${tone}` : ""}">${escapeHtml(unitValueText(spec.key, row))}</span>
+        ${extra ? `<span class="ba-unitstat__sub">${escapeHtml(extra)}</span>` : ""}
+        ${bench?.top7 == null ? "" : `<span class="ba-unitstat__req"><em>Req</em><b>${escapeHtml(formatBench(bench.top7, { rate: spec.rate, digits: spec.digits }))}</b></span>`}
+        ${bench?.team == null ? "" : `<span class="ba-unitstat__avg"><em>Avg</em><b>${escapeHtml(formatBench(bench.team, { rate: spec.rate, digits: spec.digits }))}</b></span>`}
+      </div>
+      ${meterHtml(value, bench, { higherBetter, rate: Boolean(spec.rate), digits: spec.digits })}
+    </article>
+  `;
+}
+
+function unitSheetHtml(slide, { mast, stats, single, players, page, outcome, foot }) {
+  const unitPlayers = playersForUnit(players, slide.id);
+  const boards = slide.boards.map((spec) => playerBoardHtml(spec, unitPlayers)).join("");
+  return `
+    <article class="ba-sheet ba-sheet--unit ba-sheet--unit-${slide.id.toLowerCase()} ${outcome ? `ba-sheet--${outcome}` : ""}" data-sheet="${page}">
+      ${sheetMasthead({ ...mast, title: slide.title, page })}
+      <div class="ba-sheet__body ba-sheet__body--unit">
+        <p class="ba-unitpage__blurb">${escapeHtml(slide.blurb)}</p>
+        <div class="ba-unitpage">
+          <div class="ba-unitpage__metrics">
+            ${slide.metrics.map((spec) => unitMetricRowHtml(slide.id, spec, stats, single)).join("")}
+          </div>
+          <div class="ba-unitpage__boards">${boards}</div>
+        </div>
+      </div>
+      <footer class="ba-sheet__bar"><span>Port Vale Analysis · ${escapeHtml(slide.title)}</span><span>${escapeHtml(foot)}</span></footer>
+    </article>
+  `;
 }
 
 function playersForView(block, single, fixture) {
@@ -785,6 +898,7 @@ function guideSheetsHtml({ kicker, fixture, totalPages = 4 }) {
         <div class="ba-guide__cards ba-guide__cards--1">
           ${guideCard(1, "Standouts", "Three names to discuss first.", "Best expected goals, most backline beaten and best duel % in this match — with photos.")}
           ${guideCard(2, "Six leaderboards", "Full top-five lists.", "Every player ranked for xG, aggressive regains, defensive ball wins, regains off opp defenders, backline beaten and duels won.")}
+          ${guideCard(3, "Unit target slides", "DEF, MID and ATT each have their own page.", "Five unit stats vs Req (top 7) and Vale Avg, plus the unit’s own leaderboards. Wing-backs count 50/50 in DEF and ATT.")}
         </div>
         <div class="ba-guide__defs ba-guide__defs--fill">
           ${guideDef("Expected goals", "Shot quality added up — open play only (penalties and direct free kicks excluded), same as the VS card.")}
@@ -800,18 +914,18 @@ function guideSheetsHtml({ kicker, fixture, totalPages = 4 }) {
   `;
   return guideSheetShell({
     kicker,
-    page: 3,
+    page: 6,
     totalPages,
     title: "Guide · match overview (page 1)",
     bodyHtml: page1Body,
-    footNote: "Turn to page 4 for player page + colour key",
+    footNote: "Pages 3–5 are DEF / MID / ATT unit targets",
   }) + guideSheetShell({
     kicker,
-    page: 4,
+    page: 7,
     totalPages,
     title: "Guide · players & colours (page 2)",
     bodyHtml: page2Body,
-    footNote: "Print all 4 pages for the full match pack",
+    footNote: "Print all 7 pages for the full match pack",
   });
 }
 
@@ -1315,16 +1429,23 @@ function dashHtml(block) {
     ? `EFL Cup · ${payload.season || ""}`.trim()
     : `Block ${block.id} of 9 · ${payload.competition || "League Two"} ${payload.season || ""}`.trim();
   const pageTitle = single ? "Match Report" : "Block Report";
-  const sheetPages = single ? 4 : 2;
+  const sheetPages = single ? 7 : 5;
   const mast = { kicker, single, fixture, stats, block, totalPages: sheetPages };
   const players = playersForView(block, single, fixture);
   const boards = (single ? PLAYER_BOARDS.filter((spec) => spec.key !== "ppg") : PLAYER_BOARDS)
     .map((spec) => playerBoardHtml(spec, players))
     .join("");
   const outcome = (single && fixture?.outcome) || "";
-  const foot = single
-    ? "Req = league requirement (top 7) · Avg = Vale average · wing-backs 50/50 DEF and ATT"
-    : "Req = league requirement (top 7) · Avg = Vale average · wing-backs 50/50 DEF and ATT";
+  const foot = "Req = league requirement (top 7) · Avg = Vale average · wing-backs 50/50 DEF and ATT";
+  const unitSheets = UNIT_SLIDES.map((slide, index) => unitSheetHtml(slide, {
+    mast,
+    stats,
+    single,
+    players,
+    page: 3 + index,
+    outcome,
+    foot,
+  })).join("");
 
   return `
     <section class="ba-report">
@@ -1335,7 +1456,7 @@ function dashHtml(block) {
           <button type="button" class="ba-btn ba-btn--print" data-pdf-report="${block.id}">Export PDF</button>
         </div>
       </div>
-      <p class="ba-print-hint ba-export-hide">A4 landscape · ${single ? "four pages (match + staff guide)" : "two pages"}</p>
+      <p class="ba-print-hint ba-export-hide">A4 landscape · ${single ? "seven pages (match, players, three unit targets, staff guide)" : "five pages (block, players, three unit targets)"}</p>
       <article class="ba-sheet ba-sheet--team ${outcome ? `ba-sheet--${outcome}` : ""}" data-sheet="1">
         ${sheetMasthead({ ...mast, title: pageTitle, page: 1, phases: single ? stats.phases : null })}
         <div class="ba-sheet__body">
@@ -1362,6 +1483,7 @@ function dashHtml(block) {
         </div>
         <footer class="ba-sheet__bar"><span>Port Vale Analysis</span><span>Live after full time</span></footer>
       </article>
+      ${unitSheets}
       ${single ? guideSheetsHtml({ kicker, fixture, totalPages: sheetPages }) : ""}
     </section>
   `;
