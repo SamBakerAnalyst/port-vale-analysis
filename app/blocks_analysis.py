@@ -71,8 +71,10 @@ LEAGUE_TABLE_GAMES = 46
 KPI_BYPASSED_DEFENDERS = 2
 KPI_BYPASSED_OPPONENTS = 1399  # in-possession packing / opponents beaten on the ball
 KPI_SHOT_XG = 82
+KPI_GOALS = 28
+KPI_ASSISTS = 77
 MATCH_KPI_CACHE_TTL = 6 * 3600
-MATCH_STATS_CACHE_VERSION = 15
+MATCH_STATS_CACHE_VERSION = 16
 # Shot actions stripped from match + player xG boards (open-play / set-piece delivery only).
 XG_VS_EXCLUDED_ACTIONS = frozenset({
     "PENALTY",
@@ -552,6 +554,8 @@ def _player_match_report(
                 "unit": _unit_for_position(row.get("position")),
                 "minutes": round(minutes, 1),
                 "xg": round(_kpi_value(kpis, KPI_SHOT_XG), 2),
+                "goals": int(round(_kpi_value(kpis, KPI_GOALS))),
+                "assists": int(round(_kpi_value(kpis, KPI_ASSISTS))),
                 "offensiveInterventions": int(
                     round(_kpi_value(kpis, KPI_BALL_WIN_REMOVED_OPPONENTS))
                 ),
@@ -956,6 +960,38 @@ def _apply_open_play_player_shots(
         player["shots"] = counts.get(player_id, 0)
 
 
+def _apply_player_goals_from_shots(
+    players: list[dict[str, Any]],
+    shots: list[dict[str, Any]],
+    squad_id: int,
+) -> None:
+    if not players or not shots:
+        return
+    counts: dict[int, int] = {}
+    for row in shots:
+        if int(row.get("squadId") or 0) != int(squad_id):
+            continue
+        if not row.get("isGoal"):
+            continue
+        try:
+            player_id = int(row.get("playerId") or 0)
+        except (TypeError, ValueError):
+            continue
+        if not player_id:
+            continue
+        counts[player_id] = counts.get(player_id, 0) + 1
+    if not counts:
+        return
+    for player in players:
+        try:
+            player_id = int(player.get("playerId") or 0)
+        except (TypeError, ValueError):
+            continue
+        if not player_id:
+            continue
+        player["goals"] = max(int(player.get("goals") or 0), counts.get(player_id, 0))
+
+
 def _hydrate_open_play_shots(stats: dict[str, Any], squad_id: int) -> None:
     """Fill shot counts from cached xG events without refetching the match."""
     if not isinstance(stats, dict):
@@ -966,6 +1002,7 @@ def _hydrate_open_play_shots(stats: dict[str, Any], squad_id: int) -> None:
     if not shots or not players:
         return
     _apply_open_play_player_shots(players, shots, squad_id)
+    _apply_player_goals_from_shots(players, shots, squad_id)
     _apply_open_play_unit_count(stats, players, field="shots", digits=0)
 
 
@@ -1373,6 +1410,7 @@ def _fetch_match_stats(
     if race and facts:
         _apply_open_play_player_xg(stats.get("players") or [], race.get("shots") or [], squad_id)
         _apply_open_play_player_shots(stats.get("players") or [], race.get("shots") or [], squad_id)
+        _apply_player_goals_from_shots(stats.get("players") or [], race.get("shots") or [], squad_id)
         _apply_open_play_unit_xg(stats, stats.get("players") or [])
         _apply_open_play_unit_count(stats, stats.get("players") or [], field="shots", digits=0)
         # Keep team xG aligned with the VS card / player boards.

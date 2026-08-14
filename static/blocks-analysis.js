@@ -447,10 +447,10 @@ const UNIT_SLIDES = [
         ],
       },
     ],
-    starKeys: [
-      { key: "defensiveInterventions", label: "Defensive ball wins", digits: 0 },
-      { key: "aerialRate", label: "Aerial duels won", digits: 1, rate: true, minAerials: 3 },
-      { key: "duelRate", label: "Duels won", digits: 1, rate: true, minDuels: 3 },
+    goldLeaders: [
+      { key: "goals", label: "Most goals", digits: 0, allowZero: false },
+      { key: "assists", label: "Most assists", digits: 0, allowZero: false },
+      { key: "defensiveInterventions", label: "Defensive interventions", digits: 0 },
     ],
   },
   {
@@ -476,10 +476,10 @@ const UNIT_SLIDES = [
         ],
       },
     ],
-    starKeys: [
-      { key: "ballProgression", label: "Ball progression", digits: 0 },
-      { key: "offensiveInterventions", label: "Aggressive regains", digits: 0 },
-      { key: "xg", label: "Expected goals", digits: 2 },
+    goldLeaders: [
+      { key: "goals", label: "Most goals", digits: 0, allowZero: false },
+      { key: "assists", label: "Most assists", digits: 0, allowZero: false },
+      { key: "offensiveInterventions", label: "Offensive interventions", digits: 0 },
     ],
   },
   {
@@ -505,10 +505,10 @@ const UNIT_SLIDES = [
         ],
       },
     ],
-    starKeys: [
-      { key: "xg", label: "Expected goals", digits: 2 },
-      { key: "shots", label: "Total shots", digits: 0 },
-      { key: "defendersBypassed", label: "Backline beaten", digits: 1 },
+    goldLeaders: [
+      { key: "goals", label: "Most goals", digits: 0, allowZero: false },
+      { key: "assists", label: "Most assists", digits: 0, allowZero: false },
+      { key: "regainsFromDefenders", label: "Ball wins from opp defenders", digits: 0 },
     ],
   },
 ];
@@ -538,6 +538,8 @@ function aggregatePlayers(fixtures) {
         aerialTotal: 0,
         ballProgression: 0,
         shots: 0,
+        goals: 0,
+        assists: 0,
       };
       row.name = player.name || row.name;
       row.unit = player.unit || row.unit;
@@ -555,6 +557,8 @@ function aggregatePlayers(fixtures) {
       row.aerialTotal += Number(player.aerialTotal) || 0;
       row.ballProgression += Number(player.ballProgression) || 0;
       row.shots += Number(player.shots) || 0;
+      row.goals += Number(player.goals) || 0;
+      row.assists += Number(player.assists) || 0;
       byId[id] = row;
     });
   });
@@ -682,68 +686,43 @@ function unitSheetHtml(slide, { mast, stats, single, players, page, outcome, foo
   `;
 }
 
-function unitStandout(players, slide) {
-  const specs = slide.starKeys || [];
-  if (!players.length || !specs.length) return null;
-  const ranked = specs.map((spec) => ({ spec, rows: topPlayers(players, spec) }));
-  const byId = {};
-  players.forEach((player) => {
-    byId[player.playerId] = { player, score: 0, best: null, bestRank: 99 };
-  });
-  ranked.forEach(({ spec, rows }) => {
-    rows.forEach((row, index) => {
-      const entry = byId[row.playerId];
-      if (!entry) return;
-      entry.score += Math.max(0, 3 - index);
-      if (index < entry.bestRank) {
-        entry.bestRank = index;
-        entry.best = spec;
-      }
-    });
-  });
-  const winner = Object.values(byId)
-    .filter((row) => row.score > 0)
-    .sort((a, b) => b.score - a.score || (Number(b.player.minutes) || 0) - (Number(a.player.minutes) || 0))[0];
-  if (!winner) return null;
-  const extras = specs.filter((spec) => spec.key !== winner.best?.key).slice(0, 2);
-  return { player: winner.player, spec: winner.best || specs[0], extras };
+function unitLeader(players, spec) {
+  const first = topPlayers(players, spec)[0];
+  if (!first) return null;
+  if (spec.allowZero === false && Number(first[spec.key]) <= 0) return null;
+  return first;
+}
+
+function unitGoldSlotHtml(spec, players) {
+  const player = unitLeader(players, spec);
+  if (!player) {
+    return `
+      <article class="ba-unitgold ba-unitgold--empty">
+        <p class="ba-unitgold__label">${escapeHtml(spec.label)}</p>
+        <p class="ba-unitgold__name">None</p>
+        <p class="ba-unitgold__val">0</p>
+      </article>
+    `;
+  }
+  return `
+    <article class="ba-unitgold">
+      <p class="ba-unitgold__label">${escapeHtml(spec.label)}</p>
+      <div class="ba-unitgold__row">
+        ${playerPhotoHtml(player.name, "ba-photo ba-unitgold__photo")}
+        <p class="ba-unitgold__name">${escapeHtml(player.name)}</p>
+        <p class="ba-unitgold__val">${escapeHtml(formatPlayerValue(player, spec))}</p>
+      </div>
+    </article>
+  `;
 }
 
 function unitStarHtml(slide, players) {
-  const standout = unitStandout(players, slide);
-  if (!standout) {
-    return `
-      <aside class="ba-unitstar ba-unitstar--empty">
-        <p class="ba-unitstar__kicker">Unit standout</p>
-        <p class="ba-unitstar__empty">No ${escapeHtml(slide.title.toLowerCase())} player data yet</p>
-      </aside>
-    `;
-  }
-  const { player, spec, extras } = standout;
-  const chips = extras.map((item) => `
-    <span class="ba-unitstar__chip">
-      <em>${escapeHtml(item.label)}</em>
-      <b>${escapeHtml(formatPlayerValue(player, item))}</b>
-    </span>
-  `).join("");
-  const mins = Number(player.minutes) || 0;
+  const specs = slide.goldLeaders || [];
   return `
     <aside class="ba-unitstar">
-      <p class="ba-unitstar__kicker">Unit standout · ${escapeHtml(slide.title)}</p>
-      <div class="ba-unitstar__body">
-        ${playerPhotoHtml(player.name, "ba-photo ba-unitstar__photo")}
-        <div class="ba-unitstar__copy">
-          <p class="ba-unitstar__name">${escapeHtml(player.name)}</p>
-          <div class="ba-unitstar__extras">
-            ${mins ? `<span class="ba-unitstar__chip ba-unitstar__chip--mins"><em>Played</em><b>${escapeHtml(fmtNum(mins, 0))}′</b></span>` : ""}
-            ${chips}
-          </div>
-        </div>
-        <div class="ba-unitstar__score">
-          <span class="ba-unitstar__score-label">${escapeHtml(spec.label)}</span>
-          <span class="ba-unitstar__val">${escapeHtml(formatPlayerValue(player, spec))}</span>
-          <span class="ba-unitstar__best">Best in unit</span>
-        </div>
+      <p class="ba-unitstar__kicker">${escapeHtml(slide.title)} leaders</p>
+      <div class="ba-unitstar__leaders">
+        ${specs.map((spec) => unitGoldSlotHtml(spec, players)).join("")}
       </div>
     </aside>
   `;
