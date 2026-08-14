@@ -12,7 +12,10 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
+from urllib.parse import quote
+
 from app.auth import current_user_payload
+from app.opponent_photos import opponent_photo_api_url
 from app.paths import DATA_ROOT, STANDALONE_DIR, ensure_data_dirs
 
 PIPELINES_PATH = DATA_ROOT / "player-pipelines.json"
@@ -155,19 +158,31 @@ def _clean_stage(value: str | None) -> str:
     return stage if stage in STAGE_IDS else "data_identified"
 
 
+def _photo_url(name: str, club: str = "") -> str:
+    url = opponent_photo_api_url(name, club_name=club or None)
+    if url:
+        return url
+    if name:
+        return f"/api/pre-match/player-photo?name={quote(name)}"
+    return ""
+
+
 def _public_target(row: dict[str, Any]) -> dict[str, Any]:
     notes = row.get("notes") if isinstance(row.get("notes"), list) else []
+    name = row.get("name") or "Unknown"
+    club = row.get("club") or ""
+    league = row.get("league") or ""
     return {
         "id": row.get("id"),
         "player_id": row.get("player_id"),
-        "name": row.get("name") or "Unknown",
-        "club": row.get("club") or "",
-        "league": row.get("league") or "",
+        "name": name,
+        "club": club,
+        "league": league,
         "position": row.get("position") or "",
         "position_label": row.get("position_label")
         or POSITION_LABELS.get(str(row.get("position") or ""), ""),
         "age": row.get("age"),
-        "photo_url": row.get("photo_url") or "",
+        "photo_url": _photo_url(name, club),
         "stage": _clean_stage(row.get("stage")),
         "tags": _clean_tags(row.get("tags")),
         "added_by": row.get("added_by") or "",
@@ -269,17 +284,15 @@ def register_player_pipelines_routes(app: FastAPI) -> None:
         name = " ".join((body.name or "").split()) or f"Player {body.player_id}"
         position = str(body.position or "").strip()
         position_label = str(body.position_label or "").strip() or POSITION_LABELS.get(position, "")
-        photo = str(body.photo_url or "").strip()
-        if not photo and name:
-            from urllib.parse import quote
-
-            photo = f"/api/player-photo?name={quote(name)}"
+        club = " ".join((body.club or "").split())
+        league = " ".join((body.league or "").split())
+        photo = _photo_url(name, club)
         row = {
             "id": str(uuid.uuid4()),
             "player_id": int(body.player_id),
             "name": name,
-            "club": " ".join((body.club or "").split()),
-            "league": " ".join((body.league or "").split()),
+            "club": club,
+            "league": league,
             "position": position,
             "position_label": position_label,
             "age": body.age,

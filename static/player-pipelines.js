@@ -140,6 +140,14 @@
       .join("");
 
     els.board.querySelectorAll(".pp-card").forEach((card) => {
+      const img = card.querySelector(".pp-card__photo");
+      const fallback = card.querySelector(".pp-card__fallback");
+      if (img && fallback) {
+        img.addEventListener("error", () => {
+          img.hidden = true;
+          fallback.hidden = false;
+        });
+      }
       card.addEventListener("click", () => openDrawer(card.dataset.id));
       card.addEventListener("dragstart", (event) => {
         state.dragId = card.dataset.id;
@@ -170,7 +178,18 @@
     });
   }
 
-  function cardHtml(row) {
+    function photoBlock(row) {
+      const url =
+        row.photo_url ||
+        `/api/pre-match/player-photo?name=${encodeURIComponent(row.name || "")}` +
+          (row.club ? `&club=${encodeURIComponent(row.club)}` : "");
+      return `<span class="pp-card__mug">
+        <img class="pp-card__photo" alt="" src="${esc(url)}" />
+        <span class="pp-card__fallback" hidden>${esc(initials(row.name))}</span>
+      </span>`;
+    }
+
+    function cardHtml(row) {
     const meta = [row.position_label, row.club, row.age != null ? `Age ${row.age}` : ""]
       .filter(Boolean)
       .join(" · ");
@@ -180,11 +199,7 @@
       .join("");
     const noteCount = (row.notes || []).length;
     return `<article class="pp-card" draggable="true" data-id="${esc(row.id)}">
-      ${
-        row.photo_url
-          ? `<img class="pp-card__photo" alt="" src="${esc(row.photo_url)}" />`
-          : `<div class="pp-card__fallback">${esc(initials(row.name))}</div>`
-      }
+      ${photoBlock(row)}
       <div>
         <p class="pp-card__name">${esc(row.name)}</p>
         <p class="pp-card__meta">${esc(meta)}</p>

@@ -243,6 +243,12 @@ a:hover { text-decoration: underline; }
 .pp-card:active { cursor: grabbing; }
 .pp-card.is-dragging { opacity: 0.45; }
 
+.pp-card__mug {
+  position: relative;
+  width: 40px;
+  height: 40px;
+}
+
 .pp-card__photo,
 .pp-card__fallback {
   width: 40px;
@@ -251,6 +257,9 @@ a:hover { text-decoration: underline; }
   object-fit: cover;
   background: #222;
 }
+
+.pp-card__photo[hidden],
+.pp-card__fallback[hidden] { display: none; }
 
 .pp-card__fallback {
   display: grid;
