@@ -35,6 +35,8 @@
     pollTimer: null,
   };
 
+  let lastGrouped = { blocks: [] };
+
   const els = {
     seasonLabel: document.getElementById("seasonLabel"),
     pageNote: document.getElementById("pageNote"),
@@ -106,7 +108,10 @@
     return clubNeedle().length > 0 || oppoNeedle().length > 0;
   }
 
+  let clubNameCache = { players: null, names: [] };
+
   function uniqueClubs() {
+    if (clubNameCache.players === state.players) return clubNameCache.names;
     const names = [
       ...new Set(
         (state.players || [])
@@ -115,6 +120,7 @@
       ),
     ];
     names.sort((a, b) => a.localeCompare(b));
+    clubNameCache = { players: state.players, names };
     return names;
   }
 
@@ -125,13 +131,28 @@
       .join("");
   }
 
-  function matchingClubNames(needle = clubNeedle()) {
-    const query = needle.trim().toLowerCase();
+  function clubsMatchingNeedle(needle) {
+    const query = String(needle || "").trim().toLowerCase();
     if (!query) return [];
+    return uniqueClubs().filter((name) => name.toLowerCase().includes(query));
+  }
+
+  function resolveClubName(needle) {
+    const query = String(needle || "").trim().toLowerCase();
+    if (!query) return null;
     const clubs = uniqueClubs();
-    const exact = clubs.filter((name) => name.toLowerCase() === query);
-    if (exact.length) return exact;
-    return clubs.filter((name) => name.toLowerCase().includes(query));
+    const exact = clubs.find((name) => name.toLowerCase() === query);
+    if (exact) return exact;
+    const starts = clubs.filter((name) => name.toLowerCase().startsWith(query));
+    if (starts.length === 1) return starts[0];
+    const includes = clubs.filter((name) => name.toLowerCase().includes(query));
+    if (includes.length === 1) return includes[0];
+    return null;
+  }
+
+  function matchingClubNames(needle = clubNeedle()) {
+    const resolved = resolveClubName(needle);
+    return resolved ? [resolved] : [];
   }
 
   function shortProfileLabel(label) {
@@ -441,8 +462,13 @@
           : profilesForCurrentPosition()
         : [];
 
+    const clubSet = isTeamSheetMode()
+      ? new Set(selectedClubOrder().filter((row) => !row.unmatched).map((row) => row.name))
+      : null;
+
     return state.players
       .filter((p) => state.league === "ALL" || p.league === state.league)
+      .filter((p) => !clubSet || clubSet.size === 0 || clubSet.has(String(p.club || "").trim()))
       .filter((p) => state.groupBy !== "league" || state.position === "ALL" || p.position === state.position)
       .filter((p) => passesDemographicFilters(p))
       .filter((p) => {
@@ -708,11 +734,10 @@
     return parts.join(" ");
   }
 
-  function updateExportButton() {
+  function updateExportButton(grouped) {
     if (!els.exportPdfBtn) return;
-    const pool = state.players.length ? rankedPool() : [];
-    const grouped = pool.length ? buildGrouped(pool) : { blocks: [] };
-    const hasRows = (grouped.blocks || []).some((block) => (block.players || []).length);
+    const blocks = grouped?.blocks;
+    const hasRows = (blocks || []).some((block) => (block.players || []).length);
     els.exportPdfBtn.disabled = state.loading || state.building || !hasRows;
   }
 
@@ -921,15 +946,42 @@
     });
   }
 
+  function clubSearchHints() {
+    const hints = [];
+    for (const [label, needle] of [
+      ["Team sheet", clubNeedle()],
+      ["Opposition", oppoNeedle()],
+    ]) {
+      if (!needle || resolveClubName(needle)) continue;
+      const matches = clubsMatchingNeedle(needle);
+      if (!matches.length) continue;
+      const shown = matches.slice(0, 6).join(", ");
+      const extra = matches.length > 6 ? ` (+${matches.length - 6} more)` : "";
+      hints.push(`${label}: ${shown}${extra}`);
+    }
+    return hints;
+  }
+
   function renderGrid() {
     if (state.building) {
       els.leagueGrid.innerHTML = '<p class="empty">Building player pool — this can take a minute…</p>';
-      updateExportButton();
+      updateExportButton({ blocks: [] });
       return;
     }
     if (!state.players.length) {
       els.leagueGrid.innerHTML = '<p class="empty">No players loaded yet.</p>';
-      updateExportButton();
+      updateExportButton({ blocks: [] });
+      return;
+    }
+
+    const hints = clubSearchHints();
+    if (hints.length) {
+      els.leagueGrid.classList.add("is-team-sheet");
+      syncTeamSheetUi();
+      updateSeasonLabel({});
+      els.leagueGrid.innerHTML = `<p class="empty">Keep typing or pick from the list — too many clubs still match.<br>${hints.join("<br>")}</p>`;
+      lastGrouped = { blocks: [] };
+      updateExportButton(lastGrouped);
       return;
     }
 
@@ -1005,6 +1057,7 @@
     els.leagueGrid.innerHTML = cards || (teamMode
       ? `<p class="empty">No players found for “${clubNeedle()}”. Try the club’s full name from the list.</p>`
       : `<p class="empty">No ${groupLabel}s to show.</p>`);
+    lastGrouped = grouped;
 
     els.leagueGrid.querySelectorAll("[data-drill-league]").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -1051,7 +1104,7 @@
       const oppo = oppoNeedle();
       const vs = watch && oppo ? `${watch} vs ${oppo}` : clubs.length === 1 ? clubs[0] : clubs.join(" · ");
       els.pageNote.textContent = `${vs} — full squads plus all 10 roles. Empty role = nobody played 25%+ of their minutes there.`;
-      updateExportButton();
+      updateExportButton(grouped);
       return;
     }
     const viewText =
@@ -1069,7 +1122,7 @@
           ? "Ranked by raw Impect profile score (0–100) for each PV profile."
           : "Season overall uses Impect PV profile ratings (0–100).";
     els.pageNote.textContent = `${note} Top ${limit} per ${viewText} · ${leagueLabel} · ${posLabelText}. Live / Video / Reports from Fixture Planner — unscouted names are your priority targets.`;
-    updateExportButton();
+    updateExportButton(grouped);
   }
 
   function exportContextMeta() {
@@ -1308,7 +1361,7 @@
     } catch (error) {
       setStatus(error.message || "PDF export failed.", "error");
     } finally {
-      updateExportButton();
+      updateExportButton(lastGrouped);
     }
   }
 
@@ -1473,33 +1526,49 @@
       renderGrid();
     });
 
-    [els.minMinutes, els.minAge, els.maxAge, els.minHeight, els.clubFilter, els.oppoFilter, els.perLeague].forEach(
-      (input) => {
-        input?.addEventListener("input", () => {
-          syncTeamSheetUi();
-          updateSeasonLabel({});
-          renderWeights();
-          renderGrid();
-        });
-      },
-    );
+    function debounce(fn, ms) {
+      let timer = 0;
+      return () => {
+        window.clearTimeout(timer);
+        timer = window.setTimeout(fn, ms);
+      };
+    }
 
-    els.clearClub?.addEventListener("click", () => {
-      if (!els.clubFilter) return;
-      els.clubFilter.value = "";
+    function applyClubSearch() {
+      syncTeamSheetUi();
+      updateSeasonLabel({});
+      renderGrid();
+    }
+
+    function applyNumericFilters() {
       syncTeamSheetUi();
       updateSeasonLabel({});
       renderWeights();
       renderGrid();
+    }
+
+    const scheduleClubSearch = debounce(applyClubSearch, 200);
+    const scheduleNumericFilters = debounce(applyNumericFilters, 150);
+
+    [els.clubFilter, els.oppoFilter].forEach((input) => {
+      input?.addEventListener("input", scheduleClubSearch);
+      input?.addEventListener("change", applyClubSearch);
+    });
+
+    [els.minMinutes, els.minAge, els.maxAge, els.minHeight, els.perLeague].forEach((input) => {
+      input?.addEventListener("input", scheduleNumericFilters);
+    });
+
+    els.clearClub?.addEventListener("click", () => {
+      if (!els.clubFilter) return;
+      els.clubFilter.value = "";
+      applyClubSearch();
     });
 
     els.clearOppo?.addEventListener("click", () => {
       if (!els.oppoFilter) return;
       els.oppoFilter.value = "";
-      syncTeamSheetUi();
-      updateSeasonLabel({});
-      renderWeights();
-      renderGrid();
+      applyClubSearch();
     });
 
     els.refreshBtn?.addEventListener("click", () => loadData({ refresh: true }));
