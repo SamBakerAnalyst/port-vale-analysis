@@ -72,7 +72,7 @@ KPI_BYPASSED_DEFENDERS = 2
 KPI_BYPASSED_OPPONENTS = 1399  # in-possession packing / opponents beaten on the ball
 KPI_SHOT_XG = 82
 MATCH_KPI_CACHE_TTL = 6 * 3600
-MATCH_STATS_CACHE_VERSION = 15
+MATCH_STATS_CACHE_VERSION = 16
 # Shot actions stripped from match + player xG boards (open-play / set-piece delivery only).
 XG_VS_EXCLUDED_ACTIONS = frozenset({
     "PENALTY",
@@ -96,7 +96,7 @@ PAYLOAD_CACHE_TTL = 45
 PLAYER_NAMES_TTL = 6 * 3600
 BENCHMARK_CACHE_TTL = 600
 UNIT_TOP7_TTL = 24 * 3600
-UNIT_TOP7_VERSION = 6
+UNIT_TOP7_VERSION = 7
 UNIT_TOP7_GAMES_PER_SQUAD = 8
 FORM_BASELINE_GAMES = 7
 UNITS: tuple[str, ...] = ("DEF", "MID", "ATT")
@@ -109,6 +109,7 @@ UNIT_METRIC_SPECS: dict[str, dict[str, Any]] = {
     "defensiveInterventions": {"higherBetter": True, "rate": False, "digits": 1},
     "regainsFromDefenders": {"higherBetter": True, "rate": False, "digits": 1},
     "xg": {"higherBetter": True, "rate": False, "digits": 2},
+    "shots": {"higherBetter": True, "rate": False, "digits": 0},
 }
 UNIT_COUNT_KEYS: tuple[str, ...] = (
     "defendersBypassed",
@@ -117,6 +118,7 @@ UNIT_COUNT_KEYS: tuple[str, ...] = (
     "defensiveInterventions",
     "regainsFromDefenders",
     "xg",
+    "shots",
 )
 UNIT_RATE_FIELDS: dict[str, tuple[str, str]] = {
     "duelRate": ("duelWon", "duelTotal"),
@@ -407,6 +409,7 @@ def _empty_unit_row() -> dict[str, Any]:
         "defensiveInterventions": None,
         "regainsFromDefenders": None,
         "xg": None,
+        "shots": None,
     }
 
 
@@ -438,6 +441,11 @@ def _finalize_unit_row(row: dict[str, float]) -> dict[str, Any]:
         "defensiveInterventions": round(float(row.get("defensiveInterventions") or 0), 1),
         "regainsFromDefenders": round(float(row.get("regainsFromDefenders") or 0), 1),
         "xg": round(float(row.get("xg") or 0), 2),
+        "shots": (
+            int(round(float(row["shots"])))
+            if row.get("shots") is not None
+            else None
+        ),
     }
 
 
@@ -559,6 +567,7 @@ def _player_match_report(
                 "aerialWon": int(round(aerial_won)),
                 "aerialTotal": int(round(aerial_total)),
                 "aerialRate": round((aerial_won / aerial_total) * 100, 1) if aerial_total > 0 else None,
+                "shots": 0,
             }
         )
     rows.sort(key=lambda item: (-float(item["minutes"]), str(item["name"])))
@@ -908,6 +917,68 @@ def _apply_open_play_player_xg(
         if not player_id:
             continue
         player["xg"] = open_xg.get(player_id, 0.0)
+
+
+def _player_open_play_shots(shots: list[dict[str, Any]], squad_id: int) -> dict[int, int]:
+    counts: dict[int, int] = {}
+    for row in shots:
+        if int(row.get("squadId") or 0) != int(squad_id):
+            continue
+        if str(row.get("action") or "").upper() in XG_VS_EXCLUDED_ACTIONS:
+            continue
+        try:
+            player_id = int(row.get("playerId") or 0)
+        except (TypeError, ValueError):
+            continue
+        if not player_id:
+            continue
+        counts[player_id] = counts.get(player_id, 0) + 1
+    return counts
+
+
+def _apply_open_play_player_shots(
+    players: list[dict[str, Any]],
+    shots: list[dict[str, Any]],
+    squad_id: int,
+) -> None:
+    if not players or not shots:
+        return
+    if not any(row.get("playerId") for row in shots):
+        return
+    counts = _player_open_play_shots(shots, squad_id)
+    for player in players:
+        try:
+            player_id = int(player.get("playerId") or 0)
+        except (TypeError, ValueError):
+            continue
+        if not player_id:
+            continue
+        player["shots"] = counts.get(player_id, 0)
+
+
+def _apply_open_play_unit_count(
+    stats: dict[str, Any],
+    players: list[dict[str, Any]],
+    *,
+    field: str,
+    digits: int,
+) -> None:
+    units = stats.get("units")
+    if not isinstance(units, dict) or not players:
+        return
+    totals: dict[str, float] = {unit: 0.0 for unit in UNITS}
+    for player in players:
+        unit = str(player.get("unit") or "")
+        value = float(player.get(field) or 0)
+        if unit == "WB":
+            totals["DEF"] += value * 0.5
+            totals["ATT"] += value * 0.5
+        elif unit in totals:
+            totals[unit] += value
+    for unit, value in totals.items():
+        row = units.get(unit)
+        if isinstance(row, dict):
+            row[field] = round(value, digits) if digits else int(round(value))
 
 
 def _apply_open_play_unit_xg(stats: dict[str, Any], players: list[dict[str, Any]]) -> None:
@@ -1288,7 +1359,9 @@ def _fetch_match_stats(
     stats["facts"] = facts
     if race and facts:
         _apply_open_play_player_xg(stats.get("players") or [], race.get("shots") or [], squad_id)
+        _apply_open_play_player_shots(stats.get("players") or [], race.get("shots") or [], squad_id)
         _apply_open_play_unit_xg(stats, stats.get("players") or [])
+        _apply_open_play_unit_count(stats, stats.get("players") or [], field="shots", digits=0)
         # Keep team xG aligned with the VS card / player boards.
         if facts.get("valeXg") is not None:
             stats["xg"] = facts["valeXg"]
@@ -1896,6 +1969,7 @@ def _aggregate_units(played: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             "defensiveInterventions": 0.0,
             "regainsFromDefenders": 0.0,
             "xg": 0.0,
+            "shots": 0.0,
             "seen": False,
             "seenDuel": False,
             "seenAerial": False,
@@ -1950,6 +2024,7 @@ def _aggregate_units(played: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             "defensiveInterventions": round(bucket["defensiveInterventions"], 1),
             "regainsFromDefenders": round(bucket["regainsFromDefenders"], 1),
             "xg": round(bucket["xg"], 2),
+            "shots": int(round(bucket["shots"])),
         }
     return result
 
