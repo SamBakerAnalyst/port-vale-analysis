@@ -32,6 +32,7 @@
     profiles: [],
     weights: {},
     weightsByPosition: {},
+    squadByClub: {},
     loansByClub: {},
   };
 
@@ -176,35 +177,57 @@
     return lastHits.length === 1 ? lastHits[0] : null;
   }
 
-  async function loadLoansForSelectedClubs() {
+  async function loadTeamSheetExtras() {
     const clubs = selectedClubOrder()
       .filter((row) => !row.unmatched)
       .map((row) => row.name);
-    const missing = clubs.filter((name) => !state.loansByClub[name]);
-    if (!missing.length) {
-      renderGrid();
-      return;
+    const missingSquads = clubs.filter((name) => !state.squadByClub[name]);
+    const missingLoans = clubs.filter((name) => !state.loansByClub[name]);
+
+    const jobs = [];
+    if (missingSquads.length) {
+      setStatus("Loading full squad from Impect…", "loading");
+      jobs.push(
+        Promise.all(
+          missingSquads.map(async (name) => {
+            try {
+              const data = await fetchJson(`/api/who-to-scout/squad?club=${encodeURIComponent(name)}`);
+              state.squadByClub[data.club || name] = data.players || [];
+              if (data.club && data.club !== name) state.squadByClub[name] = data.players || [];
+            } catch {
+              state.squadByClub[name] = [];
+            }
+          }),
+        ),
+      );
     }
-    const params = new URLSearchParams();
-    missing.forEach((name) => params.append("club", name));
-    try {
-      const data = await fetchJson(`/api/who-to-scout/loans?${params}`);
-      for (const [club, rows] of Object.entries(data.clubs || {})) {
-        const byName = {};
-        const byLast = {};
-        for (const row of rows || []) {
-          const info = { from: row.from, name: row.name };
-          byName[nameKey(row.name)] = info;
-          const last = lastNameKey(row.name);
-          if (last) (byLast[last] ||= []).push(info);
-        }
-        state.loansByClub[club] = { byName, byLast };
-      }
-    } catch {
-      missing.forEach((name) => {
-        if (!state.loansByClub[name]) state.loansByClub[name] = { byName: {}, byLast: {} };
-      });
+    if (missingLoans.length) {
+      const params = new URLSearchParams();
+      missingLoans.forEach((name) => params.append("club", name));
+      jobs.push(
+        fetchJson(`/api/who-to-scout/loans?${params}`)
+          .then((data) => {
+            for (const [club, rows] of Object.entries(data.clubs || {})) {
+              const byName = {};
+              const byLast = {};
+              for (const row of rows || []) {
+                const info = { from: row.from, name: row.name };
+                byName[nameKey(row.name)] = info;
+                const last = lastNameKey(row.name);
+                if (last) (byLast[last] ||= []).push(info);
+              }
+              state.loansByClub[club] = { byName, byLast };
+            }
+          })
+          .catch(() => {
+            missingLoans.forEach((name) => {
+              if (!state.loansByClub[name]) state.loansByClub[name] = { byName: {}, byLast: {} };
+            });
+          }),
+      );
     }
+    if (jobs.length) await Promise.all(jobs);
+    setStatus("");
     renderGrid();
   }
 
@@ -524,9 +547,19 @@
       ? new Set(selectedClubOrder().filter((row) => !row.unmatched).map((row) => row.name))
       : null;
 
-    return state.players
+    let source = state.players;
+    if (clubSet && clubSet.size) {
+      const overlay = [];
+      for (const name of clubSet) {
+        const rows = state.squadByClub[name];
+        if (rows && rows.length) overlay.push(...rows);
+      }
+      if (overlay.length) source = overlay;
+    }
+
+    return source
       .filter((p) => state.league === "ALL" || p.league === state.league)
-      .filter((p) => !clubSet || clubSet.size === 0 || clubSet.has(String(p.club || "").trim()))
+      .filter((p) => !clubSet || clubSet.size === 0 || clubSet.has(String(p.club || "").trim()) || source !== state.players)
       .filter((p) => state.groupBy !== "league" || state.position === "ALL" || p.position === state.position)
       .filter((p) => passesDemographicFilters(p))
       .filter((p) => {
@@ -1568,7 +1601,7 @@
       updateSeasonLabel(data);
       renderWeights();
       if (isTeamSheetMode()) {
-        loadLoansForSelectedClubs();
+        loadTeamSheetExtras();
       } else {
         renderGrid();
       }
@@ -1656,7 +1689,7 @@
     function applyClubSearch() {
       syncTeamSheetUi();
       updateSeasonLabel({});
-      loadLoansForSelectedClubs();
+      loadTeamSheetExtras();
     }
 
     function applyNumericFilters() {
