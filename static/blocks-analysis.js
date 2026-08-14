@@ -344,8 +344,9 @@ function unitValueText(metricKey, row) {
   if (metricKey === "aerialRate") {
     return row?.aerialRate == null ? "—" : `${fmtNum(row.aerialRate, 1)}%`;
   }
-  if (metricKey === "xg") return fmtNum(row?.xg, 2);
-  if (metricKey === "shots") return fmtNum(row?.shots, 0);
+  if (metricKey === "xg" || metricKey === "packingXg") return fmtNum(row?.[metricKey], 2);
+  if (metricKey === "shots" || metricKey === "assists") return fmtNum(row?.[metricKey], 0);
+  if (metricKey === "pxtShot" || metricKey === "pxtDribble") return fmtNum(row?.[metricKey], 1);
   return fmtNum(row?.[metricKey], 1);
 }
 
@@ -491,29 +492,29 @@ const UNIT_SLIDES = [
     id: "ATT",
     title: "Attack",
     who: "Forwards & wingers",
-    note: "Wing-backs are not in the standout. Shots and xG exclude pens and DFKs.",
+    note: "Forwards and wingers. Shots and xG exclude pens and DFKs.",
     groups: [
       {
-        label: "In possession",
+        label: "Chance",
         metrics: [
           { key: "xg", label: "Expected goals", hint: "Open play · no pens / DFKs", digits: 2 },
           { key: "shots", label: "Total shots", hint: "Open play · no pens / DFKs", digits: 0 },
-          { key: "defendersBypassed", label: "Backline beaten", hint: "Beat a defender on the ball", digits: 1 },
-          { key: "ballProgression", label: "Ball progression", hint: "Opponents beaten on the ball", digits: 1 },
+          { key: "packingXg", label: "Packing xG", hint: "Chance created before the shot", digits: 2 },
+          { key: "assists", label: "Assists", hint: "Unit total", digits: 0 },
         ],
       },
       {
-        label: "Hold-up / duels",
+        label: "On the ball",
         metrics: [
+          { key: "pxtDribble", label: "Dribble threat", hint: "PXT from carries and take-ons", digits: 1 },
           { key: "aerialRate", label: "Aerial duels won", hint: "Hold-up and box headers", digits: 1, rate: true },
-          { key: "duelRate", label: "Duels won", hint: "Ground + aerial", digits: 1, rate: true },
         ],
       },
     ],
     goldLeaders: [
       { key: "goals", label: "Most goals", digits: 0, allowZero: false },
       { key: "assists", label: "Most assists", digits: 0, allowZero: false },
-      { key: "regainsFromDefenders", label: "Ball wins from opp defenders", digits: 0 },
+      { key: "shots", label: "Most shots", digits: 0 },
     ],
   },
 ];
@@ -543,8 +544,11 @@ function aggregatePlayers(fixtures) {
         aerialTotal: 0,
         ballProgression: 0,
         shots: 0,
-        goals: 0,
         assists: 0,
+        packingXg: 0,
+        pxtShot: 0,
+        pxtDribble: 0,
+        goals: 0,
       };
       row.name = player.name || row.name;
       row.unit = player.unit || row.unit;
@@ -562,6 +566,9 @@ function aggregatePlayers(fixtures) {
       row.aerialTotal += Number(player.aerialTotal) || 0;
       row.ballProgression += Number(player.ballProgression) || 0;
       row.shots += Number(player.shots) || 0;
+      row.packingXg += Number(player.packingXg) || 0;
+      row.pxtShot += Number(player.pxtShot) || 0;
+      row.pxtDribble += Number(player.pxtDribble) || 0;
       row.goals += Number(player.goals) || 0;
       row.assists += Number(player.assists) || 0;
       byId[id] = row;

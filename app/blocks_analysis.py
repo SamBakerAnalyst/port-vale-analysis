@@ -71,10 +71,13 @@ LEAGUE_TABLE_GAMES = 46
 KPI_BYPASSED_DEFENDERS = 2
 KPI_BYPASSED_OPPONENTS = 1399  # in-possession packing / opponents beaten on the ball
 KPI_SHOT_XG = 82
+KPI_PACKING_XG = 83  # chance created before the shot
 KPI_GOALS = 28
 KPI_ASSISTS = 77
+KPI_PXT_SHOT = 1408
+KPI_PXT_DRIBBLE = 1405
 MATCH_KPI_CACHE_TTL = 6 * 3600
-MATCH_STATS_CACHE_VERSION = 17
+MATCH_STATS_CACHE_VERSION = 18
 # Shot actions stripped from match + player xG boards (open-play / set-piece delivery only).
 XG_VS_EXCLUDED_ACTIONS = frozenset({
     "PENALTY",
@@ -113,6 +116,10 @@ UNIT_METRIC_SPECS: dict[str, dict[str, Any]] = {
     "regainsFromDefenders": {"higherBetter": True, "rate": False, "digits": 1},
     "xg": {"higherBetter": True, "rate": False, "digits": 2},
     "shots": {"higherBetter": True, "rate": False, "digits": 0},
+    "assists": {"higherBetter": True, "rate": False, "digits": 0},
+    "packingXg": {"higherBetter": True, "rate": False, "digits": 2},
+    "pxtShot": {"higherBetter": True, "rate": False, "digits": 1},
+    "pxtDribble": {"higherBetter": True, "rate": False, "digits": 1},
 }
 UNIT_COUNT_KEYS: tuple[str, ...] = (
     "defendersBypassed",
@@ -122,6 +129,10 @@ UNIT_COUNT_KEYS: tuple[str, ...] = (
     "regainsFromDefenders",
     "xg",
     "shots",
+    "assists",
+    "packingXg",
+    "pxtShot",
+    "pxtDribble",
 )
 UNIT_RATE_FIELDS: dict[str, tuple[str, str]] = {
     "duelRate": ("duelWon", "duelTotal"),
@@ -478,6 +489,10 @@ def _empty_unit_row() -> dict[str, Any]:
         "regainsFromDefenders": None,
         "xg": None,
         "shots": None,
+        "assists": None,
+        "packingXg": None,
+        "pxtShot": None,
+        "pxtDribble": None,
         "starters": 0,
         "starterNames": [],
         "benchNames": [],
@@ -517,6 +532,10 @@ def _finalize_unit_row(row: dict[str, float]) -> dict[str, Any]:
             if row.get("shots") is not None
             else None
         ),
+        "assists": int(round(float(row.get("assists") or 0))),
+        "packingXg": round(float(row.get("packingXg") or 0), 2),
+        "pxtShot": round(float(row.get("pxtShot") or 0), 1),
+        "pxtDribble": round(float(row.get("pxtDribble") or 0), 1),
     }
 
 
@@ -533,6 +552,11 @@ def _units_from_players(players: list[dict[str, Any]], squad_id: int) -> dict[st
             "defensiveInterventions": 0.0,
             "regainsFromDefenders": 0.0,
             "xg": 0.0,
+            "shots": 0.0,
+            "assists": 0.0,
+            "packingXg": 0.0,
+            "pxtShot": 0.0,
+            "pxtDribble": 0.0,
         }
         for unit in UNITS
     }
@@ -556,6 +580,10 @@ def _units_from_players(players: list[dict[str, Any]], squad_id: int) -> dict[st
         defensive = _kpi_value(kpis, KPI_BALL_WIN_ADDED_TEAMMATES)
         deepest = _kpi_value(kpis, KPI_BALL_WIN_REMOVED_OPPONENTS_DEFENDERS)
         xg = _kpi_value(kpis, KPI_SHOT_XG)
+        assists = _kpi_value(kpis, KPI_ASSISTS)
+        packing_xg = _kpi_value(kpis, KPI_PACKING_XG)
+        pxt_shot = _kpi_value(kpis, KPI_PXT_SHOT)
+        pxt_dribble = _kpi_value(kpis, KPI_PXT_DRIBBLE)
         duel_total = won + lost
         aerial_total = aerial_won + aerial_lost
         for unit, share in shares:
@@ -569,6 +597,10 @@ def _units_from_players(players: list[dict[str, Any]], squad_id: int) -> dict[st
             buckets[unit]["defensiveInterventions"] += defensive * share
             buckets[unit]["regainsFromDefenders"] += deepest * share
             buckets[unit]["xg"] += xg * share
+            buckets[unit]["assists"] += assists * share
+            buckets[unit]["packingXg"] += packing_xg * share
+            buckets[unit]["pxtShot"] += pxt_shot * share
+            buckets[unit]["pxtDribble"] += pxt_dribble * share
             name = _short_unit_name(str(row.get("name") or ""))
             minutes = float(row.get("minutes") or 0)
             if minutes >= 45:
@@ -657,6 +689,9 @@ def _player_match_report(
                 "aerialTotal": int(round(aerial_total)),
                 "aerialRate": round((aerial_won / aerial_total) * 100, 1) if aerial_total > 0 else None,
                 "shots": 0,
+                "packingXg": round(_kpi_value(kpis, KPI_PACKING_XG), 2),
+                "pxtShot": round(_kpi_value(kpis, KPI_PXT_SHOT), 1),
+                "pxtDribble": round(_kpi_value(kpis, KPI_PXT_DRIBBLE), 1),
             }
         )
     rows.sort(key=lambda item: (-float(item["minutes"]), str(item["name"])))
@@ -694,6 +729,10 @@ def _units_from_report(players: list[dict[str, Any]]) -> dict[str, dict[str, Any
             "regainsFromDefenders": 0.0,
             "xg": 0.0,
             "shots": 0.0,
+            "assists": 0.0,
+            "packingXg": 0.0,
+            "pxtShot": 0.0,
+            "pxtDribble": 0.0,
         }
         for unit in UNITS
     }
@@ -716,6 +755,10 @@ def _units_from_report(players: list[dict[str, Any]]) -> dict[str, dict[str, Any
         buckets[unit]["regainsFromDefenders"] += float(player.get("regainsFromDefenders") or 0)
         buckets[unit]["xg"] += float(player.get("xg") or 0)
         buckets[unit]["shots"] += float(player.get("shots") or 0)
+        buckets[unit]["assists"] += float(player.get("assists") or 0)
+        buckets[unit]["packingXg"] += float(player.get("packingXg") or 0)
+        buckets[unit]["pxtShot"] += float(player.get("pxtShot") or 0)
+        buckets[unit]["pxtDribble"] += float(player.get("pxtDribble") or 0)
         name = _short_unit_name(str(player.get("name") or ""))
         if player.get("started"):
             if name and name not in starter_names[unit]:
@@ -1039,18 +1082,35 @@ def _open_play_xg_total(rows: list[dict[str, Any]]) -> float:
     return round(total, 2)
 
 
+def _shot_player_id(row: dict[str, Any]) -> int:
+    try:
+        player_id = int(row.get("playerId") or 0)
+    except (TypeError, ValueError):
+        player_id = 0
+    if player_id:
+        return player_id
+    player = row.get("player")
+    if isinstance(player, dict):
+        try:
+            return int(player.get("id") or player.get("playerId") or 0)
+        except (TypeError, ValueError):
+            return 0
+    return 0
+
+
+def _is_open_play_vale_shot(row: dict[str, Any], squad_id: int) -> bool:
+    if int(row.get("squadId") or 0) != int(squad_id):
+        return False
+    return str(row.get("action") or "").upper() not in XG_VS_EXCLUDED_ACTIONS
+
+
 def _player_open_play_xg(shots: list[dict[str, Any]], squad_id: int) -> dict[int, float]:
     """Per-player shot xG excluding penalties and direct free kicks."""
     totals: dict[int, float] = {}
     for row in shots:
-        if int(row.get("squadId") or 0) != int(squad_id):
+        if not _is_open_play_vale_shot(row, squad_id):
             continue
-        if str(row.get("action") or "").upper() in XG_VS_EXCLUDED_ACTIONS:
-            continue
-        try:
-            player_id = int(row.get("playerId") or 0)
-        except (TypeError, ValueError):
-            continue
+        player_id = _shot_player_id(row)
         if not player_id:
             continue
         totals[player_id] = totals.get(player_id, 0.0) + float(row.get("xg") or 0)
@@ -1064,7 +1124,7 @@ def _apply_open_play_player_xg(
 ) -> None:
     if not players or not shots:
         return
-    if not any(row.get("playerId") for row in shots):
+    if not any(_shot_player_id(row) for row in shots):
         return
     open_xg = _player_open_play_xg(shots, squad_id)
     for player in players:
@@ -1080,18 +1140,17 @@ def _apply_open_play_player_xg(
 def _player_open_play_shots(shots: list[dict[str, Any]], squad_id: int) -> dict[int, int]:
     counts: dict[int, int] = {}
     for row in shots:
-        if int(row.get("squadId") or 0) != int(squad_id):
+        if not _is_open_play_vale_shot(row, squad_id):
             continue
-        if str(row.get("action") or "").upper() in XG_VS_EXCLUDED_ACTIONS:
-            continue
-        try:
-            player_id = int(row.get("playerId") or 0)
-        except (TypeError, ValueError):
-            continue
+        player_id = _shot_player_id(row)
         if not player_id:
             continue
         counts[player_id] = counts.get(player_id, 0) + 1
     return counts
+
+
+def _open_play_shot_total(shots: list[dict[str, Any]], squad_id: int) -> int:
+    return sum(1 for row in shots if _is_open_play_vale_shot(row, squad_id))
 
 
 def _apply_open_play_player_shots(
@@ -1100,8 +1159,6 @@ def _apply_open_play_player_shots(
     squad_id: int,
 ) -> None:
     if not players or not shots:
-        return
-    if not any(row.get("playerId") for row in shots):
         return
     counts = _player_open_play_shots(shots, squad_id)
     for player in players:
@@ -1112,6 +1169,25 @@ def _apply_open_play_player_shots(
         if not player_id:
             continue
         player["shots"] = counts.get(player_id, 0)
+
+
+def _assign_unattributed_shots_to_attack(
+    stats: dict[str, Any],
+    shots: list[dict[str, Any]],
+    squad_id: int,
+) -> None:
+    """If shot events lack player ids, still put the team open-play count on Attack."""
+    units = stats.get("units")
+    if not isinstance(units, dict):
+        return
+    att = units.get("ATT")
+    if not isinstance(att, dict):
+        return
+    total = _open_play_shot_total(shots, squad_id)
+    attributed = sum(int(player.get("shots") or 0) for player in (stats.get("players") or []))
+    leftover = max(0, total - attributed)
+    if leftover:
+        att["shots"] = int(att.get("shots") or 0) + leftover
 
 
 def _apply_player_goals_from_shots(
@@ -1127,10 +1203,7 @@ def _apply_player_goals_from_shots(
             continue
         if not row.get("isGoal"):
             continue
-        try:
-            player_id = int(row.get("playerId") or 0)
-        except (TypeError, ValueError):
-            continue
+        player_id = _shot_player_id(row)
         if not player_id:
             continue
         counts[player_id] = counts.get(player_id, 0) + 1
@@ -1158,6 +1231,7 @@ def _hydrate_open_play_shots(stats: dict[str, Any], squad_id: int) -> None:
     _apply_open_play_player_shots(players, shots, squad_id)
     _apply_player_goals_from_shots(players, shots, squad_id)
     stats["units"] = _units_from_report(players)
+    _assign_unattributed_shots_to_attack(stats, shots, squad_id)
 
 
 def _apply_open_play_unit_count(
@@ -1562,6 +1636,7 @@ def _fetch_match_stats(
         _apply_open_play_player_shots(stats.get("players") or [], race.get("shots") or [], squad_id)
         _apply_player_goals_from_shots(stats.get("players") or [], race.get("shots") or [], squad_id)
         stats["units"] = _units_from_report(stats.get("players") or [])
+        _assign_unattributed_shots_to_attack(stats, race.get("shots") or [], squad_id)
         # Keep team xG aligned with the VS card / player boards.
         if facts.get("valeXg") is not None:
             stats["xg"] = facts["valeXg"]
@@ -2174,6 +2249,10 @@ def _aggregate_units(played: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             "regainsFromDefenders": 0.0,
             "xg": 0.0,
             "shots": 0.0,
+            "assists": 0.0,
+            "packingXg": 0.0,
+            "pxtShot": 0.0,
+            "pxtDribble": 0.0,
             "seen": False,
             "seenDuel": False,
             "seenAerial": False,
@@ -2229,6 +2308,10 @@ def _aggregate_units(played: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             "regainsFromDefenders": round(bucket["regainsFromDefenders"], 1),
             "xg": round(bucket["xg"], 2),
             "shots": int(round(bucket["shots"])),
+            "assists": int(round(bucket["assists"])),
+            "packingXg": round(bucket["packingXg"], 2),
+            "pxtShot": round(bucket["pxtShot"], 1),
+            "pxtDribble": round(bucket["pxtDribble"], 1),
         }
     return result
 
