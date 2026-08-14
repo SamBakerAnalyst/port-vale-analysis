@@ -451,13 +451,14 @@ const UNIT_SLIDES = [
       { key: "offensiveInterventions", label: "Aggressive regains", hint: "Opponents removed on ball wins", digits: 1 },
       { key: "duelRate", label: "Duels won", hint: "Ground + aerial success", digits: 1, rate: true },
       { key: "defensiveInterventions", label: "Defensive ball wins", hint: "Teammates added when we win it", digits: 1 },
-      { key: "defendersBypassed", label: "Backline beaten", hint: "Passes or dribbles that beat a defender", digits: 1 },
-      { key: "regainsFromDefenders", label: "Regains from opp defenders", hint: "Won it vs their four deepest", digits: 1 },
+      { key: "defendersBypassed", label: "Backline beaten", hint: "In possession · beat a defender", digits: 1 },
+      { key: "ballProgression", label: "Ball progression", hint: "In possession · opponents beaten on the ball", digits: 1 },
+      { key: "xg", label: "Expected goals", hint: "In possession · open play, no pens / DFKs", digits: 2 },
     ],
     boards: [
       { key: "offensiveInterventions", label: "Aggressive regains", digits: 0 },
-      { key: "duelRate", label: "Duels won", digits: 1, rate: true, minDuels: 3 },
-      { key: "defendersBypassed", label: "Backline beaten", digits: 1 },
+      { key: "ballProgression", label: "Ball progression", digits: 0 },
+      { key: "xg", label: "Expected goals", digits: 2 },
     ],
   },
   {
