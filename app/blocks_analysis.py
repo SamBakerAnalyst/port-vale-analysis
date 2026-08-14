@@ -1164,6 +1164,38 @@ def _open_play_shot_total(shots: list[dict[str, Any]], squad_id: int) -> int:
     return sum(1 for row in shots if _is_open_play_vale_shot(row, squad_id))
 
 
+def _count_xg_steps(series: list[dict[str, Any]]) -> int:
+    """How many times the cumulative xG line actually jumped — each jump is a shot."""
+    prev = 0.0
+    count = 0
+    for row in series or []:
+        xg = float(row.get("xg") or 0)
+        if xg > prev + 0.0005:
+            count += 1
+        prev = xg
+    return count
+
+
+def _open_play_shot_count_from_stats(stats: dict[str, Any], squad_id: int) -> int:
+    facts = stats.get("facts") or {}
+    if facts.get("valeOpenShots") is not None:
+        try:
+            return int(facts["valeOpenShots"])
+        except (TypeError, ValueError):
+            pass
+    race = stats.get("xgRace") or {}
+    shots = race.get("shots") or []
+    if shots:
+        return _open_play_shot_total(shots, squad_id)
+    steps = _count_xg_steps(((race.get("vale") or {}).get("series") or []))
+    if steps:
+        return steps
+    try:
+        return int(facts.get("valeShots") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _apply_open_play_player_shots(
     players: list[dict[str, Any]],
     shots: list[dict[str, Any]],
@@ -1194,7 +1226,9 @@ def _assign_unattributed_shots_to_attack(
     att = units.get("ATT")
     if not isinstance(att, dict):
         return
-    total = _open_play_shot_total(shots, squad_id)
+    total = _open_play_shot_total(shots, squad_id) if shots else 0
+    if total <= 0:
+        total = _open_play_shot_count_from_stats(stats, squad_id)
     attributed = sum(int(player.get("shots") or 0) for player in (stats.get("players") or []))
     leftover = max(0, total - attributed)
     if leftover:
@@ -1231,17 +1265,16 @@ def _apply_player_goals_from_shots(
 
 
 def _hydrate_open_play_shots(stats: dict[str, Any], squad_id: int) -> None:
-    """Fill shot counts from cached xG events without refetching the match."""
+    """Fill shot counts from cached xG events, or from the race line if events were stripped."""
     if not isinstance(stats, dict):
         return
     race = stats.get("xgRace") or {}
     shots = race.get("shots") or []
     players = stats.get("players") or []
-    if not shots or not players:
-        return
-    _apply_open_play_player_shots(players, shots, squad_id)
-    _apply_player_goals_from_shots(players, shots, squad_id)
-    stats["units"] = _units_from_report(players)
+    if shots and players:
+        _apply_open_play_player_shots(players, shots, squad_id)
+        _apply_player_goals_from_shots(players, shots, squad_id)
+        stats["units"] = _units_from_report(players)
     _assign_unattributed_shots_to_attack(stats, shots, squad_id)
 
 
@@ -1384,7 +1417,21 @@ def _match_story(
             "totalXg": round(float(opp.get("totalXg") or 0), 2),
             "series": _compact_race_series(opp.get("series") or []),
         },
+        "shots": [
+            {
+                "playerId": _shot_player_id(row) or None,
+                "squadId": int(row.get("squadId") or 0),
+                "xg": round(float(row.get("xg") or 0), 3),
+                "action": row.get("action"),
+                "isGoal": bool(row.get("isGoal")),
+            }
+            for row in shots
+        ],
     }
+    vale_open_shots = [
+        row for row in vale_shots
+        if str(row.get("action") or "").upper() not in XG_VS_EXCLUDED_ACTIONS
+    ]
     facts = {
         # VS card uses open-play xG (excl. penalties + direct free kicks).
         "valeXg": vale_open_xg,
@@ -1393,6 +1440,7 @@ def _match_story(
         "oppXgAll": compact["opp"]["totalXg"],
         "xgExcludes": "PK & DFK",
         "valeShots": len(vale_shots),
+        "valeOpenShots": len(vale_open_shots),
         "oppShots": len(opp_shots),
         "valeGoals": vale_goals,
         "valeHtXg": round(_half_time_xg(vale.get("series") or []), 2),
@@ -1768,8 +1816,11 @@ def _load_match_kpis(
             and isinstance((cached.get("stats") or {}).get("players"), list)
         ):
             stats = cached["stats"]
+            before = int(((stats.get("units") or {}).get("ATT") or {}).get("shots") or 0)
+            lineup = _hydrate_lineup_units(stats, match_id, PORT_VALE_SQUAD_ID)
             _hydrate_open_play_shots(stats, PORT_VALE_SQUAD_ID)
-            if _hydrate_lineup_units(stats, match_id, PORT_VALE_SQUAD_ID):
+            after = int(((stats.get("units") or {}).get("ATT") or {}).get("shots") or 0)
+            if lineup or after != before:
                 cached["stats"] = stats
                 dirty = True
             result[match_id] = stats
