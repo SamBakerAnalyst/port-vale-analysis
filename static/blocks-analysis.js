@@ -434,7 +434,7 @@ const UNIT_SLIDES = [
     id: "DEF",
     title: "Defence",
     who: "Centre-backs & full-backs",
-    note: "Wing-backs are not in this unit.",
+    note: "Full-backs count here. Wing-backs in a back three do not.",
     groups: [
       {
         label: "Out of possession",
@@ -1038,7 +1038,7 @@ function guideMeterDemo() {
       <div class="ba-gdemo__ref">
         <p><span class="ba-gdemo__pill ba-gdemo__pill--req">Req</span> Top 7 in League Two — promotion benchmark.</p>
         <p><span class="ba-gdemo__pill ba-gdemo__pill--avg">Avg</span> Our usual level in recent league games.</p>
-        <p><span class="ba-gdemo__pill ba-gdemo__pill--wb">WB</span> Wing-backs split 50/50 DEF and ATT.</p>
+        <p><span class="ba-gdemo__pill ba-gdemo__pill--wb">WB</span> Full-backs count in DEF. Wing-backs in a back three do not.</p>
       </div>
     </div>
   `;
@@ -1089,7 +1089,7 @@ function guideSheetsHtml({ kicker, fixture, totalPages = 4 }) {
         <div class="ba-guide__cards ba-guide__cards--1">
           ${guideCard(1, "Standouts", "Three names to discuss first.", "Best expected goals, most backline beaten and best duel % in this match — with photos.")}
           ${guideCard(2, "Six leaderboards", "Full top-five lists.", "Every player ranked for xG, aggressive regains, defensive ball wins, regains off opp defenders, backline beaten and duels won.")}
-          ${guideCard(3, "Unit target slides", "DEF, MID and ATT each have their own page.", "Five unit stats vs Req (top 7) and Vale Avg, plus the unit’s own leaderboards. Wing-backs count 50/50 in DEF and ATT.")}
+          ${guideCard(3, "Unit target slides", "DEF, MID and ATT each have their own page.", "Five unit stats vs Req (top 7) and Vale Avg, plus the unit’s own leaderboards. Full-backs sit in DEF; wing-backs in a back three do not.")}
         </div>
         <div class="ba-guide__defs ba-guide__defs--fill">
           ${guideDef("Expected goals", "Shot quality added up — open play only (penalties and direct free kicks excluded), same as the VS card.")}

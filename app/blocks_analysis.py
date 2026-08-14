@@ -77,7 +77,7 @@ KPI_ASSISTS = 77
 KPI_PXT_SHOT = 1408
 KPI_PXT_DRIBBLE = 1405
 MATCH_KPI_CACHE_TTL = 6 * 3600
-MATCH_STATS_CACHE_VERSION = 18
+MATCH_STATS_CACHE_VERSION = 19
 # Shot actions stripped from match + player xG boards (open-play / set-piece delivery only).
 XG_VS_EXCLUDED_ACTIONS = frozenset({
     "PENALTY",
@@ -141,8 +141,9 @@ UNIT_RATE_FIELDS: dict[str, tuple[str, str]] = {
 POSITION_TO_UNIT: dict[str, str | None] = {
     "GOALKEEPER": None,
     "CENTRAL_DEFENDER": "DEF",
-    "LEFT_WINGBACK_DEFENDER": "WB",
-    "RIGHT_WINGBACK_DEFENDER": "WB",
+    # Impect uses these codes for both full-backs (back 4) and wing-backs (back 3).
+    "LEFT_WINGBACK_DEFENDER": "DEF",
+    "RIGHT_WINGBACK_DEFENDER": "DEF",
     "DEFENSE_MIDFIELD": "MID",
     "CENTRAL_MIDFIELD": "MID",
     "ATTACKING_MIDFIELD": "MID",
@@ -382,6 +383,11 @@ def _is_wingback_position(position: Any) -> bool:
     return bool(text) and ("WINGBACK" in text or "WING_BACK" in text)
 
 
+def _formation_back_line(formation: str | None) -> int | None:
+    parts = [int(token) for token in re.findall(r"\d+", str(formation or ""))]
+    return parts[0] if parts else None
+
+
 def _wide_players_are_midfield(formation: str | None) -> bool:
     """4-4-2 / 4-5-1 wide mids sit in MID; 4-3-3 / 4-2-3-1 wingers stay ATT."""
     parts = [int(token) for token in re.findall(r"\d+", str(formation or ""))]
@@ -393,7 +399,12 @@ def _wide_players_are_midfield(formation: str | None) -> bool:
 def _unit_for_position(position: Any, formation: str | None = None) -> str | None:
     text = _normalize_position(position)
     if _is_wingback_position(text):
-        return "WB"
+        # Back four: Impect still labels LB/RB as wing-backs — they are DEF.
+        # Back three / five: genuine wing-backs stay out of the CB unit.
+        back = _formation_back_line(formation)
+        if back is not None and back != 4:
+            return "WB"
+        return "DEF"
     if text in {"LEFT_WINGER", "RIGHT_WINGER"} and _wide_players_are_midfield(formation):
         return "MID"
     if text in POSITION_TO_UNIT:
