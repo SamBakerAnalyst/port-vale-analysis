@@ -578,7 +578,25 @@ function vsReqText(value, top7, spec, higherBetter) {
   const digits = spec.rate ? 1 : spec.digits;
   const signed = `${diff > 0 ? "+" : ""}${fmtNum(diff, digits)}`;
   const ok = higherBetter ? diff >= 0 : diff <= 0;
-  return { text: `${signed} vs Req`, ok };
+  return { text: signed, ok };
+}
+
+function slideMetricSpecs(slide) {
+  return (slide.groups || [{ metrics: slide.metrics || [] }]).flatMap((group) => group.metrics || []);
+}
+
+function unitPulse(slide, stats, single) {
+  const specs = slideMetricSpecs(slide);
+  let hit = 0;
+  const dots = specs.map((spec) => {
+    const row = (stats.units || {})[slide.id] || {};
+    const bench = unitBenchValues(spec.key, slide.id, single, stats.played);
+    const higherBetter = bench?.spec?.higherBetter !== false;
+    const tone = meterTone(row[spec.key], bench?.top7, higherBetter) || "mute";
+    if (tone === "hot") hit += 1;
+    return `<i class="ba-unitpulse__dot is-${tone}" title="${escapeHtml(spec.label)}"></i>`;
+  });
+  return { hit, total: specs.length, dots: dots.join("") };
 }
 
 function unitMetricRowHtml(unit, spec, stats, single) {
@@ -606,13 +624,39 @@ function unitMetricRowHtml(unit, spec, stats, single) {
   `;
 }
 
+function groupVerdictHtml(group, unit, stats, single) {
+  if ((group.metrics || []).length >= 4) return "";
+  let hit = 0;
+  (group.metrics || []).forEach((spec) => {
+    const row = (stats.units || {})[unit] || {};
+    const bench = unitBenchValues(spec.key, unit, single, stats.played);
+    if (meterTone(row[spec.key], bench?.top7, bench?.spec?.higherBetter !== false) === "hot") hit += 1;
+  });
+  const total = (group.metrics || []).length;
+  const tone = hit === total && total ? "hot" : hit === 0 ? "cold" : "warn";
+  const line = hit === total
+    ? "Every metric at or above Req."
+    : hit === 0
+      ? "Every metric below the top-7 line."
+      : `${hit} of ${total} at Req.`;
+  return `
+    <aside class="ba-unitverdict is-${tone}">
+      <strong>${hit} / ${total}</strong>
+      <span>at Req</span>
+      <p>${escapeHtml(line)}</p>
+    </aside>
+  `;
+}
+
 function unitSheetHtml(slide, { mast, stats, single, players, page, outcome, foot }) {
   const unitPlayers = playersForUnit(players, slide.id);
+  const pulse = unitPulse(slide, stats, single);
   const groups = (slide.groups || [{ label: "", metrics: slide.metrics || [] }]).map((group) => `
     <section class="ba-unitcol">
       <h3 class="ba-unitcol__label">${escapeHtml(group.label)}</h3>
       <div class="ba-unitcol__metrics">
         ${group.metrics.map((spec) => unitMetricRowHtml(slide.id, spec, stats, single)).join("")}
+        ${groupVerdictHtml(group, slide.id, stats, single)}
       </div>
     </section>
   `).join("");
@@ -620,7 +664,14 @@ function unitSheetHtml(slide, { mast, stats, single, players, page, outcome, foo
     <article class="ba-sheet ba-sheet--unit ba-sheet--unit-${slide.id.toLowerCase()} ${outcome ? `ba-sheet--${outcome}` : ""}" data-sheet="${page}">
       ${sheetMasthead({ ...mast, title: slide.title, page })}
       <div class="ba-sheet__body ba-sheet__body--unit">
-        <p class="ba-unitpage__who"><b>${escapeHtml(slide.who)}</b>${slide.note ? `<span>${escapeHtml(slide.note)}</span>` : ""}</p>
+        <div class="ba-unitpage__who">
+          <b>${escapeHtml(slide.who)}</b>
+          ${slide.note ? `<span>${escapeHtml(slide.note)}</span>` : ""}
+          <span class="ba-unitpulse" title="Metrics at Req">
+            ${pulse.dots}
+            <em>${pulse.hit}/${pulse.total} at Req</em>
+          </span>
+        </div>
         <div class="ba-unitpage">
           <div class="ba-unitpage__cols">${groups}</div>
           ${unitStarHtml(slide, unitPlayers)}
@@ -683,12 +734,15 @@ function unitStarHtml(slide, players) {
         ${playerPhotoHtml(player.name, "ba-photo ba-unitstar__photo")}
         <div class="ba-unitstar__copy">
           <p class="ba-unitstar__name">${escapeHtml(player.name)}</p>
-          <p class="ba-unitstar__metric">${escapeHtml(spec.label)}${mins ? ` · ${escapeHtml(fmtNum(mins, 0))}′` : ""}</p>
-          <div class="ba-unitstar__extras">${chips}</div>
+          <div class="ba-unitstar__extras">
+            ${mins ? `<span class="ba-unitstar__chip ba-unitstar__chip--mins"><em>Played</em><b>${escapeHtml(fmtNum(mins, 0))}′</b></span>` : ""}
+            ${chips}
+          </div>
         </div>
         <div class="ba-unitstar__score">
+          <span class="ba-unitstar__score-label">${escapeHtml(spec.label)}</span>
           <span class="ba-unitstar__val">${escapeHtml(formatPlayerValue(player, spec))}</span>
-          <span class="ba-unitstar__score-label">Best in unit</span>
+          <span class="ba-unitstar__best">Best in unit</span>
         </div>
       </div>
     </aside>
