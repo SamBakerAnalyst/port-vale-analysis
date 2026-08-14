@@ -156,10 +156,16 @@
       seen.add(name);
       order.push({ name, side: "watch" });
     }
+    if (clubNeedle() && !order.some((row) => row.side === "watch")) {
+      order.push({ name: clubNeedle(), side: "watch", unmatched: true });
+    }
     for (const name of oppo) {
       if (seen.has(name)) continue;
       seen.add(name);
       order.push({ name, side: "oppo" });
+    }
+    if (oppoNeedle() && !order.some((row) => row.side === "oppo")) {
+      order.push({ name: oppoNeedle(), side: "oppo", unmatched: true });
     }
     return order;
   }
@@ -569,13 +575,17 @@
           side: "watch",
         }));
     const bothSides = clubOrder.some((row) => row.side === "watch") && clubOrder.some((row) => row.side === "oppo");
+    const hideEmptyRoles = bothSides;
     const positionOrder = state.positions.length ? state.positions : [];
     const blocks = [];
 
-    for (const entry of clubOrder) {
-      const club = entry.name;
-      const sideLabel = entry.side === "oppo" ? "Opposition" : bothSides ? "Watch" : "";
-      const clubPlayers = pool.filter((p) => String(p.club || "").trim() === club);
+    const squads = clubOrder.map((entry) => {
+      const query = String(entry.name || "").trim();
+      const clubPlayers = pool.filter((p) => {
+        const club = String(p.club || "").trim();
+        if (entry.unmatched) return club.toLowerCase().includes(query.toLowerCase());
+        return club === query;
+      });
       const uniqueById = new Map();
       for (const player of clubPlayers) {
         const key = String(player.playerId ?? player.id ?? player.name);
@@ -591,21 +601,34 @@
         if (Math.abs(diff) > 1e-9) return diff;
         return String(a.name || "").localeCompare(String(b.name || ""));
       });
+      return { entry, clubPlayers, squad };
+    });
 
-      const squadTitle = sideLabel ? `${sideLabel} · ${club}` : clubOrder.length > 1 ? `${club} · Full squad` : "Full squad";
+    for (const { entry, squad } of squads) {
+      const sideLabel = entry.side === "oppo" ? "Opposition" : bothSides ? "Watch" : "";
+      const squadTitle = sideLabel
+        ? `${sideLabel} · ${entry.name}`
+        : clubOrder.length > 1
+          ? `${entry.name} · Full squad`
+          : "Full squad";
       blocks.push({
-        key: `${club}:squad`,
+        key: `${entry.side}:${entry.name}:squad`,
         title: squadTitle,
-        club,
+        club: entry.name,
         side: entry.side,
         kind: "team-squad",
         players: squad,
         pool_count: squad.length,
         profileCols: [],
+        empty: !squad.length,
+        unmatched: Boolean(entry.unmatched),
       });
+    }
 
-      const positions =
-        state.position === "ALL" ? positionOrder : positionOrder.filter((row) => row.value === state.position);
+    const positions =
+      state.position === "ALL" ? positionOrder : positionOrder.filter((row) => row.value === state.position);
+    for (const { entry, clubPlayers } of squads) {
+      const sideLabel = entry.side === "oppo" ? "Opposition" : bothSides ? "Watch" : "";
       for (const row of positions) {
         const position = row.value;
         const profiles = state.profilesByPosition[position] || [];
@@ -620,15 +643,16 @@
             if (Math.abs(diff) > 1e-9) return diff;
             return String(a.name || "").localeCompare(String(b.name || ""));
           });
+        if (hideEmptyRoles && !players.length) continue;
         const posTitle = sideLabel
           ? `${sideLabel} · ${posLabel(position)}`
           : clubOrder.length > 1
-            ? `${club} · ${posLabel(position)}`
+            ? `${entry.name} · ${posLabel(position)}`
             : posLabel(position);
         blocks.push({
-          key: `${club}:${position}`,
+          key: `${entry.side}:${entry.name}:${position}`,
           title: posTitle,
-          club,
+          club: entry.name,
           side: entry.side,
           kind: "team-position",
           players,
@@ -946,7 +970,9 @@
             })
           : `<p class="league-card__empty">${
               teamMode
-                ? "No players here — they may be listed under another role, or Impect has no profile minutes at this position."
+                ? block.unmatched
+                  ? `No club matching “${block.club}” in this player pool. Pick the name from the list.`
+                  : "No players here — they may be listed under another role, or Impect has no profile minutes at this position."
                 : "No matches for current filters"
             }</p>`;
         const drillBtn =
