@@ -201,6 +201,16 @@ window.IMPECT_APPS = [
     ]
   },
   {
+    "id": "player-pipelines",
+    "group": "recruitment",
+    "title": "Player Pipelines",
+    "description": "Shared recruitment board — add targets, drag between Data identified, Video scouted, Live scouted, and Gone / turned us down. Notes and tags are visible to the whole team.",
+    "href": "/player-pipelines",
+    "icon": "📌",
+    "accent": "#a78bfa",
+    "tags": ["Scouting", "Targets", "Notes"]
+  },
+  {
     "id": "squad-planner",
     "group": "recruitment",
     "title": "Squad Planner",

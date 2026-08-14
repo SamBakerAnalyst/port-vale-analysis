@@ -150,7 +150,8 @@ for path in \
   "/schedule" \
   "/strategy-tracker" \
   "/players-strategy" \
-  "/pre-match-handout"
+  "/pre-match-handout" \
+  "/player-pipelines"
 do
   code="$(curl -s -o /dev/null -w "%{http_code}" -b "$COOKIE_JAR" --max-time 30 "$BASE_URL$path" || echo 000)"
   if [[ "$code" == "200" ]]; then

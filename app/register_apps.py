@@ -23,6 +23,7 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
     from app.club_strategy import register_club_strategy_routes
     from app.fixture_planner import register_fixture_planner_routes
     from app.player_cards import register_player_cards_routes
+    from app.player_pipelines import register_player_pipelines_routes
     from app.post_match.routes import register_post_match_routes
     from app.pre_match import register_pre_match_routes
     from app.pre_match_handout import register_pre_match_handout_routes
@@ -55,6 +56,7 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
         "availability_tracker": register_availability_tracker_routes,
         "scouting_address": register_scouting_address_routes,
         "who_to_scout": register_who_to_scout_routes,
+        "player_pipelines": register_player_pipelines_routes,
         "strategy_tracker": register_strategy_tracker_routes,
         # Covered by routes defined in main.py (studio) — no-op registrar.
         "main_studio": lambda _app: None,

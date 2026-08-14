@@ -11,13 +11,15 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="/static/player-dossier.css?v=14" />
+  <link rel="stylesheet" href="/static/player-dossier.css?v=15" />
 </head>
 <body>
   <div class="pd">
     <header class="pd-top">
       <a class="pd-back" href="/">← Hub</a>
       <div class="pd-top__actions" id="pdActions" hidden>
+        <button type="button" class="pd-btn" id="pdPipelineBtn">Add to pipeline</button>
+        <a class="pd-btn pd-btn--ghost" id="pdPipelineLink" href="/player-pipelines" hidden>Open pipeline</a>
         <a class="pd-btn" id="pdChartsLink" href="#">Full charts</a>
         <a class="pd-btn pd-btn--ghost" id="pdCompareLink" href="/studio">Compare</a>
       </div>
@@ -166,6 +168,6 @@
   </div>
 
   <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-  <script defer src="/static/player-dossier.js?v=14"></script>
+  <script defer src="/static/player-dossier.js?v=15"></script>
 </body>
 </html>

@@ -587,6 +587,77 @@
     }
   }
 
+  function pipelineStageLabel(stage) {
+    if (stage === "data_identified") return "Data identified";
+    if (stage === "video_scouted") return "Video scouted";
+    if (stage === "live_scouted") return "Live scouted";
+    if (stage === "gone_elsewhere") return "Gone / turned us down";
+    return "";
+  }
+
+  function setPipelineButton(inPipeline, stageTitle) {
+    const btn = document.getElementById("pdPipelineBtn");
+    const link = document.getElementById("pdPipelineLink");
+    if (!btn) return;
+    if (inPipeline) {
+      btn.textContent = stageTitle ? `In pipeline · ${stageTitle}` : "In pipeline";
+      btn.disabled = true;
+      if (link) link.hidden = false;
+    } else {
+      btn.textContent = "Add to pipeline";
+      btn.disabled = false;
+      if (link) link.hidden = true;
+    }
+  }
+
+  async function refreshPipelineStatus(playerId) {
+    try {
+      const res = await fetch(`/api/player-pipelines/status?player_id=${playerId}`, { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return;
+      setPipelineButton(Boolean(data.in_pipeline), pipelineStageLabel(data.target?.stage));
+    } catch (_err) {
+      /* optional */
+    }
+  }
+
+  function wirePipelineButton(player) {
+    const btn = document.getElementById("pdPipelineBtn");
+    if (!btn) return;
+    if (btn.dataset.wired !== "1") {
+      btn.dataset.wired = "1";
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        btn.textContent = "Adding…";
+        try {
+          const res = await fetch("/api/player-pipelines/targets", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              player_id: player.id,
+              name: player.name || "",
+              club: player.club || "",
+              league: player.league || "",
+              position: player.primary_position || "",
+              position_label: player.primary_position_label || "",
+              age: player.age ?? null,
+              photo_url: player.photo_url || "",
+              stage: "data_identified",
+            }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+          await refreshPipelineStatus(player.id);
+        } catch (err) {
+          btn.disabled = false;
+          btn.textContent = "Add to pipeline";
+          setError(err.message || String(err));
+        }
+      });
+    }
+    refreshPipelineStatus(player.id);
+  }
+
   function wireNotesUi() {
     document.getElementById("pdAddNoteBtn")?.addEventListener("click", () => openEntryModal("note"));
     document.getElementById("pdAddReportBtn")?.addEventListener("click", () => openEntryModal("report"));
@@ -803,6 +874,7 @@
       const compare = document.getElementById("pdCompareLink");
       if (data.links?.charts) charts.href = data.links.charts;
       if (data.links?.compare) compare.href = data.links.compare;
+      wirePipelineButton(data.player);
       actionsEl.hidden = false;
       gridEl.hidden = false;
       setStatus("");

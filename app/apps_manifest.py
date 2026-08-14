@@ -235,6 +235,23 @@ APPS: list[dict[str, Any]] = [
         "router": "squad_balance",
     },
     {
+        "id": "player-pipelines",
+        "group": "recruitment",
+        "title": "Player Pipelines",
+        "description": (
+            "Shared recruitment board — add targets, drag between Data identified, "
+            "Video scouted, Live scouted, and Gone / turned us down. Notes and tags "
+            "are visible to the whole team."
+        ),
+        "href": "/player-pipelines",
+        "icon": "📌",
+        "accent": "#a78bfa",
+        "tags": ["Scouting", "Targets", "Notes"],
+        "roles": ("admin",),
+        "api_prefixes": ("/player-pipelines", "/api/player-pipelines"),
+        "router": "player_pipelines",
+    },
+    {
         "id": "squad-planner",
         "group": "recruitment",
         "title": "Squad Planner",

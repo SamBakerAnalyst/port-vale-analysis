@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Player Pipelines</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/player-pipelines.css?v=1" />
+</head>
+<body>
+  <div class="pp">
+    <header class="pp-toolbar card">
+      <div class="pp-brand">
+        <p class="pp-eyebrow">Recruitment · <a href="/">← All apps</a></p>
+        <h1>Player Pipelines</h1>
+        <p class="pp-sub">Shared board — add targets, drag stages, leave notes the whole team can see.</p>
+      </div>
+      <div class="pp-search">
+        <label for="ppPlayerSearch">Add to pipeline</label>
+        <div class="pp-search__wrap">
+          <input id="ppPlayerSearch" type="search" placeholder="Search a player — add from any result" autocomplete="off" />
+          <div id="ppSearchResults" class="pp-results hidden" role="listbox"></div>
+        </div>
+      </div>
+    </header>
+
+    <section class="pp-filters card">
+      <label>
+        Filter player
+        <input id="ppFilterName" type="search" placeholder="Name or club" />
+      </label>
+      <label>
+        Position
+        <select id="ppFilterPosition">
+          <option value="">All positions</option>
+        </select>
+      </label>
+      <label>
+        Tag
+        <select id="ppFilterTag">
+          <option value="">All tags</option>
+        </select>
+      </label>
+      <label>
+        Added by
+        <select id="ppFilterStaff">
+          <option value="">Everyone</option>
+        </select>
+      </label>
+      <p class="pp-count" id="ppCount"></p>
+    </section>
+
+    <p id="ppStatus" class="pp-status hidden" role="status"></p>
+    <div id="ppBoard" class="pp-board" aria-label="Player pipeline stages"></div>
+  </div>
+
+  <aside class="pp-drawer" id="ppDrawer" hidden>
+    <div class="pp-drawer__backdrop" data-close-drawer></div>
+    <div class="pp-drawer__panel" role="dialog" aria-modal="true">
+      <header class="pp-drawer__head">
+        <div>
+          <p class="pp-drawer__stage" id="ppDrawerStage"></p>
+          <h2 id="ppDrawerName"></h2>
+          <p class="pp-drawer__meta" id="ppDrawerMeta"></p>
+        </div>
+        <button type="button" class="pp-icon" data-close-drawer aria-label="Close">×</button>
+      </header>
+      <div class="pp-drawer__actions">
+        <a class="btn btn--ghost" id="ppDrawerDossier" href="#">Open dossier</a>
+        <button type="button" class="btn btn--danger" id="ppDrawerRemove">Remove</button>
+      </div>
+      <div class="pp-drawer__block">
+        <h3>Tags</h3>
+        <div id="ppDrawerTags" class="pp-tag-cloud"></div>
+        <form id="ppCustomTagForm" class="pp-inline">
+          <input id="ppCustomTag" type="text" maxlength="40" placeholder="Custom tag" />
+          <button type="submit" class="btn btn--primary">Add</button>
+        </form>
+      </div>
+      <div class="pp-drawer__block">
+        <h3>Notes</h3>
+        <p class="pp-hint">Visible to everyone on this board.</p>
+        <div id="ppDrawerNotes"></div>
+        <form id="ppNoteForm" class="pp-note-form">
+          <textarea id="ppNoteText" rows="3" required placeholder="e.g. Agent spoken to — waiting on wages"></textarea>
+          <button type="submit" class="btn btn--primary">Add note</button>
+        </form>
+      </div>
+    </div>
+  </aside>
+
+  <script defer src="/static/player-pipelines.js?v=1"></script>
+</body>
+</html>
