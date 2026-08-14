@@ -2271,7 +2271,7 @@ a:hover { text-decoration: underline; }
 
 .ba-unitpage__who b {
   font-family: var(--display);
-  font-size: .78rem;
+  font-size: .95rem;
   font-weight: 800;
   letter-spacing: .12em;
   text-transform: uppercase;
@@ -2342,13 +2342,13 @@ a:hover { text-decoration: underline; }
 .ba-unitcol__label {
   margin: 0;
   font-family: var(--display);
-  font-size: .62rem;
+  font-size: .95rem;
   font-weight: 800;
-  letter-spacing: .14em;
+  letter-spacing: .12em;
   text-transform: uppercase;
   color: #111;
-  padding-bottom: .08rem;
-  border-bottom: 2px solid #111;
+  padding-bottom: .1rem;
+  border-bottom: 3px solid #111;
 }
 
 .ba-unitcol__metrics {
@@ -2356,18 +2356,52 @@ a:hover { text-decoration: underline; }
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: .16rem;
+  gap: .18rem;
 }
 
 .ba-unitstat {
   background: #fff;
   border: 1px solid var(--rule);
   border-radius: 2px;
-  padding: .28rem .45rem .24rem;
-  display: flex;
-  flex-direction: column;
-  gap: .1rem;
-  flex: 0 0 auto;
+  padding: .32rem .52rem .34rem;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: .12rem;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.ba-unitstat .ba-meter {
+  margin: auto 0;
+  width: 100%;
+}
+
+.ba-unitstat .ba-meter.ba-meter--compact .ba-meter__track,
+.ba-unitstat .ba-meter__track {
+  height: 22px;
+  background: #d8d2c4;
+  border: 1px solid #b7afa0;
+  box-shadow: inset 0 2px 4px rgba(17,17,17,.16);
+}
+
+.ba-unitstat .ba-meter__fill {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.28);
+}
+
+.ba-unitstat .ba-meter.ba-meter--compact .ba-meter__tick--req,
+.ba-unitstat .ba-meter__tick--req {
+  top: -7px;
+  height: 36px;
+  width: 3px;
+  background: #111;
+  transform: translateX(-1.5px);
+  box-shadow: 0 0 0 1px #fff, 0 0 0 2px #111;
+}
+
+.ba-unitstat .ba-meter__tick--avg {
+  top: 4px;
+  height: 14px;
+  width: 2px;
 }
 
 .ba-unitverdict {
@@ -2414,34 +2448,34 @@ a:hover { text-decoration: underline; }
 .ba-unitstat__label {
   margin: 0;
   font-family: var(--display);
-  font-size: .78rem;
+  font-size: 1.18rem;
   font-weight: 800;
-  letter-spacing: .08em;
+  letter-spacing: .07em;
   text-transform: uppercase;
 }
 
 .ba-unitstat__hint {
   margin: 0;
   color: var(--ink-muted);
-  font-size: .5rem;
-  font-weight: 600;
+  font-size: .58rem;
+  font-weight: 700;
   text-align: right;
 }
 
 .ba-unitstat__nums {
   display: flex;
   align-items: center;
-  gap: .28rem;
+  gap: .32rem;
   flex-wrap: wrap;
 }
 
 .ba-unitstat__val {
   font-family: var(--display);
-  font-size: 1.28rem;
+  font-size: 1.7rem;
   font-weight: 800;
   line-height: 1;
   display: inline-flex;
-  padding: .16rem .38rem .14rem;
+  padding: .18rem .42rem .14rem;
   border-radius: 2px;
   background: #111;
   color: #fff;
@@ -2512,7 +2546,7 @@ a:hover { text-decoration: underline; }
 
 .ba-unitstat__req b,
 .ba-unitstat__avg b {
-  font-size: .78rem;
+  font-size: .98rem;
 }
 
 .ba-unitpage__boards {
