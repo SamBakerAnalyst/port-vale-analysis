@@ -359,14 +359,19 @@ function unitSubText(metricKey, row) {
   return "";
 }
 
-function unitBenchValues(metricKey, unit, single, played) {
+function unitBenchValues(metricKey, unit, single, played, unitRow) {
   const spec = state.payload?.benchmarks?.units?.[unit]?.[metricKey];
   if (!spec) return { team: null, top7: null, spec: null };
   const games = spec.rate ? 1 : (single ? 1 : Math.max(Number(played) || 0, 5));
+  const baseline = Number(spec.baselineStarters || { DEF: 4, MID: 3, ATT: 3 }[unit] || 3);
+  const starters = Number(unitRow?.starters || 0) || baseline;
+  const scale = spec.rate ? 1 : (baseline > 0 ? starters / baseline : 1);
   return {
     team: spec.team == null ? null : spec.team * games,
-    top7: spec.top7 == null ? null : spec.top7 * games,
+    top7: spec.top7 == null ? null : spec.top7 * games * scale,
     spec,
+    starters,
+    baseline,
   };
 }
 
@@ -376,7 +381,7 @@ function unitPanelHtml(title, metricKey, hint, stats, single) {
   const digits = rate ? 1 : 1;
   const rows = ["DEF", "MID", "ATT"].map((unit) => {
     const row = units[unit] || {};
-    const bench = unitBenchValues(metricKey, unit, single, stats.played);
+    const bench = unitBenchValues(metricKey, unit, single, stats.played, units[unit]);
     const value = rate ? row.duelRate : row.defendersBypassed;
     const extra = unitSubText(metricKey, row);
     const tone = meterTone(value, bench.top7, true);
@@ -428,7 +433,7 @@ const UNIT_SLIDES = [
     id: "DEF",
     title: "Defence",
     who: "Centre-backs & full-backs",
-    note: "Wing-backs count half on the meters, not in the standout.",
+    note: "Wing-backs are not in this unit.",
     groups: [
       {
         label: "Out of possession",
@@ -594,7 +599,7 @@ function unitPulse(slide, stats, single) {
   let hit = 0;
   const dots = specs.map((spec) => {
     const row = (stats.units || {})[slide.id] || {};
-    const bench = unitBenchValues(spec.key, slide.id, single, stats.played);
+    const bench = unitBenchValues(spec.key, slide.id, single, stats.played, row);
     const higherBetter = bench?.spec?.higherBetter !== false;
     const tone = meterTone(row[spec.key], bench?.top7, higherBetter) || "mute";
     if (tone === "hot") hit += 1;
@@ -607,7 +612,7 @@ function unitMetricRowHtml(unit, spec, stats, single) {
   const row = (stats.units || {})[unit] || {};
   const value = row[spec.key];
   const extra = unitSubText(spec.key, row);
-  const bench = unitBenchValues(spec.key, unit, single, stats.played);
+  const bench = unitBenchValues(spec.key, unit, single, stats.played, row);
   const higherBetter = bench?.spec?.higherBetter !== false;
   const tone = meterTone(value, bench?.top7, higherBetter);
   const delta = vsReqText(value, bench?.top7, spec, higherBetter);
@@ -633,7 +638,7 @@ function groupVerdictHtml(group, unit, stats, single) {
   let hit = 0;
   (group.metrics || []).forEach((spec) => {
     const row = (stats.units || {})[unit] || {};
-    const bench = unitBenchValues(spec.key, unit, single, stats.played);
+    const bench = unitBenchValues(spec.key, unit, single, stats.played, row);
     if (meterTone(row[spec.key], bench?.top7, bench?.spec?.higherBetter !== false) === "hot") hit += 1;
   });
   const total = (group.metrics || []).length;
@@ -652,7 +657,25 @@ function groupVerdictHtml(group, unit, stats, single) {
   `;
 }
 
+function unitWhoCopy(slide, stats) {
+  const row = (stats.units || {})[slide.id] || {};
+  const starters = Number(row.starters) || 0;
+  const starterNames = (row.starterNames || []).filter(Boolean);
+  const benchNames = (row.benchNames || []).filter(Boolean);
+  const countWord = { 1: "one", 2: "two", 3: "three", 4: "four", 5: "five" }[starters];
+  const unitWord = { DEF: "defence", MID: "midfield", ATT: "attack" }[slide.id] || slide.title.toLowerCase();
+  const title = starters
+    ? `${countWord || starters}-man ${unitWord}`
+    : slide.who;
+  const bits = [];
+  if (starterNames.length) bits.push(`${starterNames.join(", ")} started`);
+  if (benchNames.length) bits.push(`${benchNames.join(", ")} off the bench`);
+  const note = bits.length ? bits.join(" · ") : (slide.note || "");
+  return { title, note };
+}
+
 function unitSheetHtml(slide, { mast, stats, single, players, page, outcome, foot }) {
+  const who = unitWhoCopy(slide, stats);
   const unitPlayers = playersForUnit(players, slide.id);
   const pulse = unitPulse(slide, stats, single);
   const groups = (slide.groups || [{ label: "", metrics: slide.metrics || [] }]).map((group) => `
@@ -669,8 +692,8 @@ function unitSheetHtml(slide, { mast, stats, single, players, page, outcome, foo
       ${sheetMasthead({ ...mast, title: slide.title, page })}
       <div class="ba-sheet__body ba-sheet__body--unit">
         <div class="ba-unitpage__who">
-          <b>${escapeHtml(slide.who)}</b>
-          ${slide.note ? `<span>${escapeHtml(slide.note)}</span>` : ""}
+          <b>${escapeHtml(who.title)}</b>
+          ${who.note ? `<span>${escapeHtml(who.note)}</span>` : ""}
           <span class="ba-unitpulse" title="Metrics at Req">
             ${pulse.dots}
             <em>${pulse.hit}/${pulse.total} at Req</em>
@@ -1597,7 +1620,7 @@ function dashHtml(block) {
     .map((spec) => playerBoardHtml(spec, players))
     .join("");
   const outcome = (single && fixture?.outcome) || "";
-  const foot = "Req = league requirement (top 7) · Avg = Vale average · wing-backs 50/50 DEF and ATT";
+  const foot = "Req = top-7 line, scaled to this XI · Avg = Vale average";
   const unitSheets = UNIT_SLIDES.map((slide, index) => unitSheetHtml(slide, {
     mast,
     stats,
