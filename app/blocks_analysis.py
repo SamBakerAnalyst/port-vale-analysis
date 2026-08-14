@@ -74,7 +74,7 @@ KPI_SHOT_XG = 82
 KPI_GOALS = 28
 KPI_ASSISTS = 77
 MATCH_KPI_CACHE_TTL = 6 * 3600
-MATCH_STATS_CACHE_VERSION = 16
+MATCH_STATS_CACHE_VERSION = 17
 # Shot actions stripped from match + player xG boards (open-play / set-piece delivery only).
 XG_VS_EXCLUDED_ACTIONS = frozenset({
     "PENALTY",
@@ -102,6 +102,7 @@ UNIT_TOP7_VERSION = 6
 UNIT_TOP7_GAMES_PER_SQUAD = 8
 FORM_BASELINE_GAMES = 7
 UNITS: tuple[str, ...] = ("DEF", "MID", "ATT")
+UNIT_BASELINE_STARTERS: dict[str, int] = {"DEF": 4, "MID": 3, "ATT": 3}
 UNIT_METRIC_SPECS: dict[str, dict[str, Any]] = {
     "defendersBypassed": {"higherBetter": True, "rate": False, "digits": 1},
     "ballProgression": {"higherBetter": True, "rate": False, "digits": 1},
@@ -133,7 +134,7 @@ POSITION_TO_UNIT: dict[str, str | None] = {
     "RIGHT_WINGBACK_DEFENDER": "WB",
     "DEFENSE_MIDFIELD": "MID",
     "CENTRAL_MIDFIELD": "MID",
-    "ATTACKING_MIDFIELD": "ATT",
+    "ATTACKING_MIDFIELD": "MID",
     "LEFT_WINGER": "ATT",
     "RIGHT_WINGER": "ATT",
     "CENTER_FORWARD": "ATT",
@@ -370,15 +371,27 @@ def _is_wingback_position(position: Any) -> bool:
     return bool(text) and ("WINGBACK" in text or "WING_BACK" in text)
 
 
-def _unit_for_position(position: Any) -> str | None:
+def _wide_players_are_midfield(formation: str | None) -> bool:
+    """4-4-2 / 4-5-1 wide mids sit in MID; 4-3-3 / 4-2-3-1 wingers stay ATT."""
+    parts = [int(token) for token in re.findall(r"\d+", str(formation or ""))]
+    if len(parts) != 3:
+        return False
+    return parts[1] >= 4
+
+
+def _unit_for_position(position: Any, formation: str | None = None) -> str | None:
     text = _normalize_position(position)
     if _is_wingback_position(text):
         return "WB"
+    if text in {"LEFT_WINGER", "RIGHT_WINGER"} and _wide_players_are_midfield(formation):
+        return "MID"
     if text in POSITION_TO_UNIT:
         return POSITION_TO_UNIT[text]
     if not text or "GOAL" in text:
         return None
-    if "WINGER" in text or "FORWARD" in text or "STRIKER" in text:
+    if "WINGER" in text:
+        return "MID" if _wide_players_are_midfield(formation) else "ATT"
+    if "FORWARD" in text or "STRIKER" in text:
         return "ATT"
     if "DEFEND" in text or "FULL_BACK" in text or "FULLBACK" in text:
         return "DEF"
@@ -387,14 +400,67 @@ def _unit_for_position(position: Any) -> str | None:
     return None
 
 
-def _unit_shares_for_position(position: Any) -> list[tuple[str, float]]:
-    """Wing-backs count half as full-backs (DEF) and half as wingers (ATT)."""
-    if _is_wingback_position(position):
-        return [("DEF", 0.5), ("ATT", 0.5)]
-    unit = _unit_for_position(position)
+def _unit_shares_for_position(position: Any, formation: str | None = None) -> list[tuple[str, float]]:
+    unit = _unit_for_position(position, formation)
     if unit in UNITS:
         return [(unit, 1.0)]
     return []
+
+
+def _short_unit_name(name: str) -> str:
+    parts = str(name or "").strip().split()
+    return parts[-1] if parts else str(name or "")
+
+
+def _lineup_roles(match_id: int, squad_id: int) -> dict[int, dict[str, Any]]:
+    """Starting XI + subs → one unit each, using kick-off shape and who they replaced."""
+    roles: dict[int, dict[str, Any]] = {}
+    try:
+        raw = impect_get(v5_path(f"/matches/{match_id}"))["data"]
+        if isinstance(raw, dict) and isinstance(raw.get("data"), dict):
+            raw = raw["data"]
+        if not isinstance(raw, dict):
+            return roles
+        squad = None
+        for key in ("squadHome", "squadAway"):
+            block = raw.get(key) or {}
+            if int(block.get("id") or 0) == int(squad_id):
+                squad = block
+                break
+        if not squad:
+            return roles
+        formation = str(squad.get("startingFormation") or "")
+        for row in squad.get("startingPositions") or []:
+            if not isinstance(row, dict):
+                continue
+            player_id = int(row.get("playerId") or 0)
+            if not player_id:
+                continue
+            roles[player_id] = {
+                "unit": _unit_for_position(row.get("position"), formation),
+                "started": True,
+                "position": row.get("position"),
+            }
+        for row in squad.get("substitutions") or []:
+            if not isinstance(row, dict):
+                continue
+            if str(row.get("substitutionType") or "").upper() != "SUB_ON":
+                continue
+            player_id = int(row.get("playerId") or 0)
+            off_id = int(row.get("exchangedPlayerId") or 0)
+            if not player_id:
+                continue
+            unit = roles.get(off_id, {}).get("unit")
+            if unit not in UNITS and unit != "WB":
+                unit = _unit_for_position(row.get("toPosition") or row.get("position"), formation)
+            roles[player_id] = {
+                "unit": unit,
+                "started": False,
+                "position": row.get("toPosition") or row.get("position"),
+            }
+    except Exception:  # noqa: BLE001
+        return roles
+    return roles
 
 
 def _empty_unit_row() -> dict[str, Any]:
@@ -412,6 +478,9 @@ def _empty_unit_row() -> dict[str, Any]:
         "regainsFromDefenders": None,
         "xg": None,
         "shots": None,
+        "starters": 0,
+        "starterNames": [],
+        "benchNames": [],
     }
 
 
@@ -468,6 +537,8 @@ def _units_from_players(players: list[dict[str, Any]], squad_id: int) -> dict[st
         for unit in UNITS
     }
     seen = False
+    starter_names: dict[str, list[str]] = {unit: [] for unit in UNITS}
+    bench_names: dict[str, list[str]] = {unit: [] for unit in UNITS}
     for row in _consolidate_player_match_rows(
         [item for item in players if int(item.get("squadId") or 0) == int(squad_id)]
     ):
@@ -498,10 +569,23 @@ def _units_from_players(players: list[dict[str, Any]], squad_id: int) -> dict[st
             buckets[unit]["defensiveInterventions"] += defensive * share
             buckets[unit]["regainsFromDefenders"] += deepest * share
             buckets[unit]["xg"] += xg * share
+            name = _short_unit_name(str(row.get("name") or ""))
+            minutes = float(row.get("minutes") or 0)
+            if minutes >= 45:
+                starter_names[unit].append(name)
+            elif name:
+                bench_names[unit].append(name)
         seen = True
     if not seen:
         return _empty_units()
-    return {unit: _finalize_unit_row(values) for unit, values in buckets.items()}
+    result = {unit: _finalize_unit_row(values) for unit, values in buckets.items()}
+    for unit in UNITS:
+        starters = [name for name in starter_names[unit] if name]
+        benches = [name for name in bench_names[unit] if name]
+        result[unit]["starters"] = len(starters)
+        result[unit]["starterNames"] = starters
+        result[unit]["benchNames"] = benches
+    return result
 
 
 def _blocks_player_names(iteration_id: int = BLOCKS_ITERATION_ID) -> dict[int, str]:
@@ -552,6 +636,7 @@ def _player_match_report(
                 "playerId": player_id,
                 "name": name,
                 "unit": _unit_for_position(row.get("position")),
+                "started": minutes >= 45,
                 "minutes": round(minutes, 1),
                 "xg": round(_kpi_value(kpis, KPI_SHOT_XG), 2),
                 "goals": int(round(_kpi_value(kpis, KPI_GOALS))),
@@ -576,6 +661,75 @@ def _player_match_report(
         )
     rows.sort(key=lambda item: (-float(item["minutes"]), str(item["name"])))
     return rows
+
+
+def _apply_lineup_roles(players: list[dict[str, Any]], roles: dict[int, dict[str, Any]]) -> None:
+    if not players or not roles:
+        return
+    for player in players:
+        try:
+            player_id = int(player.get("playerId") or 0)
+        except (TypeError, ValueError):
+            continue
+        role = roles.get(player_id)
+        if not role:
+            continue
+        unit = role.get("unit")
+        if unit in UNITS or unit == "WB":
+            player["unit"] = unit
+        player["started"] = bool(role.get("started"))
+
+
+def _units_from_report(players: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    buckets: dict[str, dict[str, float]] = {
+        unit: {
+            "defendersBypassed": 0.0,
+            "ballProgression": 0.0,
+            "duelWon": 0.0,
+            "duelTotal": 0.0,
+            "aerialWon": 0.0,
+            "aerialTotal": 0.0,
+            "offensiveInterventions": 0.0,
+            "defensiveInterventions": 0.0,
+            "regainsFromDefenders": 0.0,
+            "xg": 0.0,
+            "shots": 0.0,
+        }
+        for unit in UNITS
+    }
+    starter_names: dict[str, list[str]] = {unit: [] for unit in UNITS}
+    bench_names: dict[str, list[str]] = {unit: [] for unit in UNITS}
+    seen = False
+    for player in players:
+        unit = str(player.get("unit") or "")
+        if unit not in buckets:
+            continue
+        seen = True
+        buckets[unit]["defendersBypassed"] += float(player.get("defendersBypassed") or 0)
+        buckets[unit]["ballProgression"] += float(player.get("ballProgression") or 0)
+        buckets[unit]["duelWon"] += float(player.get("duelWon") or 0)
+        buckets[unit]["duelTotal"] += float(player.get("duelTotal") or 0)
+        buckets[unit]["aerialWon"] += float(player.get("aerialWon") or 0)
+        buckets[unit]["aerialTotal"] += float(player.get("aerialTotal") or 0)
+        buckets[unit]["offensiveInterventions"] += float(player.get("offensiveInterventions") or 0)
+        buckets[unit]["defensiveInterventions"] += float(player.get("defensiveInterventions") or 0)
+        buckets[unit]["regainsFromDefenders"] += float(player.get("regainsFromDefenders") or 0)
+        buckets[unit]["xg"] += float(player.get("xg") or 0)
+        buckets[unit]["shots"] += float(player.get("shots") or 0)
+        name = _short_unit_name(str(player.get("name") or ""))
+        if player.get("started"):
+            if name and name not in starter_names[unit]:
+                starter_names[unit].append(name)
+        elif name and name not in bench_names[unit]:
+            bench_names[unit].append(name)
+    if not seen:
+        return _empty_units()
+    result = {unit: _finalize_unit_row(values) for unit, values in buckets.items()}
+    for unit in UNITS:
+        result[unit]["starters"] = len(starter_names[unit])
+        result[unit]["starterNames"] = starter_names[unit]
+        result[unit]["benchNames"] = bench_names[unit]
+    return result
 
 
 def _kpi_value(kpis: dict[int, float], kpi_id: int) -> float:
@@ -1003,7 +1157,7 @@ def _hydrate_open_play_shots(stats: dict[str, Any], squad_id: int) -> None:
         return
     _apply_open_play_player_shots(players, shots, squad_id)
     _apply_player_goals_from_shots(players, shots, squad_id)
-    _apply_open_play_unit_count(stats, players, field="shots", digits=0)
+    stats["units"] = _units_from_report(players)
 
 
 def _apply_open_play_unit_count(
@@ -1020,10 +1174,7 @@ def _apply_open_play_unit_count(
     for player in players:
         unit = str(player.get("unit") or "")
         value = float(player.get(field) or 0)
-        if unit == "WB":
-            totals["DEF"] += value * 0.5
-            totals["ATT"] += value * 0.5
-        elif unit in totals:
+        if unit in totals:
             totals[unit] += value
     for unit, value in totals.items():
         row = units.get(unit)
@@ -1039,10 +1190,7 @@ def _apply_open_play_unit_xg(stats: dict[str, Any], players: list[dict[str, Any]
     for player in players:
         unit = str(player.get("unit") or "")
         xg = float(player.get("xg") or 0)
-        if unit == "WB":
-            totals["DEF"] += xg * 0.5
-            totals["ATT"] += xg * 0.5
-        elif unit in totals:
+        if unit in totals:
             totals[unit] += xg
     for unit, value in totals.items():
         row = units.get(unit)
@@ -1394,6 +1542,8 @@ def _fetch_match_stats(
         )
         stats["units"] = _units_from_players(players, squad_id)
         stats["players"] = _player_match_report(players, squad_id, names)
+        _apply_lineup_roles(stats["players"], _lineup_roles(match_id, squad_id))
+        stats["units"] = _units_from_report(stats["players"])
     except Exception:  # noqa: BLE001
         stats["units"] = _empty_units()
         stats["players"] = []
@@ -1411,8 +1561,7 @@ def _fetch_match_stats(
         _apply_open_play_player_xg(stats.get("players") or [], race.get("shots") or [], squad_id)
         _apply_open_play_player_shots(stats.get("players") or [], race.get("shots") or [], squad_id)
         _apply_player_goals_from_shots(stats.get("players") or [], race.get("shots") or [], squad_id)
-        _apply_open_play_unit_xg(stats, stats.get("players") or [])
-        _apply_open_play_unit_count(stats, stats.get("players") or [], field="shots", digits=0)
+        stats["units"] = _units_from_report(stats.get("players") or [])
         # Keep team xG aligned with the VS card / player boards.
         if facts.get("valeXg") is not None:
             stats["xg"] = facts["valeXg"]
@@ -1622,8 +1771,9 @@ def _empty_unit_benchmarks() -> dict[str, dict[str, Any]]:
                 "top7": None,
                 "higherBetter": spec["higherBetter"],
                 "rate": spec["rate"],
-                "digits": spec["digits"],
-            }
+                    "digits": spec["digits"],
+                    "baselineStarters": UNIT_BASELINE_STARTERS[unit],
+                }
             for key, spec in UNIT_METRIC_SPECS.items()
         }
         for unit in UNITS
@@ -1814,6 +1964,7 @@ def build_unit_benchmarks(
             payload[unit][key]["higherBetter"] = spec["higherBetter"]
             payload[unit][key]["rate"] = spec["rate"]
             payload[unit][key]["digits"] = spec["digits"]
+            payload[unit][key]["baselineStarters"] = UNIT_BASELINE_STARTERS[unit]
             if top_row.get(key) is not None:
                 payload[unit][key]["top7From"] = "previous"
     return payload
