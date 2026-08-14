@@ -77,7 +77,7 @@ KPI_ASSISTS = 77
 KPI_PXT_SHOT = 1408
 KPI_PXT_DRIBBLE = 1405
 MATCH_KPI_CACHE_TTL = 6 * 3600
-MATCH_STATS_CACHE_VERSION = 19
+MATCH_STATS_CACHE_VERSION = 18
 # Shot actions stripped from match + player xG boards (open-play / set-piece delivery only).
 XG_VS_EXCLUDED_ACTIONS = frozenset({
     "PENALTY",
@@ -1245,6 +1245,30 @@ def _hydrate_open_play_shots(stats: dict[str, Any], squad_id: int) -> None:
     _assign_unattributed_shots_to_attack(stats, shots, squad_id)
 
 
+def _hydrate_lineup_units(stats: dict[str, Any], match_id: int, squad_id: int) -> bool:
+    """Re-tag XI units from the kick-off shape without refetching match KPIs."""
+    if not isinstance(stats, dict) or not match_id:
+        return False
+    players = stats.get("players") or []
+    if not players:
+        return False
+    def_row = ((stats.get("units") or {}).get("DEF") or {})
+    starters = int(def_row.get("starters") or 0)
+    has_wb = any(str(player.get("unit") or "") == "WB" for player in players)
+    if starters >= 4 and not has_wb:
+        return False
+    try:
+        roles = _lineup_roles(match_id, squad_id)
+    except Exception:  # noqa: BLE001
+        return False
+    if not roles:
+        return False
+    _apply_lineup_roles(players, roles)
+    stats["players"] = players
+    stats["units"] = _units_from_report(players)
+    return True
+
+
 def _apply_open_play_unit_count(
     stats: dict[str, Any],
     players: list[dict[str, Any]],
@@ -1724,6 +1748,7 @@ def _load_match_kpis(
     now = time.time()
     result: dict[int, dict[str, Any]] = {}
     to_fetch: list[dict[str, Any]] = []
+    dirty = False
 
     for match in matches:
         match_id = int(match.get("matchId") or 0)
@@ -1744,6 +1769,9 @@ def _load_match_kpis(
         ):
             stats = cached["stats"]
             _hydrate_open_play_shots(stats, PORT_VALE_SQUAD_ID)
+            if _hydrate_lineup_units(stats, match_id, PORT_VALE_SQUAD_ID):
+                cached["stats"] = stats
+                dirty = True
             result[match_id] = stats
             continue
         to_fetch.append(match)
@@ -1785,6 +1813,8 @@ def _load_match_kpis(
                     "fetchedAt": now,
                     "stats": stats,
                 }
+        dirty = True
+    if dirty:
         _save_kpi_disk_cache(disk)
 
     return result
@@ -2020,20 +2050,23 @@ def build_unit_benchmarks(
         and top7
     )
     if not fresh:
-        try:
-            top7, pv_prev = _build_unit_top7_from_sample(PREVIOUS_LEAGUE_TWO_ITERATION_ID)
-            _save_unit_top7_disk(
-                {
-                    "v": UNIT_TOP7_VERSION,
-                    "fetchedAt": now,
-                    "iterationId": PREVIOUS_LEAGUE_TWO_ITERATION_ID,
-                    "top7": top7,
-                    "teamPrevious": pv_prev,
-                }
-            )
-        except Exception:  # noqa: BLE001 — keep the dashboard live without unit top-7
-            top7 = top7 or {}
-            pv_prev = pv_prev or {}
+        if top7 and not force_refresh:
+            pass
+        else:
+            try:
+                top7, pv_prev = _build_unit_top7_from_sample(PREVIOUS_LEAGUE_TWO_ITERATION_ID)
+                _save_unit_top7_disk(
+                    {
+                        "v": UNIT_TOP7_VERSION,
+                        "fetchedAt": now,
+                        "iterationId": PREVIOUS_LEAGUE_TWO_ITERATION_ID,
+                        "top7": top7,
+                        "teamPrevious": pv_prev,
+                    }
+                )
+            except Exception:  # noqa: BLE001 — keep the dashboard live without unit top-7
+                top7 = top7 or {}
+                pv_prev = pv_prev or {}
 
     for unit in UNITS:
         team_row = pv_now.get(unit) or {}

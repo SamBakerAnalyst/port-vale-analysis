@@ -22,6 +22,11 @@
 
 	# Single upstream — no active health checker (was marking hub dead under load → 503).
 	handle {
-		reverse_proxy hub:8000
+		reverse_proxy hub:8000 {
+			transport http {
+				read_timeout 120s
+				write_timeout 120s
+			}
+		}
 	}
 }
