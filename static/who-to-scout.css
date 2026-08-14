@@ -691,3 +691,21 @@ a:hover { text-decoration: underline; }
   min-height: 0;
   overflow: hidden;
 }
+
+.export-page--list {
+  gap: 0.45rem;
+  padding: 1.25rem 1.75rem 1rem;
+}
+
+.export-page--list .export-head__block {
+  font-size: 1.15rem;
+}
+
+.export-page--list .scout-table {
+  font-size: 0.78rem;
+}
+
+.export-page--list .scout-table th,
+.export-page--list .scout-table td {
+  padding: 0.22rem 0.4rem;
+}

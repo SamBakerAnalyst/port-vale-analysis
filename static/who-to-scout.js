@@ -1151,11 +1151,20 @@
     };
   }
 
+  function isTwoClubSheet() {
+    const order = selectedClubOrder().filter((row) => !row.unmatched);
+    return order.some((row) => row.side === "watch") && order.some((row) => row.side === "oppo");
+  }
+
   function exportBlocks() {
     const pool = rankedPool();
     if (!pool.length) return [];
     const grouped = buildGrouped(pool);
-    return (grouped.blocks || []).filter((block) => (block.players || []).length);
+    const blocks = (grouped.blocks || []).filter((block) => (block.players || []).length);
+    if (isTwoClubSheet()) {
+      return blocks.filter((block) => block.kind === "team-squad");
+    }
+    return blocks;
   }
 
   function rowsPerExportPage(firstPage) {
@@ -1171,26 +1180,27 @@
     totalPages,
     meta,
     viewOptions,
+    compactList = false,
   }) {
     const rankEnd = rankStart + players.length;
     const rankRange = players.length ? `Ranks ${rankStart + 1}–${rankEnd}` : "";
     const pageLabel = `Page ${pageNum}/${totalPages}`;
-    const header = firstPage
+    const header = firstPage || compactList
       ? `<header class="export-head">
           <div class="export-head__brand">
             <span class="export-head__logo">Port Vale</span>
             <h1 class="export-head__title">Who To Scout</h1>
           </div>
           <p class="export-head__sub">${meta.seasonLabel}</p>
-          <p class="export-head__meta">${meta.pageNote}</p>
-          <p class="export-head__meta">${meta.generatedAt}</p>
+          ${firstPage ? `<p class="export-head__meta">${meta.pageNote}</p>` : ""}
+          ${firstPage ? `<p class="export-head__meta">${meta.generatedAt}</p>` : `<p class="export-head__meta">${pageLabel}</p>`}
         </header>`
       : `<header class="export-head">
           <p class="export-head__meta">Who To Scout · ${pageLabel}${rankRange ? ` · ${rankRange}` : ""}</p>
         </header>`;
-    return `<div class="export-page">
+    return `<div class="export-page${compactList ? " export-page--list" : ""}">
       ${header}
-      <p class="export-head__block">${blockTitle}${firstPage ? "" : ` · ${pageLabel}`}${rankRange ? ` · ${rankRange}` : ""}</p>
+      <p class="export-head__block">${blockTitle}${compactList ? ` · ${players.length} players` : ""}${firstPage || compactList ? "" : ` · ${pageLabel}`}${!compactList && rankRange ? ` · ${rankRange}` : ""}</p>
       ${resultsTable(players, {
         ...viewOptions,
         exportMode: true,
@@ -1257,6 +1267,50 @@
     const viewOptions = exportViewOptions();
     const root = els.exportRoot;
     const pages = [];
+    const twoClubList = isTwoClubSheet();
+
+    if (twoClubList) {
+      const totalPages = blocks.length;
+      for (let i = 0; i < blocks.length; i += 1) {
+        const block = blocks[i];
+        setStatus(`Rendering PDF page ${i + 1}/${totalPages}…`, "loading");
+        root.innerHTML = buildExportPageHtml({
+          firstPage: i === 0,
+          blockTitle: block.title || block.key || "Squad",
+          players: block.players || [],
+          rankStart: 0,
+          pageNum: i + 1,
+          totalPages,
+          meta,
+          compactList: true,
+          viewOptions: {
+            showPos: true,
+            showLeague: false,
+            showScout: false,
+            showClub: false,
+            scoreLabel: "Ovr",
+            profileCols: [],
+          },
+        });
+
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+        const canvas = await window.html2canvas(root.firstElementChild, {
+          backgroundColor: "#0c0f14",
+          scale: 2,
+          logging: false,
+          useCORS: true,
+          width: 1123,
+          height: 794,
+          windowWidth: 1123,
+          windowHeight: 794,
+        });
+        pages.push({ imageData: canvas.toDataURL("image/jpeg", 0.94) });
+      }
+      root.innerHTML = "";
+      return pages;
+    }
+
     let pageCount = 0;
 
     blocks.forEach((block) => {
