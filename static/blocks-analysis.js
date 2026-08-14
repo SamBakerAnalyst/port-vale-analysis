@@ -427,58 +427,88 @@ const UNIT_SLIDES = [
   {
     id: "DEF",
     title: "Defence",
-    kicker: "Unit targets",
-    blurb: "Centre-backs and full-backs only. Wing-backs are not listed here — they still count half on the unit meters.",
-    metrics: [
-      { key: "duelRate", label: "Duels won", hint: "Ground + aerial success", digits: 1, rate: true },
-      { key: "aerialRate", label: "Aerial duels won", hint: "Headers won of attempted", digits: 1, rate: true },
-      { key: "defensiveInterventions", label: "Defensive ball wins", hint: "Teammates added when we win it", digits: 1 },
-      { key: "offensiveInterventions", label: "Aggressive regains", hint: "Opponents removed on ball wins", digits: 1 },
-      { key: "defendersBypassed", label: "Backline beaten", hint: "In possession · beat a defender", digits: 1 },
-      { key: "ballProgression", label: "Ball progression", hint: "In possession · opponents beaten on the ball", digits: 1 },
+    who: "Centre-backs & full-backs",
+    note: "Wing-backs count half on the meters, not in the standout.",
+    groups: [
+      {
+        label: "Out of possession",
+        metrics: [
+          { key: "duelRate", label: "Duels won", hint: "Ground + aerial", digits: 1, rate: true },
+          { key: "aerialRate", label: "Aerial duels won", hint: "Headers won of attempted", digits: 1, rate: true },
+          { key: "defensiveInterventions", label: "Defensive ball wins", hint: "Teammates added when we win it", digits: 1 },
+          { key: "offensiveInterventions", label: "Aggressive regains", hint: "Opponents removed on ball wins", digits: 1 },
+        ],
+      },
+      {
+        label: "In possession",
+        metrics: [
+          { key: "defendersBypassed", label: "Backline beaten", hint: "Beat a defender on the ball", digits: 1 },
+          { key: "ballProgression", label: "Ball progression", hint: "Opponents beaten on the ball", digits: 1 },
+        ],
+      },
     ],
-    star: { key: "aerialRate", label: "Aerial duels won", digits: 1, rate: true, minAerials: 3 },
-    extras: [
-      { key: "defensiveInterventions", label: "Def wins", digits: 0 },
-      { key: "duelRate", label: "Duels", digits: 1, rate: true },
+    starKeys: [
+      { key: "defensiveInterventions", label: "Defensive ball wins", digits: 0 },
+      { key: "aerialRate", label: "Aerial duels won", digits: 1, rate: true, minAerials: 3 },
+      { key: "duelRate", label: "Duels won", digits: 1, rate: true, minDuels: 3 },
     ],
   },
   {
     id: "MID",
     title: "Midfield",
-    kicker: "Unit targets",
-    blurb: "Holding and central midfielders only.",
-    metrics: [
-      { key: "offensiveInterventions", label: "Aggressive regains", hint: "Opponents removed on ball wins", digits: 1 },
-      { key: "duelRate", label: "Duels won", hint: "Ground + aerial success", digits: 1, rate: true },
-      { key: "defensiveInterventions", label: "Defensive ball wins", hint: "Teammates added when we win it", digits: 1 },
-      { key: "defendersBypassed", label: "Backline beaten", hint: "In possession · beat a defender", digits: 1 },
-      { key: "ballProgression", label: "Ball progression", hint: "In possession · opponents beaten on the ball", digits: 1 },
-      { key: "xg", label: "Expected goals", hint: "In possession · open play, no pens / DFKs", digits: 2 },
+    who: "Holding & central midfielders",
+    note: "Only midfielders in the standout.",
+    groups: [
+      {
+        label: "Out of possession",
+        metrics: [
+          { key: "offensiveInterventions", label: "Aggressive regains", hint: "Opponents removed on ball wins", digits: 1 },
+          { key: "duelRate", label: "Duels won", hint: "Ground + aerial", digits: 1, rate: true },
+          { key: "defensiveInterventions", label: "Defensive ball wins", hint: "Teammates added when we win it", digits: 1 },
+        ],
+      },
+      {
+        label: "In possession",
+        metrics: [
+          { key: "defendersBypassed", label: "Backline beaten", hint: "Beat a defender on the ball", digits: 1 },
+          { key: "ballProgression", label: "Ball progression", hint: "Opponents beaten on the ball", digits: 1 },
+          { key: "xg", label: "Expected goals", hint: "Open play · no pens / DFKs", digits: 2 },
+        ],
+      },
     ],
-    star: { key: "ballProgression", label: "Ball progression", digits: 0 },
-    extras: [
-      { key: "offensiveInterventions", label: "Regains", digits: 0 },
-      { key: "xg", label: "xG", digits: 2 },
+    starKeys: [
+      { key: "ballProgression", label: "Ball progression", digits: 0 },
+      { key: "offensiveInterventions", label: "Aggressive regains", digits: 0 },
+      { key: "xg", label: "Expected goals", digits: 2 },
     ],
   },
   {
     id: "ATT",
     title: "Attack",
-    kicker: "Unit targets",
-    blurb: "Forwards and wingers only. Wing-backs are not listed here. Shots and xG are open play — no pens or DFKs.",
-    metrics: [
-      { key: "xg", label: "Expected goals", hint: "Open play · no pens / DFKs", digits: 2 },
-      { key: "shots", label: "Total shots", hint: "Open play · no pens / DFKs", digits: 0 },
-      { key: "defendersBypassed", label: "Backline beaten", hint: "In possession · beat a defender", digits: 1 },
-      { key: "ballProgression", label: "Ball progression", hint: "In possession · opponents beaten on the ball", digits: 1 },
-      { key: "aerialRate", label: "Aerial duels won", hint: "Hold-up and box headers", digits: 1, rate: true },
-      { key: "duelRate", label: "Duels won", hint: "Ground + aerial success", digits: 1, rate: true },
+    who: "Forwards & wingers",
+    note: "Wing-backs are not in the standout. Shots and xG exclude pens and DFKs.",
+    groups: [
+      {
+        label: "In possession",
+        metrics: [
+          { key: "xg", label: "Expected goals", hint: "Open play · no pens / DFKs", digits: 2 },
+          { key: "shots", label: "Total shots", hint: "Open play · no pens / DFKs", digits: 0 },
+          { key: "defendersBypassed", label: "Backline beaten", hint: "Beat a defender on the ball", digits: 1 },
+          { key: "ballProgression", label: "Ball progression", hint: "Opponents beaten on the ball", digits: 1 },
+        ],
+      },
+      {
+        label: "Hold-up / duels",
+        metrics: [
+          { key: "aerialRate", label: "Aerial duels won", hint: "Hold-up and box headers", digits: 1, rate: true },
+          { key: "duelRate", label: "Duels won", hint: "Ground + aerial", digits: 1, rate: true },
+        ],
+      },
     ],
-    star: { key: "xg", label: "Expected goals", digits: 2 },
-    extras: [
-      { key: "shots", label: "Shots", digits: 0 },
-      { key: "defendersBypassed", label: "Backline", digits: 1 },
+    starKeys: [
+      { key: "xg", label: "Expected goals", digits: 2 },
+      { key: "shots", label: "Total shots", digits: 0 },
+      { key: "defendersBypassed", label: "Backline beaten", digits: 1 },
     ],
   },
 ];
@@ -542,6 +572,15 @@ function playersForUnit(players, unit) {
   return (players || []).filter((row) => row.unit === unit);
 }
 
+function vsReqText(value, top7, spec, higherBetter) {
+  if (value == null || top7 == null || Number.isNaN(Number(value)) || Number.isNaN(Number(top7))) return "";
+  const diff = Number(value) - Number(top7);
+  const digits = spec.rate ? 1 : spec.digits;
+  const signed = `${diff > 0 ? "+" : ""}${fmtNum(diff, digits)}`;
+  const ok = higherBetter ? diff >= 0 : diff <= 0;
+  return { text: `${signed} vs Req`, ok };
+}
+
 function unitMetricRowHtml(unit, spec, stats, single) {
   const row = (stats.units || {})[unit] || {};
   const value = row[spec.key];
@@ -549,6 +588,7 @@ function unitMetricRowHtml(unit, spec, stats, single) {
   const bench = unitBenchValues(spec.key, unit, single, stats.played);
   const higherBetter = bench?.spec?.higherBetter !== false;
   const tone = meterTone(value, bench?.top7, higherBetter);
+  const delta = vsReqText(value, bench?.top7, spec, higherBetter);
   return `
     <article class="ba-unitstat">
       <div class="ba-unitstat__head">
@@ -559,24 +599,30 @@ function unitMetricRowHtml(unit, spec, stats, single) {
         <span class="ba-unitstat__val ${tone ? `is-${tone}` : ""}">${escapeHtml(unitValueText(spec.key, row))}</span>
         ${extra ? `<span class="ba-unitstat__sub">${escapeHtml(extra)}</span>` : ""}
         ${bench?.top7 == null ? "" : `<span class="ba-unitstat__req"><em>Req</em><b>${escapeHtml(formatBench(bench.top7, { rate: spec.rate, digits: spec.digits }))}</b></span>`}
-        ${bench?.team == null ? "" : `<span class="ba-unitstat__avg"><em>Avg</em><b>${escapeHtml(formatBench(bench.team, { rate: spec.rate, digits: spec.digits }))}</b></span>`}
+        ${delta ? `<span class="ba-unitstat__delta ${delta.ok ? "is-hot" : "is-cold"}">${escapeHtml(delta.text)}</span>` : ""}
       </div>
-      ${meterHtml(value, bench, { higherBetter, rate: Boolean(spec.rate), digits: spec.digits })}
+      ${meterHtml(value, bench, { higherBetter, rate: Boolean(spec.rate), digits: spec.digits, compact: true })}
     </article>
   `;
 }
 
 function unitSheetHtml(slide, { mast, stats, single, players, page, outcome, foot }) {
   const unitPlayers = playersForUnit(players, slide.id);
+  const groups = (slide.groups || [{ label: "", metrics: slide.metrics || [] }]).map((group) => `
+    <section class="ba-unitcol">
+      <h3 class="ba-unitcol__label">${escapeHtml(group.label)}</h3>
+      <div class="ba-unitcol__metrics">
+        ${group.metrics.map((spec) => unitMetricRowHtml(slide.id, spec, stats, single)).join("")}
+      </div>
+    </section>
+  `).join("");
   return `
     <article class="ba-sheet ba-sheet--unit ba-sheet--unit-${slide.id.toLowerCase()} ${outcome ? `ba-sheet--${outcome}` : ""}" data-sheet="${page}">
       ${sheetMasthead({ ...mast, title: slide.title, page })}
       <div class="ba-sheet__body ba-sheet__body--unit">
-        <p class="ba-unitpage__blurb">${escapeHtml(slide.blurb)}</p>
+        <p class="ba-unitpage__who"><b>${escapeHtml(slide.who)}</b>${slide.note ? `<span>${escapeHtml(slide.note)}</span>` : ""}</p>
         <div class="ba-unitpage">
-          <div class="ba-unitpage__metrics">
-            ${slide.metrics.map((spec) => unitMetricRowHtml(slide.id, spec, stats, single)).join("")}
-          </div>
+          <div class="ba-unitpage__cols">${groups}</div>
           ${unitStarHtml(slide, unitPlayers)}
         </div>
       </div>
@@ -585,33 +631,65 @@ function unitSheetHtml(slide, { mast, stats, single, players, page, outcome, foo
   `;
 }
 
+function unitStandout(players, slide) {
+  const specs = slide.starKeys || [];
+  if (!players.length || !specs.length) return null;
+  const ranked = specs.map((spec) => ({ spec, rows: topPlayers(players, spec) }));
+  const byId = {};
+  players.forEach((player) => {
+    byId[player.playerId] = { player, score: 0, best: null, bestRank: 99 };
+  });
+  ranked.forEach(({ spec, rows }) => {
+    rows.forEach((row, index) => {
+      const entry = byId[row.playerId];
+      if (!entry) return;
+      entry.score += Math.max(0, 3 - index);
+      if (index < entry.bestRank) {
+        entry.bestRank = index;
+        entry.best = spec;
+      }
+    });
+  });
+  const winner = Object.values(byId)
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score || (Number(b.player.minutes) || 0) - (Number(a.player.minutes) || 0))[0];
+  if (!winner) return null;
+  const extras = specs.filter((spec) => spec.key !== winner.best?.key).slice(0, 2);
+  return { player: winner.player, spec: winner.best || specs[0], extras };
+}
+
 function unitStarHtml(slide, players) {
-  const player = topPlayers(players, slide.star)[0];
-  if (!player) {
+  const standout = unitStandout(players, slide);
+  if (!standout) {
     return `
       <aside class="ba-unitstar ba-unitstar--empty">
-        <p class="ba-unitstar__kicker">Top performer</p>
+        <p class="ba-unitstar__kicker">Unit standout</p>
         <p class="ba-unitstar__empty">No ${escapeHtml(slide.title.toLowerCase())} player data yet</p>
       </aside>
     `;
   }
-  const extras = (slide.extras || []).map((spec) => `
+  const { player, spec, extras } = standout;
+  const chips = extras.map((item) => `
     <span class="ba-unitstar__chip">
-      <em>${escapeHtml(spec.label)}</em>
-      <b>${escapeHtml(formatPlayerValue(player, spec))}</b>
+      <em>${escapeHtml(item.label)}</em>
+      <b>${escapeHtml(formatPlayerValue(player, item))}</b>
     </span>
   `).join("");
+  const mins = Number(player.minutes) || 0;
   return `
     <aside class="ba-unitstar">
-      <p class="ba-unitstar__kicker">Top performer · ${escapeHtml(slide.title)}</p>
+      <p class="ba-unitstar__kicker">Unit standout · ${escapeHtml(slide.title)}</p>
       <div class="ba-unitstar__body">
         ${playerPhotoHtml(player.name, "ba-photo ba-unitstar__photo")}
         <div class="ba-unitstar__copy">
           <p class="ba-unitstar__name">${escapeHtml(player.name)}</p>
-          <p class="ba-unitstar__metric">${escapeHtml(slide.star.label)}</p>
+          <p class="ba-unitstar__metric">${escapeHtml(spec.label)}${mins ? ` · ${escapeHtml(fmtNum(mins, 0))}′` : ""}</p>
+          <div class="ba-unitstar__extras">${chips}</div>
         </div>
-        <p class="ba-unitstar__val">${escapeHtml(formatPlayerValue(player, slide.star))}</p>
-        <div class="ba-unitstar__extras">${extras}</div>
+        <div class="ba-unitstar__score">
+          <span class="ba-unitstar__val">${escapeHtml(formatPlayerValue(player, spec))}</span>
+          <span class="ba-unitstar__score-label">Best in unit</span>
+        </div>
       </div>
     </aside>
   `;
