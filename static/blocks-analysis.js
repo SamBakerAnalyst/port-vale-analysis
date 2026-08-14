@@ -506,8 +506,9 @@ const UNIT_SLIDES = [
       {
         label: "Out of possession",
         metrics: [
-          { key: "offensiveInterventions", label: "Offensive regains", hint: "Opponents removed when we win it", digits: 1 },
+          { key: "offensiveInterventions", label: "Aggressive regains", hint: "Opponents removed when we win it", digits: 1 },
           { key: "regainsFromDefenders", label: "Regains from opp defenders", hint: "Won it vs one of their four deepest", digits: 1 },
+          { key: "duelRate", label: "Duels won", hint: "Ground + aerial", digits: 1, rate: true },
         ],
       },
     ],
