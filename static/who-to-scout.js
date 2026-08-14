@@ -53,6 +53,8 @@
     maxAge: document.getElementById("maxAge"),
     minHeight: document.getElementById("minHeight"),
     clubFilter: document.getElementById("clubFilter"),
+    clearClub: document.getElementById("clearClub"),
+    clubOptions: document.getElementById("clubOptions"),
     perLeague: document.getElementById("perLeague"),
     perGroupLabel: document.getElementById("perGroupLabel"),
     weightsGrid: document.getElementById("weightsGrid"),
@@ -86,6 +88,59 @@
     }
     const plain = Number(str);
     return Number.isFinite(plain) ? plain : null;
+  }
+
+  function clubNeedle() {
+    return (els.clubFilter?.value || "").trim();
+  }
+
+  function isTeamSheetMode() {
+    return clubNeedle().length > 0;
+  }
+
+  function uniqueClubs() {
+    const names = [
+      ...new Set(
+        (state.players || [])
+          .map((p) => String(p.club || "").trim())
+          .filter(Boolean),
+      ),
+    ];
+    names.sort((a, b) => a.localeCompare(b));
+    return names;
+  }
+
+  function fillClubOptions() {
+    if (!els.clubOptions) return;
+    els.clubOptions.innerHTML = uniqueClubs()
+      .map((name) => `<option value="${String(name).replace(/"/g, "&quot;")}"></option>`)
+      .join("");
+  }
+
+  function matchingClubNames(needle = clubNeedle()) {
+    const query = needle.trim().toLowerCase();
+    if (!query) return [];
+    const clubs = uniqueClubs();
+    const exact = clubs.filter((name) => name.toLowerCase() === query);
+    if (exact.length) return exact;
+    return clubs.filter((name) => name.toLowerCase().includes(query));
+  }
+
+  function shortProfileLabel(label) {
+    return String(label || "")
+      .replace(/^PV\s*[-–]\s*/i, "")
+      .replace(/Goal Keeper/gi, "GK")
+      .replace(/Goalkeeper/gi, "GK")
+      .replace(/  +/g, " ")
+      .trim();
+  }
+
+  function syncTeamSheetUi() {
+    const active = isTeamSheetMode();
+    if (els.clearClub) els.clearClub.disabled = !active;
+    const wrap = els.perLeague?.closest(".filter");
+    if (wrap) wrap.hidden = active;
+    if (els.weightsPanel) els.weightsPanel.hidden = active;
   }
 
   async function fetchJson(url) {
@@ -193,6 +248,7 @@
   }
 
   function resolveViewMode() {
+    if (isTeamSheetMode()) return "team";
     if (state.position !== "ALL") return "profiles";
     if (state.groupBy === "league" && state.league !== "ALL") return "positions";
     if (state.groupBy === "position") return "positions";
@@ -325,8 +381,13 @@
       if (cm == null || cm < minHeight) return false;
     }
     if (clubNeedle) {
-      const club = String(player.club || "").toLowerCase();
-      if (!club.includes(clubNeedle)) return false;
+      const clubs = matchingClubNames(clubNeedle);
+      const club = String(player.club || "");
+      if (clubs.length) {
+        if (!clubs.includes(club)) return false;
+      } else if (!club.toLowerCase().includes(clubNeedle)) {
+        return false;
+      }
     }
     return true;
   }
@@ -345,7 +406,7 @@
       .filter((p) => state.groupBy !== "league" || state.position === "ALL" || p.position === state.position)
       .filter((p) => passesDemographicFilters(p))
       .filter((p) => {
-        if (resolveViewMode() === "profiles") return true;
+        if (resolveViewMode() === "profiles" || resolveViewMode() === "team") return true;
         if (state.groupBy === "league") {
           if (state.position === "ALL") return true;
           return passesProfileFilters(p.profileScores, profiles, state.weights);
@@ -465,7 +526,78 @@
     return { blocks, limit, groupLabel: "profile", viewMode: "profiles" };
   }
 
+  function buildTeamSheet(pool) {
+    const clubs = matchingClubNames();
+    const clubOrder = clubs.length
+      ? clubs
+      : [...new Set(pool.map((p) => String(p.club || "").trim()).filter(Boolean))];
+    const positionOrder = state.positions.length ? state.positions : [];
+    const blocks = [];
+
+    for (const club of clubOrder) {
+      const clubPlayers = pool.filter((p) => String(p.club || "").trim() === club);
+      const uniqueById = new Map();
+      for (const player of clubPlayers) {
+        const key = String(player.playerId ?? player.id ?? player.name);
+        const overall = playerOverall(player);
+        const scored = { ...player, overall };
+        const prev = uniqueById.get(key);
+        if (!prev || (Number(scored.overall) || 0) > (Number(prev.overall) || 0)) {
+          uniqueById.set(key, scored);
+        }
+      }
+      const squad = [...uniqueById.values()].sort((a, b) => {
+        const diff = (b.overall || 0) - (a.overall || 0);
+        if (Math.abs(diff) > 1e-9) return diff;
+        return String(a.name || "").localeCompare(String(b.name || ""));
+      });
+
+      blocks.push({
+        key: `${club}:squad`,
+        title: clubOrder.length > 1 ? `${club} · Full squad` : "Full squad",
+        club,
+        kind: "team-squad",
+        players: squad,
+        pool_count: squad.length,
+        profileCols: [],
+      });
+
+      const positions =
+        state.position === "ALL"
+          ? positionOrder
+          : positionOrder.filter((row) => row.value === state.position);
+      for (const row of positions) {
+        const position = row.value;
+        const profiles = state.profilesByPosition[position] || [];
+        const players = clubPlayers
+          .filter((p) => p.position === position)
+          .map((p) => ({
+            ...p,
+            overall: computeOverall(p.profileScores, profiles, {}, { equalWeight: true }),
+          }))
+          .sort((a, b) => {
+            const diff = (b.overall || 0) - (a.overall || 0);
+            if (Math.abs(diff) > 1e-9) return diff;
+            return String(a.name || "").localeCompare(String(b.name || ""));
+          });
+        blocks.push({
+          key: `${club}:${position}`,
+          title: clubOrder.length > 1 ? `${club} · ${posLabel(position)}` : posLabel(position),
+          club,
+          kind: "team-position",
+          players,
+          pool_count: players.length,
+          profileCols: profiles,
+          empty: !players.length,
+        });
+      }
+    }
+
+    return { blocks, limit: null, groupLabel: "squad", viewMode: "team", clubs: clubOrder };
+  }
+
   function buildGrouped(pool) {
+    if (isTeamSheetMode()) return buildTeamSheet(pool);
     const viewMode = resolveViewMode();
     if (viewMode === "profiles") {
       return buildByProfile(pool, state.position);
@@ -485,7 +617,17 @@
     return `<td class="col-scout"><span class="scout-pill scout-pill--${kind}">${value}</span></td>`;
   }
 
-  function playerRows(players, { showPos = true, showLeague = true, scoreLabel = "Ovr", showScout = true } = {}) {
+  function playerRows(
+    players,
+    {
+      showPos = true,
+      showLeague = true,
+      scoreLabel = "Ovr",
+      showScout = true,
+      profileCols = [],
+      showClub = true,
+    } = {},
+  ) {
     return (players || [])
       .map((p, index) => {
         const mins =
@@ -499,14 +641,21 @@
         const scoutTotal = Number(p.scout_total) || 0;
         const pos = posShort(p.positionLabel, p.position);
         const scoutedClass = scoutTotal ? " has-scout" : "";
+        const profileCells = (profileCols || [])
+          .map((profile) => {
+            const value = p.profileScores?.[profile.apiName];
+            return `<td class="col-profile-score">${fmt(value, 0)}</td>`;
+          })
+          .join("");
         return `<tr class="${scoutedClass}">
           <td class="col-rank">${index + 1}</td>
           <td class="col-player"><a href="${href}">${p.name || "—"}</a></td>
-          <td class="col-club" title="${p.club || ""}">${p.club || "—"}</td>
+          ${showClub ? `<td class="col-club" title="${p.club || ""}">${p.club || "—"}</td>` : ""}
           ${showLeague ? `<td class="col-league" title="${p.league || ""}">${p.league || "—"}</td>` : ""}
           ${showPos ? `<td class="col-pos" title="${p.positionLabel || p.position || ""}">${pos}</td>` : ""}
           <td class="col-age">${age}</td>
           <td class="col-overall">${fmt(p.overall, 1)}</td>
+          ${profileCells}
           <td class="col-mins">${mins}</td>
           ${showScout ? scoutCountCell(scout.live_watches, "live") : ""}
           ${showScout ? scoutCountCell(scout.video_watches, "video") : ""}
@@ -516,9 +665,21 @@
       .join("");
   }
 
-  function resultsTable(players, { showPos = true, showLeague = true, scoreLabel = "Ovr", showScout = true } = {}) {
+  function resultsTable(
+    players,
+    {
+      showPos = true,
+      showLeague = true,
+      scoreLabel = "Ovr",
+      showScout = true,
+      profileCols = [],
+      showClub = true,
+    } = {},
+  ) {
+    const clubCol = showClub ? '<col class="col-club">' : "";
     const leagueCol = showLeague ? '<col class="col-league">' : "";
     const posCol = showPos ? '<col class="col-pos">' : "";
+    const clubHead = showClub ? '<th class="col-club">Club</th>' : "";
     const leagueHead = showLeague ? '<th class="col-league">League</th>' : "";
     const posHead = showPos ? '<th class="col-pos">Pos</th>' : "";
     const scoutCols = showScout
@@ -527,26 +688,42 @@
     const scoutHead = showScout
       ? `<th class="col-scout">Live</th><th class="col-scout">Vid</th><th class="col-scout">Rep</th>`
       : "";
-    const viewClass = showPos ? "league" : showLeague ? "position" : "profile";
+    const profileColMarkup = (profileCols || [])
+      .map(() => '<col class="col-profile-score">')
+      .join("");
+    const profileHead = (profileCols || [])
+      .map(
+        (profile) =>
+          `<th class="col-profile-score" title="${profile.apiName || profile.label}">${shortProfileLabel(profile.label)}</th>`,
+      )
+      .join("");
+    const viewClass = profileCols?.length
+      ? "team"
+      : showPos
+        ? "league"
+        : showLeague
+          ? "position"
+          : "profile";
     return `<div class="league-scroll"><table class="scout-table scout-table--${viewClass}-view">
       <colgroup>
-        <col class="col-rank"><col class="col-player"><col class="col-club">${leagueCol}${posCol}
-        <col class="col-age"><col class="col-overall"><col class="col-mins">${scoutCols}
+        <col class="col-rank"><col class="col-player">${clubCol}${leagueCol}${posCol}
+        <col class="col-age"><col class="col-overall">${profileColMarkup}<col class="col-mins">${scoutCols}
       </colgroup>
       <thead>
         <tr>
           <th class="col-rank">#</th>
           <th class="col-player">Player</th>
-          <th class="col-club">Club</th>
+          ${clubHead}
           ${leagueHead}
           ${posHead}
           <th class="col-age">Age</th>
           <th class="col-overall">${scoreLabel}</th>
+          ${profileHead}
           <th class="col-mins">Mins</th>
           ${scoutHead}
         </tr>
       </thead>
-      <tbody>${playerRows(players, { showPos, showLeague, scoreLabel, showScout })}</tbody>
+      <tbody>${playerRows(players, { showPos, showLeague, scoreLabel, showScout, profileCols, showClub })}</tbody>
     </table></div>`;
   }
 
@@ -650,29 +827,54 @@
     const pool = rankedPool();
     const grouped = buildGrouped(pool);
     const { blocks, limit, groupLabel, viewMode } = grouped;
+    const teamMode = viewMode === "team";
+
+    els.leagueGrid.classList.toggle("is-team-sheet", teamMode);
+    syncTeamSheetUi();
 
     const showPos = viewMode === "leagues";
-    const showLeague = viewMode !== "leagues" && state.league === "ALL";
-    const showScout = viewMode === "leagues" || (viewMode === "positions" && state.league === "ALL");
+    const showLeague = !teamMode && viewMode !== "leagues" && state.league === "ALL";
+    const showScout = !teamMode && (viewMode === "leagues" || (viewMode === "positions" && state.league === "ALL"));
+    const showClub = !teamMode || (grouped.clubs || []).length > 1;
 
     const cards = blocks
       .map((block) => {
         const players = block.players || [];
-        const meta = block.highest_overall
-          ? `≥85% of pool (= ${fmt(block.min_score_effective, 1)}) · ${block.qualify_count} qualify · pool ${block.pool_count}`
-          : `pool ${block.pool_count}`;
+        const meta = teamMode
+          ? block.kind === "team-squad"
+            ? `${players.length} unique player${players.length === 1 ? "" : "s"} · strongest Impect overall first`
+            : players.length
+              ? `${players.length} with enough minutes in this role`
+              : "Nobody hit 25% of their minutes in this role"
+          : block.highest_overall
+            ? `≥85% of pool (= ${fmt(block.min_score_effective, 1)}) · ${block.qualify_count} qualify · pool ${block.pool_count}`
+            : `pool ${block.pool_count}`;
         const scoreLabel =
           block.kind === "profile" ? "Score" : "Ovr";
         const body = players.length
-          ? resultsTable(players, { showPos, showLeague, scoreLabel, showScout })
-          : `<p class="league-card__empty">No matches for current filters</p>`;
+          ? resultsTable(players, {
+              showPos: teamMode ? block.kind === "team-squad" : showPos,
+              showLeague,
+              scoreLabel,
+              showScout,
+              showClub,
+              profileCols: block.profileCols || [],
+            })
+          : `<p class="league-card__empty">${
+              teamMode
+                ? "No players here — they may be listed under another role, or Impect has no profile minutes at this position."
+                : "No matches for current filters"
+            }</p>`;
         const drillBtn =
-          block.kind === "league"
-            ? `<button type="button" class="league-card__edit-weights" data-drill-league="${block.key}" title="Top 10 per position">Positions</button>`
-            : block.kind === "position"
-              ? `<button type="button" class="league-card__edit-weights" data-drill-position="${block.key}" title="Top 10 per profile">Profiles</button>`
-              : "";
-        return `<section class="league-card">
+          teamMode
+            ? ""
+            : block.kind === "league"
+              ? `<button type="button" class="league-card__edit-weights" data-drill-league="${block.key}" title="Top 10 per position">Positions</button>`
+              : block.kind === "position"
+                ? `<button type="button" class="league-card__edit-weights" data-drill-position="${block.key}" title="Top 10 per profile">Profiles</button>`
+                : "";
+        const countLabel = teamMode ? `${players.length}` : `${players.length}/${limit}`;
+        return `<section class="league-card${block.empty ? " is-empty" : ""}${block.kind === "team-squad" ? " is-squad" : ""}">
           <div class="league-card__head">
             <div>
               <h3 class="league-card__title">${block.title || block.key || "Group"}</h3>
@@ -680,7 +882,7 @@
             </div>
             <div class="league-card__actions">
               ${drillBtn}
-              <span class="league-card__count">${players.length}/${limit}</span>
+              <span class="league-card__count">${countLabel}</span>
             </div>
           </div>
           ${body}
@@ -688,7 +890,9 @@
       })
       .join("");
 
-    els.leagueGrid.innerHTML = cards || `<p class="empty">No ${groupLabel}s to show.</p>`;
+    els.leagueGrid.innerHTML = cards || (teamMode
+      ? `<p class="empty">No players found for “${clubNeedle()}”. Try the club’s full name from the list.</p>`
+      : `<p class="empty">No ${groupLabel}s to show.</p>`);
 
     els.leagueGrid.querySelectorAll("[data-drill-league]").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -729,6 +933,12 @@
           ? "each position"
           : "all positions"
         : posLabel(state.position);
+    if (teamMode) {
+      const clubs = grouped.clubs || matchingClubNames();
+      const clubText = clubs.length === 1 ? clubs[0] : `${clubs.length || pool.length} matching clubs`;
+      els.pageNote.textContent = `${clubText} team sheet — full squad plus all 10 roles. A role is empty if nobody played 25%+ of their minutes there.`;
+      return;
+    }
     const viewText =
       viewMode === "profiles"
         ? "profile"
@@ -752,6 +962,12 @@
       (data?.period === "month" ? data?.month_label : data?.season_label) ||
       "Full season";
     const limit = parseNum(els.perLeague) || data?.per_league_limit || 10;
+    if (isTeamSheetMode()) {
+      const clubs = matchingClubNames();
+      const clubText = clubs.length === 1 ? clubs[0] : clubNeedle();
+      els.seasonLabel.textContent = `${label} · ${clubText} team sheet · all players + Impect scores`;
+      return;
+    }
     const mode = resolveViewMode();
     const groupWord =
       mode === "profiles" ? "profile" : mode === "positions" ? "position" : "league";
@@ -820,7 +1036,9 @@
       }
       fillPositions(state.positions);
       fillLeagues(state.leagues);
+      fillClubOptions();
       syncFilterVisibility();
+      syncTeamSheetUi();
       syncProfilesForPosition();
       updateSeasonLabel(data);
       renderWeights();
@@ -901,11 +1119,22 @@
     [els.minMinutes, els.minAge, els.maxAge, els.minHeight, els.clubFilter, els.perLeague].forEach(
       (input) => {
         input?.addEventListener("input", () => {
+          syncTeamSheetUi();
           updateSeasonLabel({});
+          renderWeights();
           renderGrid();
         });
       },
     );
+
+    els.clearClub?.addEventListener("click", () => {
+      if (!els.clubFilter) return;
+      els.clubFilter.value = "";
+      syncTeamSheetUi();
+      updateSeasonLabel({});
+      renderWeights();
+      renderGrid();
+    });
 
     els.refreshBtn?.addEventListener("click", () => loadData({ refresh: true }));
   }

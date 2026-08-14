@@ -184,8 +184,31 @@ a:hover { text-decoration: underline; }
 }
 
 .filter__input--wide {
-  width: 11rem;
+  width: 16rem;
   font-family: var(--font);
+}
+
+.filter--club .club-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.filter__clear {
+  padding: 0.4rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.filter__clear:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .filter--month select {
@@ -329,6 +352,24 @@ a:hover { text-decoration: underline; }
   .league-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
+.league-grid.is-team-sheet {
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 1100px) {
+  .league-grid.is-team-sheet {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.league-grid.is-team-sheet .league-card.is-squad {
+  grid-column: 1 / -1;
+}
+
+.league-card.is-empty {
+  opacity: 0.72;
+}
+
 .league-card {
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -414,6 +455,22 @@ a:hover { text-decoration: underline; }
 .scout-table col.col-league { width: 7rem; }
 .scout-table col.col-age { width: 2.75rem; }
 .scout-table col.col-overall { width: 4.25rem; }
+.scout-table col.col-profile-score { width: 4.1rem; }
+
+.scout-table .col-profile-score {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: #dbe7f7;
+}
+
+.scout-table th.col-profile-score {
+  font-size: 0.58rem;
+  letter-spacing: 0.02em;
+  white-space: normal;
+  line-height: 1.15;
+}
 .scout-table col.col-mins { width: 4.75rem; }
 .scout-table col.col-scout { width: 3.25rem; }
 

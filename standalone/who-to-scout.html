@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/who-to-scout.css?v=3" />
+  <link rel="stylesheet" href="/static/who-to-scout.css?v=6" />
 </head>
 <body>
   <div class="app">
@@ -77,8 +77,12 @@
           <input type="number" id="minHeight" class="filter__input" min="150" max="210" placeholder="—" />
         </div>
         <div class="filter filter--club">
-          <label for="clubFilter">Club contains</label>
-          <input type="search" id="clubFilter" class="filter__input filter__input--wide" placeholder="e.g. Vale, Wrexham" />
+          <label for="clubFilter">Team sheet</label>
+          <div class="club-row">
+            <input type="search" id="clubFilter" class="filter__input filter__input--wide" list="clubOptions" placeholder="Type a club — full squad + scores" autocomplete="off" />
+            <datalist id="clubOptions"></datalist>
+            <button type="button" class="filter__clear" id="clearClub" disabled title="Clear team sheet">Clear</button>
+          </div>
         </div>
         <div class="filter filter--num">
           <label for="perLeague" id="perGroupLabel">Top per league</label>
@@ -100,6 +104,6 @@
     <div id="leagueGrid" class="league-grid"><p class="empty">Loading…</p></div>
   </div>
 
-  <script defer src="/static/who-to-scout.js?v=4"></script>
+  <script defer src="/static/who-to-scout.js?v=9"></script>
 </body>
 </html>
