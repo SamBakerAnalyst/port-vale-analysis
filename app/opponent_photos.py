@@ -57,6 +57,7 @@ KNOWN_CLUB_IDS: dict[str, int] = {
 
 _club_id_cache: dict[str, tuple[float, int | None]] = {}
 _squad_photo_cache: dict[tuple[int, int, int], tuple[float, dict[str, dict[str, str]]]] = {}
+_loan_arrival_cache: dict[tuple[int, int], tuple[float, dict[str, dict[str, str]]]] = {}
 _SQUAD_CACHE_VERSION = 5
 
 
@@ -283,21 +284,94 @@ def current_transfermarkt_season_year() -> int:
 
 
 def transfermarkt_loan_ins(club_name: str, *, season: str | None = None) -> dict[str, dict[str, str]]:
-    """Players listed on this club's TM squad as 'On loan from …'."""
+    """Players on loan at this club (current squad badge + TM loan arrivals)."""
     club_id = resolve_transfermarkt_club_id(club_name)
     if not club_id:
         return {}
-    year = _season_year(season) if season else current_transfermarkt_season_year()
-    entries = fetch_transfermarkt_squad_photos(club_id, season_year=year)
+    current_year = current_transfermarkt_season_year()
+    years = {current_year, current_year - 1}
+    if season:
+        years.add(_season_year(season))
+
     loans: dict[str, dict[str, str]] = {}
-    for entry in entries.values():
-        parent = str(entry.get("on_loan_from") or "").strip()
-        name = str(entry.get("name") or "").strip()
-        if parent and name:
-            loans[_normalize_name_key(name)] = {
-                "name": name,
-                "on_loan_from": parent,
-            }
+    for year in sorted(years, reverse=True):
+        entries = fetch_transfermarkt_squad_photos(club_id, season_year=year)
+        for entry in entries.values():
+            parent = str(entry.get("on_loan_from") or "").strip()
+            name = str(entry.get("name") or "").strip()
+            if parent and name:
+                loans[_normalize_name_key(name)] = {
+                    "name": name,
+                    "on_loan_from": parent,
+                }
+        loans.update(_fetch_loan_arrivals(club_id, year))
+    return loans
+
+
+def _parse_loan_arrivals(page_html: str) -> dict[str, dict[str, str]]:
+    heading = re.search(r"<h2[^>]*>\s*Arrivals\s*</h2>", page_html, flags=re.I)
+    if not heading:
+        return {}
+    departures = re.search(r"<h2[^>]*>\s*Departures\s*</h2>", page_html, flags=re.I)
+    chunk = page_html[heading.end() : departures.start() if departures else None]
+    loans: dict[str, dict[str, str]] = {}
+    skip = {"?", "loan transfer", "free transfer", "end of loan"}
+    for match in re.finditer(r"loan transfer", chunk, flags=re.I):
+        window = chunk[max(0, match.start() - 2500) : match.start()]
+        if re.search(r"End of loan", window[-200:], flags=re.I):
+            continue
+        names = re.findall(
+            r'href="/[^"]+/spieler/\d+[^"]*"[^>]*>\s*([^<]+)\s*</a>',
+            window,
+            flags=re.I,
+        )
+        name = ""
+        for raw in reversed(names):
+            candidate = re.sub(r"\s+", " ", raw).strip()
+            if candidate and candidate.casefold() not in skip:
+                name = candidate
+                break
+        if not name:
+            continue
+        from_match = None
+        for raw in re.finditer(
+            r'<a title="([^"]+)" href="/[^"]+/startseite/verein/\d+',
+            window,
+            flags=re.I,
+        ):
+            from_match = raw
+        parent = ""
+        if from_match:
+            parent = re.sub(r"\s+", " ", from_match.group(1)).strip()
+            if len(parent) % 2 == 0:
+                half = len(parent) // 2
+                if parent[:half] == parent[half:]:
+                    parent = parent[:half]
+        loans[_normalize_name_key(name)] = {
+            "name": name,
+            "on_loan_from": parent or "loan",
+        }
+    return loans
+
+
+def _fetch_loan_arrivals(club_id: int, season_year: int) -> dict[str, dict[str, str]]:
+    cache_key = (club_id, season_year)
+    cached = _loan_arrival_cache.get(cache_key)
+    now = time.time()
+    if cached and now - cached[0] < PHOTO_CACHE_TTL_SECONDS:
+        return cached[1]
+    url = (
+        f"https://www.transfermarkt.co.uk/startseite/transfers/verein/"
+        f"{club_id}/saison_id/{season_year}"
+    )
+    loans: dict[str, dict[str, str]] = {}
+    try:
+        response = requests.get(url, timeout=30, headers=TM_HEADERS)
+        if response.status_code < 400:
+            loans = _parse_loan_arrivals(response.text)
+    except requests.RequestException:
+        loans = {}
+    _loan_arrival_cache[cache_key] = (now, loans)
     return loans
 
 

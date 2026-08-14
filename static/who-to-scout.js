@@ -32,6 +32,7 @@
     profiles: [],
     weights: {},
     weightsByPosition: {},
+    seasonLabel: "",
     squadByClub: {},
     loansByClub: {},
   };
@@ -169,12 +170,40 @@
 
   function loanInfoForPlayer(player) {
     const club = String(player?.club || "").trim();
-    const clubMap = state.loansByClub[club];
-    if (!clubMap) return null;
-    const direct = clubMap.byName[nameKey(player?.name)];
-    if (direct) return direct;
-    const lastHits = clubMap.byLast[lastNameKey(player?.name)] || [];
-    return lastHits.length === 1 ? lastHits[0] : null;
+    const maps = [];
+    const seen = new Set();
+    const addMap = (key) => {
+      const map = state.loansByClub[key];
+      if (!map || seen.has(map)) return;
+      seen.add(map);
+      maps.push(map);
+    };
+    addMap(club);
+    for (const key of Object.keys(state.loansByClub)) {
+      if (nameKey(key) === nameKey(club)) addMap(key);
+    }
+    if (!maps.length) {
+      Object.keys(state.loansByClub).forEach(addMap);
+    }
+    const playerKey = nameKey(player?.name);
+    const last = lastNameKey(player?.name);
+    for (const clubMap of maps) {
+      const direct = clubMap.byName[playerKey];
+      if (direct) return direct;
+    }
+    const lastHits = [];
+    for (const clubMap of maps) {
+      lastHits.push(...(clubMap.byLast[last] || []));
+    }
+    const unique = [];
+    const seenFrom = new Set();
+    for (const hit of lastHits) {
+      const stamp = nameKey(hit.name);
+      if (seenFrom.has(stamp)) continue;
+      seenFrom.add(stamp);
+      unique.push(hit);
+    }
+    return unique.length === 1 ? unique[0] : null;
   }
 
   async function loadTeamSheetExtras() {
@@ -204,6 +233,7 @@
     if (missingLoans.length) {
       const params = new URLSearchParams();
       missingLoans.forEach((name) => params.append("club", name));
+      if (state.seasonLabel) params.set("season", state.seasonLabel);
       jobs.push(
         fetchJson(`/api/who-to-scout/loans?${params}`)
           .then((data) => {
@@ -1514,6 +1544,11 @@
   }
 
   function updateSeasonLabel(data) {
+    if (data?.season_label) state.seasonLabel = String(data.season_label);
+    else if (data?.period_label) {
+      const match = String(data.period_label).match(/(\d{2}\/\d{2})/);
+      if (match) state.seasonLabel = match[1];
+    }
     const label =
       data?.period_label ||
       (data?.period === "month" ? data?.month_label : data?.season_label) ||

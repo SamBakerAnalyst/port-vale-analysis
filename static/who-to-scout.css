@@ -628,8 +628,9 @@ a:hover { text-decoration: underline; }
 
 .scout-table tr.is-loan td.col-player,
 .scout-table tr.is-loan td.col-player a,
+.scout-table tr.has-scout.is-loan td.col-player a,
 .scout-table tr.is-loan.row-veteran td.col-player a {
-  color: #60a5fa;
+  color: #3b82f6 !important;
   font-weight: 700;
 }
 
