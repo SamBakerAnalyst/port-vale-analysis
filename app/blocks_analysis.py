@@ -69,9 +69,10 @@ LEAGUE_TABLE_GAMES = 46
 # Impect weighted bypassed defenders — matches platform league averages (~45/game).
 # KPI 1400 (raw) reads ~65/game and must not be used for Req / team backline beaten.
 KPI_BYPASSED_DEFENDERS = 2
+KPI_BYPASSED_OPPONENTS = 1399  # in-possession packing / opponents beaten on the ball
 KPI_SHOT_XG = 82
 MATCH_KPI_CACHE_TTL = 6 * 3600
-MATCH_STATS_CACHE_VERSION = 14
+MATCH_STATS_CACHE_VERSION = 15
 # Shot actions stripped from match + player xG boards (open-play / set-piece delivery only).
 XG_VS_EXCLUDED_ACTIONS = frozenset({
     "PENALTY",
@@ -95,13 +96,15 @@ PAYLOAD_CACHE_TTL = 45
 PLAYER_NAMES_TTL = 6 * 3600
 BENCHMARK_CACHE_TTL = 600
 UNIT_TOP7_TTL = 24 * 3600
-UNIT_TOP7_VERSION = 5
+UNIT_TOP7_VERSION = 6
 UNIT_TOP7_GAMES_PER_SQUAD = 8
 FORM_BASELINE_GAMES = 7
 UNITS: tuple[str, ...] = ("DEF", "MID", "ATT")
 UNIT_METRIC_SPECS: dict[str, dict[str, Any]] = {
     "defendersBypassed": {"higherBetter": True, "rate": False, "digits": 1},
+    "ballProgression": {"higherBetter": True, "rate": False, "digits": 1},
     "duelRate": {"higherBetter": True, "rate": True, "digits": 1},
+    "aerialRate": {"higherBetter": True, "rate": True, "digits": 1},
     "offensiveInterventions": {"higherBetter": True, "rate": False, "digits": 1},
     "defensiveInterventions": {"higherBetter": True, "rate": False, "digits": 1},
     "regainsFromDefenders": {"higherBetter": True, "rate": False, "digits": 1},
@@ -109,11 +112,16 @@ UNIT_METRIC_SPECS: dict[str, dict[str, Any]] = {
 }
 UNIT_COUNT_KEYS: tuple[str, ...] = (
     "defendersBypassed",
+    "ballProgression",
     "offensiveInterventions",
     "defensiveInterventions",
     "regainsFromDefenders",
     "xg",
 )
+UNIT_RATE_FIELDS: dict[str, tuple[str, str]] = {
+    "duelRate": ("duelWon", "duelTotal"),
+    "aerialRate": ("aerialWon", "aerialTotal"),
+}
 POSITION_TO_UNIT: dict[str, str | None] = {
     "GOALKEEPER": None,
     "CENTRAL_DEFENDER": "DEF",
@@ -388,9 +396,13 @@ def _unit_shares_for_position(position: Any) -> list[tuple[str, float]]:
 def _empty_unit_row() -> dict[str, Any]:
     return {
         "defendersBypassed": None,
+        "ballProgression": None,
         "duelWon": None,
         "duelTotal": None,
         "duelRate": None,
+        "aerialWon": None,
+        "aerialTotal": None,
+        "aerialRate": None,
         "offensiveInterventions": None,
         "defensiveInterventions": None,
         "regainsFromDefenders": None,
@@ -405,14 +417,23 @@ def _empty_units() -> dict[str, dict[str, Any]]:
 def _finalize_unit_row(row: dict[str, float]) -> dict[str, Any]:
     won = float(row.get("duelWon") or 0)
     total = float(row.get("duelTotal") or 0)
-    seen = any(float(row.get(key) or 0) for key in (*UNIT_COUNT_KEYS, "duelWon", "duelTotal"))
+    aerial_won = float(row.get("aerialWon") or 0)
+    aerial_total = float(row.get("aerialTotal") or 0)
+    seen = any(
+        float(row.get(key) or 0)
+        for key in (*UNIT_COUNT_KEYS, "duelWon", "duelTotal", "aerialWon", "aerialTotal")
+    )
     if not seen:
         return _empty_unit_row()
     return {
         "defendersBypassed": round(float(row.get("defendersBypassed") or 0), 1),
+        "ballProgression": round(float(row.get("ballProgression") or 0), 1),
         "duelWon": round(won, 1) if total or won else None,
         "duelTotal": round(total, 1) if total or won else None,
         "duelRate": round((won / total) * 100, 1) if total > 0 else None,
+        "aerialWon": round(aerial_won, 1) if aerial_total or aerial_won else None,
+        "aerialTotal": round(aerial_total, 1) if aerial_total or aerial_won else None,
+        "aerialRate": round((aerial_won / aerial_total) * 100, 1) if aerial_total > 0 else None,
         "offensiveInterventions": round(float(row.get("offensiveInterventions") or 0), 1),
         "defensiveInterventions": round(float(row.get("defensiveInterventions") or 0), 1),
         "regainsFromDefenders": round(float(row.get("regainsFromDefenders") or 0), 1),
@@ -424,8 +445,11 @@ def _units_from_players(players: list[dict[str, Any]], squad_id: int) -> dict[st
     buckets: dict[str, dict[str, float]] = {
         unit: {
             "defendersBypassed": 0.0,
+            "ballProgression": 0.0,
             "duelWon": 0.0,
             "duelTotal": 0.0,
+            "aerialWon": 0.0,
+            "aerialTotal": 0.0,
             "offensiveInterventions": 0.0,
             "defensiveInterventions": 0.0,
             "regainsFromDefenders": 0.0,
@@ -443,16 +467,23 @@ def _units_from_players(players: list[dict[str, Any]], squad_id: int) -> dict[st
         kpis = row.get("kpis") or {}
         won = _kpi_value(kpis, KPI_WON_GROUND_DUELS) + _kpi_value(kpis, KPI_WON_AERIAL_DUELS)
         lost = _kpi_value(kpis, KPI_LOST_GROUND_DUELS) + _kpi_value(kpis, KPI_LOST_AERIAL_DUELS)
+        aerial_won = _kpi_value(kpis, KPI_WON_AERIAL_DUELS)
+        aerial_lost = _kpi_value(kpis, KPI_LOST_AERIAL_DUELS)
         bypassed = _kpi_value(kpis, KPI_BYPASSED_DEFENDERS)
+        progression = _kpi_value(kpis, KPI_BYPASSED_OPPONENTS)
         offensive = _kpi_value(kpis, KPI_BALL_WIN_REMOVED_OPPONENTS)
         defensive = _kpi_value(kpis, KPI_BALL_WIN_ADDED_TEAMMATES)
         deepest = _kpi_value(kpis, KPI_BALL_WIN_REMOVED_OPPONENTS_DEFENDERS)
         xg = _kpi_value(kpis, KPI_SHOT_XG)
         duel_total = won + lost
+        aerial_total = aerial_won + aerial_lost
         for unit, share in shares:
             buckets[unit]["defendersBypassed"] += bypassed * share
+            buckets[unit]["ballProgression"] += progression * share
             buckets[unit]["duelWon"] += won * share
             buckets[unit]["duelTotal"] += duel_total * share
+            buckets[unit]["aerialWon"] += aerial_won * share
+            buckets[unit]["aerialTotal"] += aerial_total * share
             buckets[unit]["offensiveInterventions"] += offensive * share
             buckets[unit]["defensiveInterventions"] += defensive * share
             buckets[unit]["regainsFromDefenders"] += deepest * share
@@ -498,6 +529,8 @@ def _player_match_report(
         won = _kpi_value(kpis, KPI_WON_GROUND_DUELS) + _kpi_value(kpis, KPI_WON_AERIAL_DUELS)
         lost = _kpi_value(kpis, KPI_LOST_GROUND_DUELS) + _kpi_value(kpis, KPI_LOST_AERIAL_DUELS)
         total = won + lost
+        aerial_won = _kpi_value(kpis, KPI_WON_AERIAL_DUELS)
+        aerial_total = aerial_won + _kpi_value(kpis, KPI_LOST_AERIAL_DUELS)
         player_id = int(row["playerId"])
         name = (
             player_names.get(player_id)
@@ -519,9 +552,13 @@ def _player_match_report(
                     round(_kpi_value(kpis, KPI_BALL_WIN_REMOVED_OPPONENTS_DEFENDERS))
                 ),
                 "defendersBypassed": round(_kpi_value(kpis, KPI_BYPASSED_DEFENDERS), 1),
+                "ballProgression": round(_kpi_value(kpis, KPI_BYPASSED_OPPONENTS), 1),
                 "duelWon": int(round(won)),
                 "duelTotal": int(round(total)),
                 "duelRate": round((won / total) * 100, 1) if total > 0 else None,
+                "aerialWon": int(round(aerial_won)),
+                "aerialTotal": int(round(aerial_total)),
+                "aerialRate": round((aerial_won / aerial_total) * 100, 1) if aerial_total > 0 else None,
             }
         )
     rows.sort(key=lambda item: (-float(item["minutes"]), str(item["name"])))
@@ -1473,8 +1510,10 @@ def _unit_averages_from_stats_list(
     counts: dict[str, dict[str, list[float]]] = {
         unit: {key: [] for key in UNIT_COUNT_KEYS} for unit in UNITS
     }
-    won: dict[str, float] = {unit: 0.0 for unit in UNITS}
-    total: dict[str, float] = {unit: 0.0 for unit in UNITS}
+    rates: dict[str, dict[str, dict[str, float]]] = {
+        unit: {key: {"won": 0.0, "total": 0.0} for key in UNIT_RATE_FIELDS}
+        for unit in UNITS
+    }
     for stats in stats_list:
         units = (stats or {}).get("units") or {}
         for unit in UNITS:
@@ -1482,10 +1521,10 @@ def _unit_averages_from_stats_list(
             for key in UNIT_COUNT_KEYS:
                 if row.get(key) is not None:
                     counts[unit][key].append(float(row[key]))
-            duel_total = row.get("duelTotal")
-            if duel_total:
-                won[unit] += float(row.get("duelWon") or 0)
-                total[unit] += float(duel_total)
+            for rate_key, (won_key, total_key) in UNIT_RATE_FIELDS.items():
+                if row.get(total_key):
+                    rates[unit][rate_key]["won"] += float(row.get(won_key) or 0)
+                    rates[unit][rate_key]["total"] += float(row[total_key])
     out: dict[str, dict[str, float | None]] = {}
     for unit in UNITS:
         row: dict[str, float | None] = {
@@ -1495,10 +1534,12 @@ def _unit_averages_from_stats_list(
             )
             for key in UNIT_COUNT_KEYS
         }
-        row["duelRate"] = _round_or_none(
-            (100.0 * won[unit] / total[unit]) if total[unit] > 0 else None,
-            1,
-        )
+        for rate_key in UNIT_RATE_FIELDS:
+            bucket = rates[unit][rate_key]
+            row[rate_key] = _round_or_none(
+                (100.0 * bucket["won"] / bucket["total"]) if bucket["total"] > 0 else None,
+                1,
+            )
         out[unit] = row
     return out
 
@@ -1516,8 +1557,7 @@ def _build_unit_top7_from_sample(
             unit,
             {
                 "counts": {key: [] for key in UNIT_COUNT_KEYS},
-                "won": 0.0,
-                "total": 0.0,
+                "rates": {key: {"won": 0.0, "total": 0.0} for key in UNIT_RATE_FIELDS},
             },
         )
 
@@ -1548,19 +1588,23 @@ def _build_unit_top7_from_sample(
                         for key in UNIT_COUNT_KEYS:
                             if row.get(key) is not None:
                                 bucket["counts"][key].append(float(row[key]))
-                        if row.get("duelTotal"):
-                            bucket["won"] += float(row.get("duelWon") or 0)
-                            bucket["total"] += float(row["duelTotal"])
+                        for rate_key, (won_key, total_key) in UNIT_RATE_FIELDS.items():
+                            if row.get(total_key):
+                                bucket["rates"][rate_key]["won"] += float(row.get(won_key) or 0)
+                                bucket["rates"][rate_key]["total"] += float(row[total_key])
 
     def _squad_unit_avgs(bucket: dict[str, Any]) -> dict[str, float | None]:
         counts = bucket.get("counts") or {}
-        duel_total = float(bucket.get("total") or 0)
-        duel_won = float(bucket.get("won") or 0)
+        rates = bucket.get("rates") or {}
         out: dict[str, float | None] = {}
         for key in UNIT_COUNT_KEYS:
             vals = counts.get(key) or []
             out[key] = (sum(vals) / len(vals)) if vals else None
-        out["duelRate"] = (100.0 * duel_won / duel_total) if duel_total > 0 else None
+        for rate_key in UNIT_RATE_FIELDS:
+            rate = rates.get(rate_key) or {}
+            total = float(rate.get("total") or 0)
+            won = float(rate.get("won") or 0)
+            out[rate_key] = (100.0 * won / total) if total > 0 else None
         return out
 
     per_squad: dict[int, dict[str, dict[str, float | None]]] = {}
@@ -1843,14 +1887,18 @@ def _aggregate_units(played: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     totals = {
         unit: {
             "defendersBypassed": 0.0,
+            "ballProgression": 0.0,
             "duelWon": 0.0,
             "duelTotal": 0.0,
+            "aerialWon": 0.0,
+            "aerialTotal": 0.0,
             "offensiveInterventions": 0.0,
             "defensiveInterventions": 0.0,
             "regainsFromDefenders": 0.0,
             "xg": 0.0,
             "seen": False,
             "seenDuel": False,
+            "seenAerial": False,
         }
         for unit in UNITS
     }
@@ -1868,6 +1916,11 @@ def _aggregate_units(played: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
                 bucket["duelTotal"] += float(data.get("duelTotal") or 0)
                 bucket["seenDuel"] = True
                 bucket["seen"] = True
+            if data.get("aerialWon") is not None or data.get("aerialTotal") is not None:
+                bucket["aerialWon"] += float(data.get("aerialWon") or 0)
+                bucket["aerialTotal"] += float(data.get("aerialTotal") or 0)
+                bucket["seenAerial"] = True
+                bucket["seen"] = True
     result: dict[str, dict[str, Any]] = {}
     for unit in UNITS:
         bucket = totals[unit]
@@ -1876,12 +1929,22 @@ def _aggregate_units(played: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             continue
         won = float(bucket["duelWon"])
         total = float(bucket["duelTotal"])
+        aerial_won = float(bucket["aerialWon"])
+        aerial_total = float(bucket["aerialTotal"])
         result[unit] = {
             "defendersBypassed": round(bucket["defendersBypassed"], 1),
+            "ballProgression": round(bucket["ballProgression"], 1),
             "duelWon": round(won, 1) if bucket["seenDuel"] else None,
             "duelTotal": round(total, 1) if bucket["seenDuel"] else None,
             "duelRate": (
                 round((won / total) * 100, 1) if bucket["seenDuel"] and total > 0 else None
+            ),
+            "aerialWon": round(aerial_won, 1) if bucket["seenAerial"] else None,
+            "aerialTotal": round(aerial_total, 1) if bucket["seenAerial"] else None,
+            "aerialRate": (
+                round((aerial_won / aerial_total) * 100, 1)
+                if bucket["seenAerial"] and aerial_total > 0
+                else None
             ),
             "offensiveInterventions": round(bucket["offensiveInterventions"], 1),
             "defensiveInterventions": round(bucket["defensiveInterventions"], 1),

@@ -341,14 +341,19 @@ function unitValueText(metricKey, row) {
   if (metricKey === "duelRate") {
     return row?.duelRate == null ? "—" : `${fmtNum(row.duelRate, 1)}%`;
   }
+  if (metricKey === "aerialRate") {
+    return row?.aerialRate == null ? "—" : `${fmtNum(row.aerialRate, 1)}%`;
+  }
   if (metricKey === "xg") return fmtNum(row?.xg, 2);
-  if (metricKey === "defendersBypassed") return fmtNum(row?.defendersBypassed, 1);
   return fmtNum(row?.[metricKey], 1);
 }
 
 function unitSubText(metricKey, row) {
   if (metricKey === "duelRate" && row?.duelTotal) {
     return `${fmtNum(row.duelWon)} / ${fmtNum(row.duelTotal)}`;
+  }
+  if (metricKey === "aerialRate" && row?.aerialTotal) {
+    return `${fmtNum(row.aerialWon)} / ${fmtNum(row.aerialTotal)}`;
   }
   return "";
 }
@@ -425,15 +430,16 @@ const UNIT_SLIDES = [
     blurb: "Centre-backs and full-backs. Wing-backs count half here.",
     metrics: [
       { key: "duelRate", label: "Duels won", hint: "Ground + aerial success", digits: 1, rate: true },
+      { key: "aerialRate", label: "Aerial duels won", hint: "Headers won of attempted", digits: 1, rate: true },
       { key: "defensiveInterventions", label: "Defensive ball wins", hint: "Teammates added when we win it", digits: 1 },
       { key: "offensiveInterventions", label: "Aggressive regains", hint: "Opponents removed on ball wins", digits: 1 },
-      { key: "regainsFromDefenders", label: "Regains from opp defenders", hint: "Won it vs their four deepest", digits: 1 },
-      { key: "defendersBypassed", label: "Backline beaten", hint: "Passes or dribbles that beat a defender", digits: 1 },
+      { key: "defendersBypassed", label: "Backline beaten", hint: "In possession · beat a defender", digits: 1 },
+      { key: "ballProgression", label: "Ball progression", hint: "In possession · opponents beaten on the ball", digits: 1 },
     ],
     boards: [
-      { key: "duelRate", label: "Duels won", digits: 1, rate: true, minDuels: 3 },
+      { key: "aerialRate", label: "Aerial duels won", digits: 1, rate: true, minAerials: 3 },
       { key: "defensiveInterventions", label: "Defensive ball wins", digits: 0 },
-      { key: "offensiveInterventions", label: "Aggressive regains", digits: 0 },
+      { key: "ballProgression", label: "Ball progression", digits: 0 },
     ],
   },
   {
@@ -495,6 +501,9 @@ function aggregatePlayers(fixtures) {
         defendersBypassed: 0,
         duelWon: 0,
         duelTotal: 0,
+        aerialWon: 0,
+        aerialTotal: 0,
+        ballProgression: 0,
       };
       row.name = player.name || row.name;
       row.unit = player.unit || row.unit;
@@ -508,6 +517,9 @@ function aggregatePlayers(fixtures) {
       row.defendersBypassed += Number(player.defendersBypassed) || 0;
       row.duelWon += Number(player.duelWon) || 0;
       row.duelTotal += Number(player.duelTotal) || 0;
+      row.aerialWon += Number(player.aerialWon) || 0;
+      row.aerialTotal += Number(player.aerialTotal) || 0;
+      row.ballProgression += Number(player.ballProgression) || 0;
       byId[id] = row;
     });
   });
@@ -515,6 +527,8 @@ function aggregatePlayers(fixtures) {
     row.ppg = row.appearances ? row.points / row.appearances : null;
     row.xg = Math.round(row.xg * 100) / 100;
     row.duelRate = row.duelTotal > 0 ? Math.round((row.duelWon / row.duelTotal) * 1000) / 10 : null;
+    row.aerialRate = row.aerialTotal > 0 ? Math.round((row.aerialWon / row.aerialTotal) * 1000) / 10 : null;
+    row.ballProgression = Math.round(row.ballProgression * 10) / 10;
     return row;
   });
 }
@@ -531,8 +545,8 @@ function playersForUnit(players, unit) {
 
 function unitMetricRowHtml(unit, spec, stats, single) {
   const row = (stats.units || {})[unit] || {};
-  const value = spec.rate ? row.duelRate : row[spec.key];
-  const extra = spec.key === "duelRate" ? unitSubText("duelRate", row) : "";
+  const value = row[spec.key];
+  const extra = unitSubText(spec.key, row);
   const bench = unitBenchValues(spec.key, unit, single, stats.played);
   const higherBetter = bench?.spec?.higherBetter !== false;
   const tone = meterTone(value, bench?.top7, higherBetter);
@@ -589,11 +603,13 @@ function playersForView(block, single, fixture) {
 
 function topPlayers(players, spec) {
   const minDuels = spec.minDuels || 0;
+  const minAerials = spec.minAerials || 0;
   return [...players]
     .filter((row) => {
       const value = row[spec.key];
       if (value == null || Number.isNaN(Number(value))) return false;
       if (minDuels && Number(row.duelTotal || 0) < minDuels) return false;
+      if (minAerials && Number(row.aerialTotal || 0) < minAerials) return false;
       return true;
     })
     .sort((a, b) => {
@@ -629,6 +645,8 @@ function playerBoardHtml(spec, players) {
     ? rows.map((row, index) => {
         const extra = spec.key === "duelRate" && row.duelTotal
           ? `<span class="ba-lead__sub">${escapeHtml(`${fmtNum(row.duelWon)} / ${fmtNum(row.duelTotal)}`)}</span>`
+          : spec.key === "aerialRate" && row.aerialTotal
+            ? `<span class="ba-lead__sub">${escapeHtml(`${fmtNum(row.aerialWon)} / ${fmtNum(row.aerialTotal)}`)}</span>`
           : (row.unit ? `<span class="ba-lead__sub">${escapeHtml(row.unit)}</span>` : "");
         return `
           <li class="ba-lead__row ${index === 0 ? "is-first" : ""}">
@@ -641,9 +659,11 @@ function playerBoardHtml(spec, players) {
         `;
       }).join("")
     : `<li class="ba-lead__empty">No player data yet</li>`;
-  const minNote = spec.minDuels
-    ? `<span class="ba-lead__min">min. ${escapeHtml(String(spec.minDuels))} duels</span>`
-    : "";
+    const minNote = spec.minDuels
+      ? `<span class="ba-lead__min">min. ${escapeHtml(String(spec.minDuels))} duels</span>`
+      : spec.minAerials
+        ? `<span class="ba-lead__min">min. ${escapeHtml(String(spec.minAerials))} aerials</span>`
+      : "";
   return `
     <article class="ba-lead">
       <p class="ba-lead__label">${escapeHtml(spec.label)}${minNote}</p>
