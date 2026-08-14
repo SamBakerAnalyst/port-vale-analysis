@@ -45,6 +45,8 @@ from app.scouting import (
 
 _squad_sheet_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 _SQUAD_SHEET_TTL = 6 * 3600
+_SQUAD_SHEET_MIN_MINUTES = 300
+_SQUAD_SHEET_CACHE_VERSION = 3
 
 
 def _club_key(name: str) -> str:
@@ -118,7 +120,7 @@ def build_club_team_sheet(club_query: str) -> dict[str, Any]:
     if not needle:
         raise HTTPException(status_code=400, detail="club is required")
 
-    cache_key = _club_key(needle)
+    cache_key = f"{_club_key(needle)}:v{_SQUAD_SHEET_CACHE_VERSION}"
     cached = _squad_sheet_cache.get(cache_key)
     now = time.time()
     if cached and now - cached[0] < _SQUAD_SHEET_TTL:
@@ -251,6 +253,9 @@ def build_club_team_sheet(club_query: str) -> dict[str, Any]:
                 position=position,
             )
             if sheet:
+                minutes = float(sheet.get("minutes") or 0)
+                if minutes < _SQUAD_SHEET_MIN_MINUTES:
+                    continue
                 players.append(sheet)
 
     _attach_scout_coverage(players)
