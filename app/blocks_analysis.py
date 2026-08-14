@@ -51,7 +51,7 @@ from app.post_match.phase_analysis import (
     build_game_by_phase,
 )
 from app.post_match.season_matches import build_season_matches
-from app.post_match.xg_race import build_xg_race
+from app.post_match.xg_race import _fetch_shots_with_xg, build_xg_race
 from app.scouting import SCOUTING_DIR
 
 # League Two 26/27. Keep these here — post-match DEFAULT_ITERATION_ID may still
@@ -1264,18 +1264,52 @@ def _apply_player_goals_from_shots(
         player["goals"] = max(int(player.get("goals") or 0), counts.get(player_id, 0))
 
 
-def _hydrate_open_play_shots(stats: dict[str, Any], squad_id: int) -> None:
-    """Fill shot counts from cached xG events, or from the race line if events were stripped."""
+def _compact_shot_rows(shots: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "playerId": _shot_player_id(row) or None,
+            "squadId": int(row.get("squadId") or 0),
+            "xg": round(float(row.get("xg") or 0), 3),
+            "action": row.get("action"),
+            "isGoal": bool(row.get("isGoal")),
+        }
+        for row in shots
+    ]
+
+
+def _hydrate_open_play_shots(stats: dict[str, Any], squad_id: int, match_id: int = 0) -> bool:
+    """Open-play shot xG/counts. KPI 82 includes pens/DFKs — those must not land on player boards."""
     if not isinstance(stats, dict):
-        return
+        return False
+    changed = False
     race = stats.get("xgRace") or {}
-    shots = race.get("shots") or []
+    shots = list(race.get("shots") or [])
     players = stats.get("players") or []
+    facts = stats.get("facts") or {}
+    vale_xg = float(facts.get("valeXg") or 0)
+    player_xg = sum(float(player.get("xg") or 0) for player in players)
+    needs_events = (not any(_shot_player_id(row) for row in shots)) or (
+        vale_xg > 0 and abs(player_xg - vale_xg) > 0.04
+    )
+    if needs_events and match_id:
+        try:
+            raw, _ = _fetch_shots_with_xg(int(match_id))
+        except Exception:  # noqa: BLE001
+            raw = []
+        if raw:
+            shots = _compact_shot_rows(raw)
+            race = dict(race)
+            race["shots"] = shots
+            stats["xgRace"] = race
+            changed = True
     if shots and players:
+        _apply_open_play_player_xg(players, shots, squad_id)
         _apply_open_play_player_shots(players, shots, squad_id)
         _apply_player_goals_from_shots(players, shots, squad_id)
         stats["units"] = _units_from_report(players)
+        changed = True
     _assign_unattributed_shots_to_attack(stats, shots, squad_id)
+    return changed
 
 
 def _hydrate_lineup_units(stats: dict[str, Any], match_id: int, squad_id: int) -> bool:
@@ -1417,16 +1451,7 @@ def _match_story(
             "totalXg": round(float(opp.get("totalXg") or 0), 2),
             "series": _compact_race_series(opp.get("series") or []),
         },
-        "shots": [
-            {
-                "playerId": _shot_player_id(row) or None,
-                "squadId": int(row.get("squadId") or 0),
-                "xg": round(float(row.get("xg") or 0), 3),
-                "action": row.get("action"),
-                "isGoal": bool(row.get("isGoal")),
-            }
-            for row in shots
-        ],
+        "shots": _compact_shot_rows(shots),
     }
     vale_open_shots = [
         row for row in vale_shots
@@ -1818,9 +1843,9 @@ def _load_match_kpis(
             stats = cached["stats"]
             before = int(((stats.get("units") or {}).get("ATT") or {}).get("shots") or 0)
             lineup = _hydrate_lineup_units(stats, match_id, PORT_VALE_SQUAD_ID)
-            _hydrate_open_play_shots(stats, PORT_VALE_SQUAD_ID)
+            shot_changed = _hydrate_open_play_shots(stats, PORT_VALE_SQUAD_ID, match_id)
             after = int(((stats.get("units") or {}).get("ATT") or {}).get("shots") or 0)
-            if lineup or after != before:
+            if lineup or shot_changed or after != before:
                 cached["stats"] = stats
                 dirty = True
             result[match_id] = stats
