@@ -32,7 +32,7 @@
     profiles: [],
     weights: {},
     weightsByPosition: {},
-    pollTimer: null,
+    loansByClub: {},
   };
 
   let lastGrouped = { blocks: [] };
@@ -148,6 +148,64 @@
     const includes = clubs.filter((name) => name.toLowerCase().includes(query));
     if (includes.length === 1) return includes[0];
     return null;
+  }
+
+  function lastNameKey(value) {
+    const parts = String(value || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    return nameKey(parts[parts.length - 1] || "");
+  }
+
+  function nameKey(value) {
+    return String(value || "")
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "");
+  }
+
+  function loanInfoForPlayer(player) {
+    const club = String(player?.club || "").trim();
+    const clubMap = state.loansByClub[club];
+    if (!clubMap) return null;
+    const direct = clubMap.byName[nameKey(player?.name)];
+    if (direct) return direct;
+    const lastHits = clubMap.byLast[lastNameKey(player?.name)] || [];
+    return lastHits.length === 1 ? lastHits[0] : null;
+  }
+
+  async function loadLoansForSelectedClubs() {
+    const clubs = selectedClubOrder()
+      .filter((row) => !row.unmatched)
+      .map((row) => row.name);
+    const missing = clubs.filter((name) => !state.loansByClub[name]);
+    if (!missing.length) {
+      renderGrid();
+      return;
+    }
+    const params = new URLSearchParams();
+    missing.forEach((name) => params.append("club", name));
+    try {
+      const data = await fetchJson(`/api/who-to-scout/loans?${params}`);
+      for (const [club, rows] of Object.entries(data.clubs || {})) {
+        const byName = {};
+        const byLast = {};
+        for (const row of rows || []) {
+          const info = { from: row.from, name: row.name };
+          byName[nameKey(row.name)] = info;
+          const last = lastNameKey(row.name);
+          if (last) (byLast[last] ||= []).push(info);
+        }
+        state.loansByClub[club] = { byName, byLast };
+      }
+    } catch {
+      missing.forEach((name) => {
+        if (!state.loansByClub[name]) state.loansByClub[name] = { byName: {}, byLast: {} };
+      });
+    }
+    renderGrid();
   }
 
   function matchingClubNames(needle = clubNeedle()) {
@@ -730,6 +788,7 @@
   function rowClasses(p, scoutTotal) {
     const parts = [];
     if (scoutTotal) parts.push("has-scout");
+    if (loanInfoForPlayer(p)) parts.push("is-loan");
     if (Number(p.age) > 30) parts.push("row-veteran");
     return parts.join(" ");
   }
@@ -768,9 +827,11 @@
         const scoutTotal = Number(p.scout_total) || 0;
         const pos = posShort(p.positionLabel, p.position);
         const rowClass = rowClasses(p, scoutTotal);
+        const loan = loanInfoForPlayer(p);
+        const loanTitle = loan?.from ? `On loan from ${loan.from}` : "";
         const nameCell = exportMode
-          ? `<td class="col-player">${p.name || "—"}</td>`
-          : `<td class="col-player"><a href="${href}">${p.name || "—"}</a></td>`;
+          ? `<td class="col-player"${loanTitle ? ` title="${loanTitle}"` : ""}>${p.name || "—"}</td>`
+          : `<td class="col-player"><a href="${href}"${loanTitle ? ` title="${loanTitle}"` : ""}>${p.name || "—"}</a></td>`;
         const profileCells = (profileCols || [])
           .map((profile) => {
             const value = p.profileScores?.[profile.apiName];
@@ -1103,7 +1164,7 @@
       const watch = clubNeedle();
       const oppo = oppoNeedle();
       const vs = watch && oppo ? `${watch} vs ${oppo}` : clubs.length === 1 ? clubs[0] : clubs.join(" · ");
-      els.pageNote.textContent = `${vs} — full squads plus all 10 roles. Empty role = nobody played 25%+ of their minutes there.`;
+      els.pageNote.textContent = `${vs} — full squads plus all 10 roles. Empty role = nobody played 25%+ of their minutes there. Names in blue are on loan at that club.`;
       updateExportButton(grouped);
       return;
     }
@@ -1506,7 +1567,11 @@
       syncProfilesForPosition();
       updateSeasonLabel(data);
       renderWeights();
-      renderGrid();
+      if (isTeamSheetMode()) {
+        loadLoansForSelectedClubs();
+      } else {
+        renderGrid();
+      }
       setStatus("");
     } catch (error) {
       setStatus(`Could not load data: ${error.message}`, "error");
@@ -1591,7 +1656,7 @@
     function applyClubSearch() {
       syncTeamSheetUi();
       updateSeasonLabel({});
-      renderGrid();
+      loadLoansForSelectedClubs();
     }
 
     function applyNumericFilters() {

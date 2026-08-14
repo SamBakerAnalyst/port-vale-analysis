@@ -254,3 +254,20 @@ def register_who_to_scout_routes(app: FastAPI) -> None:
             month=month,
             force_refresh=False,
         )
+
+    @app.get("/api/who-to-scout/loans")
+    def who_to_scout_loans_route(
+        club: list[str] = Query(default_factory=list),
+        season: str | None = Query(None),
+    ) -> dict[str, Any]:
+        from app.opponent_photos import transfermarkt_loan_ins
+
+        clubs = [str(name).strip() for name in club if str(name).strip()]
+        by_club: dict[str, list[dict[str, str]]] = {}
+        for name in clubs:
+            loans = transfermarkt_loan_ins(name, season=season)
+            by_club[name] = [
+                {"name": row["name"], "from": row["on_loan_from"]}
+                for row in loans.values()
+            ]
+        return {"clubs": by_club}

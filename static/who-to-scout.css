@@ -626,6 +626,13 @@ a:hover { text-decoration: underline; }
 
 .scout-table tr.row-veteran td.col-player a { color: #fde68a; }
 
+.scout-table tr.is-loan td.col-player,
+.scout-table tr.is-loan td.col-player a,
+.scout-table tr.is-loan.row-veteran td.col-player a {
+  color: #60a5fa;
+  font-weight: 700;
+}
+
 .export-root {
   position: fixed;
   left: -14000px;

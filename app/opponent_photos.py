@@ -51,11 +51,13 @@ KNOWN_CLUB_IDS: dict[str, int] = {
     "peterboroughunited": 1072,
     "leytonorient": 1150,
     "plymouthargyle": 2262,
+    "tranmererovers": 1074,
+    "fctranmere": 1074,
 }
 
 _club_id_cache: dict[str, tuple[float, int | None]] = {}
 _squad_photo_cache: dict[tuple[int, int, int], tuple[float, dict[str, dict[str, str]]]] = {}
-_SQUAD_CACHE_VERSION = 4
+_SQUAD_CACHE_VERSION = 5
 
 
 def _normalize_name_key(name: str) -> str:
@@ -155,12 +157,13 @@ def _parse_squad_photos(page_html: str) -> dict[str, dict[str, str]]:
         r'<td[^>]*rueckennummer[^>]*title="([^"]*)"[^>]*>\s*'
         r'<div\s+class=["\']?rn_nummer["\']?>([^<]*)</div>\s*</td>\s*'
         r'<td[^>]*class="[^"]*posrela[^"]*"[^>]*>\s*'
-        r'<table[^>]*inline-table[^>]*>\s*'
+        r"(.*?)"
+        r"<table[^>]*inline-table[^>]*>\s*"
         r"(.*?)</table>\s*</td>"
         r"(.*?)</tr>",
         flags=re.S | re.I,
     )
-    for title, number, table_html, rest_html in row_pattern.findall(page_html):
+    for title, number, posrela_prefix, table_html, rest_html in row_pattern.findall(page_html):
         name_match = re.search(
             r'alt="([^"]+)"',
             table_html,
@@ -194,6 +197,11 @@ def _parse_squad_photos(page_html: str) -> dict[str, dict[str, str]]:
         if not position:
             position = re.sub(r"\s+", " ", str(title or "")).strip()
 
+        loan_match = re.search(
+            r'title="On loan from\s+([^"]+?)(?:\s+until[^"]*)?"',
+            f"{posrela_prefix}{table_html}",
+            flags=re.I,
+        )
         club_match = re.search(
             r'<a title="([^"]+)" href="/[^"]+/startseite/verein/(\d+)"'
             r'><img[^>]*wappen',
@@ -218,6 +226,10 @@ def _parse_squad_photos(page_html: str) -> dict[str, dict[str, str]]:
             "registered_club": club_name,
             "registered_club_id": club_id,
         }
+        if loan_match:
+            from_club = re.sub(r"\s+", " ", loan_match.group(1)).strip()
+            if from_club:
+                bucket["on_loan_from"] = from_club
         try:
             bucket["shirt_number"] = str(int(str(number).strip()))
         except ValueError:
@@ -254,10 +266,39 @@ def transfermarkt_entry_is_loaned_out(
     """True when the kader row badge is a club other than the parent squad."""
     if not entry or not parent_club_id:
         return False
+    if str(entry.get("on_loan_from") or "").strip():
+        return False
     raw_id = str(entry.get("registered_club_id") or "").strip()
     if not raw_id.isdigit():
         return False
     return int(raw_id) != int(parent_club_id)
+
+
+def current_transfermarkt_season_year() -> int:
+    """EFL / TM saison_id — July onwards is the new season start year."""
+    from datetime import date
+
+    today = date.today()
+    return today.year if today.month >= 7 else today.year - 1
+
+
+def transfermarkt_loan_ins(club_name: str, *, season: str | None = None) -> dict[str, dict[str, str]]:
+    """Players listed on this club's TM squad as 'On loan from …'."""
+    club_id = resolve_transfermarkt_club_id(club_name)
+    if not club_id:
+        return {}
+    year = _season_year(season) if season else current_transfermarkt_season_year()
+    entries = fetch_transfermarkt_squad_photos(club_id, season_year=year)
+    loans: dict[str, dict[str, str]] = {}
+    for entry in entries.values():
+        parent = str(entry.get("on_loan_from") or "").strip()
+        name = str(entry.get("name") or "").strip()
+        if parent and name:
+            loans[_normalize_name_key(name)] = {
+                "name": name,
+                "on_loan_from": parent,
+            }
+    return loans
 
 
 def player_on_transfermarkt_squad(
