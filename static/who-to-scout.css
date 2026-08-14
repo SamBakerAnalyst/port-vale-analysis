@@ -107,6 +107,18 @@ a:hover { text-decoration: underline; }
 }
 
 .btn:hover { border-color: rgba(61, 139, 253, 0.45); color: #fff; text-decoration: none; }
+
+.btn--export {
+  background: rgba(52, 211, 153, 0.12);
+  border-color: rgba(52, 211, 153, 0.45);
+  color: var(--green);
+  font-weight: 700;
+}
+
+.btn--export:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .btn--ghost { background: transparent; }
 
 .filters {
@@ -352,22 +364,18 @@ a:hover { text-decoration: underline; }
   .league-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
-.league-grid.is-team-sheet {
-  grid-template-columns: 1fr;
+.league-card.is-empty {
+  opacity: 0.72;
+}
+
+.league-card.is-oppo {
+  border-color: rgba(251, 191, 36, 0.35);
 }
 
 @media (min-width: 1100px) {
   .league-grid.is-team-sheet {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-}
-
-.league-grid.is-team-sheet .league-card.is-squad {
-  grid-column: 1 / -1;
-}
-
-.league-card.is-empty {
-  opacity: 0.72;
 }
 
 .league-card {
@@ -454,7 +462,6 @@ a:hover { text-decoration: underline; }
 .scout-table col.col-pos { width: 5.5rem; }
 .scout-table col.col-league { width: 7rem; }
 .scout-table col.col-age { width: 2.75rem; }
-.scout-table col.col-overall { width: 4.25rem; }
 .scout-table col.col-profile-score { width: 4.1rem; }
 
 .scout-table .col-profile-score {
@@ -613,3 +620,74 @@ a:hover { text-decoration: underline; }
 .scout-table tr.has-scout td.col-player a { color: #fff; }
 
 .scout-table tr.is-scouted td.col-overall { color: var(--text-muted); }
+
+.scout-table .col-age.is-age-u23 { color: #34d399; font-weight: 700; }
+.scout-table .col-age.is-age-o30 { color: #fbbf24; font-weight: 700; }
+
+.scout-table tr.row-veteran td.col-player a { color: #fde68a; }
+
+.export-root {
+  position: fixed;
+  left: -14000px;
+  top: 0;
+  pointer-events: none;
+}
+
+.export-page {
+  width: 1123px;
+  height: 794px;
+  box-sizing: border-box;
+  padding: 1.75rem 2rem 1.5rem;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.export-head__brand {
+  display: flex;
+  align-items: baseline;
+  gap: 0.65rem;
+  margin: 0;
+}
+
+.export-head__logo {
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+}
+
+.export-head__title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.export-head__sub,
+.export-head__meta {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.export-head__block {
+  margin: 0.15rem 0 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #cfe2ff;
+}
+
+.export-page .scout-table {
+  font-size: 0.8125rem;
+}
+
+.export-page .scout-table th {
+  position: static;
+}
+
+.export-page .league-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}

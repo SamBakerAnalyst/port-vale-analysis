@@ -54,6 +54,8 @@
     minHeight: document.getElementById("minHeight"),
     clubFilter: document.getElementById("clubFilter"),
     clearClub: document.getElementById("clearClub"),
+    oppoFilter: document.getElementById("oppoFilter"),
+    clearOppo: document.getElementById("clearOppo"),
     clubOptions: document.getElementById("clubOptions"),
     perLeague: document.getElementById("perLeague"),
     perGroupLabel: document.getElementById("perGroupLabel"),
@@ -61,6 +63,8 @@
     weightsPanel: document.getElementById("weightsPanel"),
     weightsHint: document.getElementById("weightsHint"),
     refreshBtn: document.getElementById("refreshBtn"),
+    exportPdfBtn: document.getElementById("exportPdfBtn"),
+    exportRoot: document.getElementById("exportRoot"),
   };
 
   function fmt(value, digits = 1) {
@@ -94,8 +98,12 @@
     return (els.clubFilter?.value || "").trim();
   }
 
+  function oppoNeedle() {
+    return (els.oppoFilter?.value || "").trim();
+  }
+
   function isTeamSheetMode() {
-    return clubNeedle().length > 0;
+    return clubNeedle().length > 0 || oppoNeedle().length > 0;
   }
 
   function uniqueClubs() {
@@ -131,13 +139,35 @@
       .replace(/^PV\s*[-–]\s*/i, "")
       .replace(/Goal Keeper/gi, "GK")
       .replace(/Goalkeeper/gi, "GK")
+      .replace(/Centre[- ]?back/gi, "CB")
+      .replace(/Midfield/gi, "MF")
+      .replace(/Play Maker/gi, "PM")
       .replace(/  +/g, " ")
       .trim();
   }
 
+  function selectedClubOrder() {
+    const watch = matchingClubNames(clubNeedle());
+    const oppo = matchingClubNames(oppoNeedle());
+    const seen = new Set();
+    const order = [];
+    for (const name of watch) {
+      if (seen.has(name)) continue;
+      seen.add(name);
+      order.push({ name, side: "watch" });
+    }
+    for (const name of oppo) {
+      if (seen.has(name)) continue;
+      seen.add(name);
+      order.push({ name, side: "oppo" });
+    }
+    return order;
+  }
+
   function syncTeamSheetUi() {
     const active = isTeamSheetMode();
-    if (els.clearClub) els.clearClub.disabled = !active;
+    if (els.clearClub) els.clearClub.disabled = !clubNeedle();
+    if (els.clearOppo) els.clearOppo.disabled = !oppoNeedle();
     const wrap = els.perLeague?.closest(".filter");
     if (wrap) wrap.hidden = active;
     if (els.weightsPanel) els.weightsPanel.hidden = active;
@@ -165,13 +195,13 @@
 
   function playerHref(p) {
     const id = p.playerId ?? p.player_id ?? null;
-    if (id != null && id !== "") return `/player?id=${encodeURIComponent(id)}`;
+    if (id != null && id !== "") return `/player/${encodeURIComponent(id)}`;
     const composite = String(p.id || "");
     if (composite.includes(":")) {
       const tail = composite.split(":").pop();
-      if (tail) return `/player?id=${encodeURIComponent(tail)}`;
+      if (tail) return `/player/${encodeURIComponent(tail)}`;
     }
-    return "/scouting";
+    return "#";
   }
 
   function defaultMonthOptions() {
@@ -368,7 +398,6 @@
     const minAge = parseNum(els.minAge);
     const maxAge = parseNum(els.maxAge);
     const minHeight = parseNum(els.minHeight);
-    const clubNeedle = (els.clubFilter?.value || "").trim().toLowerCase();
 
     if (minMinutes > 0) {
       const mins = Number(player.minutes) || 0;
@@ -380,13 +409,18 @@
       const cm = parseHeightCm(player.height);
       if (cm == null || cm < minHeight) return false;
     }
-    if (clubNeedle) {
-      const clubs = matchingClubNames(clubNeedle);
+    const watchNeedle = clubNeedle().toLowerCase();
+    const awayNeedle = oppoNeedle().toLowerCase();
+    if (watchNeedle || awayNeedle) {
+      const allowed = new Set(selectedClubOrder().map((row) => row.name));
       const club = String(player.club || "");
-      if (clubs.length) {
-        if (!clubs.includes(club)) return false;
-      } else if (!club.toLowerCase().includes(clubNeedle)) {
-        return false;
+      if (allowed.size) {
+        if (!allowed.has(club)) return false;
+      } else {
+        const hay = club.toLowerCase();
+        const watchHit = watchNeedle && hay.includes(watchNeedle);
+        const oppoHit = awayNeedle && hay.includes(awayNeedle);
+        if (!watchHit && !oppoHit) return false;
       }
     }
     return true;
@@ -527,14 +561,20 @@
   }
 
   function buildTeamSheet(pool) {
-    const clubs = matchingClubNames();
-    const clubOrder = clubs.length
-      ? clubs
-      : [...new Set(pool.map((p) => String(p.club || "").trim()).filter(Boolean))];
+    const selected = selectedClubOrder();
+    const clubOrder = selected.length
+      ? selected
+      : [...new Set(pool.map((p) => String(p.club || "").trim()).filter(Boolean))].map((name) => ({
+          name,
+          side: "watch",
+        }));
+    const bothSides = clubOrder.some((row) => row.side === "watch") && clubOrder.some((row) => row.side === "oppo");
     const positionOrder = state.positions.length ? state.positions : [];
     const blocks = [];
 
-    for (const club of clubOrder) {
+    for (const entry of clubOrder) {
+      const club = entry.name;
+      const sideLabel = entry.side === "oppo" ? "Opposition" : bothSides ? "Watch" : "";
       const clubPlayers = pool.filter((p) => String(p.club || "").trim() === club);
       const uniqueById = new Map();
       for (const player of clubPlayers) {
@@ -552,10 +592,12 @@
         return String(a.name || "").localeCompare(String(b.name || ""));
       });
 
+      const squadTitle = sideLabel ? `${sideLabel} · ${club}` : clubOrder.length > 1 ? `${club} · Full squad` : "Full squad";
       blocks.push({
         key: `${club}:squad`,
-        title: clubOrder.length > 1 ? `${club} · Full squad` : "Full squad",
+        title: squadTitle,
         club,
+        side: entry.side,
         kind: "team-squad",
         players: squad,
         pool_count: squad.length,
@@ -563,9 +605,7 @@
       });
 
       const positions =
-        state.position === "ALL"
-          ? positionOrder
-          : positionOrder.filter((row) => row.value === state.position);
+        state.position === "ALL" ? positionOrder : positionOrder.filter((row) => row.value === state.position);
       for (const row of positions) {
         const position = row.value;
         const profiles = state.profilesByPosition[position] || [];
@@ -580,10 +620,16 @@
             if (Math.abs(diff) > 1e-9) return diff;
             return String(a.name || "").localeCompare(String(b.name || ""));
           });
+        const posTitle = sideLabel
+          ? `${sideLabel} · ${posLabel(position)}`
+          : clubOrder.length > 1
+            ? `${club} · ${posLabel(position)}`
+            : posLabel(position);
         blocks.push({
           key: `${club}:${position}`,
-          title: clubOrder.length > 1 ? `${club} · ${posLabel(position)}` : posLabel(position),
+          title: posTitle,
           club,
+          side: entry.side,
           kind: "team-position",
           players,
           pool_count: players.length,
@@ -593,7 +639,13 @@
       }
     }
 
-    return { blocks, limit: null, groupLabel: "squad", viewMode: "team", clubs: clubOrder };
+    return {
+      blocks,
+      limit: null,
+      groupLabel: "squad",
+      viewMode: "team",
+      clubs: clubOrder.map((row) => row.name),
+    };
   }
 
   function buildGrouped(pool) {
@@ -617,6 +669,29 @@
     return `<td class="col-scout"><span class="scout-pill scout-pill--${kind}">${value}</span></td>`;
   }
 
+  function ageBandClass(age) {
+    const n = Number(age);
+    if (!Number.isFinite(n)) return "";
+    if (n < 23) return "is-age-u23";
+    if (n > 30) return "is-age-o30";
+    return "";
+  }
+
+  function rowClasses(p, scoutTotal) {
+    const parts = [];
+    if (scoutTotal) parts.push("has-scout");
+    if (Number(p.age) > 30) parts.push("row-veteran");
+    return parts.join(" ");
+  }
+
+  function updateExportButton() {
+    if (!els.exportPdfBtn) return;
+    const pool = state.players.length ? rankedPool() : [];
+    const grouped = pool.length ? buildGrouped(pool) : { blocks: [] };
+    const hasRows = (grouped.blocks || []).some((block) => (block.players || []).length);
+    els.exportPdfBtn.disabled = state.loading || state.building || !hasRows;
+  }
+
   function playerRows(
     players,
     {
@@ -624,6 +699,8 @@
       showLeague = true,
       scoreLabel = "Ovr",
       showScout = true,
+      exportMode = false,
+      rankStart = 0,
       profileCols = [],
       showClub = true,
     } = {},
@@ -636,24 +713,28 @@
             : `${Number(p.minutes).toLocaleString()}′`;
         const age =
           p.age == null || p.age === "" ? "—" : String(Math.round(Number(p.age)));
+        const ageClass = ageBandClass(p.age);
         const href = playerHref(p);
         const scout = p.scout || {};
         const scoutTotal = Number(p.scout_total) || 0;
         const pos = posShort(p.positionLabel, p.position);
-        const scoutedClass = scoutTotal ? " has-scout" : "";
+        const rowClass = rowClasses(p, scoutTotal);
+        const nameCell = exportMode
+          ? `<td class="col-player">${p.name || "—"}</td>`
+          : `<td class="col-player"><a href="${href}">${p.name || "—"}</a></td>`;
         const profileCells = (profileCols || [])
           .map((profile) => {
             const value = p.profileScores?.[profile.apiName];
             return `<td class="col-profile-score">${fmt(value, 0)}</td>`;
           })
           .join("");
-        return `<tr class="${scoutedClass}">
-          <td class="col-rank">${index + 1}</td>
-          <td class="col-player"><a href="${href}">${p.name || "—"}</a></td>
+        return `<tr${rowClass ? ` class="${rowClass}"` : ""}>
+          <td class="col-rank">${rankStart + index + 1}</td>
+          ${nameCell}
           ${showClub ? `<td class="col-club" title="${p.club || ""}">${p.club || "—"}</td>` : ""}
           ${showLeague ? `<td class="col-league" title="${p.league || ""}">${p.league || "—"}</td>` : ""}
           ${showPos ? `<td class="col-pos" title="${p.positionLabel || p.position || ""}">${pos}</td>` : ""}
-          <td class="col-age">${age}</td>
+          <td class="col-age${ageClass ? ` ${ageClass}` : ""}">${age}</td>
           <td class="col-overall">${fmt(p.overall, 1)}</td>
           ${profileCells}
           <td class="col-mins">${mins}</td>
@@ -672,6 +753,8 @@
       showLeague = true,
       scoreLabel = "Ovr",
       showScout = true,
+      exportMode = false,
+      rankStart = 0,
       profileCols = [],
       showClub = true,
     } = {},
@@ -723,7 +806,7 @@
           ${scoutHead}
         </tr>
       </thead>
-      <tbody>${playerRows(players, { showPos, showLeague, scoreLabel, showScout, profileCols, showClub })}</tbody>
+      <tbody>${playerRows(players, { showPos, showLeague, scoreLabel, showScout, exportMode, rankStart, profileCols, showClub })}</tbody>
     </table></div>`;
   }
 
@@ -817,10 +900,12 @@
   function renderGrid() {
     if (state.building) {
       els.leagueGrid.innerHTML = '<p class="empty">Building player pool — this can take a minute…</p>';
+      updateExportButton();
       return;
     }
     if (!state.players.length) {
       els.leagueGrid.innerHTML = '<p class="empty">No players loaded yet.</p>';
+      updateExportButton();
       return;
     }
 
@@ -845,12 +930,11 @@
             ? `${players.length} unique player${players.length === 1 ? "" : "s"} · strongest Impect overall first`
             : players.length
               ? `${players.length} with enough minutes in this role`
-              : "Nobody hit 25% of their minutes in this role"
+              : "Nobody in the pool hit 25% of their minutes in this role"
           : block.highest_overall
             ? `≥85% of pool (= ${fmt(block.min_score_effective, 1)}) · ${block.qualify_count} qualify · pool ${block.pool_count}`
             : `pool ${block.pool_count}`;
-        const scoreLabel =
-          block.kind === "profile" ? "Score" : "Ovr";
+        const scoreLabel = block.kind === "profile" ? "Score" : "Ovr";
         const body = players.length
           ? resultsTable(players, {
               showPos: teamMode ? block.kind === "team-squad" : showPos,
@@ -873,8 +957,10 @@
               : block.kind === "position"
                 ? `<button type="button" class="league-card__edit-weights" data-drill-position="${block.key}" title="Top 10 per profile">Profiles</button>`
                 : "";
-        const countLabel = teamMode ? `${players.length}` : `${players.length}/${limit}`;
-        return `<section class="league-card${block.empty ? " is-empty" : ""}${block.kind === "team-squad" ? " is-squad" : ""}">
+        const countLabel = teamMode
+          ? `${players.length}`
+          : `${players.length}/${limit}`;
+        return `<section class="league-card${block.empty ? " is-empty" : ""}${block.kind === "team-squad" ? " is-squad" : ""}${block.side === "oppo" ? " is-oppo" : ""}">
           <div class="league-card__head">
             <div>
               <h3 class="league-card__title">${block.title || block.key || "Group"}</h3>
@@ -929,14 +1015,17 @@
     const leagueLabel = state.league === "ALL" ? "all leagues" : state.league;
     const posLabelText =
       state.position === "ALL"
-        ? viewMode === "positions"
+        ? viewMode === "positions" || viewMode === "team"
           ? "each position"
           : "all positions"
         : posLabel(state.position);
     if (teamMode) {
-      const clubs = grouped.clubs || matchingClubNames();
-      const clubText = clubs.length === 1 ? clubs[0] : `${clubs.length || pool.length} matching clubs`;
-      els.pageNote.textContent = `${clubText} team sheet — full squad plus all 10 roles. A role is empty if nobody played 25%+ of their minutes there.`;
+      const clubs = grouped.clubs || selectedClubOrder().map((row) => row.name);
+      const watch = clubNeedle();
+      const oppo = oppoNeedle();
+      const vs = watch && oppo ? `${watch} vs ${oppo}` : clubs.length === 1 ? clubs[0] : clubs.join(" · ");
+      els.pageNote.textContent = `${vs} — full squads plus all 10 roles. Empty role = nobody played 25%+ of their minutes there.`;
+      updateExportButton();
       return;
     }
     const viewText =
@@ -954,6 +1043,247 @@
           ? "Ranked by raw Impect profile score (0–100) for each PV profile."
           : "Season overall uses Impect PV profile ratings (0–100).";
     els.pageNote.textContent = `${note} Top ${limit} per ${viewText} · ${leagueLabel} · ${posLabelText}. Live / Video / Reports from Fixture Planner — unscouted names are your priority targets.`;
+    updateExportButton();
+  }
+
+  function exportContextMeta() {
+    return {
+      seasonLabel: els.seasonLabel?.textContent || "Who To Scout",
+      pageNote: els.pageNote?.textContent || "",
+      generatedAt: new Date().toLocaleString(undefined, {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    };
+  }
+
+  function exportViewOptions() {
+    const viewMode = resolveViewMode();
+    const clubs = selectedClubOrder().map((row) => row.name);
+    return {
+      showPos: viewMode === "leagues",
+      showLeague: viewMode !== "leagues" && viewMode !== "team" && state.league === "ALL",
+      showScout: viewMode === "leagues" || (viewMode === "positions" && state.league === "ALL"),
+      showClub: viewMode !== "team" || clubs.length > 1,
+      scoreLabel: viewMode === "profiles" ? "Score" : "Ovr",
+    };
+  }
+
+  function exportBlocks() {
+    const pool = rankedPool();
+    if (!pool.length) return [];
+    const grouped = buildGrouped(pool);
+    return (grouped.blocks || []).filter((block) => (block.players || []).length);
+  }
+
+  function rowsPerExportPage(firstPage) {
+    return firstPage ? 14 : 18;
+  }
+
+  function buildExportPageHtml({
+    firstPage,
+    blockTitle,
+    players,
+    rankStart,
+    pageNum,
+    totalPages,
+    meta,
+    viewOptions,
+  }) {
+    const rankEnd = rankStart + players.length;
+    const rankRange = players.length ? `Ranks ${rankStart + 1}–${rankEnd}` : "";
+    const pageLabel = `Page ${pageNum}/${totalPages}`;
+    const header = firstPage
+      ? `<header class="export-head">
+          <div class="export-head__brand">
+            <span class="export-head__logo">Port Vale</span>
+            <h1 class="export-head__title">Who To Scout</h1>
+          </div>
+          <p class="export-head__sub">${meta.seasonLabel}</p>
+          <p class="export-head__meta">${meta.pageNote}</p>
+          <p class="export-head__meta">${meta.generatedAt}</p>
+        </header>`
+      : `<header class="export-head">
+          <p class="export-head__meta">Who To Scout · ${pageLabel}${rankRange ? ` · ${rankRange}` : ""}</p>
+        </header>`;
+    return `<div class="export-page">
+      ${header}
+      <p class="export-head__block">${blockTitle}${firstPage ? "" : ` · ${pageLabel}`}${rankRange ? ` · ${rankRange}` : ""}</p>
+      ${resultsTable(players, {
+        ...viewOptions,
+        exportMode: true,
+        rankStart,
+        profileCols: viewOptions.profileCols || [],
+      })}
+    </div>`;
+  }
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      if (document.querySelector(`script[src="${src}"]`)) {
+        resolve();
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = src;
+      script.onload = resolve;
+      script.onerror = () => reject(new Error("Could not load export library."));
+      document.head.appendChild(script);
+    });
+  }
+
+  function slugify(text) {
+    return String(text || "export")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60);
+  }
+
+  function exportFileName() {
+    const stamp = new Date().toISOString().slice(0, 10);
+    const mode = state.period === "month" ? `month-${state.year || ""}-${state.month || ""}` : "season";
+    if (isTeamSheetMode()) {
+      const clubs = selectedClubOrder().map((row) => row.name);
+      const club = clubs.length ? clubs.map(slugify).join("-vs-") : slugify(clubNeedle() || oppoNeedle());
+      return `who-to-scout-team-${club}-${mode}-${stamp}.pdf`;
+    }
+    const league = state.league === "ALL" ? "all-leagues" : slugify(state.league);
+    return `who-to-scout-${league}-${mode}-${stamp}.pdf`;
+  }
+
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function captureExportPages() {
+    await loadScript("https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js");
+    if (!window.html2canvas) throw new Error("Export capture failed.");
+    if (document.fonts?.ready) await document.fonts.ready;
+
+    const blocks = exportBlocks();
+    if (!blocks.length) throw new Error("Nothing to export — adjust filters or wait for data.");
+
+    const meta = exportContextMeta();
+    const viewOptions = exportViewOptions();
+    const root = els.exportRoot;
+    const pages = [];
+    let pageCount = 0;
+
+    blocks.forEach((block) => {
+      const players = block.players || [];
+      const firstRows = rowsPerExportPage(true);
+      const otherRows = rowsPerExportPage(false);
+      const blockPages =
+        players.length <= firstRows
+          ? 1
+          : 1 + Math.ceil((players.length - firstRows) / otherRows);
+      pageCount += blockPages;
+    });
+
+    let rendered = 0;
+    for (const block of blocks) {
+      const players = block.players || [];
+      const blockTitle = block.title || block.key || "Group";
+      const firstRows = rowsPerExportPage(true);
+      const otherRows = rowsPerExportPage(false);
+      const blockPages =
+        players.length <= firstRows
+          ? 1
+          : 1 + Math.ceil((players.length - firstRows) / otherRows);
+      let offset = 0;
+
+      for (let page = 0; page < blockPages; page += 1) {
+        const perPage = page === 0 ? firstRows : otherRows;
+        const chunk = players.slice(offset, offset + perPage);
+        rendered += 1;
+        setStatus(`Rendering PDF page ${rendered}/${pageCount}…`, "loading");
+        root.innerHTML = buildExportPageHtml({
+          firstPage: page === 0 && rendered === 1,
+          blockTitle,
+          players: chunk,
+          rankStart: offset,
+          pageNum: page + 1,
+          totalPages: blockPages,
+          meta,
+          viewOptions: {
+            ...viewOptions,
+            profileCols: block.profileCols || viewOptions.profileCols || [],
+          },
+        });
+
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+        const canvas = await window.html2canvas(root.firstElementChild, {
+          backgroundColor: "#0c0f14",
+          scale: 2,
+          logging: false,
+          useCORS: true,
+          width: 1123,
+          height: 794,
+          windowWidth: 1123,
+          windowHeight: 794,
+        });
+        pages.push({ imageData: canvas.toDataURL("image/jpeg", 0.94) });
+        offset += perPage;
+      }
+    }
+
+    root.innerHTML = "";
+    return pages;
+  }
+
+  async function exportPdf() {
+    if (els.exportPdfBtn?.disabled) return;
+    els.exportPdfBtn.disabled = true;
+    setStatus("Preparing PDF export…", "loading");
+    try {
+      const pages = await captureExportPages();
+      setStatus("Building PDF…", "loading");
+      const payload = {
+        filename: exportFileName(),
+        pages,
+      };
+      const res = await fetch("/api/scouting/export-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const raw = await res.text();
+        let message = `Export failed (${res.status}).`;
+        try {
+          const data = raw ? JSON.parse(raw) : {};
+          message = data.detail || message;
+        } catch {
+          if (raw) message = raw.slice(0, 160);
+        }
+        throw new Error(message);
+      }
+      const blob = await res.blob();
+      const savedDesktopPath = res.headers.get("X-Saved-Desktop-Path");
+      downloadBlob(blob, payload.filename);
+      if (savedDesktopPath) {
+        setStatus(`PDF saved to Desktop and downloaded.`, "warn");
+      } else {
+        setStatus("PDF downloaded.", "warn");
+      }
+    } catch (error) {
+      setStatus(error.message || "PDF export failed.", "error");
+    } finally {
+      updateExportButton();
+    }
   }
 
   function updateSeasonLabel(data) {
@@ -963,9 +1293,10 @@
       "Full season";
     const limit = parseNum(els.perLeague) || data?.per_league_limit || 10;
     if (isTeamSheetMode()) {
-      const clubs = matchingClubNames();
-      const clubText = clubs.length === 1 ? clubs[0] : clubNeedle();
-      els.seasonLabel.textContent = `${label} · ${clubText} team sheet · all players + Impect scores`;
+      const watch = clubNeedle();
+      const oppo = oppoNeedle();
+      const vs = watch && oppo ? `${watch} vs ${oppo}` : watch || oppo;
+      els.seasonLabel.textContent = `${label} · ${vs} · match brief`;
       return;
     }
     const mode = resolveViewMode();
@@ -1116,7 +1447,7 @@
       renderGrid();
     });
 
-    [els.minMinutes, els.minAge, els.maxAge, els.minHeight, els.clubFilter, els.perLeague].forEach(
+    [els.minMinutes, els.minAge, els.maxAge, els.minHeight, els.clubFilter, els.oppoFilter, els.perLeague].forEach(
       (input) => {
         input?.addEventListener("input", () => {
           syncTeamSheetUi();
@@ -1136,7 +1467,17 @@
       renderGrid();
     });
 
+    els.clearOppo?.addEventListener("click", () => {
+      if (!els.oppoFilter) return;
+      els.oppoFilter.value = "";
+      syncTeamSheetUi();
+      updateSeasonLabel({});
+      renderWeights();
+      renderGrid();
+    });
+
     els.refreshBtn?.addEventListener("click", () => loadData({ refresh: true }));
+    els.exportPdfBtn?.addEventListener("click", exportPdf);
   }
 
   async function init() {
