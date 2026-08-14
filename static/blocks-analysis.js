@@ -344,7 +344,7 @@ function unitValueText(metricKey, row) {
   if (metricKey === "aerialRate") {
     return row?.aerialRate == null ? "—" : `${fmtNum(row.aerialRate, 1)}%`;
   }
-  if (metricKey === "xg" || metricKey === "packingXg") return fmtNum(row?.[metricKey], 2);
+  if (metricKey === "xg" || metricKey === "packingXg" || metricKey === "crossPxt") return fmtNum(row?.[metricKey], 2);
   if (metricKey === "shots" || metricKey === "assists") return fmtNum(row?.[metricKey], 0);
   if (metricKey === "pxtShot" || metricKey === "pxtDribble") return fmtNum(row?.[metricKey], 1);
   return fmtNum(row?.[metricKey], 1);
@@ -499,8 +499,8 @@ const UNIT_SLIDES = [
         metrics: [
           { key: "xg", label: "Expected goals", hint: "Open play · no pens / DFKs", digits: 2 },
           { key: "shots", label: "Total shots", hint: "Open play · no pens / DFKs", digits: 0 },
-          { key: "packingXg", label: "Packing xG", hint: "Chance created before the shot", digits: 2 },
-          { key: "assists", label: "Assists", hint: "Unit total", digits: 0 },
+          { key: "defendersBypassed", label: "Defenders bypassed", hint: "Beat a defender on the ball", digits: 1 },
+          { key: "crossPxt", label: "Crossed expected threat", hint: "PXT from crosses", digits: 2 },
         ],
       },
       {
@@ -547,6 +547,7 @@ function aggregatePlayers(fixtures) {
         shots: 0,
         assists: 0,
         packingXg: 0,
+        crossPxt: 0,
         pxtShot: 0,
         pxtDribble: 0,
         goals: 0,
@@ -568,6 +569,7 @@ function aggregatePlayers(fixtures) {
       row.ballProgression += Number(player.ballProgression) || 0;
       row.shots += Number(player.shots) || 0;
       row.packingXg += Number(player.packingXg) || 0;
+      row.crossPxt += Number(player.crossPxt) || 0;
       row.pxtShot += Number(player.pxtShot) || 0;
       row.pxtDribble += Number(player.pxtDribble) || 0;
       row.goals += Number(player.goals) || 0;

@@ -28,6 +28,7 @@ from app.post_match.duels import (
     KPI_WON_AERIAL_DUELS,
     KPI_WON_GROUND_DUELS,
 )
+from app.post_match.crosses import CROSS_ACTIONS, EVENT_KPI_ALTERED_THREAT
 from app.post_match.impect_client import extract_rows, impect_get, v5_path
 from app.post_match.report import (
     _consolidate_player_match_rows,
@@ -118,6 +119,7 @@ UNIT_METRIC_SPECS: dict[str, dict[str, Any]] = {
     "shots": {"higherBetter": True, "rate": False, "digits": 0},
     "assists": {"higherBetter": True, "rate": False, "digits": 0},
     "packingXg": {"higherBetter": True, "rate": False, "digits": 2},
+    "crossPxt": {"higherBetter": True, "rate": False, "digits": 2},
     "pxtShot": {"higherBetter": True, "rate": False, "digits": 1},
     "pxtDribble": {"higherBetter": True, "rate": False, "digits": 1},
 }
@@ -131,6 +133,7 @@ UNIT_COUNT_KEYS: tuple[str, ...] = (
     "shots",
     "assists",
     "packingXg",
+    "crossPxt",
     "pxtShot",
     "pxtDribble",
 )
@@ -502,6 +505,7 @@ def _empty_unit_row() -> dict[str, Any]:
         "shots": None,
         "assists": None,
         "packingXg": None,
+        "crossPxt": None,
         "pxtShot": None,
         "pxtDribble": None,
         "starters": 0,
@@ -545,6 +549,7 @@ def _finalize_unit_row(row: dict[str, float]) -> dict[str, Any]:
         ),
         "assists": int(round(float(row.get("assists") or 0))),
         "packingXg": round(float(row.get("packingXg") or 0), 2),
+        "crossPxt": round(float(row.get("crossPxt") or 0), 2),
         "pxtShot": round(float(row.get("pxtShot") or 0), 1),
         "pxtDribble": round(float(row.get("pxtDribble") or 0), 1),
     }
@@ -566,6 +571,7 @@ def _units_from_players(players: list[dict[str, Any]], squad_id: int) -> dict[st
             "shots": 0.0,
             "assists": 0.0,
             "packingXg": 0.0,
+            "crossPxt": 0.0,
             "pxtShot": 0.0,
             "pxtDribble": 0.0,
         }
@@ -742,6 +748,7 @@ def _units_from_report(players: list[dict[str, Any]]) -> dict[str, dict[str, Any
             "shots": 0.0,
             "assists": 0.0,
             "packingXg": 0.0,
+            "crossPxt": 0.0,
             "pxtShot": 0.0,
             "pxtDribble": 0.0,
         }
@@ -768,6 +775,7 @@ def _units_from_report(players: list[dict[str, Any]]) -> dict[str, dict[str, Any
         buckets[unit]["shots"] += float(player.get("shots") or 0)
         buckets[unit]["assists"] += float(player.get("assists") or 0)
         buckets[unit]["packingXg"] += float(player.get("packingXg") or 0)
+        buckets[unit]["crossPxt"] += float(player.get("crossPxt") or 0)
         buckets[unit]["pxtShot"] += float(player.get("pxtShot") or 0)
         buckets[unit]["pxtDribble"] += float(player.get("pxtDribble") or 0)
         name = _short_unit_name(str(player.get("name") or ""))
@@ -1264,6 +1272,42 @@ def _apply_player_goals_from_shots(
         player["goals"] = max(int(player.get("goals") or 0), counts.get(player_id, 0))
 
 
+def _apply_cross_pxt(
+    players: list[dict[str, Any]],
+    events: list[dict[str, Any]],
+    event_kpis: list[dict[str, Any]],
+    squad_id: int,
+) -> None:
+    if not players:
+        return
+    cross_ids = {
+        int(event["id"])
+        for event in events or []
+        if event.get("id") is not None
+        and event.get("action") in CROSS_ACTIONS
+        and int(event.get("squadId") or 0) == int(squad_id)
+    }
+    by_player: dict[int, float] = {}
+    for row in event_kpis or []:
+        event_id = int(row.get("eventId") or 0)
+        if event_id not in cross_ids:
+            continue
+        if int(row.get("kpiId") or -1) != EVENT_KPI_ALTERED_THREAT:
+            continue
+        player_id = int(row.get("playerId") or 0)
+        if not player_id:
+            continue
+        by_player[player_id] = by_player.get(player_id, 0.0) + float(row.get("value") or 0)
+    for player in players:
+        try:
+            player_id = int(player.get("playerId") or 0)
+        except (TypeError, ValueError):
+            continue
+        if not player_id:
+            continue
+        player["crossPxt"] = round(by_player.get(player_id, 0.0), 2)
+
+
 def _compact_shot_rows(shots: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
         {
@@ -1291,16 +1335,25 @@ def _hydrate_open_play_shots(stats: dict[str, Any], squad_id: int, match_id: int
     needs_events = (not any(_shot_player_id(row) for row in shots)) or (
         vale_xg > 0 and abs(player_xg - vale_xg) > 0.04
     )
-    if needs_events and match_id:
+    needs_cross = bool(players) and not any(player.get("crossPxt") is not None for player in players)
+    events: list[dict[str, Any]] | None = None
+    if (needs_events or needs_cross) and match_id:
         try:
-            raw, _ = _fetch_shots_with_xg(int(match_id))
+            raw, events = _fetch_shots_with_xg(int(match_id))
         except Exception:  # noqa: BLE001
-            raw = []
+            raw, events = [], None
         if raw:
             shots = _compact_shot_rows(raw)
             race = dict(race)
             race["shots"] = shots
             stats["xgRace"] = race
+            changed = True
+        if needs_cross:
+            try:
+                ekpi = extract_rows(impect_get(v5_path(f"/matches/{int(match_id)}/event-kpis"))["data"])
+            except Exception:  # noqa: BLE001
+                ekpi = []
+            _apply_cross_pxt(players, events or [], ekpi, squad_id)
             changed = True
     if shots and players:
         _apply_open_play_player_xg(players, shots, squad_id)
@@ -2371,6 +2424,7 @@ def _aggregate_units(played: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             "shots": 0.0,
             "assists": 0.0,
             "packingXg": 0.0,
+            "crossPxt": 0.0,
             "pxtShot": 0.0,
             "pxtDribble": 0.0,
             "seen": False,
@@ -2430,6 +2484,7 @@ def _aggregate_units(played: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             "shots": int(round(bucket["shots"])),
             "assists": int(round(bucket["assists"])),
             "packingXg": round(bucket["packingXg"], 2),
+            "crossPxt": round(bucket["crossPxt"], 2),
             "pxtShot": round(bucket["pxtShot"], 1),
             "pxtDribble": round(bucket["pxtDribble"], 1),
         }
