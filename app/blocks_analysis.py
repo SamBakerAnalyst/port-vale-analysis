@@ -72,7 +72,7 @@ KPI_BYPASSED_DEFENDERS = 2
 KPI_BYPASSED_OPPONENTS = 1399  # in-possession packing / opponents beaten on the ball
 KPI_SHOT_XG = 82
 MATCH_KPI_CACHE_TTL = 6 * 3600
-MATCH_STATS_CACHE_VERSION = 16
+MATCH_STATS_CACHE_VERSION = 15
 # Shot actions stripped from match + player xG boards (open-play / set-piece delivery only).
 XG_VS_EXCLUDED_ACTIONS = frozenset({
     "PENALTY",
@@ -96,7 +96,7 @@ PAYLOAD_CACHE_TTL = 45
 PLAYER_NAMES_TTL = 6 * 3600
 BENCHMARK_CACHE_TTL = 600
 UNIT_TOP7_TTL = 24 * 3600
-UNIT_TOP7_VERSION = 7
+UNIT_TOP7_VERSION = 6
 UNIT_TOP7_GAMES_PER_SQUAD = 8
 FORM_BASELINE_GAMES = 7
 UNITS: tuple[str, ...] = ("DEF", "MID", "ATT")
@@ -956,6 +956,19 @@ def _apply_open_play_player_shots(
         player["shots"] = counts.get(player_id, 0)
 
 
+def _hydrate_open_play_shots(stats: dict[str, Any], squad_id: int) -> None:
+    """Fill shot counts from cached xG events without refetching the match."""
+    if not isinstance(stats, dict):
+        return
+    race = stats.get("xgRace") or {}
+    shots = race.get("shots") or []
+    players = stats.get("players") or []
+    if not shots or not players:
+        return
+    _apply_open_play_player_shots(players, shots, squad_id)
+    _apply_open_play_unit_count(stats, players, field="shots", digits=0)
+
+
 def _apply_open_play_unit_count(
     stats: dict[str, Any],
     players: list[dict[str, Any]],
@@ -1456,7 +1469,9 @@ def _load_match_kpis(
             and isinstance((cached.get("stats") or {}).get("units"), dict)
             and isinstance((cached.get("stats") or {}).get("players"), list)
         ):
-            result[match_id] = cached["stats"]
+            stats = cached["stats"]
+            _hydrate_open_play_shots(stats, PORT_VALE_SQUAD_ID)
+            result[match_id] = stats
             continue
         to_fetch.append(match)
 
