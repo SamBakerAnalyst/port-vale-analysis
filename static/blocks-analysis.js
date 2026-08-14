@@ -504,10 +504,10 @@ const UNIT_SLIDES = [
         ],
       },
       {
-        label: "On the ball",
+        label: "Out of possession",
         metrics: [
-          { key: "pxtDribble", label: "Dribble threat", hint: "PXT from carries and take-ons", digits: 1 },
-          { key: "aerialRate", label: "Aerial duels won", hint: "Hold-up and box headers", digits: 1, rate: true },
+          { key: "offensiveInterventions", label: "Offensive regains", hint: "Opponents removed when we win it", digits: 1 },
+          { key: "regainsFromDefenders", label: "Regains from opp defenders", hint: "Won it vs one of their four deepest", digits: 1 },
         ],
       },
     ],
