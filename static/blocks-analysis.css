@@ -3898,11 +3898,36 @@ body.is-printing .ba-toolbar,
 body.is-printing .ba-jump,
 body.is-printing .ba-status,
 body.is-printing .ba-footer,
-body.is-printing .ba-poster,
 body.is-printing .ba-report__chrome,
 body.is-printing .ba-print-hint,
 body.is-printing .ba-block:not(.is-print-target) {
   display: none !important;
+}
+
+body.is-printing .ba-poster {
+  display: flex !important;
+  flex-direction: column;
+  width: 297mm;
+  height: 210mm;
+  max-width: 297mm;
+  max-height: 210mm;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  page-break-after: always;
+  break-after: page;
+  break-inside: avoid;
+  overflow: hidden;
+}
+
+body.is-printing .ba-poster .ba-export-hide {
+  display: none !important;
+}
+
+body.is-printing .ba-poster__body {
+  flex: 1;
+  min-height: 0;
 }
 
 body.is-printing,
@@ -3937,6 +3962,24 @@ body.is-printing .ba-sheet {
 body.is-printing .ba-sheet:last-of-type {
   page-break-after: auto;
   break-after: auto;
+}
+
+.ba-poster.ba-sheet--pdf-capture {
+  display: flex !important;
+  flex-direction: column;
+  width: 1123px !important;
+  height: 794px !important;
+  max-width: 1123px !important;
+  max-height: 794px !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  overflow: hidden !important;
+}
+
+.ba-poster.ba-sheet--pdf-capture .ba-poster__body {
+  flex: 1;
+  min-height: 0;
 }
 
 .ba-sheet--pdf-capture {
@@ -3982,6 +4025,23 @@ body.is-printing .ba-sheet:last-of-type {
     padding: 0;
     margin: 0;
     display: block;
+  }
+
+  .ba-poster {
+    display: flex !important;
+    flex-direction: column;
+    width: 297mm !important;
+    height: 210mm !important;
+    max-width: 297mm !important;
+    max-height: 210mm !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    page-break-after: always;
+    break-after: page;
+    break-inside: avoid;
+    overflow: hidden !important;
   }
 
   .ba-sheet {

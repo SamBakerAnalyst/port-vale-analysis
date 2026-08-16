@@ -1108,18 +1108,18 @@ function guideSheetsHtml({ kicker, fixture, totalPages = 4 }) {
   `;
   return guideSheetShell({
     kicker,
-    page: 6,
+    page: 7,
     totalPages,
     title: "Guide · match overview (page 1)",
     bodyHtml: page1Body,
-    footNote: "Pages 3–5 are DEF / MID / ATT unit targets",
+    footNote: "Pages 4–6 are DEF / MID / ATT unit targets",
   }) + guideSheetShell({
     kicker,
-    page: 7,
+    page: 8,
     totalPages,
     title: "Guide · players & colours (page 2)",
     bodyHtml: page2Body,
-    footNote: "Print all 7 pages for the full match pack",
+    footNote: "Print all 8 pages for the full match pack",
   });
 }
 
@@ -1623,7 +1623,7 @@ function dashHtml(block) {
     ? `EFL Cup · ${payload.season || ""}`.trim()
     : `Block ${block.id} of 9 · ${payload.competition || "League Two"} ${payload.season || ""}`.trim();
   const pageTitle = single ? "Match Report" : "Block Report";
-  const sheetPages = single ? 7 : 5;
+  const sheetPages = single ? 8 : 6;
   const mast = { kicker, single, fixture, stats, block, totalPages: sheetPages };
   const players = playersForView(block, single, fixture);
   const boards = (single ? PLAYER_BOARDS.filter((spec) => spec.key !== "ppg") : PLAYER_BOARDS)
@@ -1636,7 +1636,7 @@ function dashHtml(block) {
     stats,
     single,
     players,
-    page: 3 + index,
+    page: 4 + index,
     outcome,
     foot,
   })).join("");
@@ -1650,9 +1650,9 @@ function dashHtml(block) {
           <button type="button" class="ba-btn ba-btn--print" data-pdf-report="${block.id}">Export PDF</button>
         </div>
       </div>
-      <p class="ba-print-hint ba-export-hide">A4 landscape · ${single ? "seven pages (match, players, three unit targets, staff guide)" : "five pages (block, players, three unit targets)"}</p>
-      <article class="ba-sheet ba-sheet--team ${outcome ? `ba-sheet--${outcome}` : ""}" data-sheet="1">
-        ${sheetMasthead({ ...mast, title: pageTitle, page: 1, phases: single ? stats.phases : null })}
+      <p class="ba-print-hint ba-export-hide">A4 landscape · ${single ? "eight pages (block, match, players, three unit targets, staff guide)" : "six pages (block, overview, players, three unit targets)"}</p>
+      <article class="ba-sheet ba-sheet--team ${outcome ? `ba-sheet--${outcome}` : ""}" data-sheet="2">
+        ${sheetMasthead({ ...mast, title: pageTitle, page: 2, phases: single ? stats.phases : null })}
         <div class="ba-sheet__body">
           ${metricStrip(stats, single, fixture)}
           ${single ? `
@@ -1669,8 +1669,8 @@ function dashHtml(block) {
         </div>
         <footer class="ba-sheet__bar"><span>Port Vale Analysis</span><span>${escapeHtml(foot)}</span></footer>
       </article>
-      <article class="ba-sheet ba-sheet--players ${outcome ? `ba-sheet--${outcome}` : ""}" data-sheet="2">
-        ${sheetMasthead({ ...mast, title: "Players", page: 2 })}
+      <article class="ba-sheet ba-sheet--players ${outcome ? `ba-sheet--${outcome}` : ""}" data-sheet="3">
+        ${sheetMasthead({ ...mast, title: "Players", page: 3 })}
         <div class="ba-sheet__body">
           ${single && players.length ? standoutsHtml(players) : ""}
           <div class="ba-players__grid ${single ? "ba-players__grid--six" : ""}">${boards}</div>
@@ -1848,7 +1848,8 @@ function reportPdfName(blockId) {
 
 async function exportReportPdf(blockId) {
   const root = document.getElementById(`block-${blockId}`);
-  const sheets = [...(root?.querySelectorAll(".ba-sheet") || [])];
+  const poster = root?.querySelector(".ba-poster");
+  const sheets = [poster, ...(root?.querySelectorAll(".ba-sheet") || [])].filter(Boolean);
   if (!sheets.length) throw new Error("Match report not found");
   await loadScript("https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js");
   if (typeof html2canvas !== "function") throw new Error("PDF export failed to load");
@@ -1873,6 +1874,7 @@ async function exportReportPdf(blockId) {
         scrollY: 0,
         onclone: (_doc, cloned) => {
           cloned.classList.add("ba-sheet--pdf-capture");
+          cloned.querySelectorAll(".ba-export-hide").forEach((el) => { el.style.display = "none"; });
           tidyMetersForPdf(cloned);
           cloned.style.width = `${SHEET_EXPORT_WIDTH}px`;
           cloned.style.maxWidth = `${SHEET_EXPORT_WIDTH}px`;
