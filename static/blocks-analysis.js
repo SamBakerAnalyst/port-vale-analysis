@@ -841,24 +841,31 @@ function sheetMasthead({ title, kicker, page, totalPages = 2, single, fixture, s
     const gf = fixture.played ? fmtNum(stats.goals) : "–";
     const ga = fixture.played ? fmtNum(stats.goalsAgainst) : "–";
     const outcome = fixture.outcome || "tbc";
-    center = `
-      <div class="ba-sheet__scoreboard">
+    const valeHome = fixture.isHome !== false;
+    const valeClub = `
         <div class="ba-sheet__club">
           ${clubBadge("/standalone/port-vale-badge.png?v=2", "PV", "Port Vale")}
           <span class="ba-sheet__club-name">Port Vale</span>
-        </div>
+        </div>`;
+    const oppClub = `
+        <div class="ba-sheet__club">
+          ${clubBadge(fixture.badgeUrl, fixture.opponentInitials, fixture.opponentName)}
+          <span class="ba-sheet__club-name">${escapeHtml(shortOpponent(fixture.opponentName))}</span>
+        </div>`;
+    const homeGoals = valeHome ? gf : ga;
+    const awayGoals = valeHome ? ga : gf;
+    center = `
+      <div class="ba-sheet__scoreboard">
+        ${valeHome ? valeClub : oppClub}
         <div class="ba-sheet__score">
           <div class="ba-sheet__score-row">
-            <span class="ba-sheet__goals">${escapeHtml(gf)}</span>
+            <span class="ba-sheet__goals">${escapeHtml(homeGoals)}</span>
             <span class="ba-sheet__score-sep">–</span>
-            <span class="ba-sheet__goals">${escapeHtml(ga)}</span>
+            <span class="ba-sheet__goals">${escapeHtml(awayGoals)}</span>
           </div>
           <span class="ba-sheet__result ba-sheet__result--${escapeHtml(outcome)}">${escapeHtml(outcomeLabel(outcome))}</span>
         </div>
-        <div class="ba-sheet__club ba-sheet__club--opp">
-          ${clubBadge(fixture.badgeUrl, fixture.opponentInitials, fixture.opponentName)}
-          <span class="ba-sheet__club-name">${escapeHtml(shortOpponent(fixture.opponentName))}</span>
-        </div>
+        ${valeHome ? oppClub : valeClub}
       </div>
     `;
   } else {
