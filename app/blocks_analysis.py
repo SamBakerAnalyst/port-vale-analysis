@@ -909,6 +909,22 @@ def _iteration_table_top7_ids(iteration_id: int) -> list[int]:
     return ordered[:7]
 
 
+def _iteration_max_league_games(iteration_id: int) -> int:
+    """How far the current league season has got (max games any club has played)."""
+    rows = extract_rows(impect_get(v5_path(f"/iterations/{iteration_id}/matches"))["data"])
+    played: dict[int, int] = defaultdict(int)
+    for row in rows:
+        if (row.get("goals") or {}).get("home", {}).get("fullTime") is None:
+            continue
+        home_id = int(row.get("homeSquadId") or 0)
+        away_id = int(row.get("awaySquadId") or 0)
+        if home_id > 0:
+            played[home_id] += 1
+        if away_id > 0:
+            played[away_id] += 1
+    return max(played.values(), default=0)
+
+
 def _benchmark_entry(
     per_squad: dict[int, float],
     *,
@@ -1077,14 +1093,22 @@ def build_block_benchmarks(
         return _benchmark_cache[1]
 
     payload = _benchmarks_for_iteration(iteration_id)
+    try:
+        season_games = _iteration_max_league_games(iteration_id)
+    except Exception:  # noqa: BLE001
+        season_games = 0
+    # One or two games make “table top 7” a lottery (308 OI in a single match).
+    # Keep last season’s promotion line until a full block is in.
+    use_previous_req = season_games < GAMES_PER_BLOCK
     older = None
     for key, row in payload.items():
-        if row.get("top7") is not None and row.get("team") is not None:
+        have_current = row.get("top7") is not None and row.get("team") is not None
+        if have_current and not use_previous_req:
             continue
         if older is None:
             older = _benchmarks_for_iteration(PREVIOUS_LEAGUE_TWO_ITERATION_ID)
         prev = older.get(key) or {}
-        if row.get("top7") is None and prev.get("top7") is not None:
+        if (row.get("top7") is None or use_previous_req) and prev.get("top7") is not None:
             row["top7"] = prev["top7"]
             row["top7From"] = "previous"
         if row.get("team") is None and prev.get("team") is not None:
