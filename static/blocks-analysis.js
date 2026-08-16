@@ -474,7 +474,7 @@ const UNIT_SLIDES = [
         metrics: [
           { key: "xg", label: "Expected goals", hint: "Open play · no pens / DFKs", digits: 2 },
           { key: "shots", label: "Total shots", hint: "Open play · no pens / DFKs", digits: 0 },
-          { key: "defendersBypassed", label: "Defenders bypassed", hint: "Beat a defender on the ball", digits: 1 },
+          { key: "defendersBypassed", label: "Backline beaten", hint: "Beat a defender on the ball", digits: 1 },
           { key: "crossPxt", label: "Crossed expected threat", hint: "PXT from crosses", digits: 2 },
         ],
       },
