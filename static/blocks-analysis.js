@@ -326,7 +326,10 @@ function unitValueText(metricKey, row) {
   if (metricKey === "aerialRate") {
     return row?.aerialRate == null ? "—" : `${fmtNum(row.aerialRate, 1)}%`;
   }
-  if (metricKey === "xg" || metricKey === "packingXg" || metricKey === "crossPxt") return fmtNum(row?.[metricKey], 2);
+  if (metricKey === "xg" || metricKey === "packingXg") return fmtNum(row?.[metricKey], 2);
+  if (metricKey === "crossPxt") {
+    return row?.crossPxt == null ? "—" : `${fmtNum(row.crossPxt, 1)}%`;
+  }
   if (metricKey === "shots" || metricKey === "assists") return fmtNum(row?.[metricKey], 0);
   if (metricKey === "pxtShot" || metricKey === "pxtDribble") return fmtNum(row?.[metricKey], 1);
   return fmtNum(row?.[metricKey], 1);
@@ -477,7 +480,7 @@ const UNIT_SLIDES = [
           { key: "xg", label: "Expected goals", hint: "Open play · no pens / DFKs", digits: 2 },
           { key: "shots", label: "Total shots", hint: "Open play · no pens / DFKs", digits: 0 },
           { key: "defendersBypassed", label: "Backline beaten", hint: "Beat a defender on the ball", digits: 1 },
-          { key: "crossPxt", label: "Crossed expected threat", hint: "PXT from crosses", digits: 2 },
+          { key: "crossPxt", label: "Crossed expected threat", hint: "Altered threat from high & low crosses", digits: 1, rate: true },
         ],
       },
       {

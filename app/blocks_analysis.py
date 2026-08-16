@@ -119,7 +119,7 @@ UNIT_METRIC_SPECS: dict[str, dict[str, Any]] = {
     "shots": {"higherBetter": True, "rate": False, "digits": 0},
     "assists": {"higherBetter": True, "rate": False, "digits": 0},
     "packingXg": {"higherBetter": True, "rate": False, "digits": 2},
-    "crossPxt": {"higherBetter": True, "rate": False, "digits": 2},
+    "crossPxt": {"higherBetter": True, "rate": True, "digits": 1},
     "pxtShot": {"higherBetter": True, "rate": False, "digits": 1},
     "pxtDribble": {"higherBetter": True, "rate": False, "digits": 1},
 }
@@ -1381,8 +1381,8 @@ def _apply_cross_pxt(
             continue
         if not player_id:
             continue
-        player["crossPxt"] = round(by_player.get(player_id, 0.0), 2)
-    return round(team_total, 2)
+        player["crossPxt"] = round(by_player.get(player_id, 0.0) * 100.0, 1)
+    return round(team_total * 100.0, 1)
 
 
 def _compact_shot_rows(shots: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1440,7 +1440,10 @@ def _hydrate_open_play_shots(
             team_cross = _apply_cross_pxt(players, events, ekpi, squad_id)
             stats["crossPxt"] = team_cross
             stats["crossPxtReady"] = True
+            stats["crossPxtScale"] = "percent"
             changed = True
+    if _scale_cached_cross_pxt_to_percent(stats):
+        changed = True
     if shots and players:
         _apply_open_play_player_xg(players, shots, squad_id)
         _apply_open_play_player_shots(players, shots, squad_id)
@@ -1450,6 +1453,24 @@ def _hydrate_open_play_shots(
     _assign_unattributed_shots_to_attack(stats, shots, squad_id)
     _assign_team_cross_pxt_to_attack(stats)
     return changed
+
+
+def _scale_cached_cross_pxt_to_percent(stats: dict[str, Any]) -> bool:
+    """KPI 1404 is a fraction; Impect altered threat is shown as percent."""
+    if not isinstance(stats, dict) or stats.get("crossPxtScale") == "percent":
+        return False
+    players = stats.get("players") or []
+    has_value = stats.get("crossPxt") is not None or any(
+        player.get("crossPxt") is not None for player in players
+    )
+    if not has_value:
+        return False
+    for player in players:
+        player["crossPxt"] = round(float(player.get("crossPxt") or 0) * 100.0, 1)
+    if stats.get("crossPxt") is not None:
+        stats["crossPxt"] = round(float(stats["crossPxt"]) * 100.0, 1)
+    stats["crossPxtScale"] = "percent"
+    return True
 
 
 def _assign_team_cross_pxt_to_attack(stats: dict[str, Any]) -> None:
