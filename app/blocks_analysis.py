@@ -1374,7 +1374,13 @@ def _compact_shot_rows(shots: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
-def _hydrate_open_play_shots(stats: dict[str, Any], squad_id: int, match_id: int = 0) -> bool:
+def _hydrate_open_play_shots(
+    stats: dict[str, Any],
+    squad_id: int,
+    match_id: int = 0,
+    *,
+    fetch_remote: bool = True,
+) -> bool:
     """Open-play shot xG/counts. KPI 82 includes pens/DFKs — those must not land on player boards."""
     if not isinstance(stats, dict):
         return False
@@ -1385,10 +1391,11 @@ def _hydrate_open_play_shots(stats: dict[str, Any], squad_id: int, match_id: int
     facts = stats.get("facts") or {}
     vale_xg = float(facts.get("valeXg") or 0)
     player_xg = sum(float(player.get("xg") or 0) for player in players)
-    needs_events = (not any(_shot_player_id(row) for row in shots)) or (
-        vale_xg > 0 and abs(player_xg - vale_xg) > 0.04
+    needs_events = fetch_remote and (
+        (not any(_shot_player_id(row) for row in shots))
+        or (vale_xg > 0 and abs(player_xg - vale_xg) > 0.04)
     )
-    needs_cross = bool(players) and not stats.get("crossPxtReady")
+    needs_cross = fetch_remote and bool(players) and not stats.get("crossPxtReady")
     events: list[dict[str, Any]] | None = None
     if (needs_events or needs_cross) and match_id:
         try:
@@ -1963,7 +1970,9 @@ def _load_match_kpis(
             stats = cached["stats"]
             before = int(((stats.get("units") or {}).get("ATT") or {}).get("shots") or 0)
             lineup = _hydrate_lineup_units(stats, match_id, PORT_VALE_SQUAD_ID)
-            shot_changed = _hydrate_open_play_shots(stats, PORT_VALE_SQUAD_ID, match_id)
+            shot_changed = _hydrate_open_play_shots(
+                stats, PORT_VALE_SQUAD_ID, match_id, fetch_remote=False
+            )
             after = int(((stats.get("units") or {}).get("ATT") or {}).get("shots") or 0)
             if lineup or shot_changed or after != before:
                 cached["stats"] = stats
@@ -1971,6 +1980,19 @@ def _load_match_kpis(
             result[match_id] = stats
             continue
         to_fetch.append(match)
+
+    # One Impect pass for the latest cached game — never N matches on the request thread.
+    latest_id = 0
+    for match in matches:
+        match_id = int(match.get("matchId") or 0)
+        stats = result.get(match_id)
+        if stats and match.get("outcome") is not None:
+            latest_id = match_id
+    if latest_id and not (result.get(latest_id) or {}).get("crossPxtReady"):
+        if _hydrate_open_play_shots(
+            result[latest_id], PORT_VALE_SQUAD_ID, latest_id, fetch_remote=True
+        ):
+            dirty = True
 
     if to_fetch:
         names = _merged_player_names()
