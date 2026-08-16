@@ -1282,40 +1282,83 @@ def _apply_player_goals_from_shots(
         player["goals"] = max(int(player.get("goals") or 0), counts.get(player_id, 0))
 
 
+def _event_action_name(event: dict[str, Any]) -> str:
+    return str(event.get("action") or event.get("actionType") or "").upper()
+
+
+def _event_player_id(event: dict[str, Any]) -> int:
+    player = event.get("player") if isinstance(event.get("player"), dict) else {}
+    try:
+        return int(player.get("id") or event.get("playerId") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _apply_cross_pxt(
     players: list[dict[str, Any]],
     events: list[dict[str, Any]],
     event_kpis: list[dict[str, Any]],
     squad_id: int,
-) -> None:
+) -> float:
+    """PXT (KPI 1404) on Vale HIGH_CROSS / LOW_CROSS events. Returns team total."""
     if not players:
-        return
-    cross_ids = {
-        int(event["id"])
-        for event in events or []
-        if event.get("id") is not None
-        and event.get("action") in CROSS_ACTIONS
-        and int(event.get("squadId") or 0) == int(squad_id)
-    }
-    by_player: dict[int, float] = {}
+        return 0.0
+    pxt_by_event: dict[int, float] = {}
+    kpi_player: dict[int, int] = {}
     for row in event_kpis or []:
-        event_id = int(row.get("eventId") or 0)
-        if event_id not in cross_ids:
+        if not isinstance(row, dict):
             continue
-        if int(row.get("kpiId") or -1) != EVENT_KPI_ALTERED_THREAT:
+        try:
+            if int(row.get("kpiId") or -1) != EVENT_KPI_ALTERED_THREAT:
+                continue
+            event_id = int(row.get("eventId") or 0)
+        except (TypeError, ValueError):
             continue
-        player_id = int(row.get("playerId") or 0)
-        if not player_id:
+        if not event_id:
             continue
-        by_player[player_id] = by_player.get(player_id, 0.0) + float(row.get("value") or 0)
+        try:
+            pxt_by_event[event_id] = pxt_by_event.get(event_id, 0.0) + float(row.get("value") or 0)
+        except (TypeError, ValueError):
+            continue
+        try:
+            pid = int(row.get("playerId") or 0)
+        except (TypeError, ValueError):
+            pid = 0
+        if pid:
+            kpi_player[event_id] = pid
+
+    by_player: dict[int, float] = {}
+    team_total = 0.0
+    for event in events or []:
+        if not isinstance(event, dict):
+            continue
+        if _event_action_name(event) not in CROSS_ACTIONS:
+            continue
+        try:
+            event_squad = int(event.get("squadId") or 0)
+        except (TypeError, ValueError):
+            event_squad = 0
+        if event_squad and event_squad != int(squad_id):
+            continue
+        try:
+            event_id = int(event.get("id") or 0)
+        except (TypeError, ValueError):
+            event_id = 0
+        value = float(pxt_by_event.get(event_id, 0.0) or 0)
+        team_total += value
+        player_id = _event_player_id(event) or kpi_player.get(event_id, 0)
+        if player_id:
+            by_player[player_id] = by_player.get(player_id, 0.0) + value
+
     for player in players:
         try:
-            player_id = int(player.get("playerId") or 0)
+            player_id = int(player.get("playerId") or player.get("id") or 0)
         except (TypeError, ValueError):
             continue
         if not player_id:
             continue
         player["crossPxt"] = round(by_player.get(player_id, 0.0), 2)
+    return round(team_total, 2)
 
 
 def _compact_shot_rows(shots: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1345,7 +1388,7 @@ def _hydrate_open_play_shots(stats: dict[str, Any], squad_id: int, match_id: int
     needs_events = (not any(_shot_player_id(row) for row in shots)) or (
         vale_xg > 0 and abs(player_xg - vale_xg) > 0.04
     )
-    needs_cross = bool(players) and not any(player.get("crossPxt") is not None for player in players)
+    needs_cross = bool(players) and not stats.get("crossPxtReady")
     events: list[dict[str, Any]] | None = None
     if (needs_events or needs_cross) and match_id:
         try:
@@ -1358,12 +1401,14 @@ def _hydrate_open_play_shots(stats: dict[str, Any], squad_id: int, match_id: int
             race["shots"] = shots
             stats["xgRace"] = race
             changed = True
-        if needs_cross:
+        if needs_cross and events is not None:
             try:
                 ekpi = extract_rows(impect_get(v5_path(f"/matches/{int(match_id)}/event-kpis"))["data"])
             except Exception:  # noqa: BLE001
                 ekpi = []
-            _apply_cross_pxt(players, events or [], ekpi, squad_id)
+            team_cross = _apply_cross_pxt(players, events, ekpi, squad_id)
+            stats["crossPxt"] = team_cross
+            stats["crossPxtReady"] = True
             changed = True
     if shots and players:
         _apply_open_play_player_xg(players, shots, squad_id)
@@ -1372,7 +1417,22 @@ def _hydrate_open_play_shots(stats: dict[str, Any], squad_id: int, match_id: int
         stats["units"] = _units_from_report(players)
         changed = True
     _assign_unattributed_shots_to_attack(stats, shots, squad_id)
+    _assign_team_cross_pxt_to_attack(stats)
     return changed
+
+
+def _assign_team_cross_pxt_to_attack(stats: dict[str, Any]) -> None:
+    """Attack card is a team chance metric — include FB / midfield crosses."""
+    units = stats.get("units")
+    if not isinstance(units, dict):
+        return
+    att = units.get("ATT")
+    if not isinstance(att, dict):
+        return
+    team = stats.get("crossPxt")
+    if team is None:
+        team = sum(float(player.get("crossPxt") or 0) for player in (stats.get("players") or []))
+    att["crossPxt"] = round(float(team or 0), 2)
 
 
 def _hydrate_lineup_units(stats: dict[str, Any], match_id: int, squad_id: int) -> bool:
