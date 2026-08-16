@@ -399,7 +399,12 @@ def _wide_players_are_midfield(formation: str | None) -> bool:
     return parts[1] >= 4
 
 
-def _unit_for_position(position: Any, formation: str | None = None) -> str | None:
+def _unit_for_position(
+    position: Any,
+    formation: str | None = None,
+    *,
+    on_as_sub: bool = False,
+) -> str | None:
     text = _normalize_position(position)
     if _is_wingback_position(text):
         # Back four: Impect still labels LB/RB as wing-backs — they are DEF.
@@ -408,6 +413,10 @@ def _unit_for_position(position: Any, formation: str | None = None) -> str | Non
         if back is not None and back != 4:
             return "WB"
         return "DEF"
+    # Starter 10s stay in MID. A bench arrival listed as AM is an attacking sub
+    # (e.g. Faal on for a holding mid while the 10 tucks in).
+    if text == "ATTACKING_MIDFIELD" and on_as_sub:
+        return "ATT"
     if text in {"LEFT_WINGER", "RIGHT_WINGER"} and _wide_players_are_midfield(formation):
         return "MID"
     if text in POSITION_TO_UNIT:
@@ -475,13 +484,14 @@ def _lineup_roles(match_id: int, squad_id: int) -> dict[int, dict[str, Any]]:
             off_id = int(row.get("exchangedPlayerId") or 0)
             if not player_id:
                 continue
-            unit = roles.get(off_id, {}).get("unit")
+            to_pos = row.get("toPosition") or row.get("position")
+            unit = _unit_for_position(to_pos, formation, on_as_sub=True)
             if unit not in UNITS and unit != "WB":
-                unit = _unit_for_position(row.get("toPosition") or row.get("position"), formation)
+                unit = roles.get(off_id, {}).get("unit")
             roles[player_id] = {
                 "unit": unit,
                 "started": False,
-                "position": row.get("toPosition") or row.get("position"),
+                "position": to_pos,
             }
     except Exception:  # noqa: BLE001
         return roles
@@ -1372,21 +1382,18 @@ def _hydrate_lineup_units(stats: dict[str, Any], match_id: int, squad_id: int) -
     players = stats.get("players") or []
     if not players:
         return False
-    def_row = ((stats.get("units") or {}).get("DEF") or {})
-    starters = int(def_row.get("starters") or 0)
-    has_wb = any(str(player.get("unit") or "") == "WB" for player in players)
-    if starters >= 4 and not has_wb:
-        return False
     try:
         roles = _lineup_roles(match_id, squad_id)
     except Exception:  # noqa: BLE001
         return False
     if not roles:
         return False
+    before = [(player.get("playerId"), player.get("unit")) for player in players]
     _apply_lineup_roles(players, roles)
     stats["players"] = players
     stats["units"] = _units_from_report(players)
-    return True
+    after = [(player.get("playerId"), player.get("unit")) for player in players]
+    return before != after
 
 
 def _apply_open_play_unit_count(
