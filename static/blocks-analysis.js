@@ -280,54 +280,34 @@ function formatBench(value, { rate = false, digits = 1 } = {}) {
   return rate ? `${fmtNum(value, digits)}%` : fmtNum(value, digits);
 }
 
-function meterFlagAlign(pct) {
-  if (pct >= 78) return "is-end";
-  if (pct <= 18) return "is-start";
-  return "";
+function benchMatchesValue(benchValue, value) {
+  if (benchValue == null || value == null) return true;
+  const a = Number(benchValue);
+  const b = Number(value);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return true;
+  const tol = Math.max(0.05, Math.abs(b) * 0.02);
+  return Math.abs(a - b) <= tol;
 }
 
-function meterHtml(value, bench, { higherBetter = true, rate = false, digits = 1, compact = false } = {}) {
+function meterHtml(value, bench, { higherBetter = true } = {}) {
   const team = bench?.team;
   const top7 = bench?.top7;
   if (value == null || (team == null && top7 == null)) return "";
   const nums = [Number(value) || 0];
-  if (team != null) nums.push(Number(team));
+  if (team != null && !benchMatchesValue(team, value)) nums.push(Number(team));
   if (top7 != null) nums.push(Number(top7));
   const max = Math.max(...nums, 0.01) * 1.18;
   const pct = (n) => Math.max(1.5, Math.min(98.5, (Number(n) / max) * 100));
   const tone = meterTone(value, top7 ?? team, higherBetter);
   const reqPct = top7 == null ? null : pct(top7);
-  const avgPct = team == null ? null : pct(team);
-  const reqLabel = top7 == null ? "" : escapeHtml(formatBench(top7, { rate, digits }));
-  const avgLabel = team == null ? "" : escapeHtml(formatBench(team, { rate, digits }));
-  if (compact) {
-    return `
-      <div class="ba-meter ba-meter--compact ba-meter--${tone}">
-        <span class="ba-meter__track">
-          <span class="ba-meter__fill" style="width:${pct(value)}%"></span>
-          ${avgPct == null ? "" : `<i class="ba-meter__tick ba-meter__tick--avg" style="left:${avgPct}%"></i>`}
-          ${reqPct == null ? "" : `<i class="ba-meter__tick ba-meter__tick--req" style="left:${reqPct}%"></i>`}
-        </span>
-      </div>
-    `;
-  }
+  const avgPct = team == null || benchMatchesValue(team, value) ? null : pct(team);
   return `
-    <div class="ba-meter ba-meter--${tone}">
-      ${reqPct == null ? `<div class="ba-meter__rail"></div>` : `
-        <div class="ba-meter__rail ba-meter__rail--req">
-          <span class="ba-meter__flag ba-meter__flag--req ${meterFlagAlign(reqPct)}" style="left:${reqPct}%"><em>Req</em><b>${reqLabel}</b></span>
-        </div>
-      `}
+    <div class="ba-meter ba-meter--compact ba-meter--${tone}">
       <span class="ba-meter__track">
         <span class="ba-meter__fill" style="width:${pct(value)}%"></span>
         ${avgPct == null ? "" : `<i class="ba-meter__tick ba-meter__tick--avg" style="left:${avgPct}%"></i>`}
         ${reqPct == null ? "" : `<i class="ba-meter__tick ba-meter__tick--req" style="left:${reqPct}%"></i>`}
       </span>
-      ${avgPct == null ? `<div class="ba-meter__rail"></div>` : `
-        <div class="ba-meter__rail ba-meter__rail--avg">
-          <span class="ba-meter__flag ba-meter__flag--avg ${meterFlagAlign(avgPct)}" style="left:${avgPct}%"><em>Avg</em><b>${avgLabel}</b></span>
-        </div>
-      `}
     </div>
   `;
 }
@@ -398,12 +378,7 @@ function unitPanelHtml(title, metricKey, hint, stats, single) {
             ${extra ? `<span class="ba-unitrow__sub">${escapeHtml(extra)}</span>` : ""}
             ${reqText}
           </div>
-          ${meterHtml(value, bench, {
-            higherBetter: true,
-            rate,
-            digits,
-            compact: true,
-          })}
+          ${meterHtml(value, bench, { higherBetter: true })}
         </div>
       </div>
     `;
@@ -638,7 +613,7 @@ function unitMetricRowHtml(unit, spec, stats, single) {
         ${bench?.top7 == null ? "" : `<span class="ba-unitstat__req"><em>Req</em><b>${escapeHtml(formatBench(bench.top7, { rate: spec.rate, digits: spec.digits }))}</b></span>`}
         ${delta ? `<span class="ba-unitstat__delta ${delta.ok ? "is-hot" : "is-cold"}">${escapeHtml(delta.text)}</span>` : ""}
       </div>
-      ${meterHtml(value, bench, { higherBetter, rate: Boolean(spec.rate), digits: spec.digits, compact: true })}
+      ${meterHtml(value, bench, { higherBetter })}
     </article>
   `;
 }
@@ -1020,7 +995,7 @@ function guideMeterDemo() {
   return `
     <div class="ba-gdemo">
       <p class="ba-gdemo__title">Reading the colours</p>
-      <p class="ba-gdemo__intro">Every headline number has a bar underneath — compare this game to our usual level and the promotion standard.</p>
+      <p class="ba-gdemo__intro">Every headline number has a bar underneath. The black mark is Req — the League Two top-7 line.</p>
       <div class="ba-gdemo__samples">
         <div class="ba-gdemo__sample">
           <span class="ba-gdemo__sample-val is-hot">52%</span>
@@ -1040,7 +1015,7 @@ function guideMeterDemo() {
       </div>
       <div class="ba-gdemo__ref">
         <p><span class="ba-gdemo__pill ba-gdemo__pill--req">Req</span> Top 7 in League Two — promotion benchmark.</p>
-        <p><span class="ba-gdemo__pill ba-gdemo__pill--avg">Avg</span> Our usual level in recent league games.</p>
+        <p><span class="ba-gdemo__pill ba-gdemo__pill--avg">Avg</span> Vale’s usual level — only shown when it differs from this match.</p>
         <p><span class="ba-gdemo__pill ba-gdemo__pill--wb">WB</span> Full-backs count in DEF. Wing-backs in a back three do not.</p>
       </div>
     </div>
@@ -1150,7 +1125,7 @@ function xgVsHtml(stats, fixture) {
         <div class="ba-xgvs__side ba-xgvs__side--vale ${valeAhead ? "is-ahead" : ""}">
           <span class="ba-xgvs__who">Vale</span>
           <span class="ba-xgvs__num">${escapeHtml(fmtNum(vale, 2))}</span>
-          ${bench?.team == null ? "" : `<span class="ba-xgvs__avg">Avg ${escapeHtml(formatBench(bench.team, { digits: 2 }))}</span>`}
+          ${bench?.team == null || benchMatchesValue(bench.team, vale) ? "" : `<span class="ba-xgvs__avg">Avg ${escapeHtml(formatBench(bench.team, { digits: 2 }))}</span>`}
         </div>
         <span class="ba-xgvs__badge">VS</span>
         <div class="ba-xgvs__side ba-xgvs__side--opp ${oppAhead ? "is-ahead" : ""}">
@@ -1195,15 +1170,17 @@ function metricStrip(stats, single, fixture) {
         const bench = item.skipBench ? null : scaledBench(item.key, stats, single);
         const higherBetter = item.invert ? false : (bench?.spec?.higherBetter !== false);
         const tone = meterTone(value, bench?.top7, higherBetter);
+        const reqText = bench?.top7 == null
+          ? ""
+          : `<span class="ba-strip__req"><em>Req</em><b>${escapeHtml(formatBench(bench.top7, { rate: Boolean(item.rate || bench.spec?.rate), digits: item.digits }))}</b></span>`;
         return `
           <article class="ba-strip__cell">
             <p class="ba-strip__label">${escapeHtml(item.label)}</p>
-            <p class="ba-strip__value ${tone ? `is-${tone}` : ""}">${escapeHtml(formatMetric(value, item))}</p>
-            ${bench ? meterHtml(value, bench, {
-              higherBetter,
-              rate: Boolean(item.rate || bench.spec?.rate),
-              digits: item.digits,
-            }) : ""}
+            <div class="ba-strip__nums">
+              <p class="ba-strip__value ${tone ? `is-${tone}` : ""}">${escapeHtml(formatMetric(value, item))}</p>
+              ${reqText}
+            </div>
+            ${bench ? meterHtml(value, bench, { higherBetter }) : ""}
           </article>
         `;
       }).join("")}
@@ -1630,7 +1607,7 @@ function dashHtml(block) {
     .map((spec) => playerBoardHtml(spec, players))
     .join("");
   const outcome = (single && fixture?.outcome) || "";
-  const foot = "Req = top-7 line, scaled to this XI · Avg = Vale average";
+  const foot = "Req = League Two top-7 line, scaled to this XI";
   const unitSheets = UNIT_SLIDES.map((slide, index) => unitSheetHtml(slide, {
     mast,
     stats,
@@ -1805,25 +1782,7 @@ const SHEET_EXPORT_WIDTH = 1123;
 const SHEET_EXPORT_HEIGHT = 794;
 const SHEET_EXPORT_SCALE = 2;
 
-function tidyMetersForPdf(root) {
-  root.querySelectorAll(".ba-meter").forEach((meter) => {
-    const reqFlag = meter.querySelector(".ba-meter__flag--req");
-    const avgFlag = meter.querySelector(".ba-meter__flag--avg");
-    if (!reqFlag || !avgFlag) return;
-    const reqLeft = parseFloat(reqFlag.style.left);
-    const avgLeft = parseFloat(avgFlag.style.left);
-    if (!Number.isFinite(reqLeft) || !Number.isFinite(avgLeft)) return;
-    if (Math.abs(reqLeft - avgLeft) >= 14) return;
-    const nudged = Math.max(6, Math.min(avgLeft, reqLeft - 20));
-    avgFlag.style.left = `${nudged}%`;
-    avgFlag.classList.remove("is-end");
-    avgFlag.classList.add("is-start");
-    if (reqLeft > 78) {
-      reqFlag.classList.add("is-end");
-      reqFlag.classList.remove("is-start");
-    }
-  });
-}
+function tidyMetersForPdf() {}
 
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);

@@ -1201,11 +1201,26 @@ a:hover { text-decoration: underline; }
   border-radius: 0 0 2px 2px;
   padding: .4rem .48rem .38rem;
   min-width: 0;
-  overflow: visible;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   print-color-adjust: exact;
   -webkit-print-color-adjust: exact;
+}
+
+.ba-strip__cell .ba-meter {
+  margin-top: auto;
+}
+
+.ba-strip__cell .ba-meter__track {
+  height: 14px;
+  background: #d8d2c4;
+  border: 1px solid #b7afa0;
+}
+
+.ba-strip__cell .ba-meter__tick--req {
+  top: -4px;
+  height: 22px;
 }
 
 .ba-strip__label {
@@ -1219,13 +1234,48 @@ a:hover { text-decoration: underline; }
   min-height: 1.4em;
 }
 
-.ba-strip__value {
+.ba-strip__nums {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .4rem;
   margin: .12rem 0 .28rem;
+}
+
+.ba-strip__value {
+  margin: 0;
   font-family: var(--display);
   font-size: 1.7rem;
   font-weight: 800;
   line-height: .9;
   letter-spacing: .02em;
+}
+
+.ba-strip__req {
+  display: inline-flex;
+  align-items: baseline;
+  gap: .22rem;
+  padding: .12rem .36rem .1rem;
+  background: #111;
+  color: #f5c518;
+  border-radius: 2px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ba-strip__req em {
+  font-style: normal;
+  font-size: .52rem;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.ba-strip__req b {
+  font-family: var(--display);
+  font-size: 1.05rem;
+  font-weight: 800;
 }
 
 .ba-strip__value.is-hot { color: #1f7a3f; }
