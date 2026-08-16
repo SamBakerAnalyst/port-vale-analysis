@@ -262,8 +262,10 @@ function scaledBench(key, stats, single) {
 }
 
 function meterTone(value, top7, higherBetter) {
-  if (value == null || top7 == null || Number.isNaN(Number(value)) || Number.isNaN(Number(top7))) return "";
+  if (value == null || Number.isNaN(Number(value))) return "";
   const v = Number(value);
+  if (higherBetter && v < 0) return "cold";
+  if (top7 == null || Number.isNaN(Number(top7))) return "";
   const t = Number(top7);
   if (higherBetter) {
     if (v >= t) return "hot";
@@ -298,7 +300,7 @@ function meterHtml(value, bench, { higherBetter = true } = {}) {
   if (top7 != null) nums.push(Number(top7));
   const max = Math.max(...nums, 0.01) * 1.18;
   const pct = (n) => Math.max(1.5, Math.min(98.5, (Number(n) / max) * 100));
-  const tone = meterTone(value, top7 ?? team, higherBetter);
+  const tone = meterTone(value, top7, higherBetter);
   const reqPct = top7 == null ? null : pct(top7);
   const avgPct = team == null || benchMatchesValue(team, value) ? null : pct(team);
   return `
