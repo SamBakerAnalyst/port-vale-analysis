@@ -129,7 +129,27 @@ async function fetchJson(url, options = {}) {
   return data;
 }
 
-function fixtureFromState(id) {
+function downloadEmlFile(data) {
+  const raw = String(data?.eml_base64 || "").trim();
+  if (!raw) return false;
+  try {
+    const binary = atob(raw);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: "message/rfc822" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = data.eml_filename || "ticket-request.eml";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
   return (state.payload?.fixtures || []).find((row) => fixtureId(row) === id);
 }
 
@@ -529,9 +549,12 @@ async function confirmTicketRequest() {
       setStatus(message, "ok");
       closeTicketRequestModal();
     } else {
-      const reason = data.reason || "Email not sent";
-      setTicketModalStatus(reason, "error");
-      setStatus(reason, "error");
+      const downloaded = downloadEmlFile(data);
+      const reason = downloaded
+        ? "Website can't send mail from the server. Open the downloaded email in Outlook or Mail and click Send."
+        : data.reason || "Email not sent";
+      setTicketModalStatus(reason, downloaded ? "ok" : "error");
+      setStatus(reason, downloaded ? "ok" : "error");
     }
   } catch (error) {
     const message = error.message || "Could not send email";

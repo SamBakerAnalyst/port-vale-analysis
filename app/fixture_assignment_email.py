@@ -241,11 +241,74 @@ def _smtp_network_error(exc: BaseException) -> bool:
     return "network is unreachable" in text or "timed out" in text or "connection refused" in text
 
 
+def _smtp_port_open(host: str, port: int, timeout: float = 2.0) -> bool:
+    import socket
+
+    try:
+        with socket.create_connection((host, int(port)), timeout=timeout):
+            return True
+    except Exception:
+        return False
+
+
 def _smtp_blocked_hint() -> str:
     return (
-        "Mail server unreachable from the hub (hosting blocks SMTP ports). "
-        "Set RESEND_API_KEY or Microsoft Graph credentials in .env — see .env.example."
+        "The website host blocks outgoing email. "
+        "Open the downloaded message in Outlook or Mail and click Send."
     )
+
+
+def _build_mime_message(
+    *,
+    settings: dict[str, Any],
+    to_emails: list[str],
+    subject: str,
+    text_body: str,
+    html_body: str,
+    attachments: list[dict[str, Any]] | None = None,
+) -> MIMEMultipart:
+    root = MIMEMultipart("mixed")
+    root["Subject"] = subject
+    root["From"] = formataddr((settings["from_name"], settings["from_email"]))
+    root["To"] = ", ".join(to_emails)
+    root["Reply-To"] = settings["from_email"]
+
+    alt = MIMEMultipart("alternative")
+    root.attach(alt)
+    alt.attach(MIMEText(text_body, "plain", "utf-8"))
+    alt.attach(MIMEText(html_body, "html", "utf-8"))
+
+    for attachment in attachments or []:
+        payload = attachment.get("content")
+        if not payload:
+            continue
+        filename = str(attachment.get("filename") or "attachment.bin")
+        maintype = str(attachment.get("maintype") or "application")
+        subtype = str(attachment.get("subtype") or "octet-stream")
+        cid = str(attachment.get("cid") or "").strip()
+        if maintype == "image" and cid:
+            image = MIMEImage(payload, _subtype=subtype)
+            image.add_header("Content-ID", f"<{cid}>")
+            image.add_header("Content-Disposition", "inline", filename=filename)
+            root.attach(image)
+            continue
+        from email.mime.base import MIMEBase
+        from email import encoders
+
+        part = MIMEBase(maintype, subtype)
+        part.set_payload(payload)
+        encoders.encode_base64(part)
+        part.add_header("Content-Disposition", "attachment", filename=filename)
+        root.attach(part)
+    return root
+
+
+def _eml_payload(root: MIMEMultipart, *, filename: str) -> dict[str, str]:
+    raw = root.as_bytes()
+    return {
+        "eml_filename": filename,
+        "eml_base64": base64.b64encode(raw).decode("ascii"),
+    }
 
 
 def _graph_access_token() -> str:
@@ -385,39 +448,19 @@ def _send_via_smtp(
             "reason": "SMTP password not configured (set SMTP_PASSWORD in .env)",
         }
 
-    root = MIMEMultipart("mixed")
-    root["Subject"] = subject
-    root["From"] = formataddr((settings["from_name"], settings["from_email"]))
-    root["To"] = ", ".join(to_emails)
-    root["Reply-To"] = settings["from_email"]
+    root = _build_mime_message(
+        settings=settings,
+        to_emails=to_emails,
+        subject=subject,
+        text_body=text_body,
+        html_body=html_body,
+        attachments=attachments,
+    )
+    safe_name = "".join(ch if ch.isalnum() or ch in "-_." else "-" for ch in subject).strip("-") or "email"
+    eml = _eml_payload(root, filename=f"{safe_name[:60]}.eml")
 
-    alt = MIMEMultipart("alternative")
-    root.attach(alt)
-    alt.attach(MIMEText(text_body, "plain", "utf-8"))
-    alt.attach(MIMEText(html_body, "html", "utf-8"))
-
-    for attachment in attachments or []:
-        payload = attachment.get("content")
-        if not payload:
-            continue
-        filename = str(attachment.get("filename") or "attachment.bin")
-        maintype = str(attachment.get("maintype") or "application")
-        subtype = str(attachment.get("subtype") or "octet-stream")
-        cid = str(attachment.get("cid") or "").strip()
-        if maintype == "image" and cid:
-            image = MIMEImage(payload, _subtype=subtype)
-            image.add_header("Content-ID", f"<{cid}>")
-            image.add_header("Content-Disposition", "inline", filename=filename)
-            root.attach(image)
-            continue
-        from email.mime.base import MIMEBase
-        from email import encoders
-
-        part = MIMEBase(maintype, subtype)
-        part.set_payload(payload)
-        encoders.encode_base64(part)
-        part.add_header("Content-Disposition", "attachment", filename=filename)
-        root.attach(part)
+    if not _smtp_port_open(settings["host"], settings["port"]):
+        return {"sent": False, "reason": _smtp_blocked_hint(), **eml}
 
     try:
         context = _ssl_context()
@@ -428,9 +471,12 @@ def _send_via_smtp(
             server.login(settings["user"], settings["password"])
             server.sendmail(settings["from_email"], to_emails, root.as_string())
     except Exception as exc:
+        result = {"sent": False, **eml}
         if _smtp_network_error(exc):
-            return {"sent": False, "reason": _smtp_blocked_hint()}
-        return {"sent": False, "reason": str(exc)}
+            result["reason"] = _smtp_blocked_hint()
+        else:
+            result["reason"] = str(exc)
+        return result
 
     return {"sent": True, "to": to_emails, "transport": "smtp"}
 
