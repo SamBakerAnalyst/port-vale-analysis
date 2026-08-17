@@ -2335,12 +2335,15 @@ def _compute_fixture_planner_payload(season: str) -> dict[str, Any]:
 
 
 def _upcoming_only_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    cutoff = (datetime.now(UTC).date() - timedelta(days=2)).isoformat()
+    today = datetime.now(UTC).date()
+    start = (today - timedelta(days=1)).isoformat()
+    end = (today + timedelta(days=45)).isoformat()
     merged = dict(payload)
     merged["fixtures"] = [
         row
         for row in payload.get("fixtures") or []
-        if row.get("manual") or str(row.get("date") or "")[:10] >= cutoff
+        if row.get("manual")
+        or start <= str(row.get("date") or "")[:10] <= end
     ]
     return merged
 
