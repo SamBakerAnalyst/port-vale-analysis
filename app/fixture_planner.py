@@ -2163,24 +2163,10 @@ def _build_league_bundle(league_ui: str, season: str) -> dict[str, Any]:
 
 
 def fixture_planner_meta() -> dict[str, Any]:
-    impect = _impect()
-    seasons_by_league: dict[str, list[str]] = {}
-    for row in FIXTURE_COMPETITIONS:
-        competition = str(row["competition"])
-        seasons: list[str] = []
-        for item in impect._fetch_iterations():
-            if str(item.get("competition_name", "")).strip() != competition:
-                continue
-            season = str(item.get("season", "")).strip()
-            if season and season not in seasons:
-                seasons.append(season)
-        seasons.sort(key=impect._season_sort_key, reverse=True)
-        allowed = [item for item in seasons if item in ALLOWED_FIXTURE_SEASONS]
-        seasons_by_league[row["ui"]] = allowed or list(ALLOWED_FIXTURE_SEASONS)
-
+    allowed = list(ALLOWED_FIXTURE_SEASONS)
     return {
         "season": DEFAULT_SEASON,
-        "seasons": list(ALLOWED_FIXTURE_SEASONS),
+        "seasons": allowed,
         "staff": list(FIXTURE_STAFF),
         "staff_teams": [
             {
@@ -2196,7 +2182,7 @@ def fixture_planner_meta() -> dict[str, Any]:
                 "ui": row["ui"],
                 "competition": row["competition"],
                 "color": row["color"],
-                "seasons": seasons_by_league.get(row["ui"], []),
+                "seasons": allowed,
             }
             for row in FIXTURE_LEAGUES
         ],
@@ -2205,7 +2191,7 @@ def fixture_planner_meta() -> dict[str, Any]:
                 "ui": row["ui"],
                 "competition": row["competition"],
                 "color": row["color"],
-                "seasons": seasons_by_league.get(row["ui"], []),
+                "seasons": allowed,
             }
             for row in FIXTURE_CUPS
         ],
