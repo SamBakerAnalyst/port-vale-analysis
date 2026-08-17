@@ -317,6 +317,8 @@ async function loadCalendar() {
     const scoutLabel = state.staff || "All staff";
     const fixtures = state.payload.fixtures || [];
     const count = fixtures.length;
+    const today = todayKey();
+    const upcomingCount = fixtures.filter((row) => String(row.date || "").slice(0, 10) >= today).length;
     els.statusBar.textContent = `${scoutLabel} · ${count} assignment${count === 1 ? "" : "s"} (${upcomingCount} upcoming) · updated ${updated}`;
   } catch (error) {
     els.statusBar.textContent = error.message;
