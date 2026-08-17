@@ -79,6 +79,8 @@ KPI_PXT_SHOT = 1408
 KPI_PXT_DRIBBLE = 1405
 MATCH_KPI_CACHE_TTL = 6 * 3600
 MATCH_STATS_CACHE_VERSION = 18
+# Bump when cross PXT logic changes — does not invalidate full match KPI cache.
+CROSS_PXT_VERSION = 2
 # Shot actions stripped from match + player xG boards (open-play / set-piece delivery only).
 XG_VS_EXCLUDED_ACTIONS = frozenset({
     "PENALTY",
@@ -1385,6 +1387,19 @@ def _apply_cross_pxt(
     return round(team_total * 100.0, 1)
 
 
+def _cross_pxt_stale(stats: dict[str, Any] | None) -> bool:
+    if not isinstance(stats, dict):
+        return False
+    return int(stats.get("crossPxtVersion") or 0) != CROSS_PXT_VERSION
+
+
+def _mark_cross_pxt_applied(stats: dict[str, Any], team_total: float) -> None:
+    stats["crossPxt"] = team_total
+    stats["crossPxtReady"] = True
+    stats["crossPxtScale"] = "percent"
+    stats["crossPxtVersion"] = CROSS_PXT_VERSION
+
+
 def _compact_shot_rows(shots: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
         {
@@ -1419,7 +1434,7 @@ def _hydrate_open_play_shots(
         (not any(_shot_player_id(row) for row in shots))
         or (vale_xg > 0 and abs(player_xg - vale_xg) > 0.04)
     )
-    needs_cross = fetch_remote and bool(players) and not stats.get("crossPxtReady")
+    needs_cross = fetch_remote and bool(players) and _cross_pxt_stale(stats)
     events: list[dict[str, Any]] | None = None
     if (needs_events or needs_cross) and match_id:
         try:
@@ -1438,12 +1453,8 @@ def _hydrate_open_play_shots(
             except Exception:  # noqa: BLE001
                 ekpi = []
             team_cross = _apply_cross_pxt(players, events, ekpi, squad_id)
-            stats["crossPxt"] = team_cross
-            stats["crossPxtReady"] = True
-            stats["crossPxtScale"] = "percent"
+            _mark_cross_pxt_applied(stats, team_cross)
             changed = True
-    if _scale_cached_cross_pxt_to_percent(stats):
-        changed = True
     if shots and players:
         _apply_open_play_player_xg(players, shots, squad_id)
         _apply_open_play_player_shots(players, shots, squad_id)
@@ -1453,24 +1464,6 @@ def _hydrate_open_play_shots(
     _assign_unattributed_shots_to_attack(stats, shots, squad_id)
     _assign_team_cross_pxt_to_attack(stats)
     return changed
-
-
-def _scale_cached_cross_pxt_to_percent(stats: dict[str, Any]) -> bool:
-    """KPI 1404 is a fraction; Impect altered threat is shown as percent."""
-    if not isinstance(stats, dict) or stats.get("crossPxtScale") == "percent":
-        return False
-    players = stats.get("players") or []
-    has_value = stats.get("crossPxt") is not None or any(
-        player.get("crossPxt") is not None for player in players
-    )
-    if not has_value:
-        return False
-    for player in players:
-        player["crossPxt"] = round(float(player.get("crossPxt") or 0) * 100.0, 1)
-    if stats.get("crossPxt") is not None:
-        stats["crossPxt"] = round(float(stats["crossPxt"]) * 100.0, 1)
-    stats["crossPxtScale"] = "percent"
-    return True
 
 
 def _assign_team_cross_pxt_to_attack(stats: dict[str, Any]) -> None:
@@ -1484,7 +1477,7 @@ def _assign_team_cross_pxt_to_attack(stats: dict[str, Any]) -> None:
     team = stats.get("crossPxt")
     if team is None:
         team = sum(float(player.get("crossPxt") or 0) for player in (stats.get("players") or []))
-    att["crossPxt"] = round(float(team or 0), 2)
+    att["crossPxt"] = round(float(team or 0), 1)
 
 
 def _hydrate_lineup_units(stats: dict[str, Any], match_id: int, squad_id: int) -> bool:
@@ -1955,6 +1948,7 @@ def _fetch_match_stats(
             )
         except Exception:  # noqa: BLE001
             stats["inBehind"] = None
+    _hydrate_open_play_shots(stats, squad_id, match_id, fetch_remote=True)
     return stats
 
 
@@ -2033,11 +2027,15 @@ def _load_match_kpis(
         stats = result.get(match_id)
         if stats and match.get("outcome") is not None:
             latest_id = match_id
-    if latest_id and not (result.get(latest_id) or {}).get("crossPxtReady"):
+    if latest_id and _cross_pxt_stale(result.get(latest_id)):
         if _hydrate_open_play_shots(
             result[latest_id], PORT_VALE_SQUAD_ID, latest_id, fetch_remote=True
         ):
             dirty = True
+            cached = disk.get(str(latest_id))
+            if isinstance(cached, dict):
+                cached["stats"] = result[latest_id]
+                dirty = True
 
     if to_fetch:
         names = _merged_player_names()
