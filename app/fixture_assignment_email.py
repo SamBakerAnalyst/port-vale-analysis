@@ -182,6 +182,10 @@ def smtp_configured() -> bool:
     return bool(_env("SMTP_PASSWORD") or _env("FIXTURE_EMAIL_PASSWORD"))
 
 
+def email_configured() -> bool:
+    return smtp_configured() or _resend_configured() or _graph_configured()
+
+
 def _smtp_settings() -> dict[str, Any]:
     password = _env("SMTP_PASSWORD") or _env("FIXTURE_EMAIL_PASSWORD")
     user = _env("SMTP_USER") or _env("FIXTURE_EMAIL_FROM") or DEFAULT_FROM_EMAIL
@@ -194,6 +198,287 @@ def _smtp_settings() -> dict[str, Any]:
         "from_email": from_email,
         "from_name": _env("FIXTURE_EMAIL_FROM_NAME") or DEFAULT_FROM_NAME,
     }
+
+
+def _email_transport_mode() -> str:
+    mode = (_env("FIXTURE_EMAIL_TRANSPORT") or "auto").lower()
+    return mode if mode in {"auto", "smtp", "graph", "resend"} else "auto"
+
+
+def _resend_configured() -> bool:
+    return bool(_env("RESEND_API_KEY"))
+
+
+def _graph_configured() -> bool:
+    return bool(
+        _env("MS_GRAPH_TENANT_ID")
+        and _env("MS_GRAPH_CLIENT_ID")
+        and _env("MS_GRAPH_CLIENT_SECRET")
+    )
+
+
+def _choose_email_transport() -> str:
+    mode = _email_transport_mode()
+    if mode == "smtp":
+        return "smtp"
+    if mode == "resend":
+        return "resend" if _resend_configured() else "smtp"
+    if mode == "graph":
+        return "graph" if _graph_configured() else "smtp"
+    if _resend_configured():
+        return "resend"
+    if _graph_configured():
+        return "graph"
+    return "smtp"
+
+
+def _smtp_network_error(exc: BaseException) -> bool:
+    if isinstance(exc, (TimeoutError, ConnectionError)):
+        return True
+    if isinstance(exc, OSError) and getattr(exc, "errno", None) in {51, 61, 101, 111, 113}:
+        return True
+    text = str(exc).lower()
+    return "network is unreachable" in text or "timed out" in text or "connection refused" in text
+
+
+def _smtp_blocked_hint() -> str:
+    return (
+        "Mail server unreachable from the hub (hosting blocks SMTP ports). "
+        "Set RESEND_API_KEY or Microsoft Graph credentials in .env — see .env.example."
+    )
+
+
+def _graph_access_token() -> str:
+    tenant = _env("MS_GRAPH_TENANT_ID")
+    response = _http.post(
+        f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
+        data={
+            "client_id": _env("MS_GRAPH_CLIENT_ID"),
+            "client_secret": _env("MS_GRAPH_CLIENT_SECRET"),
+            "scope": "https://graph.microsoft.com/.default",
+            "grant_type": "client_credentials",
+        },
+        timeout=30,
+    )
+    if not response.ok:
+        raise RuntimeError(f"Graph auth failed ({response.status_code}): {response.text[:240]}")
+    token = response.json().get("access_token")
+    if not token:
+        raise RuntimeError("Graph auth returned no access token")
+    return str(token)
+
+
+def _send_via_resend(
+    *,
+    settings: dict[str, Any],
+    to_emails: list[str],
+    subject: str,
+    text_body: str,
+    html_body: str,
+    attachments: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    api_key = _env("RESEND_API_KEY")
+    payload: dict[str, Any] = {
+        "from": formataddr((settings["from_name"], settings["from_email"])),
+        "to": to_emails,
+        "subject": subject,
+        "html": html_body,
+        "text": text_body,
+    }
+    attach_payload: list[dict[str, str]] = []
+    for attachment in attachments or []:
+        content = attachment.get("content")
+        if not content:
+            continue
+        row: dict[str, str] = {
+            "filename": str(attachment.get("filename") or "attachment.bin"),
+            "content": base64.b64encode(content).decode("ascii"),
+        }
+        cid = str(attachment.get("cid") or "").strip()
+        if cid:
+            row["content_id"] = cid
+        content_type = str(attachment.get("content_type") or "").strip()
+        if content_type:
+            row["content_type"] = content_type
+        attach_payload.append(row)
+    if attach_payload:
+        payload["attachments"] = attach_payload
+
+    response = _http.post(
+        "https://api.resend.com/emails",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=45,
+    )
+    if not response.ok:
+        detail = response.text[:240].replace("\n", " ")
+        return {"sent": False, "reason": f"Resend API error ({response.status_code}): {detail}"}
+    return {"sent": True, "to": to_emails, "transport": "resend"}
+
+
+def _send_via_graph(
+    *,
+    settings: dict[str, Any],
+    to_emails: list[str],
+    subject: str,
+    text_body: str,
+    html_body: str,
+    attachments: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    token = _graph_access_token()
+    send_as = _env("MS_GRAPH_SEND_AS") or settings["from_email"]
+    graph_attachments: list[dict[str, Any]] = []
+    for attachment in attachments or []:
+        content = attachment.get("content")
+        if not content:
+            continue
+        row: dict[str, Any] = {
+            "@odata.type": "#microsoft.graph.fileAttachment",
+            "name": str(attachment.get("filename") or "attachment.bin"),
+            "contentType": str(attachment.get("content_type") or "application/octet-stream"),
+            "contentBytes": base64.b64encode(content).decode("ascii"),
+        }
+        cid = str(attachment.get("cid") or "").strip()
+        if cid:
+            row["isInline"] = True
+            row["contentId"] = cid
+        graph_attachments.append(row)
+
+    message: dict[str, Any] = {
+        "subject": subject,
+        "body": {"contentType": "HTML", "content": html_body or text_body},
+        "toRecipients": [{"emailAddress": {"address": email}} for email in to_emails],
+    }
+    if graph_attachments:
+        message["attachments"] = graph_attachments
+
+    response = _http.post(
+        f"https://graph.microsoft.com/v1.0/users/{quote(send_as)}/sendMail",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        json={"message": message, "saveToSentItems": True},
+        timeout=45,
+    )
+    if not response.ok:
+        detail = response.text[:240].replace("\n", " ")
+        return {"sent": False, "reason": f"Microsoft Graph error ({response.status_code}): {detail}"}
+    return {"sent": True, "to": to_emails, "transport": "graph"}
+
+
+def _send_via_smtp(
+    *,
+    settings: dict[str, Any],
+    to_emails: list[str],
+    subject: str,
+    text_body: str,
+    html_body: str,
+    attachments: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    if not settings["password"]:
+        return {
+            "sent": False,
+            "reason": "SMTP password not configured (set SMTP_PASSWORD in .env)",
+        }
+
+    root = MIMEMultipart("mixed")
+    root["Subject"] = subject
+    root["From"] = formataddr((settings["from_name"], settings["from_email"]))
+    root["To"] = ", ".join(to_emails)
+    root["Reply-To"] = settings["from_email"]
+
+    alt = MIMEMultipart("alternative")
+    root.attach(alt)
+    alt.attach(MIMEText(text_body, "plain", "utf-8"))
+    alt.attach(MIMEText(html_body, "html", "utf-8"))
+
+    for attachment in attachments or []:
+        payload = attachment.get("content")
+        if not payload:
+            continue
+        filename = str(attachment.get("filename") or "attachment.bin")
+        maintype = str(attachment.get("maintype") or "application")
+        subtype = str(attachment.get("subtype") or "octet-stream")
+        cid = str(attachment.get("cid") or "").strip()
+        if maintype == "image" and cid:
+            image = MIMEImage(payload, _subtype=subtype)
+            image.add_header("Content-ID", f"<{cid}>")
+            image.add_header("Content-Disposition", "inline", filename=filename)
+            root.attach(image)
+            continue
+        from email.mime.base import MIMEBase
+        from email import encoders
+
+        part = MIMEBase(maintype, subtype)
+        part.set_payload(payload)
+        encoders.encode_base64(part)
+        part.add_header("Content-Disposition", "attachment", filename=filename)
+        root.attach(part)
+
+    try:
+        context = _ssl_context()
+        with smtplib.SMTP(settings["host"], settings["port"], timeout=45) as server:
+            server.ehlo()
+            server.starttls(context=context)
+            server.ehlo()
+            server.login(settings["user"], settings["password"])
+            server.sendmail(settings["from_email"], to_emails, root.as_string())
+    except Exception as exc:
+        if _smtp_network_error(exc):
+            return {"sent": False, "reason": _smtp_blocked_hint()}
+        return {"sent": False, "reason": str(exc)}
+
+    return {"sent": True, "to": to_emails, "transport": "smtp"}
+
+
+def _send_email_payload(
+    *,
+    to_emails: list[str],
+    subject: str,
+    text_body: str,
+    html_body: str,
+    attachments: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    recipients = _parse_email_list(",".join(to_emails))
+    if not recipients:
+        return {"sent": False, "reason": "No recipient email addresses configured"}
+
+    settings = _smtp_settings()
+    transport = _choose_email_transport()
+    if transport == "resend":
+        if not _resend_configured():
+            return {"sent": False, "reason": "RESEND_API_KEY not configured"}
+        return _send_via_resend(
+            settings=settings,
+            to_emails=recipients,
+            subject=subject,
+            text_body=text_body,
+            html_body=html_body,
+            attachments=attachments,
+        )
+    if transport == "graph":
+        if not _graph_configured():
+            return {"sent": False, "reason": "Microsoft Graph credentials not configured"}
+        return _send_via_graph(
+            settings=settings,
+            to_emails=recipients,
+            subject=subject,
+            text_body=text_body,
+            html_body=html_body,
+            attachments=attachments,
+        )
+    return _send_via_smtp(
+        settings=settings,
+        to_emails=recipients,
+        subject=subject,
+        text_body=text_body,
+        html_body=html_body,
+        attachments=attachments,
+    )
 
 
 def _fotmob_badge_url(team_id: str | int | None) -> str | None:
@@ -698,12 +983,10 @@ def send_assignment_email(
     if not to_email:
         return {"sent": False, "reason": f"No email configured for {staff}"}
 
-    settings = _smtp_settings()
-    if not settings["password"]:
-        logger.warning("SMTP password not configured; skipped assignment email to %s", to_email)
+    if not email_configured():
         return {
             "sent": False,
-            "reason": "SMTP password not configured (set SMTP_PASSWORD in .env)",
+            "reason": "Email not configured (set SMTP, RESEND_API_KEY, or Microsoft Graph in .env)",
         }
 
     kickoff_label = _format_kickoff(kickoff_utc, date_key)
@@ -736,106 +1019,82 @@ def send_assignment_email(
         fixture_id=fixture_id,
     )
 
-    root = MIMEMultipart("mixed")
-    root["Subject"] = f"Scouting assignment · {home} vs {away}"
-    root["From"] = formataddr((settings["from_name"], settings["from_email"]))
-    root["To"] = to_email
-    root["Reply-To"] = settings["from_email"]
-
-    related = MIMEMultipart("related")
-    root.attach(related)
-    alt = MIMEMultipart("alternative")
-    related.attach(alt)
-
     home_bytes = _download_image(home_badge_url)
     away_bytes = _download_image(away_badge_url)
     home_cid = make_msgid(domain="port-vale.co.uk")[1:-1] if home_bytes else None
     away_cid = make_msgid(domain="port-vale.co.uk")[1:-1] if away_bytes else None
 
-    alt.attach(
-        MIMEText(
-            build_assignment_email_text(
-                staff=staff,
-                home=home,
-                away=away,
-                league=league,
-                watch_type=watch_type,
-                kickoff_label=kickoff_label,
-                venue=venue_label,
-                watched_players=targets,
-                reject_url=reject_url,
-                outlook_url=outlook_url or "",
-            ),
-            "plain",
-            "utf-8",
-        )
-    )
-    alt.attach(
-        MIMEText(
-            build_assignment_email_html(
-                staff=staff,
-                home=home,
-                away=away,
-                league=league,
-                watch_type=watch_type,
-                kickoff_label=kickoff_label,
-                venue=venue_label,
-                home_cid=home_cid,
-                away_cid=away_cid,
-                watched_players=targets,
-                reject_url=reject_url,
-                outlook_url=outlook_url or "",
-            ),
-            "html",
-            "utf-8",
-        )
-    )
-
+    attachments: list[dict[str, Any]] = []
     if home_bytes and home_cid:
-        image = MIMEImage(home_bytes)
-        image.add_header("Content-ID", f"<{home_cid}>")
-        image.add_header("Content-Disposition", "inline", filename="home-badge.png")
-        related.attach(image)
+        attachments.append(
+            {
+                "filename": "home-badge.png",
+                "content": home_bytes,
+                "maintype": "image",
+                "subtype": "png",
+                "cid": home_cid,
+                "content_type": "image/png",
+            }
+        )
     if away_bytes and away_cid:
-        image = MIMEImage(away_bytes)
-        image.add_header("Content-ID", f"<{away_cid}>")
-        image.add_header("Content-Disposition", "inline", filename="away-badge.png")
-        related.attach(image)
-
+        attachments.append(
+            {
+                "filename": "away-badge.png",
+                "content": away_bytes,
+                "maintype": "image",
+                "subtype": "png",
+                "cid": away_cid,
+                "content_type": "image/png",
+            }
+        )
     if ics_body:
-        from email.mime.base import MIMEBase
-        from email import encoders
-
-        ics_part = MIMEBase("text", "calendar", method="PUBLISH", charset="UTF-8")
-        ics_part.set_payload(ics_body.encode("utf-8"))
-        encoders.encode_base64(ics_part)
-        ics_part.add_header(
-            "Content-Type",
-            'text/calendar; charset="UTF-8"; method=PUBLISH; name="scouting-assignment.ics"',
+        attachments.append(
+            {
+                "filename": "scouting-assignment.ics",
+                "content": ics_body.encode("utf-8"),
+                "maintype": "text",
+                "subtype": "calendar",
+                "content_type": "text/calendar",
+            }
         )
-        ics_part.add_header(
-            "Content-Disposition",
-            "attachment",
-            filename="scouting-assignment.ics",
-        )
-        root.attach(ics_part)
 
-    context = _ssl_context()
-    with smtplib.SMTP(settings["host"], settings["port"], timeout=30) as server:
-        server.ehlo()
-        server.starttls(context=context)
-        server.ehlo()
-        server.login(settings["user"], settings["password"])
-        server.sendmail(settings["from_email"], [to_email], root.as_string())
-
-    logger.info("Assignment email sent to %s for %s vs %s", to_email, home, away)
-    return {
-        "sent": True,
-        "to": to_email,
-        "reject_url": reject_url or None,
-        "outlook_url": outlook_url or None,
-        "ics_attached": bool(ics_body),
-    }
+    result = _send_email_payload(
+        to_emails=[to_email],
+        subject=f"Scouting assignment · {home} vs {away}",
+        text_body=build_assignment_email_text(
+            staff=staff,
+            home=home,
+            away=away,
+            league=league,
+            watch_type=watch_type,
+            kickoff_label=kickoff_label,
+            venue=venue_label,
+            watched_players=targets,
+            reject_url=reject_url,
+            outlook_url=outlook_url or "",
+        ),
+        html_body=build_assignment_email_html(
+            staff=staff,
+            home=home,
+            away=away,
+            league=league,
+            watch_type=watch_type,
+            kickoff_label=kickoff_label,
+            venue=venue_label,
+            home_cid=home_cid,
+            away_cid=away_cid,
+            watched_players=targets,
+            reject_url=reject_url,
+            outlook_url=outlook_url or "",
+        ),
+        attachments=attachments,
+    )
+    if result.get("sent"):
+        logger.info("Assignment email sent to %s for %s vs %s", to_email, home, away)
+        result["reject_url"] = reject_url or None
+        result["outlook_url"] = outlook_url or None
+        result["ics_attached"] = bool(ics_body)
+    return result
 
 
 def send_rejection_notify_email(
@@ -853,12 +1112,10 @@ def send_rejection_notify_email(
     if not to_email:
         return {"sent": False, "reason": "No reject notify email configured"}
 
-    settings = _smtp_settings()
-    if not settings["password"]:
-        logger.warning("SMTP password not configured; skipped rejection notify to %s", to_email)
+    if not email_configured():
         return {
             "sent": False,
-            "reason": "SMTP password not configured (set SMTP_PASSWORD in .env)",
+            "reason": "Email not configured (set SMTP, RESEND_API_KEY, or Microsoft Graph in .env)",
         }
 
     first = staff.split(" ")[0] if staff else "Scout"
@@ -912,23 +1169,15 @@ def send_rejection_notify_email(
 </html>
 """
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = formataddr((settings["from_name"], settings["from_email"]))
-    msg["To"] = to_email
-    msg.attach(MIMEText(text, "plain", "utf-8"))
-    msg.attach(MIMEText(html, "html", "utf-8"))
-
-    context = _ssl_context()
-    with smtplib.SMTP(settings["host"], settings["port"], timeout=30) as server:
-        server.ehlo()
-        server.starttls(context=context)
-        server.ehlo()
-        server.login(settings["user"], settings["password"])
-        server.sendmail(settings["from_email"], [to_email], msg.as_string())
-
-    logger.info("Rejection notify email sent to %s for %s / %s vs %s", to_email, staff, home, away)
-    return {"sent": True, "to": to_email}
+    result = _send_email_payload(
+        to_emails=[to_email],
+        subject=subject,
+        text_body=text,
+        html_body=html,
+    )
+    if result.get("sent"):
+        logger.info("Rejection notify email sent to %s for %s / %s vs %s", to_email, staff, home, away)
+    return result
 
 
 def _fixture_rows_html(fixtures: list[dict[str, Any]], *, ticket_mode: bool = False) -> str:
@@ -1167,58 +1416,26 @@ def _send_multipart_email(
     html_body: str,
     attachments: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    recipients = _parse_email_list(",".join(to_emails))
-    if not recipients:
-        return {"sent": False, "reason": "No recipient email addresses configured"}
-
-    settings = _smtp_settings()
-    if not settings["password"]:
+    if not email_configured():
         return {
             "sent": False,
-            "reason": "SMTP password not configured (set SMTP_PASSWORD in .env)",
+            "reason": "Email not configured (set SMTP, RESEND_API_KEY, or Microsoft Graph in .env)",
         }
 
-    root = MIMEMultipart("mixed")
-    root["Subject"] = subject
-    root["From"] = formataddr((settings["from_name"], settings["from_email"]))
-    root["To"] = ", ".join(recipients)
-    root["Reply-To"] = settings["from_email"]
-
-    alt = MIMEMultipart("alternative")
-    root.attach(alt)
-    alt.attach(MIMEText(text_body, "plain", "utf-8"))
-    alt.attach(MIMEText(html_body, "html", "utf-8"))
-
-    for attachment in attachments or []:
-        payload = attachment.get("content")
-        filename = str(attachment.get("filename") or "attachment.bin")
-        maintype = str(attachment.get("maintype") or "application")
-        subtype = str(attachment.get("subtype") or "octet-stream")
-        if not payload:
-            continue
-        from email.mime.base import MIMEBase
-        from email import encoders
-
-        part = MIMEBase(maintype, subtype)
-        part.set_payload(payload)
-        encoders.encode_base64(part)
-        part.add_header("Content-Disposition", "attachment", filename=filename)
-        root.attach(part)
-
-    context = _ssl_context()
-    with smtplib.SMTP(settings["host"], settings["port"], timeout=45) as server:
-        server.ehlo()
-        server.starttls(context=context)
-        server.ehlo()
-        server.login(settings["user"], settings["password"])
-        server.sendmail(settings["from_email"], recipients, root.as_string())
-
-    logger.info("Bulk fixture email sent to %s · %s", recipients, subject)
-    return {
-        "sent": True,
-        "to": recipients,
-        "attachments": [str(row.get("filename") or "") for row in (attachments or []) if row.get("content")],
-    }
+    result = _send_email_payload(
+        to_emails=to_emails,
+        subject=subject,
+        text_body=text_body,
+        html_body=html_body,
+        attachments=attachments,
+    )
+    if result.get("sent"):
+        recipients = _parse_email_list(",".join(to_emails))
+        logger.info("Bulk fixture email sent to %s · %s", recipients, subject)
+        result["attachments"] = [
+            str(row.get("filename") or "") for row in (attachments or []) if row.get("content")
+        ]
+    return result
 
 
 def build_ticket_request_print_pdf(
