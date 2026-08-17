@@ -2371,21 +2371,16 @@ def build_fixture_planner_payload(
         )
 
     now = time.time()
-    if not force_refresh:
-        cached = _cached_payload_for_season(season)
-        if cached:
-            saved_at, payload = cached
-            age = now - saved_at
-            if age < FIXTURE_CACHE_STALE_SECONDS:
-                if age >= FIXTURE_CACHE_TTL_SECONDS:
-                    _schedule_fixture_rebuild(season)
-                return _finalize_fixture_payload(payload, season=season)
+    cached = _cached_payload_for_season(season)
+    if cached and now - cached[0] < FIXTURE_CACHE_STALE_SECONDS:
+        if force_refresh or now - cached[0] >= FIXTURE_CACHE_TTL_SECONDS:
+            _schedule_fixture_rebuild(season)
+        return _finalize_fixture_payload(cached[1], season=season)
 
     with _fixture_compute_lock:
-        if not force_refresh:
-            cached = _cached_payload_for_season(season)
-            if cached and now - cached[0] < FIXTURE_CACHE_TTL_SECONDS:
-                return _finalize_fixture_payload(cached[1], season=season)
+        cached = _cached_payload_for_season(season)
+        if cached and now - cached[0] < FIXTURE_CACHE_STALE_SECONDS:
+            return _finalize_fixture_payload(cached[1], season=season)
         payload = _compute_fixture_planner_payload(season)
         saved_at = time.time()
         _store_memory_fixture_cache(season, saved_at, payload)

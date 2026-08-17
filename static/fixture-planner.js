@@ -1379,13 +1379,7 @@ function visibleFixtures() {
   if (state.playedOnly && !state.monthFilter && fixtures.length > MAX_UNFILTERED_FIXTURES) {
     const monthKey = defaultMonthForPastView();
     fixtures = fixtures.filter((fixture) => fixtureDateKey(fixture).slice(0, 7) === monthKey);
-  } else if (
-    state.compScope === "leagues" &&
-    !state.hidePast &&
-    !state.playedOnly &&
-    !state.monthFilter &&
-    fixtures.length > MAX_UNFILTERED_FIXTURES
-  ) {
+  } else if (!state.monthFilter && fixtures.length > MAX_UNFILTERED_FIXTURES) {
     const monthKey = defaultMonthForPastView();
     fixtures = fixtures.filter((fixture) => fixtureDateKey(fixture).slice(0, 7) === monthKey);
   }
@@ -2599,6 +2593,9 @@ async function loadFixtures({ forceRefresh = false } = {}) {
     state.teamNamesLoaded = false;
     setTeamNameCatalog(teamNamesFromPayload(state.payload));
     await loadAssignmentsFromServer();
+    if (!IS_PLAYED_APP && !state.monthFilter) {
+      state.monthFilter = defaultMonthForPastView();
+    }
     renderMonthFilter();
     renderSummary();
     renderView({ scrollToUpcoming: true });
