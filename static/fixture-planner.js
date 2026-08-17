@@ -162,6 +162,8 @@ function downloadEmlFile(data) {
     return false;
   }
 }
+
+function fixtureFromState(id) {
   return (state.payload?.fixtures || []).find((row) => fixtureId(row) === id);
 }
 
