@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_SEASON = "26/27"
 ALLOWED_FIXTURE_SEASONS: tuple[str, ...] = ("26/27", "25/26")
 FIXTURE_CACHE_TTL_SECONDS = 1800
-FIXTURE_CACHE_VERSION = "v15"
+FIXTURE_CACHE_VERSION = "v16"
 
 FIXTURE_STAFF_TEAMS: tuple[dict[str, Any], ...] = (
     {
@@ -1234,12 +1234,14 @@ def _parse_kickoff_utc(value: Any) -> datetime | None:
     return stamp.astimezone(UTC)
 
 
-def _is_placeholder_kickoff(value: Any) -> bool:
+def _is_placeholder_kickoff(value: Any, *, cup: bool | None = None) -> bool:
     """True when a source stamped a date with a fake kick-off time.
 
-    FotMob often uses 12:00–14:00Z on midweek cup ties before real KOs are
+    FotMob often uses 12:00–14:00Z on midweek *cup* ties before real KOs are
     published — that shows as 13:00–15:00 UK and looks like a confirmed 3pm.
-    Saturday/Sunday 14:00Z (traditional 3pm) is left alone.
+    Saturday/Sunday 14:00Z (traditional 3pm) is left alone, as is Monday
+    (Bank Holiday 15:00 UK is a real league kick-off).
+    League competitions are never treated as midday placeholders.
     """
     stamp = _parse_kickoff_utc(value)
     if stamp is None:
@@ -1250,8 +1252,10 @@ def _is_placeholder_kickoff(value: Any) -> bool:
     # Midnight-ish UTC dumps.
     if minute == 0 and hour in (0, 22, 23):
         return True
-    # Mon–Fri midday UTC placeholders (Tue cup round = classic 14:00Z → 15:00 UK).
-    if stamp.weekday() <= 4 and minute == 0 and hour in (12, 13, 14):
+    if cup is False:
+        return False
+    # Tue–Fri midday UTC placeholders (classic 14:00Z → 15:00 UK on cup rounds).
+    if stamp.weekday() in (1, 2, 3, 4) and minute == 0 and hour in (12, 13, 14):
         return True
     return False
 
@@ -2111,7 +2115,8 @@ def _build_league_bundle(league_ui: str, season: str) -> dict[str, Any]:
         row["source_count"] = len(sources)
         row["verified"] = bool(row.get("match_id"))
         row["kickoff_tbc"] = _is_placeholder_kickoff(
-            row.get("kickoff_utc") or row.get("scheduled_date")
+            row.get("kickoff_utc") or row.get("scheduled_date"),
+            cup=bool(config.get("cup")),
         )
         row["fixture_id"] = _fixture_id(
             str(row.get("league") or league_ui),

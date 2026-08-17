@@ -513,7 +513,7 @@ async function confirmTicketRequest() {
   }
 }
 
-function isPlaceholderKickoff(iso) {
+function isPlaceholderKickoff(iso, fixture) {
   const token = String(iso || "").trim();
   if (!token || !token.includes("T")) return true;
   const stamp = new Date(token);
@@ -522,13 +522,16 @@ function isPlaceholderKickoff(iso) {
   const minute = stamp.getUTCMinutes();
   const day = stamp.getUTCDay(); // 0 Sun … 6 Sat
   if (minute === 0 && (hour === 0 || hour === 22 || hour === 23)) return true;
-  // Mon–Fri midday UTC dumps from FotMob (14:00Z → 15:00 UK in summer).
-  if (day >= 1 && day <= 5 && minute === 0 && hour >= 12 && hour <= 14) return true;
+  const isCup = Boolean(fixture?.cup) || isCupCompetition(fixture?.league);
+  // League 15:00 UK (14:00Z in summer) is a real KO — Bank Holiday Monday especially.
+  if (fixture && !isCup) return false;
+  // Tue–Fri midday UTC dumps from FotMob on cups (14:00Z → 15:00 UK in summer).
+  if (day >= 2 && day <= 5 && minute === 0 && hour >= 12 && hour <= 14) return true;
   return false;
 }
 
 function formatTime(iso, fixture) {
-  if (fixture?.kickoff_tbc || isPlaceholderKickoff(iso)) return "TBC";
+  if (fixture?.kickoff_tbc || isPlaceholderKickoff(iso, fixture)) return "TBC";
   if (!iso) return "TBC";
   return new Date(iso).toLocaleTimeString("en-GB", {
     hour: "2-digit",
