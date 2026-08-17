@@ -421,7 +421,7 @@ def _send_via_smtp(
 
     try:
         context = _ssl_context()
-        with smtplib.SMTP(settings["host"], settings["port"], timeout=45) as server:
+        with smtplib.SMTP(settings["host"], settings["port"], timeout=8) as server:
             server.ehlo()
             server.starttls(context=context)
             server.ehlo()

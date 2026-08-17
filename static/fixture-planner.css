@@ -310,6 +310,23 @@ a:hover { text-decoration: underline; }
   background: transparent;
 }
 
+.fp-btn--primary {
+  background: var(--accent, #34d399);
+  border-color: var(--accent, #34d399);
+  color: #052e16;
+  font-weight: 700;
+}
+
+.fp-btn--primary:hover {
+  filter: brightness(1.08);
+}
+
+.fp-btn--primary:disabled {
+  opacity: .7;
+  cursor: wait;
+  filter: none;
+}
+
 .fp-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -1318,6 +1335,8 @@ a:hover { text-decoration: underline; }
   padding: .85rem 1.1rem;
   border-top: 1px solid var(--border, #1f2937);
   background: var(--surface-2, #0f172a);
+  position: relative;
+  z-index: 2;
 }
 
 .fp-assignment-badge--players {
@@ -1455,6 +1474,25 @@ a:hover { text-decoration: underline; }
   font-size: var(--fp-text-sm);
   resize: vertical;
   min-height: 4.5rem;
+}
+
+.fp-ticket-modal__status {
+  margin: 0;
+  padding: .15rem 1.1rem .75rem;
+  font-size: .85rem;
+  line-height: 1.4;
+}
+
+.fp-ticket-modal__status--loading {
+  color: #fbbf24;
+}
+
+.fp-ticket-modal__status--error {
+  color: #fca5a5;
+}
+
+.fp-ticket-modal__status--ok {
+  color: #86efac;
 }
 
 .fp-ticket-modal__hint {

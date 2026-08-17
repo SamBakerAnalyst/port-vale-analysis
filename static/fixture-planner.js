@@ -71,6 +71,7 @@ const els = {
   ticketModalMeta: document.getElementById("ticketModalMeta"),
   ticketModalBody: document.getElementById("ticketModalBody"),
   ticketAdditionalRequests: document.getElementById("ticketAdditionalRequests"),
+  ticketModalStatus: document.getElementById("ticketModalStatus"),
   ticketConfirmBtn: document.getElementById("ticketConfirmBtn"),
   pageSubtitle: document.getElementById("pageSubtitle"),
   hidePastToggle: document.getElementById("hidePastToggle"),
@@ -339,10 +340,26 @@ async function sendBulkEmail(kind) {
   }
 }
 
+function setTicketModalStatus(message, kind = "") {
+  const el = els.ticketModalStatus;
+  if (!el) return;
+  if (!message) {
+    el.hidden = true;
+    el.textContent = "";
+    el.className = "fp-ticket-modal__status";
+    return;
+  }
+  el.hidden = false;
+  el.textContent = message;
+  el.className = `fp-ticket-modal__status${kind ? ` fp-ticket-modal__status--${kind}` : ""}`;
+}
+
 function closeTicketRequestModal() {
   if (!els.ticketModal) return;
   els.ticketModal.classList.add("fp-assign-modal--hidden");
   els.ticketModal.setAttribute("aria-hidden", "true");
+  setTicketModalStatus("");
+  if (els.ticketConfirmBtn) els.ticketConfirmBtn.textContent = "Send to admin";
 }
 
 function syncTicketRequestUi() {
@@ -450,6 +467,7 @@ async function openTicketRequestModal() {
   if (els.ticketConfirmBtn) els.ticketConfirmBtn.disabled = true;
   if (els.ticketModalMeta) els.ticketModalMeta.textContent = "Fetching LIVE assignments…";
   if (els.ticketModalTitle) els.ticketModalTitle.textContent = "Next two weeks · ticket requests";
+  setTicketModalStatus("");
 
   try {
     const data = await fetchJson("/api/fixture-planner/email/ticket-request");
@@ -489,10 +507,15 @@ function collectTicketRequestPayload() {
 async function confirmTicketRequest() {
   const payload = collectTicketRequestPayload();
   if (!payload.fixtures.length) {
+    setTicketModalStatus("No LIVE fixtures to send", "error");
     setStatus("No LIVE fixtures to send", "error");
     return;
   }
-  if (els.ticketConfirmBtn) els.ticketConfirmBtn.disabled = true;
+  if (els.ticketConfirmBtn) {
+    els.ticketConfirmBtn.disabled = true;
+    els.ticketConfirmBtn.textContent = "Sending…";
+  }
+  setTicketModalStatus("Sending ticket request to admin…", "loading");
   setStatus("Sending ticket request to admin…", "loading");
   try {
     const data = await fetchJson("/api/fixture-planner/email/ticket-request", {
@@ -501,15 +524,24 @@ async function confirmTicketRequest() {
     });
     if (data.sent) {
       const to = Array.isArray(data.to) ? data.to.join(", ") : data.to || "recipients";
-      setStatus(`Ticket request sent to ${to} · ${data.fixture_count || 0} new fixture(s)`, "ok");
+      const message = `Ticket request sent to ${to} · ${data.fixture_count || 0} new fixture(s)`;
+      setTicketModalStatus(message, "ok");
+      setStatus(message, "ok");
       closeTicketRequestModal();
     } else {
-      setStatus(data.reason || "Email not sent", "error");
+      const reason = data.reason || "Email not sent";
+      setTicketModalStatus(reason, "error");
+      setStatus(reason, "error");
     }
   } catch (error) {
-    setStatus(error.message || "Could not send email", "error");
+    const message = error.message || "Could not send email";
+    setTicketModalStatus(message, "error");
+    setStatus(message, "error");
   } finally {
-    if (els.ticketConfirmBtn) els.ticketConfirmBtn.disabled = false;
+    if (els.ticketConfirmBtn) {
+      els.ticketConfirmBtn.disabled = false;
+      els.ticketConfirmBtn.textContent = "Send to admin";
+    }
   }
 }
 
