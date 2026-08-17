@@ -133,15 +133,13 @@ function renderStaffToggle() {
     });
   });
 }
-function jumpToAssignmentMonth() {
-  const first = state.payload?.fixtures?.[0]?.date;
-  if (first) {
-    state.monthKey = monthKeyFromDate(first);
-  }
+function upcomingFixtures(fixtures = state.payload?.fixtures || []) {
+  const today = todayKey();
+  return fixtures.filter((row) => row.date >= today);
 }
 
 function renderUpcomingList() {
-  const fixtures = state.payload?.fixtures || [];
+  const fixtures = upcomingFixtures();
   if (!fixtures.length) {
     return `
       <aside class="so-upcoming">
@@ -256,8 +254,9 @@ function renderCalendar() {
         ${events
           .map((row) => {
             const color = leagueColors[row.league] || "#34d399";
+            const isPast = dateKey < today;
             return `
-              <article class="so-cal-event" style="--league-color:${color}" title="${fixtureLabel(row)}">
+              <article class="so-cal-event${isPast ? " so-cal-event--past" : ""}" style="--league-color:${color}" title="${fixtureLabel(row)}">
                 <div class="so-cal-event__time">${formatTime(row.kickoff_utc)} · ${row.watch_type}</div>
                 <div class="so-cal-event__teams">${fixtureLabel(row)}</div>
                 <div class="so-cal-event__meta">
@@ -304,22 +303,22 @@ async function loadCalendar() {
     const params = new URLSearchParams({
       season: state.season,
       watch_type: state.watchType,
-      include_past: "false",
+      include_past: "true",
     });
     if (state.staff) {
       params.set("staff", state.staff);
     }
     state.payload = await fetchJson(`/api/fixture-planner/scouts-calendar?${params}`);
 
-    jumpToAssignmentMonth();
-
     renderCalendar();
     const updated = state.payload.generated_at
       ? new Date(state.payload.generated_at).toLocaleTimeString("en-GB")
       : "—";
     const scoutLabel = state.staff || "All staff";
-    const count = state.payload.fixtures?.length || 0;
-    els.statusBar.textContent = `${scoutLabel} · ${count} upcoming ${state.watchType === "ALL" ? "assignments" : "live games"} · updated ${updated}`;
+    const fixtures = state.payload.fixtures || [];
+    const count = fixtures.length;
+    const upcomingCount = upcomingFixtures(fixtures).length;
+    els.statusBar.textContent = `${scoutLabel} · ${count} assignment${count === 1 ? "" : "s"} (${upcomingCount} upcoming) · updated ${updated}`;
   } catch (error) {
     els.statusBar.textContent = error.message;
     els.calendarRoot.innerHTML = `<div class="card so-empty">${error.message}</div>`;

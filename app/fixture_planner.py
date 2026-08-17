@@ -4790,7 +4790,7 @@ def build_scouts_calendar_payload(
     season: str | None = None,
     staff: str | None = None,
     watch_type: str = "LIVE",
-    include_past: bool = False,
+    include_past: bool = True,
 ) -> dict[str, Any]:
     watch_filter = str(watch_type or "LIVE").strip().upper()
     if watch_filter not in ("LIVE", "VIDEO", "ALL"):
@@ -6111,7 +6111,7 @@ def register_fixture_planner_routes(app: FastAPI) -> None:
         season: str | None = Query(None),
         staff: str | None = Query(None),
         watch_type: str = Query("LIVE"),
-        include_past: bool = Query(False),
+        include_past: bool = Query(True),
     ) -> dict[str, Any]:
         if season is not None and season not in ALLOWED_FIXTURE_SEASONS:
             raise HTTPException(
