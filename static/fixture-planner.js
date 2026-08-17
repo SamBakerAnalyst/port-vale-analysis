@@ -324,6 +324,22 @@ function closeTicketRequestModal() {
   els.ticketModal.setAttribute("aria-hidden", "true");
 }
 
+function syncTicketRequestUi() {
+  const count = els.ticketModalBody?.querySelectorAll(".fp-ticket-card").length || 0;
+  if (els.ticketConfirmBtn) els.ticketConfirmBtn.disabled = count === 0;
+  if (els.ticketModalTitle) {
+    els.ticketModalTitle.textContent =
+      count > 0
+        ? `${count} live fixture${count === 1 ? "" : "s"} in this email`
+        : "No fixtures in this email";
+  }
+  const list = els.ticketModalBody?.querySelector(".fp-ticket-list");
+  if (count === 0 && list && !list.querySelector(".fp-ticket-modal__empty")) {
+    list.innerHTML =
+      '<p class="fp-ticket-modal__empty">All fixtures removed. Close and reopen the modal to load them again.</p>';
+  }
+}
+
 function renderTicketRequestRows(fixtures, alreadyRequested = []) {
   if (!els.ticketModalBody) return;
   if (!fixtures.length && !alreadyRequested.length) {
@@ -341,7 +357,7 @@ function renderTicketRequestRows(fixtures, alreadyRequested = []) {
   }
   if (els.ticketConfirmBtn) els.ticketConfirmBtn.disabled = false;
   els.ticketModalBody.innerHTML = `
-    <p class="fp-ticket-modal__hint">New requests for the next two weeks only. Games already sent to admin stay remembered.</p>
+    <p class="fp-ticket-modal__hint">New requests for the next two weeks only. Click × to leave a game out of this email.</p>
     <div class="fp-ticket-list">
       ${fixtures
         .map((row) => {
@@ -349,9 +365,12 @@ function renderTicketRequestRows(fixtures, alreadyRequested = []) {
           const match = `${row.home || "Home"} vs ${row.away || "Away"}`;
           return `
             <article class="fp-ticket-card" data-fixture-id="${id}">
-              <div class="fp-ticket-card__main">
-                <strong class="fp-ticket-card__match">${escapeHtml(match)}</strong>
-                <span class="fp-ticket-card__meta">${escapeHtml(row.league || "")} · ${escapeHtml(row.kickoff_label || row.date || "TBC")} · ${escapeHtml(staffLabel(row.staff) || "TBC")}</span>
+              <div class="fp-ticket-card__head">
+                <div class="fp-ticket-card__main">
+                  <strong class="fp-ticket-card__match">${escapeHtml(match)}</strong>
+                  <span class="fp-ticket-card__meta">${escapeHtml(row.league || "")} · ${escapeHtml(row.kickoff_label || row.date || "TBC")} · ${escapeHtml(staffLabel(row.staff) || "TBC")}</span>
+                </div>
+                <button type="button" class="fp-ticket-card__remove" data-ticket-remove aria-label="Remove ${escapeHtml(match)} from email">×</button>
               </div>
               <div class="fp-ticket-card__fields">
                 <label class="fp-ticket-field">
@@ -379,6 +398,7 @@ function renderTicketRequestRows(fixtures, alreadyRequested = []) {
     </div>
     ${renderAlreadyRequestedTickets(alreadyRequested)}
   `;
+  syncTicketRequestUi();
 }
 
 function renderAlreadyRequestedTickets(rows) {
@@ -3432,6 +3452,13 @@ async function init() {
   els.scheduleUpdateBtn?.addEventListener("click", () => sendBulkEmail("schedule-update"));
   els.ticketModal?.querySelectorAll("[data-ticket-close]").forEach((btn) => {
     btn.addEventListener("click", closeTicketRequestModal);
+  });
+  els.ticketModalBody?.addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-ticket-remove]");
+    if (!btn) return;
+    event.preventDefault();
+    btn.closest(".fp-ticket-card")?.remove();
+    syncTicketRequestUi();
   });
   els.ticketConfirmBtn?.addEventListener("click", confirmTicketRequest);
 

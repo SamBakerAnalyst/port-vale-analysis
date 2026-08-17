@@ -1305,6 +1305,45 @@ a:hover { text-decoration: underline; }
   background: var(--surface-2);
 }
 
+.fp-ticket-card__head {
+  display: flex;
+  align-items: flex-start;
+  gap: .65rem;
+}
+
+.fp-ticket-card__main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.fp-ticket-card__remove {
+  flex: 0 0 auto;
+  width: 1.85rem;
+  height: 1.85rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease, background .15s ease;
+}
+
+.fp-ticket-card__remove:hover,
+.fp-ticket-card__remove:focus-visible {
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, .45);
+  background: rgba(248, 113, 113, .08);
+}
+
+.fp-ticket-modal__empty {
+  margin: 0;
+  padding: .75rem 0;
+  color: var(--text-muted);
+  font-size: .9rem;
+}
+
 .fp-ticket-card__match {
   display: block;
   font-size: .98rem;
