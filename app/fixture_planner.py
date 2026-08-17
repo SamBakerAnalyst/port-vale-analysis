@@ -5170,7 +5170,7 @@ def _fotmob_venue_from_page(page_url: str | None) -> str | None:
         response = _http.get(
             f"https://www.fotmob.com{token}",
             headers={"User-Agent": "Mozilla/5.0"},
-            timeout=20,
+            timeout=3,
         )
         if response.ok:
             match = re.search(
@@ -5492,6 +5492,7 @@ def _email_fixture_rows(
     *,
     watch_types: set[str] | None = None,
     days_ahead: int | None = None,
+    fetch_venues: bool = False,
 ) -> tuple[list[dict[str, Any]], str]:
     """Build upcoming assigned fixture rows for bulk emails."""
     from app.fixture_assignment_email import _format_kickoff
@@ -5529,7 +5530,7 @@ def _email_fixture_rows(
             resolved = None
         if isinstance(resolved, dict):
             page_url = resolved.get("fotmob_page_url")
-            if page_url:
+            if fetch_venues and page_url:
                 venue = _fotmob_venue_from_page(page_url) or ""
             if not venue:
                 home = resolved.get("home") if isinstance(resolved.get("home"), dict) else {}
@@ -5605,6 +5606,7 @@ def send_admin_ticket_request(body: TicketRequestBody | None = None) -> dict[str
     fixtures, period_label = _email_fixture_rows(
         watch_types={"LIVE"},
         days_ahead=TICKET_REQUEST_DAYS_AHEAD,
+        fetch_venues=True,
     )
     requested = get_ticket_requests().get("requests") or {}
     detail_by_id = {
