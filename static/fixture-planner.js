@@ -2576,7 +2576,7 @@ function renderView({ preserveScroll = false, scrollToUpcoming = false } = {}) {
   }
 }
 
-async function loadFixtures({ forceRefresh = true } = {}) {
+async function loadFixtures({ forceRefresh = false } = {}) {
   state.loading = true;
   state.enrichment = {};
   state.enrichmentPending = {};
@@ -3555,7 +3555,7 @@ async function init() {
     renderView();
   });
 
-  els.refreshBtn.addEventListener("click", () => loadFixtures());
+  els.refreshBtn.addEventListener("click", () => loadFixtures({ forceRefresh: true }));
 
   els.ticketRequestBtn?.addEventListener("click", () => sendBulkEmail("ticket-request"));
   els.scheduleUpdateBtn?.addEventListener("click", () => sendBulkEmail("schedule-update"));
