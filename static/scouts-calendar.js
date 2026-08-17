@@ -15,7 +15,7 @@ const state = {
   payload: null,
   season: "26/27",
   staff: "",
-  watchType: "LIVE",
+  watchType: "ALL",
   monthKey: "",
   loading: false,
   refreshTimer: null,
@@ -317,7 +317,6 @@ async function loadCalendar() {
     const scoutLabel = state.staff || "All staff";
     const fixtures = state.payload.fixtures || [];
     const count = fixtures.length;
-    const upcomingCount = upcomingFixtures(fixtures).length;
     els.statusBar.textContent = `${scoutLabel} · ${count} assignment${count === 1 ? "" : "s"} (${upcomingCount} upcoming) · updated ${updated}`;
   } catch (error) {
     els.statusBar.textContent = error.message;

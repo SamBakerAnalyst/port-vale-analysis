@@ -3760,6 +3760,40 @@ def _sync_watched_player_from_report(
     _mirror_assignment_to_live(fixture_id=fixture_id, assignment=saved)
 
 
+def _assignment_watch_type_matches(assigned_watch: Any, filter_watch: str | None) -> bool:
+    if not filter_watch:
+        return True
+    assigned = str(assigned_watch or "").strip().upper() or "LIVE"
+    target = str(filter_watch).strip().upper()
+    if target == "ALL":
+        return True
+    return assigned == target
+
+
+def _expand_calendar_staff_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One calendar card per scout when multiple staff share an assignment."""
+    expanded: list[dict[str, Any]] = []
+    for row in rows:
+        names = list(row.get("staff_names") or _normalize_staff_names(row.get("staff")))
+        if len(names) <= 1:
+            expanded.append(row)
+            continue
+        for name in names:
+            clone = dict(row)
+            clone["staff"] = name
+            clone["staff_names"] = [name]
+            expanded.append(clone)
+    expanded.sort(
+        key=lambda item: (
+            str(item.get("date") or ""),
+            str(item.get("kickoff_utc") or ""),
+            str(item.get("staff") or ""),
+            str(item.get("league") or ""),
+        )
+    )
+    return expanded
+
+
 def _assignment_rows_for_seasons(
     seasons: list[str],
     *,
@@ -3788,7 +3822,7 @@ def _assignment_rows_for_seasons(
             continue
         if staff and staff.casefold() not in {name.casefold() for name in staff_names}:
             continue
-        if watch_type and assigned_watch != watch_type.upper():
+        if watch_type and not _assignment_watch_type_matches(assigned_watch, watch_type):
             continue
 
         assignment_season = str(assignment.get("season") or "").strip()
@@ -3800,14 +3834,16 @@ def _assignment_rows_for_seasons(
         away_name = str(assignment.get("away") or "").strip()
         league_name = str(assignment.get("league") or "").strip()
         kickoff = assignment.get("kickoff_utc")
-        date_key = _parse_iso_date(assignment.get("date") or assignment.get("kickoff_utc"))
+        assignment_date = _parse_iso_date(assignment.get("date") or assignment.get("kickoff_utc"))
+        date_key = assignment_date
 
         if fixture is not None:
             home_name = (fixture.get("home") or {}).get("name") or home_name
             away_name = (fixture.get("away") or {}).get("name") or away_name
             league_name = str(fixture.get("league") or league_name)
             kickoff = fixture.get("kickoff_utc") or kickoff
-            date_key = _parse_iso_date(fixture.get("date") or fixture.get("scheduled_date")) or date_key
+            if not assignment_date:
+                date_key = _parse_iso_date(fixture.get("date") or fixture.get("scheduled_date")) or date_key
             assignment_season = assignment_season or str(fixture.get("season") or "").strip()
 
         fixture_status = str((fixture or {}).get("status") or "").strip()
@@ -3819,12 +3855,12 @@ def _assignment_rows_for_seasons(
             continue
 
         staff_label = _staff_label(staff_names)
-        dedupe_key = fixture_id or f"{staff_label}|{date_key}|{league_name}|{home_name}|{away_name}"
+        canonical_fixture_id = str((fixture or {}).get("fixture_id") or fixture_id)
+        dedupe_key = f"{canonical_fixture_id}|{staff_label}"
         if dedupe_key in seen:
             continue
         seen.add(dedupe_key)
 
-        canonical_fixture_id = str((fixture or {}).get("fixture_id") or fixture_id)
         report_rows = scouting_reports_for_fixture(canonical_fixture_id)
         manual = get_manual_fixture(canonical_fixture_id) or get_manual_fixture(fixture_id)
         watched = list(assignment.get("watched_players") or [])
@@ -4789,12 +4825,12 @@ def build_scouts_calendar_payload(
     *,
     season: str | None = None,
     staff: str | None = None,
-    watch_type: str = "LIVE",
+    watch_type: str = "ALL",
     include_past: bool = True,
 ) -> dict[str, Any]:
-    watch_filter = str(watch_type or "LIVE").strip().upper()
+    watch_filter = str(watch_type or "ALL").strip().upper()
     if watch_filter not in ("LIVE", "VIDEO", "ALL"):
-        watch_filter = "LIVE"
+        watch_filter = "ALL"
     cache_key = f"calendar|{season or 'ALL'}|{watch_filter}|{include_past}|{staff or ''}"
     cached = _scout_ops_cache_get(cache_key)
     if cached is not None:
@@ -4802,11 +4838,13 @@ def build_scouts_calendar_payload(
 
     seasons = [season] if season in ALLOWED_FIXTURE_SEASONS else list(ALLOWED_FIXTURE_SEASONS)
 
-    rows = _assignment_rows_for_seasons(
-        seasons,
-        include_past=include_past,
-        staff=staff or None,
-        watch_type=None if watch_filter == "ALL" else watch_filter,
+    rows = _expand_calendar_staff_rows(
+        _assignment_rows_for_seasons(
+            seasons,
+            include_past=include_past,
+            staff=staff or None,
+            watch_type=None if watch_filter == "ALL" else watch_filter,
+        )
     )
 
     by_date: dict[str, list[dict[str, Any]]] = {}
@@ -6110,7 +6148,7 @@ def register_fixture_planner_routes(app: FastAPI) -> None:
     def fixture_planner_scouts_calendar_route(
         season: str | None = Query(None),
         staff: str | None = Query(None),
-        watch_type: str = Query("LIVE"),
+        watch_type: str = Query("ALL"),
         include_past: bool = Query(True),
     ) -> dict[str, Any]:
         if season is not None and season not in ALLOWED_FIXTURE_SEASONS:
