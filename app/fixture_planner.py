@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_SEASON = "26/27"
 ALLOWED_FIXTURE_SEASONS: tuple[str, ...] = ("26/27", "25/26")
 FIXTURE_CACHE_TTL_SECONDS = 1800
+FIXTURE_CACHE_STALE_SECONDS = 12 * 3600
 FIXTURE_CACHE_VERSION = "v16"
 
 FIXTURE_STAFF_TEAMS: tuple[dict[str, Any], ...] = (
@@ -83,6 +84,9 @@ _http.trust_env = False
 
 _fixture_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 _fixture_cache_lock = threading.Lock()
+_fixture_compute_lock = threading.Lock()
+_fixture_rebuild_lock = threading.Lock()
+_fixture_rebuild_pending: set[str] = set()
 
 _scout_ops_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 _scout_ops_cache_lock = threading.Lock()
@@ -328,13 +332,21 @@ def _cached_fixtures_list(seasons: list[str], *, warm: bool = False) -> list[dic
             merged = _finalize_fixture_payload(cached[1], season=season)
             for fixture in merged.get("fixtures") or []:
                 fixtures.append({**fixture, "season": season})
-        elif warm:
-            try:
-                payload = build_fixture_planner_payload(season=season)
-                for fixture in payload.get("fixtures") or []:
+        else:
+            disk = _load_disk_fixture_cache(season)
+            if disk:
+                ts, payload = disk
+                _store_memory_fixture_cache(season, ts, payload)
+                merged = _finalize_fixture_payload(payload, season=season)
+                for fixture in merged.get("fixtures") or []:
                     fixtures.append({**fixture, "season": season})
-            except HTTPException:
-                continue
+            elif warm:
+                try:
+                    payload = build_fixture_planner_payload(season=season)
+                    for fixture in payload.get("fixtures") or []:
+                        fixtures.append({**fixture, "season": season})
+                except HTTPException:
+                    continue
     return fixtures
 
 
@@ -2215,28 +2227,87 @@ def clear_fixture_planner_cache(season: str | None = None) -> None:
                 _fixture_cache.pop(key, None)
 
 
-def build_fixture_planner_payload(
-    *,
-    season: str,
-    force_refresh: bool = False,
-) -> dict[str, Any]:
-    if season not in ALLOWED_FIXTURE_SEASONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Season must be one of: {', '.join(ALLOWED_FIXTURE_SEASONS)}",
-        )
+def _disk_fixture_cache_path(season: str) -> Path:
+    safe = str(season).replace("/", "-")
+    return ASSIGNMENTS_DIR / f"fixtures-cache-{FIXTURE_CACHE_VERSION}-{safe}.json"
 
-    selected = list(FIXTURE_LEAGUE_UIS) + list(FIXTURE_CUP_UIS)
+
+def _store_memory_fixture_cache(season: str, saved_at: float, payload: dict[str, Any]) -> None:
     cache_key = f"{FIXTURE_CACHE_VERSION}:{season}"
-    now = time.time()
-    if force_refresh:
-        clear_fixture_planner_cache(season)
-    else:
-        with _fixture_cache_lock:
-            cached = _fixture_cache.get(cache_key)
-            if cached and now - cached[0] < FIXTURE_CACHE_TTL_SECONDS:
-                return _finalize_fixture_payload(cached[1], season=season)
+    with _fixture_cache_lock:
+        _fixture_cache[cache_key] = (saved_at, payload)
 
+
+def _load_disk_fixture_cache(season: str) -> tuple[float, dict[str, Any]] | None:
+    path = _disk_fixture_cache_path(season)
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict) or str(data.get("version") or "") != FIXTURE_CACHE_VERSION:
+        return None
+    payload = data.get("payload")
+    if not isinstance(payload, dict):
+        return None
+    try:
+        saved_at = float(data.get("saved_at") or 0)
+    except (TypeError, ValueError):
+        return None
+    if saved_at <= 0:
+        return None
+    return saved_at, payload
+
+
+def _save_disk_fixture_cache(season: str, payload: dict[str, Any]) -> None:
+    path = _disk_fixture_cache_path(season)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    blob = {
+        "version": FIXTURE_CACHE_VERSION,
+        "season": season,
+        "saved_at": time.time(),
+        "payload": payload,
+    }
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(blob, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(path)
+
+
+def _schedule_fixture_rebuild(season: str) -> None:
+    with _fixture_rebuild_lock:
+        if season in _fixture_rebuild_pending:
+            return
+        _fixture_rebuild_pending.add(season)
+
+    def _run() -> None:
+        try:
+            build_fixture_planner_payload(season=season, force_refresh=True)
+        except Exception:
+            logger.exception("Background fixture rebuild failed for %s", season)
+        finally:
+            with _fixture_rebuild_lock:
+                _fixture_rebuild_pending.discard(season)
+
+    threading.Thread(target=_run, daemon=True, name=f"fixture-rebuild-{season}").start()
+
+
+def _cached_payload_for_season(season: str) -> tuple[float, dict[str, Any]] | None:
+    cache_key = f"{FIXTURE_CACHE_VERSION}:{season}"
+    with _fixture_cache_lock:
+        cached = _fixture_cache.get(cache_key)
+    if cached:
+        return cached
+    disk = _load_disk_fixture_cache(season)
+    if not disk:
+        return None
+    saved_at, payload = disk
+    _store_memory_fixture_cache(season, saved_at, payload)
+    return saved_at, payload
+
+
+def _compute_fixture_planner_payload(season: str) -> dict[str, Any]:
+    selected = list(FIXTURE_LEAGUE_UIS) + list(FIXTURE_CUP_UIS)
     bundles = [_build_league_bundle(league_ui, season) for league_ui in selected]
     fixtures = [fixture for bundle in bundles for fixture in bundle["fixtures"]]
     fixtures.sort(
@@ -2246,8 +2317,7 @@ def build_fixture_planner_payload(
             str(row.get("league") or ""),
         )
     )
-
-    payload = {
+    return {
         "season": season,
         "leagues": list(FIXTURE_LEAGUE_UIS),
         "cups": list(FIXTURE_CUP_UIS),
@@ -2262,10 +2332,7 @@ def build_fixture_planner_payload(
             }
             for bundle in bundles
         ],
-        "coverage": {
-            bundle["league"]: bundle["coverage"]
-            for bundle in bundles
-        },
+        "coverage": {bundle["league"]: bundle["coverage"] for bundle in bundles},
         "summary": {
             "total_fixtures": len(fixtures),
             "verified_fixtures": sum(1 for row in fixtures if row.get("verified")),
@@ -2280,9 +2347,53 @@ def build_fixture_planner_payload(
         "generated_at": datetime.now(UTC).isoformat(),
     }
 
-    with _fixture_cache_lock:
-        _fixture_cache[cache_key] = (now, payload)
-    return _finalize_fixture_payload(payload, season=season)
+
+def _upcoming_only_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    cutoff = (datetime.now(UTC).date() - timedelta(days=2)).isoformat()
+    merged = dict(payload)
+    merged["fixtures"] = [
+        row
+        for row in payload.get("fixtures") or []
+        if row.get("manual") or str(row.get("date") or "")[:10] >= cutoff
+    ]
+    return merged
+
+
+def build_fixture_planner_payload(
+    *,
+    season: str,
+    force_refresh: bool = False,
+) -> dict[str, Any]:
+    if season not in ALLOWED_FIXTURE_SEASONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Season must be one of: {', '.join(ALLOWED_FIXTURE_SEASONS)}",
+        )
+
+    now = time.time()
+    if not force_refresh:
+        cached = _cached_payload_for_season(season)
+        if cached:
+            saved_at, payload = cached
+            age = now - saved_at
+            if age < FIXTURE_CACHE_STALE_SECONDS:
+                if age >= FIXTURE_CACHE_TTL_SECONDS:
+                    _schedule_fixture_rebuild(season)
+                return _finalize_fixture_payload(payload, season=season)
+
+    with _fixture_compute_lock:
+        if not force_refresh:
+            cached = _cached_payload_for_season(season)
+            if cached and now - cached[0] < FIXTURE_CACHE_TTL_SECONDS:
+                return _finalize_fixture_payload(cached[1], season=season)
+        payload = _compute_fixture_planner_payload(season)
+        saved_at = time.time()
+        _store_memory_fixture_cache(season, saved_at, payload)
+        try:
+            _save_disk_fixture_cache(season, payload)
+        except OSError:
+            logger.exception("Could not write fixture disk cache for %s", season)
+        return _finalize_fixture_payload(payload, season=season)
 
 
 def _load_assignments_store() -> dict[str, Any]:
@@ -5989,12 +6100,16 @@ def register_fixture_planner_routes(app: FastAPI) -> None:
     def fixture_planner_fixtures_route(
         season: str = Query(DEFAULT_SEASON),
         refresh: int = Query(0),
+        upcoming: int = Query(0),
     ) -> JSONResponse:
+        payload = build_fixture_planner_payload(
+            season=season,
+            force_refresh=bool(refresh),
+        )
+        if upcoming:
+            payload = _upcoming_only_payload(payload)
         return JSONResponse(
-            content=build_fixture_planner_payload(
-                season=season,
-                force_refresh=bool(refresh),
-            ),
+            content=payload,
             headers={"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"},
         )
 

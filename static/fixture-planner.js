@@ -2592,8 +2592,9 @@ async function loadFixtures({ forceRefresh = false } = {}) {
 
   try {
     const refresh = forceRefresh ? "&refresh=1" : "";
+    const upcoming = IS_PLAYED_APP ? "" : "&upcoming=1";
     state.payload = await fetchJson(
-      `/api/fixture-planner/fixtures?season=${encodeURIComponent(state.season)}${refresh}&_=${Date.now()}`,
+      `/api/fixture-planner/fixtures?season=${encodeURIComponent(state.season)}${refresh}${upcoming}&_=${Date.now()}`,
     );
     state.teamNamesLoaded = false;
     setTeamNameCatalog(teamNamesFromPayload(state.payload));
