@@ -702,6 +702,46 @@ a:hover { text-decoration: underline; }
   color: var(--text-muted);
 }
 
+.fp-list-fixture--postponed {
+  opacity: .72;
+}
+
+.fp-list-fixture--postponed .fp-list-fixture__teams {
+  text-decoration: line-through;
+  text-decoration-color: rgba(248, 113, 113, .55);
+}
+
+.fp-postponed-label {
+  display: inline-flex;
+  align-items: center;
+  font-size: .95rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: #fbbf24;
+}
+
+.fp-postponed-restore,
+.fp-postpone-btn {
+  align-self: flex-start;
+  margin-top: .15rem;
+  font-size: var(--fp-text-sm);
+}
+
+.fp-postponed-restore {
+  padding: .15rem .35rem;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.fp-postponed-restore:hover {
+  color: var(--text);
+}
+
 .fp-fixture-enrich {
   display: flex;
   flex-direction: column;

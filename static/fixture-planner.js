@@ -154,6 +154,27 @@ function loadAssignments() {
   }
 }
 
+async function setFixturePostponed(fixtureId, postponed) {
+  const fixture = fixtureFromState(fixtureId);
+  const status = postponed ? "postponed" : "scheduled";
+  try {
+    await fetchJson("/api/fixture-planner/fixture-status", {
+      method: "PATCH",
+      body: JSON.stringify({ fixture_id: fixtureId, status }),
+    });
+    if (fixture) {
+      fixture.status = status;
+      fixture.postponed = postponed;
+    }
+    els.statusBar.textContent = postponed
+      ? `Marked ${fixtureTeams(fixture || { home: { name: "" }, away: { name: "" } })} as postponed`
+      : "Fixture restored to scheduled";
+    renderView({ preserveScroll: true });
+  } catch (error) {
+    els.statusBar.textContent = error.message;
+  }
+}
+
 function saveAssignments() {
   localStorage.setItem(ASSIGNMENTS_KEY, JSON.stringify(state.assignments));
 }
@@ -600,6 +621,10 @@ function isCompletedFixture(fixture) {
   if (fixture?.manual && String(fixture?.status || "").toLowerCase() === "scheduled") return false;
   if (fixture?.manual && fixture?.score) return true;
   return false;
+}
+
+function isPostponedFixture(fixture) {
+  return String(fixture?.status || "").toLowerCase() === "postponed" || Boolean(fixture?.postponed);
 }
 
 function isManualFixture(fixture) {
@@ -1450,6 +1475,12 @@ function assignmentControls(fixture, { expanded = false } = {}) {
     IS_PLAYED_APP && assigned.length
       ? `<a class="fp-btn fp-btn--ghost" href="/scout-summary?staff=${encodeURIComponent(primaryStaff(assigned))}">Reports</a>`
       : "";
+  const postponed = isPostponedFixture(fixture);
+  const postponeControl = IS_PLAYED_APP
+    ? ""
+    : postponed
+      ? `<button type="button" class="fp-btn fp-btn--ghost fp-postpone-btn" data-fixture-postpone="${id}" data-postponed="1">Restore fixture</button>`
+      : `<button type="button" class="fp-btn fp-btn--ghost fp-postpone-btn" data-fixture-postpone="${id}" data-postponed="0">Mark postponed</button>`;
   const coverageNote =
     IS_PLAYED_APP && assigned.length && assignment.watch_type
       ? `<div class="fp-assignment__note">${escapeHtml(assignment.watch_type)} · ${escapeHtml(staffLabel(assigned))}</div>`
@@ -1471,6 +1502,7 @@ function assignmentControls(fixture, { expanded = false } = {}) {
       <div class="fp-watch-toggle">${watchButtons}</div>
       ${editPlayers}
       ${reportsLink}
+      ${postponeControl}
     </div>
   `;
 }
@@ -1690,6 +1722,17 @@ function bindAssignmentEvents(root) {
       const current = assignmentFor(id);
       const next = current.watch_type === btn.dataset.watch ? "" : btn.dataset.watch;
       setAssignment(id, { watch_type: next });
+    });
+  });
+
+  root.querySelectorAll("[data-fixture-postpone]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const id = btn.dataset.fixturePostpone;
+      if (!id) return;
+      const restore = btn.dataset.postponed === "1";
+      setFixturePostponed(id, !restore);
     });
   });
 }
@@ -2337,6 +2380,7 @@ function renderFixtureCard(fixture, { showDate = false } = {}) {
   const id = fixtureId(fixture);
   const color = leagueColors[fixture.league] || "#34d399";
   const completed = isCompletedFixture(fixture);
+  const postponed = isPostponedFixture(fixture);
   const showDateLine = showDate || completed;
   const dateLine = showDateLine
     ? `<span class="fp-list-fixture__date">${formatShortDate(fixtureDateKey(fixture))}</span>`
@@ -2346,13 +2390,20 @@ function renderFixtureCard(fixture, { showDate = false } = {}) {
   const cupBadge = showCompBadge
     ? `<span class="fp-cup-badge" style="--league-color:${color}">${escapeHtml(fixture.league || "Cup")}</span>`
     : "";
+  const timeLabel = postponed
+    ? `<span class="fp-postponed-label">Postponed</span>`
+    : `<span class="fp-list-fixture__time">${formatTime(fixture.kickoff_utc || fixture.scheduled_date, fixture)}</span>`;
+  const collapsedPostpone = !IS_PLAYED_APP && postponed
+    ? `<button type="button" class="fp-postponed-restore" data-fixture-postpone="${id}" data-postponed="1">Restore</button>`
+    : "";
   const expanded = Boolean(state.expandedFixtureIds[id]);
   return `
-    <article class="fp-list-fixture fp-list-fixture--stacked${completed ? " fp-list-fixture--completed" : ""}${usesStackedCompLayout() ? " fp-list-fixture--cup" : ""}${expanded ? " fp-list-fixture--expanded" : ""}" style="--league-color:${color}" data-fixture-card="${id}">
+    <article class="fp-list-fixture fp-list-fixture--stacked${completed ? " fp-list-fixture--completed" : ""}${postponed ? " fp-list-fixture--postponed" : ""}${usesStackedCompLayout() ? " fp-list-fixture--cup" : ""}${expanded ? " fp-list-fixture--expanded" : ""}" style="--league-color:${color}" data-fixture-card="${id}">
       <div class="fp-list-fixture__schedule">
-        <span class="fp-list-fixture__time">${formatTime(fixture.kickoff_utc || fixture.scheduled_date, fixture)}</span>
+        ${timeLabel}
         ${dateLine}
         ${cupBadge}
+        ${collapsedPostpone}
       </div>
       <div class="fp-list-fixture__main">
         <div class="fp-list-fixture__head">

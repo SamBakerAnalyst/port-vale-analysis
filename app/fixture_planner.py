@@ -93,12 +93,14 @@ ASSIGNMENTS_DIR.mkdir(parents=True, exist_ok=True)
 ASSIGNMENTS_PATH = ASSIGNMENTS_DIR / "assignments.json"
 SCOUTING_REPORTS_PATH = ASSIGNMENTS_DIR / "scouting-reports.json"
 MANUAL_FIXTURES_PATH = ASSIGNMENTS_DIR / "manual-fixtures.json"
+FIXTURE_OVERRIDES_PATH = ASSIGNMENTS_DIR / "fixture-overrides.json"
 TICKET_REQUESTS_PATH = ASSIGNMENTS_DIR / "ticket-requests.json"
 TEAM_SHEETS_DIR = ASSIGNMENTS_DIR / "team-sheets"
 TEAM_SHEETS_DIR.mkdir(parents=True, exist_ok=True)
 _assignments_lock = threading.Lock()
 _scouting_reports_lock = threading.Lock()
 _manual_fixtures_lock = threading.Lock()
+_fixture_overrides_lock = threading.Lock()
 _ticket_requests_lock = threading.Lock()
 TICKET_REQUEST_DAYS_AHEAD = 13
 
@@ -323,7 +325,7 @@ def _cached_fixtures_list(seasons: list[str], *, warm: bool = False) -> list[dic
         with _fixture_cache_lock:
             cached = _fixture_cache.get(cache_key)
         if cached and now - cached[0] < FIXTURE_CACHE_TTL_SECONDS:
-            merged = _merge_manual_fixtures_into_payload(cached[1], season=season)
+            merged = _finalize_fixture_payload(cached[1], season=season)
             for fixture in merged.get("fixtures") or []:
                 fixtures.append({**fixture, "season": season})
         elif warm:
@@ -434,6 +436,11 @@ class TicketRequestFixtureDetail(BaseModel):
 class TicketRequestBody(BaseModel):
     fixtures: list[TicketRequestFixtureDetail] = Field(default_factory=list)
     additional_requests: str = ""
+
+
+class FixtureStatusUpdate(BaseModel):
+    fixture_id: str
+    status: str = "postponed"
 
 
 class ScoutingReportToggle(BaseModel):
@@ -2223,7 +2230,7 @@ def build_fixture_planner_payload(
         with _fixture_cache_lock:
             cached = _fixture_cache.get(cache_key)
             if cached and now - cached[0] < FIXTURE_CACHE_TTL_SECONDS:
-                return _merge_manual_fixtures_into_payload(cached[1], season=season)
+                return _finalize_fixture_payload(cached[1], season=season)
 
     bundles = [_build_league_bundle(league_ui, season) for league_ui in selected]
     fixtures = [fixture for bundle in bundles for fixture in bundle["fixtures"]]
@@ -2270,7 +2277,7 @@ def build_fixture_planner_payload(
 
     with _fixture_cache_lock:
         _fixture_cache[cache_key] = (now, payload)
-    return _merge_manual_fixtures_into_payload(payload, season=season)
+    return _finalize_fixture_payload(payload, season=season)
 
 
 def _load_assignments_store() -> dict[str, Any]:
@@ -3004,6 +3011,102 @@ def _merge_manual_fixtures_into_payload(payload: dict[str, Any], *, season: str)
     merged["leagues"] = leagues
     merged["summary"] = summary
     return merged
+
+
+def _load_fixture_overrides_store() -> dict[str, Any]:
+    with _fixture_overrides_lock:
+        if not FIXTURE_OVERRIDES_PATH.exists():
+            return {"version": 1, "updated_at": None, "overrides": {}}
+        try:
+            payload = json.loads(FIXTURE_OVERRIDES_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {"version": 1, "updated_at": None, "overrides": {}}
+        if not isinstance(payload, dict):
+            return {"version": 1, "updated_at": None, "overrides": {}}
+        overrides = payload.get("overrides")
+        if not isinstance(overrides, dict):
+            payload["overrides"] = {}
+        return payload
+
+
+def _save_fixture_overrides_store(payload: dict[str, Any]) -> None:
+    FIXTURE_OVERRIDES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with _fixture_overrides_lock:
+        FIXTURE_OVERRIDES_PATH.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+    _scout_ops_cache_clear()
+
+
+def get_fixture_overrides() -> dict[str, dict[str, Any]]:
+    store = _load_fixture_overrides_store()
+    raw = store.get("overrides") or {}
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        str(key): value
+        for key, value in raw.items()
+        if isinstance(value, dict)
+    }
+
+
+def set_fixture_status_override(fixture_id: str, *, status: str) -> dict[str, Any]:
+    fid = str(fixture_id or "").strip()
+    if not fid:
+        raise HTTPException(status_code=400, detail="fixture_id is required")
+    normalized = str(status or "").strip().lower()
+    if normalized not in {"scheduled", "postponed"}:
+        raise HTTPException(status_code=400, detail="status must be scheduled or postponed")
+
+    store = _load_fixture_overrides_store()
+    overrides = dict(store.get("overrides") or {})
+    if normalized == "scheduled":
+        overrides.pop(fid, None)
+    else:
+        overrides[fid] = {
+            "status": normalized,
+            "updated_at": datetime.now(UTC).isoformat(),
+        }
+    store["overrides"] = overrides
+    store["updated_at"] = datetime.now(UTC).isoformat()
+    _save_fixture_overrides_store(store)
+    clear_fixture_planner_cache()
+
+    return {"ok": True, "fixture_id": fid, "status": normalized}
+
+
+def _apply_fixture_overrides_to_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    overrides = get_fixture_overrides()
+    if not overrides:
+        return payload
+    fixtures: list[dict[str, Any]] = []
+    changed = False
+    for row in payload.get("fixtures") or []:
+        fid = str(row.get("fixture_id") or "")
+        override = overrides.get(fid)
+        if override and str(override.get("status") or "").lower() == "postponed":
+            fixtures.append({**row, "status": "postponed", "postponed": True})
+            changed = True
+        else:
+            fixtures.append(row)
+    if not changed:
+        return payload
+    merged = dict(payload)
+    merged["fixtures"] = fixtures
+    return merged
+
+
+def _finalize_fixture_payload(payload: dict[str, Any], *, season: str) -> dict[str, Any]:
+    merged = _merge_manual_fixtures_into_payload(payload, season=season)
+    return _apply_fixture_overrides_to_payload(merged)
+
+
+def _fixture_is_postponed(fixture_id: str, fixture: dict[str, Any] | None = None) -> bool:
+    if isinstance(fixture, dict) and str(fixture.get("status") or "").lower() == "postponed":
+        return True
+    override = get_fixture_overrides().get(str(fixture_id or "").strip()) or {}
+    return str(override.get("status") or "").lower() == "postponed"
 
 
 def _extract_fotmob_league_team_names(payload: dict[str, Any]) -> list[str]:
@@ -3830,6 +3933,8 @@ def _assignment_rows_for_seasons(
             continue
 
         fixture = _resolve_fixture_record(fixture_id, fixtures_list, assignment=assignment)
+        if _fixture_is_postponed(fixture_id, fixture if isinstance(fixture, dict) else None):
+            continue
         home_name = str(assignment.get("home") or "").strip()
         away_name = str(assignment.get("away") or "").strip()
         league_name = str(assignment.get("league") or "").strip()
@@ -5316,6 +5421,8 @@ def _email_fixture_rows(
 
         venue = ""
         fixture_id = str(row.get("fixture_id") or "")
+        if _fixture_is_postponed(fixture_id):
+            continue
         try:
             resolved = _resolve_fixture_for_email(fixture_id, row) if fixture_id else None
         except Exception:
@@ -5952,6 +6059,10 @@ def register_fixture_planner_routes(app: FastAPI) -> None:
             mirror_to_live=allow_mirror,
             send_email=allow_mirror,
         )
+
+    @app.patch("/api/fixture-planner/fixture-status")
+    def fixture_planner_fixture_status_route(body: FixtureStatusUpdate) -> dict[str, Any]:
+        return set_fixture_status_override(body.fixture_id, status=body.status)
 
     @app.get("/api/fixture-planner/email/ticket-request")
     def fixture_planner_ticket_request_preview_route() -> dict[str, Any]:
