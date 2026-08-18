@@ -4016,6 +4016,24 @@ a:hover { text-decoration: underline; }
 }
 
 /* Player export deck (presentation targets for players) */
+.ba-block--player-export .ba-report__chrome {
+  position: sticky;
+  top: 3.1rem;
+  z-index: 4;
+  padding: .55rem 0 .35rem;
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.ba-pe__lead {
+  margin: 0 auto 1rem;
+  width: min(100%, 1120px);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: .92rem;
+  font-weight: 600;
+}
+
 .ba-pe {
   display: grid;
   gap: 1.35rem;

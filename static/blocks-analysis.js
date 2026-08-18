@@ -789,7 +789,13 @@ function playerExportHtml(block) {
     page: index + 1,
     totalPages: UNIT_SLIDES.length,
   })).join("");
-  return `<section class="ba-pe">${slides}</section>`;
+  const opp = fixture?.opponentName ? shortOpponent(fixture.opponentName) : "match";
+  return `
+    <section class="ba-pe">
+      <p class="ba-pe__lead ba-export-hide">3 unit target slides · ${escapeHtml(opp)} · Export PDF downloads all three</p>
+      ${slides}
+    </section>
+  `;
 }
 
 function unitSheetHtml(slide, { mast, stats, single, players, page, outcome, foot }) {
@@ -1862,6 +1868,23 @@ function renderJump(blocks, viewBlockId) {
   }).join("");
 }
 
+function blockPageHtml(block) {
+  const playerExport = reportTab(block.id) === "player-export";
+  if (playerExport) {
+    return `
+      <article class="ba-block ba-block--player-export" id="block-${block.id}">
+        ${dashHtml(block)}
+      </article>
+    `;
+  }
+  return `
+    <article class="ba-block" id="block-${block.id}">
+      ${posterHtml(block)}
+      ${dashHtml(block)}
+    </article>
+  `;
+}
+
 function render() {
   const payload = state.payload;
   if (!payload) return;
@@ -1872,15 +1895,14 @@ function render() {
   if (!block) return;
   els.pageSubtitle.textContent = `${payload.competition || "League Two"} ${payload.season || ""} · ${payload.playedCount || 0} / ${payload.matchCount || 0} league games played · viewing Block ${viewBlockId}`;
   renderJump(blocks, viewBlockId);
-  els.blocksRoot.innerHTML = `
-    <article class="ba-block" id="block-${block.id}">
-      ${posterHtml(block)}
-      ${dashHtml(block)}
-    </article>
-  `;
+  els.blocksRoot.innerHTML = blockPageHtml(block);
   if (state.scrollToTop) {
     state.scrollToTop = false;
     window.scrollTo({ top: 0, behavior: "smooth" });
+  } else if (reportTab(block.id) === "player-export") {
+    requestAnimationFrame(() => {
+      document.querySelector(".ba-pe-slide, .ba-pe--empty")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 }
 
@@ -2256,6 +2278,7 @@ els.blocksRoot.addEventListener("click", async (event) => {
     state.reportTabs[blockId] = tabBtn.dataset.reportTab;
     if (tabBtn.dataset.reportTab === "player-export") {
       ensurePlayedGameFilter(blockId);
+      state.scrollToTop = true;
     }
     render();
     return;
