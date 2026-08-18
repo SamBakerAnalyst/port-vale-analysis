@@ -212,6 +212,24 @@ function reportFixtures(block) {
   return [...(block.fixtures || []), ...(block.demoFixtures || [])];
 }
 
+function playedFixtures(block) {
+  return reportFixtures(block).filter((row) => row.played && row.matchId);
+}
+
+function latestPlayedMatchId(block) {
+  const rows = playedFixtures(block);
+  return rows.length ? String(rows[rows.length - 1].matchId) : null;
+}
+
+function ensurePlayedGameFilter(blockId) {
+  const block = (state.payload?.blocks || []).find((row) => row.id === Number(blockId));
+  if (!block) return;
+  const filter = state.filters[blockId];
+  if (filter && filter !== "all") return;
+  const matchId = latestPlayedMatchId(block);
+  if (matchId) state.filters[blockId] = matchId;
+}
+
 function selectedStats(block) {
   const filterId = state.filters[block.id];
   if (!filterId || filterId === "all") return { stats: block.totals, label: "All games in this block", single: false };
@@ -1693,7 +1711,7 @@ function standoutsHtml(players) {
 }
 
 function dashHtml(block) {
-  const { stats, single, fixture } = selectedStats(block);
+  const playedInBlock = playedFixtures(block).length;
   const filterId = state.filters[block.id] || "all";
   const pills = [`<button type="button" class="ba-filter__btn ${filterId === "all" ? "is-active" : ""}" data-filter="all" data-block="${block.id}">All games</button>`]
     .concat(
@@ -1701,7 +1719,8 @@ function dashHtml(block) {
         .filter((row) => row.matchId)
         .map((row) => {
           const active = String(filterId) === String(row.matchId);
-          return `<button type="button" class="ba-filter__btn ${active ? "is-active" : ""}" data-filter="${row.matchId}" data-block="${block.id}">${escapeHtml(row.slot)}. ${escapeHtml(shortOpponent(row.opponentName))}</button>`;
+          const playedTag = row.played ? "" : " · TBC";
+          return `<button type="button" class="ba-filter__btn ${active ? "is-active" : ""} ${row.played ? "" : "ba-filter__btn--tbc"}" data-filter="${row.matchId}" data-block="${block.id}">${escapeHtml(row.slot)}. ${escapeHtml(shortOpponent(row.opponentName))}${playedTag}</button>`;
         })
     )
     .concat(
@@ -1714,6 +1733,48 @@ function dashHtml(block) {
     )
     .join("");
 
+  const tab = reportTab(block.id);
+  const playerExport = tab === "player-export";
+  const reportChrome = `
+      <div class="ba-report__chrome ba-export-hide">
+        <div class="ba-report__tabs" role="tablist" aria-label="Report view for block ${block.id}">
+          <button type="button" role="tab" class="ba-report__tab ${tab === "staff" ? "is-active" : ""}" data-report-tab="staff" data-block="${block.id}" aria-selected="${tab === "staff"}">Staff report</button>
+          <button type="button" role="tab" class="ba-report__tab ${playerExport ? "is-active" : ""}" data-report-tab="player-export" data-block="${block.id}" aria-selected="${playerExport}">Player export</button>
+        </div>
+        <div class="ba-report__tools">
+          <div class="ba-filter" role="group" aria-label="Filter block ${block.id} to one game">${pills}</div>
+          <div class="ba-report__actions">
+            ${playerExport ? `
+              <button type="button" class="ba-btn" data-print-player="${block.id}" ${playedInBlock ? "" : "disabled"}>Print</button>
+              <button type="button" class="ba-btn ba-btn--print" data-pdf-player="${block.id}" ${playedInBlock ? "" : "disabled"}>Export PDF</button>
+            ` : `
+              <button type="button" class="ba-btn" data-print-report="${block.id}" ${playedInBlock ? "" : "disabled"}>Print</button>
+              <button type="button" class="ba-btn ba-btn--print" data-pdf-report="${block.id}" ${playedInBlock ? "" : "disabled"}>Export PDF</button>
+            `}
+          </div>
+        </div>
+      </div>
+  `;
+
+  if (!playedInBlock) {
+    const firstWithData = (state.payload?.blocks || []).find((row) => playedFixtures(row).length);
+    const latest = firstWithData ? playedFixtures(firstWithData).slice(-1)[0] : null;
+    const oppHint = latest ? ` · ${shortOpponent(latest.opponentName)}` : "";
+    return `
+      <section class="ba-report">
+        ${reportChrome}
+        <div class="ba-report__empty">
+          <p><strong>Block ${block.id} hasn't started yet.</strong> No games played in this block — that's why the report is blank.</p>
+          ${firstWithData ? `
+            <p>Your latest match is in <strong>Block ${firstWithData.id}${escapeHtml(oppHint)}</strong>. Open that block and pick the game pill to see numbers, ticks, and player export.</p>
+            <button type="button" class="ba-btn" data-open-block="${firstWithData.id}" data-open-match="${latest?.matchId || ""}">Open Block ${firstWithData.id}${escapeHtml(oppHint)}</button>
+          ` : `<p>No league results loaded yet — try Refresh.</p>`}
+        </div>
+      </section>
+    `;
+  }
+
+  const { stats, single, fixture } = selectedStats(block);
   const payload = state.payload || {};
   const isDemo = Boolean(fixture?.demo);
   const kicker = isDemo
@@ -1738,8 +1799,6 @@ function dashHtml(block) {
     foot,
   })).join("");
 
-  const tab = reportTab(block.id);
-  const playerExport = tab === "player-export";
   const staffSheets = `
       <p class="ba-print-hint ba-export-hide">A4 landscape · ${single ? "eight pages (block, match, players, three unit targets, staff guide)" : "six pages (block, overview, players, three unit targets)"}</p>
       <article class="ba-sheet ba-sheet--team ${outcome ? `ba-sheet--${outcome}` : ""}" data-sheet="2">
@@ -1774,24 +1833,7 @@ function dashHtml(block) {
 
   return `
     <section class="ba-report">
-      <div class="ba-report__chrome ba-export-hide">
-        <div class="ba-report__tabs" role="tablist" aria-label="Report view for block ${block.id}">
-          <button type="button" role="tab" class="ba-report__tab ${tab === "staff" ? "is-active" : ""}" data-report-tab="staff" data-block="${block.id}" aria-selected="${tab === "staff"}">Staff report</button>
-          <button type="button" role="tab" class="ba-report__tab ${playerExport ? "is-active" : ""}" data-report-tab="player-export" data-block="${block.id}" aria-selected="${playerExport}">Player export</button>
-        </div>
-        <div class="ba-report__tools">
-          <div class="ba-filter" role="group" aria-label="Filter block ${block.id} to one game">${pills}</div>
-          <div class="ba-report__actions">
-            ${playerExport ? `
-              <button type="button" class="ba-btn" data-print-player="${block.id}" ${single ? "" : "disabled"}>Print</button>
-              <button type="button" class="ba-btn ba-btn--print" data-pdf-player="${block.id}" ${single ? "" : "disabled"}>Export PDF</button>
-            ` : `
-              <button type="button" class="ba-btn" data-print-report="${block.id}">Print</button>
-              <button type="button" class="ba-btn ba-btn--print" data-pdf-report="${block.id}">Export PDF</button>
-            `}
-          </div>
-        </div>
-      </div>
+      ${reportChrome}
       ${playerExport ? playerExportHtml(block) : staffSheets}
     </section>
   `;
@@ -1801,7 +1843,8 @@ function renderJump(blocks, currentBlockId) {
   els.jumpNav.innerHTML = blocks.map((block) => {
     const current = block.id === currentBlockId ? "is-current" : "";
     const done = block.status === "complete" ? "is-complete" : "";
-    return `<button type="button" class="ba-jump__btn ${current} ${done}" data-jump="${block.id}">Block ${block.id}</button>`;
+    const live = playedFixtures(block).length ? "has-played" : "";
+    return `<button type="button" class="ba-jump__btn ${current} ${done} ${live}" data-jump="${block.id}">Block ${block.id}</button>`;
   }).join("");
 }
 
@@ -1832,9 +1875,13 @@ async function load(refresh = false) {
     state.payload = payload;
     (payload.blocks || []).forEach((block) => {
       if (state.filters[block.id]) return;
-      const leaguePlayed = (block.fixtures || []).some((row) => row.played);
+      const latest = latestPlayedMatchId(block);
+      if (latest) {
+        state.filters[block.id] = latest;
+        return;
+      }
       const demo = (block.demoFixtures || []).find((row) => row.played && row.matchId);
-      state.filters[block.id] = (!leaguePlayed && demo) ? String(demo.matchId) : "all";
+      state.filters[block.id] = demo ? String(demo.matchId) : "all";
     });
     render();
     setStatus("");
@@ -2183,7 +2230,21 @@ els.blocksRoot.addEventListener("click", async (event) => {
   }
   const tabBtn = event.target.closest("[data-report-tab]");
   if (tabBtn) {
-    state.reportTabs[Number(tabBtn.dataset.block)] = tabBtn.dataset.reportTab;
+    const blockId = Number(tabBtn.dataset.block);
+    state.reportTabs[blockId] = tabBtn.dataset.reportTab;
+    if (tabBtn.dataset.reportTab === "player-export") {
+      ensurePlayedGameFilter(blockId);
+    }
+    render();
+    return;
+  }
+  const openBlockBtn = event.target.closest("[data-open-block]");
+  if (openBlockBtn) {
+    const blockId = Number(openBlockBtn.dataset.openBlock);
+    const matchId = openBlockBtn.dataset.openMatch;
+    if (matchId) state.filters[blockId] = matchId;
+    state.reportTabs[blockId] = "player-export";
+    document.getElementById(`block-${blockId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
     render();
     return;
   }

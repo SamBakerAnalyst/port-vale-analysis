@@ -2901,6 +2901,30 @@ a:hover { text-decoration: underline; }
   color: #f5c518;
 }
 
+.ba-filter__btn--tbc {
+  opacity: .55;
+}
+
+.ba-report__empty {
+  width: min(100%, 1120px);
+  margin: 0 auto 1.35rem;
+  padding: 1.75rem 1.5rem;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  text-align: center;
+}
+
+.ba-report__empty p {
+  margin: 0 0 .75rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.ba-report__empty .ba-btn {
+  margin-top: .35rem;
+}
+
 .ba-kpis {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
