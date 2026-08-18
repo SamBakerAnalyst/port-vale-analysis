@@ -709,13 +709,9 @@ function playerExportTargetRow(spec, unit, stats, single, index) {
   return `
     <div class="ba-pe__row">
       <div class="ba-pe__icon ba-pe__icon--left">${PE_ICONS_LEFT[index % PE_ICONS_LEFT.length]}</div>
-      <div class="ba-pe__copy">
-        <p class="ba-pe__name">${escapeHtml(spec.label.toUpperCase())}</p>
-        <p class="ba-pe__nums">
-          <span class="ba-pe__req">REQ <b>${escapeHtml(req)}</b></span>
-          <span class="ba-pe__act ${hit ? "is-hit" : "is-miss"}">ACTUAL <b>${escapeHtml(actual)}</b></span>
-        </p>
-      </div>
+      <p class="ba-pe__label">${escapeHtml(spec.label.toUpperCase())}</p>
+      <span class="ba-pe__req">REQ ${escapeHtml(req)}</span>
+      <span class="ba-pe__actual ${hit ? "is-hit" : "is-miss"}">${escapeHtml(actual)}</span>
       ${mark}
       <div class="ba-pe__icon ba-pe__icon--right">${PE_ICONS_RIGHT[index % PE_ICONS_RIGHT.length]}</div>
     </div>
