@@ -4,6 +4,8 @@ const state = {
   payload: null,
   filters: {},
   reportTabs: {},
+  viewBlockId: null,
+  scrollToTop: false,
   loading: false,
   saving: false,
 };
@@ -1737,9 +1739,12 @@ function dashHtml(block) {
   const playerExport = tab === "player-export";
   const reportChrome = `
       <div class="ba-report__chrome ba-export-hide">
-        <div class="ba-report__tabs" role="tablist" aria-label="Report view for block ${block.id}">
+        <div class="ba-report__heading">
+          <p class="ba-report__context">Block ${block.id} · ${escapeHtml(block.title || `Games ${block.id}`)}</p>
+          <div class="ba-report__tabs" role="tablist" aria-label="Report view for block ${block.id}">
           <button type="button" role="tab" class="ba-report__tab ${tab === "staff" ? "is-active" : ""}" data-report-tab="staff" data-block="${block.id}" aria-selected="${tab === "staff"}">Staff report</button>
           <button type="button" role="tab" class="ba-report__tab ${playerExport ? "is-active" : ""}" data-report-tab="player-export" data-block="${block.id}" aria-selected="${playerExport}">Player export</button>
+          </div>
         </div>
         <div class="ba-report__tools">
           <div class="ba-filter" role="group" aria-label="Filter block ${block.id} to one game">${pills}</div>
@@ -1839,9 +1844,18 @@ function dashHtml(block) {
   `;
 }
 
-function renderJump(blocks, currentBlockId) {
+function resolveViewBlockId(payload) {
+  const blocks = payload?.blocks || [];
+  if (!blocks.length) return 1;
+  const wanted = Number(state.viewBlockId);
+  if (blocks.some((block) => block.id === wanted)) return wanted;
+  const withPlayed = blocks.find((block) => playedFixtures(block).length);
+  return withPlayed?.id ?? payload?.currentBlockId ?? blocks[0].id;
+}
+
+function renderJump(blocks, viewBlockId) {
   els.jumpNav.innerHTML = blocks.map((block) => {
-    const current = block.id === currentBlockId ? "is-current" : "";
+    const current = block.id === viewBlockId ? "is-current" : "";
     const done = block.status === "complete" ? "is-complete" : "";
     const live = playedFixtures(block).length ? "has-played" : "";
     return `<button type="button" class="ba-jump__btn ${current} ${done} ${live}" data-jump="${block.id}">Block ${block.id}</button>`;
@@ -1851,17 +1865,23 @@ function renderJump(blocks, currentBlockId) {
 function render() {
   const payload = state.payload;
   if (!payload) return;
-  const y = window.scrollY;
   const blocks = payload.blocks || [];
-  els.pageSubtitle.textContent = `${payload.competition || "League Two"} ${payload.season || ""} · ${payload.playedCount || 0} / ${payload.matchCount || 0} league games played`;
-  renderJump(blocks, payload.currentBlockId);
-  els.blocksRoot.innerHTML = blocks.map((block) => `
+  const viewBlockId = resolveViewBlockId(payload);
+  state.viewBlockId = viewBlockId;
+  const block = blocks.find((row) => row.id === viewBlockId) || blocks[0];
+  if (!block) return;
+  els.pageSubtitle.textContent = `${payload.competition || "League Two"} ${payload.season || ""} · ${payload.playedCount || 0} / ${payload.matchCount || 0} league games played · viewing Block ${viewBlockId}`;
+  renderJump(blocks, viewBlockId);
+  els.blocksRoot.innerHTML = `
     <article class="ba-block" id="block-${block.id}">
       ${posterHtml(block)}
       ${dashHtml(block)}
     </article>
-  `).join("");
-  window.scrollTo(0, y);
+  `;
+  if (state.scrollToTop) {
+    state.scrollToTop = false;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 }
 
 async function load(refresh = false) {
@@ -2205,7 +2225,9 @@ els.exportAllBtn.addEventListener("click", async () => {
 els.jumpNav.addEventListener("click", (event) => {
   const btn = event.target.closest("[data-jump]");
   if (!btn) return;
-  document.getElementById(`block-${btn.dataset.jump}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  state.viewBlockId = Number(btn.dataset.jump);
+  state.scrollToTop = true;
+  render();
 });
 
 els.blocksRoot.addEventListener("click", async (event) => {
@@ -2243,8 +2265,9 @@ els.blocksRoot.addEventListener("click", async (event) => {
     const blockId = Number(openBlockBtn.dataset.openBlock);
     const matchId = openBlockBtn.dataset.openMatch;
     if (matchId) state.filters[blockId] = matchId;
+    state.viewBlockId = blockId;
     state.reportTabs[blockId] = "player-export";
-    document.getElementById(`block-${blockId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    state.scrollToTop = true;
     render();
     return;
   }

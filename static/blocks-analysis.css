@@ -636,9 +636,25 @@ a:hover { text-decoration: underline; }
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-end;
   gap: .7rem;
   margin-bottom: .45rem;
+}
+
+.ba-report__heading {
+  display: flex;
+  flex-direction: column;
+  gap: .45rem;
+}
+
+.ba-report__context {
+  margin: 0;
+  color: var(--accent);
+  font-family: var(--display);
+  font-size: .92rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
 }
 
 .ba-report__tabs {
