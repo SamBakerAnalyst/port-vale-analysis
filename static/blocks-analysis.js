@@ -3,6 +3,7 @@ const FETCH_TIMEOUT_MS = 90000;
 const state = {
   payload: null,
   filters: {},
+  reportTabs: {},
   loading: false,
   saving: false,
 };
@@ -662,6 +663,110 @@ function unitWhoCopy(slide, stats) {
   if (benchNames.length) bits.push(`${benchNames.join(", ")} off the bench`);
   const note = bits.length ? bits.join(" · ") : (slide.note || "");
   return { title, note };
+}
+
+const PE_UNIT_HEADINGS = {
+  DEF: "DEFENCE TARGETS",
+  MID: "MIDFIELD TARGETS",
+  ATT: "ATTACK TARGETS",
+};
+
+const PE_ICONS_LEFT = [
+  `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M31 8l-10 18h8l-4 14 18-23h-8l5-9z" fill="currentColor"/></svg>`,
+  `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M18 50c9-5 16-13 20-23 3 4 7 8 12 11-7 2-13 6-18 12-2-1-8 0-14 0z" fill="currentColor"/><circle cx="30" cy="18" r="7" fill="currentColor"/></svg>`,
+  `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 18c-8 0-14 6-14 14 0 10 14 24 14 24s14-14 14-24c0-8-6-14-14-14z" fill="currentColor"/></svg>`,
+  `<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="22" fill="none" stroke="currentColor" stroke-width="5"/><path d="M32 18v16l10 8" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/></svg>`,
+];
+
+const PE_ICONS_RIGHT = [
+  `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 18h12l4 28 8-36 8 36 4-28h12" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M16 42l12-12 8 8 12-14" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><path d="M42 24h10v10" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  `<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="18" cy="18" r="6" fill="currentColor"/><circle cx="46" cy="18" r="6" fill="currentColor"/><circle cx="32" cy="46" r="6" fill="currentColor"/><path d="M22 22l8 18M42 22l-8 18" fill="none" stroke="currentColor" stroke-width="4"/></svg>`,
+  `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 32c6-9 13-13 22-13s16 4 22 13c-6 9-13 13-22 13S16 41 10 32z" fill="none" stroke="currentColor" stroke-width="5"/><circle cx="32" cy="32" r="7" fill="currentColor"/></svg>`,
+];
+
+function reportTab(blockId) {
+  return state.reportTabs[blockId] || "staff";
+}
+
+function metricAtReq(spec, unit, stats, single) {
+  const row = (stats.units || {})[unit] || {};
+  const bench = unitBenchValues(spec.key, unit, single, stats.played, row);
+  const higherBetter = bench?.spec?.higherBetter !== false;
+  return meterTone(row[spec.key], bench?.top7, higherBetter) === "hot";
+}
+
+function playerExportTargetRow(spec, unit, stats, single, index) {
+  const row = (stats.units || {})[unit] || {};
+  const bench = unitBenchValues(spec.key, unit, single, stats.played, row);
+  const hit = metricAtReq(spec, unit, stats, single);
+  const reqPart = bench?.top7 == null
+    ? ""
+    : ` - REQ ${formatBench(bench.top7, { rate: spec.rate, digits: spec.digits })}`;
+  const label = `${spec.label.toUpperCase()}${reqPart}`;
+  const mark = hit
+    ? `<span class="ba-pe__mark ba-pe__mark--hit" aria-label="Target met">✓</span>`
+    : `<span class="ba-pe__mark ba-pe__mark--miss" aria-label="Target missed">✕</span>`;
+  return `
+    <div class="ba-pe__row">
+      <div class="ba-pe__icon ba-pe__icon--left">${PE_ICONS_LEFT[index % PE_ICONS_LEFT.length]}</div>
+      <p class="ba-pe__label">${escapeHtml(label)}</p>
+      ${mark}
+      <div class="ba-pe__icon ba-pe__icon--right">${PE_ICONS_RIGHT[index % PE_ICONS_RIGHT.length]}</div>
+    </div>
+  `;
+}
+
+function playerExportSlideHtml(slide, { stats, single, fixture, page, totalPages }) {
+  const specs = slideMetricSpecs(slide);
+  const hit = specs.filter((spec) => metricAtReq(spec, slide.id, stats, single)).length;
+  const opponent = fixture?.opponentName
+    ? String(fixture.opponentName).replace(/\s+FC$/i, "").trim().toUpperCase()
+    : "";
+  const rows = specs.map((spec, index) => playerExportTargetRow(spec, slide.id, stats, single, index)).join("");
+  return `
+    <article class="ba-pe-slide ba-pe-slide--${slide.id.toLowerCase()}">
+      <div class="ba-pe-slide__grit" aria-hidden="true"></div>
+      <div class="ba-pe-slide__slash ba-pe-slide__slash--one" aria-hidden="true"></div>
+      <div class="ba-pe-slide__slash ba-pe-slide__slash--two" aria-hidden="true"></div>
+      <header class="ba-pe-slide__hero">
+        <div class="ba-pe-slide__hero-left">
+          <img class="ba-pe-slide__badge" src="/standalone/port-vale-badge.png?v=2" alt="Port Vale" crossorigin="anonymous" />
+          <div class="ba-pe-slide__avatar" aria-hidden="true"></div>
+          <div>
+            <div class="ba-pe-slide__club">PORT VALE</div>
+            <h2 class="ba-pe-slide__title">${escapeHtml(PE_UNIT_HEADINGS[slide.id] || slide.title.toUpperCase())}</h2>
+            ${opponent ? `<p class="ba-pe-slide__vs">(v ${escapeHtml(opponent)})</p>` : ""}
+          </div>
+        </div>
+        <div class="ba-pe-slide__chip">${escapeHtml(slide.id)}</div>
+      </header>
+      <div class="ba-pe-slide__targets">${rows}</div>
+      <footer class="ba-pe-slide__strap">
+        <span>${hit} OF ${specs.length} TARGETS AT REQ</span>
+        <span>${page} / ${totalPages}</span>
+      </footer>
+    </article>
+  `;
+}
+
+function playerExportHtml(block) {
+  const { stats, single, fixture } = selectedStats(block);
+  if (!single) {
+    return `
+      <section class="ba-pe ba-pe--empty">
+        <p class="ba-pe__hint">Select one game above to open the player export — each unit target shows a tick or cross vs the League Two top-7 Req line.</p>
+      </section>
+    `;
+  }
+  const slides = UNIT_SLIDES.map((slide, index) => playerExportSlideHtml(slide, {
+    stats,
+    single,
+    fixture,
+    page: index + 1,
+    totalPages: UNIT_SLIDES.length,
+  })).join("");
+  return `<section class="ba-pe">${slides}</section>`;
 }
 
 function unitSheetHtml(slide, { mast, stats, single, players, page, outcome, foot }) {
@@ -1630,15 +1735,9 @@ function dashHtml(block) {
     foot,
   })).join("");
 
-  return `
-    <section class="ba-report">
-      <div class="ba-report__chrome ba-export-hide">
-        <div class="ba-filter" role="group" aria-label="Filter block ${block.id} to one game">${pills}</div>
-        <div class="ba-report__actions">
-          <button type="button" class="ba-btn" data-print-report="${block.id}">Print</button>
-          <button type="button" class="ba-btn ba-btn--print" data-pdf-report="${block.id}">Export PDF</button>
-        </div>
-      </div>
+  const tab = reportTab(block.id);
+  const playerExport = tab === "player-export";
+  const staffSheets = `
       <p class="ba-print-hint ba-export-hide">A4 landscape · ${single ? "eight pages (block, match, players, three unit targets, staff guide)" : "six pages (block, overview, players, three unit targets)"}</p>
       <article class="ba-sheet ba-sheet--team ${outcome ? `ba-sheet--${outcome}` : ""}" data-sheet="2">
         ${sheetMasthead({ ...mast, title: pageTitle, page: 2, phases: single ? stats.phases : null })}
@@ -1668,6 +1767,24 @@ function dashHtml(block) {
       </article>
       ${unitSheets}
       ${single ? guideSheetsHtml({ kicker, fixture, totalPages: sheetPages }) : ""}
+  `;
+
+  return `
+    <section class="ba-report">
+      <div class="ba-report__chrome ba-export-hide">
+        <div class="ba-report__tabs" role="tablist" aria-label="Report view for block ${block.id}">
+          <button type="button" role="tab" class="ba-report__tab ${tab === "staff" ? "is-active" : ""}" data-report-tab="staff" data-block="${block.id}" aria-selected="${tab === "staff"}">Staff report</button>
+          <button type="button" role="tab" class="ba-report__tab ${playerExport ? "is-active" : ""}" data-report-tab="player-export" data-block="${block.id}" aria-selected="${playerExport}">Player export</button>
+        </div>
+        <div class="ba-report__tools">
+          <div class="ba-filter" role="group" aria-label="Filter block ${block.id} to one game">${pills}</div>
+          <div class="ba-report__actions">
+            <button type="button" class="ba-btn" data-print-report="${block.id}">Print</button>
+            <button type="button" class="ba-btn ba-btn--print" data-pdf-report="${block.id}">Export PDF</button>
+          </div>
+        </div>
+      </div>
+      ${playerExport ? playerExportHtml(block) : staffSheets}
     </section>
   `;
 }
@@ -1975,6 +2092,12 @@ els.blocksRoot.addEventListener("click", async (event) => {
   if (filterBtn) {
     const blockId = Number(filterBtn.dataset.block);
     state.filters[blockId] = filterBtn.dataset.filter;
+    render();
+    return;
+  }
+  const tabBtn = event.target.closest("[data-report-tab]");
+  if (tabBtn) {
+    state.reportTabs[Number(tabBtn.dataset.block)] = tabBtn.dataset.reportTab;
     render();
     return;
   }
