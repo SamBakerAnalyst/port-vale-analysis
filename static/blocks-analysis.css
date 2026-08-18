@@ -4366,6 +4366,17 @@ body.is-player-export .ba-app {
 .ba-pe-slide__strap--partial { color: var(--pe-gold2); }
 .ba-pe-slide__strap--none-hit { color: var(--pe-red); }
 
+.ba-pe-export-host {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: -1;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
 .ba-pe-slide--pdf-capture,
 body.is-pdf-capturing .ba-pe-slide {
   width: 1123px !important;

@@ -798,7 +798,7 @@ function playerExportHtml(block) {
   const opp = fixture?.opponentName ? shortOpponent(fixture.opponentName) : "match";
   return `
     <section class="ba-pe">
-      <p class="ba-pe__lead ba-export-hide">3 unit target slides · ${escapeHtml(opp)} · Export PDF downloads all three</p>
+      <p class="ba-pe__lead ba-export-hide">3 unit target slides · ${escapeHtml(opp)} · Export PNGs for WhatsApp (zip + Desktop folder)</p>
       ${slides}
     </section>
   `;
@@ -1763,6 +1763,7 @@ function dashHtml(block) {
           <div class="ba-report__actions">
             ${playerExport ? `
               <button type="button" class="ba-btn" data-print-player="${block.id}" ${playedInBlock ? "" : "disabled"}>Print</button>
+              <button type="button" class="ba-btn ba-btn--print" data-png-player="${block.id}" ${playedInBlock ? "" : "disabled"}>Export PNGs</button>
               <button type="button" class="ba-btn ba-btn--print" data-pdf-player="${block.id}" ${playedInBlock ? "" : "disabled"}>Export PDF</button>
             ` : `
               <button type="button" class="ba-btn" data-print-report="${block.id}" ${playedInBlock ? "" : "disabled"}>Print</button>
@@ -2048,55 +2049,101 @@ function playerPdfName(blockId) {
   return `Block-${blockId}-unit-targets.pdf`;
 }
 
-async function exportPlayerPdf(blockId) {
+function playerPngZipName(blockId) {
+  const block = (state.payload?.blocks || []).find((row) => row.id === Number(blockId));
+  if (!block) return "port-vale-unit-targets.zip";
+  const { single, fixture } = selectedStats(block);
+  if (single && fixture?.opponentName) {
+    return `Port-Vale-${slug(shortOpponent(fixture.opponentName))}-unit-targets.zip`;
+  }
+  return `Block-${blockId}-unit-targets.zip`;
+}
+
+function playerSlidePngName(slide, index) {
+  const unit = ["def", "mid", "att"].find((id) => slide.classList.contains(`ba-pe-slide--${id}`)) || `slide-${index + 1}`;
+  const labels = { def: "defence", mid: "midfield", att: "attack" };
+  return `${String(index + 1).padStart(2, "0")}-${labels[unit] || unit}.png`;
+}
+
+function stylePlayerExportClone(clone, layoutWidth, layoutHeight) {
+  clone.classList.add("ba-pe-slide--pdf-capture");
+  clone.style.width = `${layoutWidth}px`;
+  clone.style.maxWidth = `${layoutWidth}px`;
+  clone.style.height = `${layoutHeight}px`;
+  clone.style.minHeight = `${layoutHeight}px`;
+  clone.style.aspectRatio = "auto";
+  clone.style.margin = "0";
+  clone.style.border = "0";
+  clone.style.borderRadius = "0";
+  clone.style.boxShadow = "none";
+  clone.style.overflow = "hidden";
+}
+
+async function capturePlayerSlides(blockId, options = {}) {
   const root = document.getElementById(`block-${blockId}`);
   const slides = [...(root?.querySelectorAll(".ba-pe-slide") || [])];
   if (!slides.length) throw new Error("Pick one game, then open Player export");
   await loadScript("https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js");
-  if (typeof html2canvas !== "function") throw new Error("PDF export failed to load");
+  if (typeof html2canvas !== "function") throw new Error("Export failed to load");
   if (document.fonts?.ready) await document.fonts.ready;
+
+  const layoutWidth = SHEET_EXPORT_WIDTH;
+  const layoutHeight = SHEET_EXPORT_HEIGHT;
+  const scale = options.scale ?? SHEET_EXPORT_SCALE;
+  const host = document.createElement("div");
+  host.className = "ba-pe-export-host";
+  host.style.width = `${layoutWidth}px`;
+  host.style.height = `${layoutHeight}px`;
+  document.body.appendChild(host);
 
   document.body.classList.add("is-pdf-capturing");
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   const pages = [];
   try {
-    for (const slide of slides) {
-      const canvas = await html2canvas(slide, {
-        backgroundColor: "#13161b",
-        scale: SHEET_EXPORT_SCALE,
+    for (let index = 0; index < slides.length; index += 1) {
+      const slide = slides[index];
+      host.replaceChildren();
+      const clone = slide.cloneNode(true);
+      stylePlayerExportClone(clone, layoutWidth, layoutHeight);
+      host.appendChild(clone);
+      void clone.offsetWidth;
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      await new Promise((resolve) => window.setTimeout(resolve, 80));
+
+      const canvas = await html2canvas(clone, {
+        backgroundColor: "#0a0c10",
+        scale,
         logging: false,
         useCORS: true,
         allowTaint: false,
-        width: SHEET_EXPORT_WIDTH,
-        height: SHEET_EXPORT_HEIGHT,
-        windowWidth: SHEET_EXPORT_WIDTH,
-        windowHeight: SHEET_EXPORT_HEIGHT,
+        foreignObjectRendering: false,
+        width: layoutWidth,
+        height: layoutHeight,
+        windowWidth: layoutWidth,
+        windowHeight: layoutHeight,
         scrollX: 0,
         scrollY: 0,
-        onclone: (_doc, cloned) => {
-          cloned.classList.add("ba-pe-slide--pdf-capture");
-          cloned.style.width = `${SHEET_EXPORT_WIDTH}px`;
-          cloned.style.maxWidth = `${SHEET_EXPORT_WIDTH}px`;
-          cloned.style.height = `${SHEET_EXPORT_HEIGHT}px`;
-          cloned.style.minHeight = `${SHEET_EXPORT_HEIGHT}px`;
-          cloned.style.aspectRatio = "auto";
-          cloned.style.margin = "0";
-          cloned.style.border = "0";
-          cloned.style.borderRadius = "0";
-          cloned.style.boxShadow = "none";
-          cloned.style.overflow = "hidden";
-        },
       });
-      pages.push({
+      const page = {
         imageData: canvas.toDataURL("image/png"),
         width: canvas.width,
         height: canvas.height,
-      });
+      };
+      if (options.includeFilenames) {
+        page.filename = playerSlidePngName(slide, index);
+      }
+      pages.push(page);
+      if (options.onProgress) options.onProgress(index + 1, slides.length);
     }
   } finally {
+    host.remove();
     document.body.classList.remove("is-pdf-capturing");
   }
+  return pages;
+}
 
+async function exportPlayerPdf(blockId) {
+  const pages = await capturePlayerSlides(blockId);
   const filename = playerPdfName(blockId);
   const response = await fetch("/api/blocks-analysis/export-pdf", {
     method: "POST",
@@ -2112,6 +2159,42 @@ async function exportPlayerPdf(blockId) {
     throw new Error(detail || "PDF export failed");
   }
   downloadBlob(await response.blob(), filename);
+}
+
+async function exportPlayerPngs(blockId) {
+  const block = (state.payload?.blocks || []).find((row) => row.id === Number(blockId));
+  const { fixture } = block ? selectedStats(block) : { fixture: null };
+  const pages = await capturePlayerSlides(blockId, {
+    includeFilenames: true,
+    onProgress: (done, total) => setStatus(`Capturing PNGs… ${done}/${total}`, "loading"),
+  });
+  const filename = playerPngZipName(blockId);
+  const response = await fetch("/api/blocks-analysis/export-pngs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      pages,
+      filename,
+      document_title: "Port Vale Unit Targets",
+      opponent_name: fixture?.opponentName || "match",
+    }),
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(detail || "PNG export failed");
+  }
+  downloadBlob(await response.blob(), filename);
+  const folder = response.headers.get("X-Saved-Desktop-Folder");
+  if (folder) {
+    setStatus(`PNG pack ready · folder on Desktop for WhatsApp · ${pages.length} slides`, "ok");
+    return;
+  }
+  const zipPath = response.headers.get("X-Saved-Desktop-Path");
+  if (zipPath) {
+    setStatus(`PNG zip saved to Desktop · ${pages.length} slides`, "ok");
+    return;
+  }
+  setStatus(`PNG zip downloaded · ${pages.length} slides`, "ok");
 }
 
 async function exportReportPdf(blockId) {
@@ -2321,6 +2404,19 @@ els.blocksRoot.addEventListener("click", async (event) => {
       setStatus(err.message || "PDF export failed", "error");
     } finally {
       pdfBtn.disabled = false;
+    }
+    return;
+  }
+  const pngBtn = event.target.closest("[data-png-player]");
+  if (pngBtn) {
+    pngBtn.disabled = true;
+    setStatus("Capturing unit target slides as PNGs…", "loading");
+    try {
+      await exportPlayerPngs(Number(pngBtn.dataset.pngPlayer));
+    } catch (err) {
+      setStatus(err.message || "PNG export failed", "error");
+    } finally {
+      pngBtn.disabled = false;
     }
     return;
   }

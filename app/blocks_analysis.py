@@ -272,6 +272,24 @@ class BlocksExportRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class BlocksPngExportPage(BaseModel):
+    image_data: str = Field(default="", alias="imageData")
+    filename: str | None = None
+    width: int = 0
+    height: int = 0
+
+    model_config = {"populate_by_name": True}
+
+
+class BlocksPngExportRequest(BaseModel):
+    pages: list[BlocksPngExportPage] = Field(default_factory=list)
+    filename: str | None = None
+    document_title: str | None = None
+    opponent_name: str | None = None
+
+    model_config = {"populate_by_name": True}
+
+
 def _empty_targets() -> dict[str, Any]:
     return {
         "version": 1,
@@ -2851,3 +2869,46 @@ def register_blocks_analysis_routes(app: FastAPI) -> None:
         if saved_path is not None:
             headers["X-Saved-Desktop-Path"] = str(saved_path)
         return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
+
+    @app.post("/api/blocks-analysis/export-pngs")
+    def blocks_analysis_export_pngs(body: BlocksPngExportRequest) -> Response:
+        from app.main import _safe_export_filename
+        from app.pre_match import (
+            PreMatchPngExportPage,
+            PreMatchPngExportRequest,
+            _save_png_bundle_to_desktop,
+            build_pre_match_png_zip,
+        )
+
+        if not body.pages:
+            raise HTTPException(status_code=400, detail="No export pages provided.")
+        payload = PreMatchPngExportRequest(
+            pages=[
+                PreMatchPngExportPage(
+                    imageData=page.image_data,
+                    filename=page.filename,
+                    width=page.width,
+                    height=page.height,
+                )
+                for page in body.pages
+            ],
+            filename=body.filename,
+            document_title=body.document_title,
+            opponent_name=body.opponent_name,
+        )
+        try:
+            zip_bytes, entries = build_pre_match_png_zip(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        opponent = re.sub(r"[^\w\s\-]+", "", str(body.opponent_name or "match"))
+        opponent = re.sub(r"\s+", "-", opponent).strip("-") or "match"
+        default_name = f"port-vale-{opponent}-unit-targets.zip"
+        filename = _safe_export_filename(body.filename or default_name, default_ext=".zip")
+        headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+        zip_path, folder_path = _save_png_bundle_to_desktop(zip_bytes, filename, entries)
+        if zip_path is not None:
+            headers["X-Saved-Desktop-Path"] = str(zip_path)
+        if folder_path is not None:
+            headers["X-Saved-Desktop-Folder"] = str(folder_path)
+        return Response(content=zip_bytes, media_type="application/zip", headers=headers)
