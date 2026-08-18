@@ -4017,8 +4017,9 @@ a:hover { text-decoration: underline; }
     0 0 0 1px rgba(255,255,255,.06) inset,
     0 10px 28px rgba(0, 0, 0, .35),
     0 28px 56px rgba(0, 0, 0, .28);
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
+  container-type: size;
   print-color-adjust: exact;
   -webkit-print-color-adjust: exact;
 }
@@ -4069,29 +4070,36 @@ a:hover { text-decoration: underline; }
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 1.2rem;
-  padding: 1.35rem 1.75rem 0;
+  gap: .85rem;
+  padding: .72rem 1.35rem .2rem;
+  flex: 0 0 auto;
 }
 
 .ba-pe-slide__hero-left {
   display: flex;
-  align-items: flex-start;
-  gap: .85rem;
+  align-items: center;
+  gap: .65rem;
   min-width: 0;
+  flex: 1 1 auto;
+}
+
+.ba-pe-slide__titles {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .ba-pe-slide__badge {
-  width: 64px;
-  height: 64px;
+  width: 48px;
+  height: 48px;
   object-fit: contain;
   flex: 0 0 auto;
 }
 
 .ba-pe-slide__avatar {
-  width: 64px;
-  height: 64px;
-  border: 3px solid rgba(255,255,255,.45);
-  border-radius: 8px;
+  width: 48px;
+  height: 48px;
+  border: 2px solid rgba(255,255,255,.45);
+  border-radius: 6px;
   position: relative;
   flex: 0 0 auto;
 }
@@ -4099,76 +4107,94 @@ a:hover { text-decoration: underline; }
 .ba-pe-slide__avatar::before {
   content: "";
   position: absolute;
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: #fff;
-  left: 20px;
-  top: 12px;
+  left: 15px;
+  top: 10px;
 }
 
 .ba-pe-slide__avatar::after {
   content: "";
   position: absolute;
-  width: 34px;
-  height: 18px;
-  border-radius: 24px 24px 8px 8px;
+  width: 28px;
+  height: 14px;
+  border-radius: 20px 20px 6px 6px;
   background: #fff;
-  left: 14px;
-  bottom: 12px;
+  left: 10px;
+  bottom: 10px;
 }
 
 .ba-pe-slide__club {
   color: var(--pe-gold2);
-  font: 700 1.05rem/1 "Barlow Condensed", sans-serif;
+  font: 700 .82rem/1 "Barlow Condensed", sans-serif;
   letter-spacing: .12em;
 }
 
 .ba-pe-slide__title {
-  margin: .12rem 0 0;
-  font: 800 clamp(2rem, 4.2vw, 3.35rem)/.92 "Barlow Condensed", sans-serif;
+  margin: .08rem 0 0;
+  font: 800 clamp(1.15rem, 6.2cqh, 2.15rem)/1 "Barlow Condensed", sans-serif;
   letter-spacing: .01em;
   text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ba-pe-slide__vs {
-  margin: .35rem 0 0;
   color: #fff;
-  font: 700 clamp(1rem, 2vw, 1.55rem)/1 "Barlow Condensed", sans-serif;
-  opacity: .95;
-  text-transform: uppercase;
+  font-weight: 700;
+  opacity: .92;
 }
 
 .ba-pe-slide__chip {
-  min-width: 72px;
+  min-width: 58px;
   text-align: center;
-  padding: .45rem .85rem;
+  padding: .28rem .55rem;
   border: 2px solid var(--pe-gold);
   color: var(--pe-gold2);
-  font: 800 2rem/1 "Barlow Condensed", sans-serif;
+  font: 800 clamp(1.1rem, 5cqh, 1.55rem)/1 "Barlow Condensed", sans-serif;
   flex: 0 0 auto;
 }
 
-.ba-pe-slide__targets {
+.ba-pe-slide__body {
   position: relative;
   z-index: 1;
-  display: grid;
-  gap: .45rem;
-  padding: .85rem 1.75rem 0;
-  align-content: center;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 1.35rem .55rem;
+}
+
+.ba-pe-slide__targets {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  gap: 0;
+  overflow: hidden;
 }
 
 .ba-pe__row {
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr) auto 56px;
+  grid-template-columns: clamp(34px, 5.5cqw, 44px) minmax(0, 1fr) clamp(34px, 5.5cqw, 44px) clamp(34px, 5.5cqw, 44px);
   align-items: center;
-  gap: .85rem;
-  min-height: 64px;
+  gap: clamp(.35rem, 1.2cqw, .65rem);
+  min-height: 0;
+  flex: 1 1 0;
+  max-height: 16.5%;
+}
+
+.ba-pe-slide--rows-7 .ba-pe__row {
+  max-height: 14%;
 }
 
 .ba-pe__icon {
-  width: 52px;
-  height: 52px;
+  width: clamp(34px, 5.5cqw, 44px);
+  height: clamp(34px, 5.5cqw, 44px);
   border-radius: 50%;
   background: var(--pe-gold);
   color: #fff;
@@ -4178,22 +4204,26 @@ a:hover { text-decoration: underline; }
 }
 
 .ba-pe__icon svg {
-  width: 28px;
-  height: 28px;
+  width: clamp(18px, 3cqw, 24px);
+  height: clamp(18px, 3cqw, 24px);
 }
 
 .ba-pe__label {
   margin: 0;
-  font: 800 clamp(.95rem, 1.65vw, 1.55rem)/.95 "Barlow Condensed", sans-serif;
+  font: 800 clamp(.68rem, 2.35cqh, 1.2rem)/1 "Barlow Condensed", sans-serif;
   text-transform: uppercase;
+}
+
+.ba-pe-slide--rows-7 .ba-pe__label {
+  font-size: clamp(.62rem, 2.05cqh, 1.05rem);
 }
 
 .ba-pe__mark {
   display: grid;
   place-items: center;
-  width: 52px;
-  height: 52px;
-  font: 900 2.4rem/1 "Barlow Condensed", sans-serif;
+  width: clamp(34px, 5.5cqw, 44px);
+  height: clamp(34px, 5.5cqw, 44px);
+  font: 900 clamp(1.35rem, 4.5cqh, 2rem)/1 "Barlow Condensed", sans-serif;
 }
 
 .ba-pe__mark--hit {
@@ -4207,22 +4237,47 @@ a:hover { text-decoration: underline; }
 }
 
 .ba-pe-slide__strap {
-  position: relative;
-  z-index: 1;
+  flex: 0 0 auto;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
-  padding: .65rem 1.75rem .85rem;
+  padding: .35rem 0 0;
+  margin-top: .2rem;
   color: var(--pe-red);
-  font: 800 clamp(.75rem, 1.2vw, 1.05rem)/1 "Barlow Condensed", sans-serif;
+  font: 800 clamp(.62rem, 2cqh, .88rem)/1 "Barlow Condensed", sans-serif;
   letter-spacing: .05em;
   text-transform: uppercase;
 }
 
+.ba-pe-slide--pdf-capture,
+body.is-pdf-capturing .ba-pe-slide {
+  width: 1123px !important;
+  height: 794px !important;
+  max-width: 1123px !important;
+  max-height: 794px !important;
+  aspect-ratio: auto !important;
+}
+
+.ba-pe-slide--pdf-capture .ba-pe__row,
+body.is-pdf-capturing .ba-pe-slide .ba-pe__row {
+  max-height: none;
+  flex: 1 1 0;
+}
+
+.ba-pe-slide--pdf-capture .ba-pe__label,
+body.is-pdf-capturing .ba-pe-slide .ba-pe__label {
+  font-size: 1.05rem;
+}
+
+.ba-pe-slide--pdf-capture.ba-pe-slide--rows-7 .ba-pe__label,
+body.is-pdf-capturing .ba-pe-slide.ba-pe-slide--rows-7 .ba-pe__label {
+  font-size: .92rem;
+}
+
 @media (max-width: 760px) {
   .ba-pe__row {
-    grid-template-columns: 44px minmax(0, 1fr) auto;
+    grid-template-columns: 36px minmax(0, 1fr) 36px;
   }
 
   .ba-pe__icon--right {
@@ -4232,6 +4287,15 @@ a:hover { text-decoration: underline; }
   .ba-pe-slide__avatar {
     display: none;
   }
+
+  .ba-pe-slide__title {
+    white-space: normal;
+    line-height: 1.05;
+  }
+}
+
+body.is-printing-player .ba-poster {
+  display: none !important;
 }
 
 body.is-exporting .ba-export-hide { display: none !important; }

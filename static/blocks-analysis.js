@@ -724,8 +724,9 @@ function playerExportSlideHtml(slide, { stats, single, fixture, page, totalPages
     ? String(fixture.opponentName).replace(/\s+FC$/i, "").trim().toUpperCase()
     : "";
   const rows = specs.map((spec, index) => playerExportTargetRow(spec, slide.id, stats, single, index)).join("");
+  const vsHtml = opponent ? `<span class="ba-pe-slide__vs">(v ${escapeHtml(opponent)})</span>` : "";
   return `
-    <article class="ba-pe-slide ba-pe-slide--${slide.id.toLowerCase()}">
+    <article class="ba-pe-slide ba-pe-slide--${slide.id.toLowerCase()} ba-pe-slide--rows-${specs.length}">
       <div class="ba-pe-slide__grit" aria-hidden="true"></div>
       <div class="ba-pe-slide__slash ba-pe-slide__slash--one" aria-hidden="true"></div>
       <div class="ba-pe-slide__slash ba-pe-slide__slash--two" aria-hidden="true"></div>
@@ -733,19 +734,20 @@ function playerExportSlideHtml(slide, { stats, single, fixture, page, totalPages
         <div class="ba-pe-slide__hero-left">
           <img class="ba-pe-slide__badge" src="/standalone/port-vale-badge.png?v=2" alt="Port Vale" crossorigin="anonymous" />
           <div class="ba-pe-slide__avatar" aria-hidden="true"></div>
-          <div>
+          <div class="ba-pe-slide__titles">
             <div class="ba-pe-slide__club">PORT VALE</div>
-            <h2 class="ba-pe-slide__title">${escapeHtml(PE_UNIT_HEADINGS[slide.id] || slide.title.toUpperCase())}</h2>
-            ${opponent ? `<p class="ba-pe-slide__vs">(v ${escapeHtml(opponent)})</p>` : ""}
+            <h2 class="ba-pe-slide__title">${escapeHtml(PE_UNIT_HEADINGS[slide.id] || slide.title.toUpperCase())}${vsHtml}</h2>
           </div>
         </div>
         <div class="ba-pe-slide__chip">${escapeHtml(slide.id)}</div>
       </header>
-      <div class="ba-pe-slide__targets">${rows}</div>
-      <footer class="ba-pe-slide__strap">
-        <span>${hit} OF ${specs.length} TARGETS AT REQ</span>
-        <span>${page} / ${totalPages}</span>
-      </footer>
+      <div class="ba-pe-slide__body">
+        <div class="ba-pe-slide__targets">${rows}</div>
+        <footer class="ba-pe-slide__strap">
+          <span>${hit} OF ${specs.length} TARGETS AT REQ</span>
+          <span>${page} / ${totalPages}</span>
+        </footer>
+      </div>
     </article>
   `;
 }
@@ -1779,8 +1781,13 @@ function dashHtml(block) {
         <div class="ba-report__tools">
           <div class="ba-filter" role="group" aria-label="Filter block ${block.id} to one game">${pills}</div>
           <div class="ba-report__actions">
-            <button type="button" class="ba-btn" data-print-report="${block.id}">Print</button>
-            <button type="button" class="ba-btn ba-btn--print" data-pdf-report="${block.id}">Export PDF</button>
+            ${playerExport ? `
+              <button type="button" class="ba-btn" data-print-player="${block.id}" ${single ? "" : "disabled"}>Print</button>
+              <button type="button" class="ba-btn ba-btn--print" data-pdf-player="${block.id}" ${single ? "" : "disabled"}>Export PDF</button>
+            ` : `
+              <button type="button" class="ba-btn" data-print-report="${block.id}">Print</button>
+              <button type="button" class="ba-btn ba-btn--print" data-pdf-report="${block.id}">Export PDF</button>
+            `}
           </div>
         </div>
       </div>
@@ -1934,6 +1941,82 @@ function reportPdfName(blockId) {
   return `Block-${blockId}-${slug(block.title || "report")}.pdf`;
 }
 
+function playerPdfName(blockId) {
+  const block = (state.payload?.blocks || []).find((row) => row.id === Number(blockId));
+  if (!block) return "port-vale-unit-targets.pdf";
+  const { single, fixture } = selectedStats(block);
+  if (single && fixture?.opponentName) {
+    return `Port-Vale-${slug(shortOpponent(fixture.opponentName))}-unit-targets.pdf`;
+  }
+  return `Block-${blockId}-unit-targets.pdf`;
+}
+
+async function exportPlayerPdf(blockId) {
+  const root = document.getElementById(`block-${blockId}`);
+  const slides = [...(root?.querySelectorAll(".ba-pe-slide") || [])];
+  if (!slides.length) throw new Error("Pick one game, then open Player export");
+  await loadScript("https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js");
+  if (typeof html2canvas !== "function") throw new Error("PDF export failed to load");
+  if (document.fonts?.ready) await document.fonts.ready;
+
+  document.body.classList.add("is-pdf-capturing");
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  const pages = [];
+  try {
+    for (const slide of slides) {
+      const canvas = await html2canvas(slide, {
+        backgroundColor: "#13161b",
+        scale: SHEET_EXPORT_SCALE,
+        logging: false,
+        useCORS: true,
+        allowTaint: false,
+        width: SHEET_EXPORT_WIDTH,
+        height: SHEET_EXPORT_HEIGHT,
+        windowWidth: SHEET_EXPORT_WIDTH,
+        windowHeight: SHEET_EXPORT_HEIGHT,
+        scrollX: 0,
+        scrollY: 0,
+        onclone: (_doc, cloned) => {
+          cloned.classList.add("ba-pe-slide--pdf-capture");
+          cloned.style.width = `${SHEET_EXPORT_WIDTH}px`;
+          cloned.style.maxWidth = `${SHEET_EXPORT_WIDTH}px`;
+          cloned.style.height = `${SHEET_EXPORT_HEIGHT}px`;
+          cloned.style.minHeight = `${SHEET_EXPORT_HEIGHT}px`;
+          cloned.style.aspectRatio = "auto";
+          cloned.style.margin = "0";
+          cloned.style.border = "0";
+          cloned.style.borderRadius = "0";
+          cloned.style.boxShadow = "none";
+          cloned.style.overflow = "hidden";
+        },
+      });
+      pages.push({
+        imageData: canvas.toDataURL("image/png"),
+        width: canvas.width,
+        height: canvas.height,
+      });
+    }
+  } finally {
+    document.body.classList.remove("is-pdf-capturing");
+  }
+
+  const filename = playerPdfName(blockId);
+  const response = await fetch("/api/blocks-analysis/export-pdf", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      pages,
+      filename,
+      document_title: "Port Vale Unit Targets",
+    }),
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(detail || "PDF export failed");
+  }
+  downloadBlob(await response.blob(), filename);
+}
+
 async function exportReportPdf(blockId) {
   const root = document.getElementById(`block-${blockId}`);
   const poster = root?.querySelector(".ba-poster");
@@ -2013,11 +2096,13 @@ async function exportReportPdf(blockId) {
 function printReport(blockId) {
   const block = document.getElementById(`block-${blockId}`);
   if (!block) return;
+  const playerDeck = block.querySelector(".ba-pe:not(.ba-pe--empty)");
   document.querySelectorAll(".ba-block.is-print-target").forEach((el) => el.classList.remove("is-print-target"));
   block.classList.add("is-print-target");
+  document.body.classList.toggle("is-printing-player", Boolean(playerDeck));
   document.body.classList.add("is-printing");
   const tidy = () => {
-    document.body.classList.remove("is-printing");
+    document.body.classList.remove("is-printing", "is-printing-player");
     block.classList.remove("is-print-target");
     window.removeEventListener("afterprint", tidy);
   };
@@ -2101,17 +2186,21 @@ els.blocksRoot.addEventListener("click", async (event) => {
     render();
     return;
   }
-  const printBtn = event.target.closest("[data-print-report]");
+  const printBtn = event.target.closest("[data-print-report], [data-print-player]");
   if (printBtn) {
-    printReport(Number(printBtn.dataset.printReport));
+    printReport(Number(printBtn.dataset.printReport || printBtn.dataset.printPlayer));
     return;
   }
-  const pdfBtn = event.target.closest("[data-pdf-report]");
+  const pdfBtn = event.target.closest("[data-pdf-report], [data-pdf-player]");
   if (pdfBtn) {
     pdfBtn.disabled = true;
-    setStatus("Building A4 landscape PDF…", "loading");
+    setStatus(pdfBtn.dataset.pdfPlayer ? "Building unit targets PDF…" : "Building A4 landscape PDF…", "loading");
     try {
-      await exportReportPdf(Number(pdfBtn.dataset.pdfReport));
+      if (pdfBtn.dataset.pdfPlayer) {
+        await exportPlayerPdf(Number(pdfBtn.dataset.pdfPlayer));
+      } else {
+        await exportReportPdf(Number(pdfBtn.dataset.pdfReport));
+      }
       setStatus("PDF downloaded.", "ok");
     } catch (err) {
       setStatus(err.message || "PDF export failed", "error");
