@@ -318,10 +318,20 @@ async function persistAssignment(id) {
       state.assignments = data.assignments;
       saveAssignments();
     }
-    if (data.email?.sent) {
+    if data.email?.sent) {
       setStatus(`Assignment saved · email sent to ${data.email.to}`, "ok");
-    } else if (data.email && !data.email.sent && data.email.reason) {
-      setStatus(`Assignment saved · email not sent: ${data.email.reason}`, "error");
+    } else if (data.email && !data.email.sent) {
+      const failed = (data.email.results || []).find((row) => row?.eml_base64) || data.email;
+      const downloaded = downloadEmlFile(failed);
+      const reason = data.email.reason || failed.reason || "Email not sent";
+      if (downloaded) {
+        setStatus(
+          "Assignment saved · website can't send mail from the server. Open the downloaded email in Outlook or Mail and click Send.",
+          "ok",
+        );
+      } else {
+        setStatus(`Assignment saved · email not sent: ${reason}`, "error");
+      }
     }
   } catch (error) {
     console.warn("Could not persist assignment", error);

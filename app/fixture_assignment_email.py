@@ -46,6 +46,7 @@ DEFAULT_FROM_EMAIL = "sam.baker@port-vale.co.uk"
 DEFAULT_FROM_NAME = "Sam Baker · Port Vale Recruitment"
 DEFAULT_SMTP_HOST = "smtp.office365.com"
 DEFAULT_SMTP_PORT = 587
+PORT_VALE_GRAPH_TENANT_ID = "dfcffac1-cb4c-4a43-9ad5-aaf3672ee5d8"
 
 _http = requests.Session()
 _http.trust_env = False
@@ -183,7 +184,13 @@ def smtp_configured() -> bool:
 
 
 def email_configured() -> bool:
-    return smtp_configured() or _resend_configured() or _graph_configured()
+    return (
+        smtp_configured()
+        or _resend_configured()
+        or _graph_configured()
+        or _graph_delegated_configured()
+        or _sendgrid_configured()
+    )
 
 
 def _smtp_settings() -> dict[str, Any]:
@@ -202,7 +209,8 @@ def _smtp_settings() -> dict[str, Any]:
 
 def _email_transport_mode() -> str:
     mode = (_env("FIXTURE_EMAIL_TRANSPORT") or "auto").lower()
-    return mode if mode in {"auto", "smtp", "graph", "resend"} else "auto"
+    allowed = {"auto", "smtp", "graph", "graph_delegated", "resend", "sendgrid"}
+    return mode if mode in allowed else "auto"
 
 
 def _resend_configured() -> bool:
@@ -217,14 +225,40 @@ def _graph_configured() -> bool:
     )
 
 
+def _graph_delegated_configured() -> bool:
+    return bool(_env("MS_GRAPH_CLIENT_ID") and _env("MS_GRAPH_REFRESH_TOKEN"))
+
+
+def _sendgrid_configured() -> bool:
+    return bool(_env("SENDGRID_API_KEY"))
+
+
+def _graph_tenant_id() -> str:
+    return _env("MS_GRAPH_TENANT_ID") or PORT_VALE_GRAPH_TENANT_ID
+
+
+def _smtp_reachable() -> bool:
+    settings = _smtp_settings()
+    return _smtp_port_open(settings["host"], settings["port"])
+
+
 def _choose_email_transport() -> str:
     mode = _email_transport_mode()
-    if mode == "smtp":
-        return "smtp"
+    if mode == "sendgrid":
+        return "sendgrid" if _sendgrid_configured() else "smtp"
     if mode == "resend":
         return "resend" if _resend_configured() else "smtp"
     if mode == "graph":
         return "graph" if _graph_configured() else "smtp"
+    if mode == "graph_delegated":
+        return "graph_delegated" if _graph_delegated_configured() else "smtp"
+    if mode == "smtp":
+        return "smtp"
+
+    if _sendgrid_configured():
+        return "sendgrid"
+    if _graph_delegated_configured():
+        return "graph_delegated"
     if _resend_configured():
         return "resend"
     if _graph_configured():
@@ -312,7 +346,7 @@ def _eml_payload(root: MIMEMultipart, *, filename: str) -> dict[str, str]:
 
 
 def _graph_access_token() -> str:
-    tenant = _env("MS_GRAPH_TENANT_ID")
+    tenant = _graph_tenant_id()
     response = _http.post(
         f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
         data={
@@ -393,6 +427,57 @@ def _send_via_graph(
 ) -> dict[str, Any]:
     token = _graph_access_token()
     send_as = _env("MS_GRAPH_SEND_AS") or settings["from_email"]
+    message = _graph_message_payload(
+        to_emails=to_emails,
+        subject=subject,
+        text_body=text_body,
+        html_body=html_body,
+        attachments=attachments,
+    )
+
+    response = _http.post(
+        f"https://graph.microsoft.com/v1.0/users/{quote(send_as)}/sendMail",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        json={"message": message, "saveToSentItems": True},
+        timeout=45,
+    )
+    if not response.ok:
+        detail = response.text[:240].replace("\n", " ")
+        return {"sent": False, "reason": f"Microsoft Graph error ({response.status_code}): {detail}"}
+    return {"sent": True, "to": to_emails, "transport": "graph"}
+
+
+def _graph_delegated_access_token() -> str:
+    tenant = _graph_tenant_id()
+    response = _http.post(
+        f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
+        data={
+            "client_id": _env("MS_GRAPH_CLIENT_ID"),
+            "refresh_token": _env("MS_GRAPH_REFRESH_TOKEN"),
+            "grant_type": "refresh_token",
+            "scope": "https://graph.microsoft.com/Mail.Send offline_access",
+        },
+        timeout=30,
+    )
+    if not response.ok:
+        raise RuntimeError(f"Graph delegated auth failed ({response.status_code}): {response.text[:240]}")
+    token = response.json().get("access_token")
+    if not token:
+        raise RuntimeError("Graph delegated auth returned no access token")
+    return str(token)
+
+
+def _graph_message_payload(
+    *,
+    to_emails: list[str],
+    subject: str,
+    text_body: str,
+    html_body: str,
+    attachments: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     graph_attachments: list[dict[str, Any]] = []
     for attachment in attachments or []:
         content = attachment.get("content")
@@ -417,9 +502,31 @@ def _send_via_graph(
     }
     if graph_attachments:
         message["attachments"] = graph_attachments
+    return message
 
+
+def _send_via_graph_delegated(
+    *,
+    to_emails: list[str],
+    subject: str,
+    text_body: str,
+    html_body: str,
+    attachments: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    try:
+        token = _graph_delegated_access_token()
+    except Exception as exc:
+        return {"sent": False, "reason": str(exc)}
+
+    message = _graph_message_payload(
+        to_emails=to_emails,
+        subject=subject,
+        text_body=text_body,
+        html_body=html_body,
+        attachments=attachments,
+    )
     response = _http.post(
-        f"https://graph.microsoft.com/v1.0/users/{quote(send_as)}/sendMail",
+        "https://graph.microsoft.com/v1.0/me/sendMail",
         headers={
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
@@ -430,7 +537,65 @@ def _send_via_graph(
     if not response.ok:
         detail = response.text[:240].replace("\n", " ")
         return {"sent": False, "reason": f"Microsoft Graph error ({response.status_code}): {detail}"}
-    return {"sent": True, "to": to_emails, "transport": "graph"}
+    return {"sent": True, "to": to_emails, "transport": "graph_delegated"}
+
+
+def _send_via_sendgrid(
+    *,
+    settings: dict[str, Any],
+    to_emails: list[str],
+    subject: str,
+    text_body: str,
+    html_body: str,
+    attachments: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    api_key = _env("SENDGRID_API_KEY")
+    payload: dict[str, Any] = {
+        "personalizations": [{"to": [{"email": email} for email in to_emails]}],
+        "from": {
+            "email": settings["from_email"],
+            "name": settings["from_name"],
+        },
+        "subject": subject,
+        "content": [
+            {"type": "text/plain", "value": text_body},
+            {"type": "text/html", "value": html_body},
+        ],
+    }
+    attach_payload: list[dict[str, Any]] = []
+    for attachment in attachments or []:
+        content = attachment.get("content")
+        if not content:
+            continue
+        maintype = str(attachment.get("maintype") or "application")
+        subtype = str(attachment.get("subtype") or "octet-stream")
+        row: dict[str, Any] = {
+            "content": base64.b64encode(content).decode("ascii"),
+            "filename": str(attachment.get("filename") or "attachment.bin"),
+            "type": str(attachment.get("content_type") or f"{maintype}/{subtype}"),
+            "disposition": "attachment",
+        }
+        cid = str(attachment.get("cid") or "").strip()
+        if cid:
+            row["disposition"] = "inline"
+            row["content_id"] = cid
+        attach_payload.append(row)
+    if attach_payload:
+        payload["attachments"] = attach_payload
+
+    response = _http.post(
+        "https://api.sendgrid.com/v3/mail/send",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=45,
+    )
+    if response.status_code not in {200, 202}:
+        detail = response.text[:240].replace("\n", " ")
+        return {"sent": False, "reason": f"SendGrid API error ({response.status_code}): {detail}"}
+    return {"sent": True, "to": to_emails, "transport": "sendgrid"}
 
 
 def _send_via_smtp(
@@ -495,11 +660,32 @@ def _send_email_payload(
 
     settings = _smtp_settings()
     transport = _choose_email_transport()
+    if transport == "sendgrid":
+        if not _sendgrid_configured():
+            return {"sent": False, "reason": "SENDGRID_API_KEY not configured"}
+        return _send_via_sendgrid(
+            settings=settings,
+            to_emails=recipients,
+            subject=subject,
+            text_body=text_body,
+            html_body=html_body,
+            attachments=attachments,
+        )
     if transport == "resend":
         if not _resend_configured():
             return {"sent": False, "reason": "RESEND_API_KEY not configured"}
         return _send_via_resend(
             settings=settings,
+            to_emails=recipients,
+            subject=subject,
+            text_body=text_body,
+            html_body=html_body,
+            attachments=attachments,
+        )
+    if transport == "graph_delegated":
+        if not _graph_delegated_configured():
+            return {"sent": False, "reason": "Microsoft Graph refresh token not configured"}
+        return _send_via_graph_delegated(
             to_emails=recipients,
             subject=subject,
             text_body=text_body,
@@ -1032,7 +1218,7 @@ def send_assignment_email(
     if not email_configured():
         return {
             "sent": False,
-            "reason": "Email not configured (set SMTP, RESEND_API_KEY, or Microsoft Graph in .env)",
+            "reason": "Email not configured (set SENDGRID_API_KEY, RESEND_API_KEY, Microsoft Graph, or SMTP in .env)",
         }
 
     kickoff_label = _format_kickoff(kickoff_utc, date_key)
@@ -1161,7 +1347,7 @@ def send_rejection_notify_email(
     if not email_configured():
         return {
             "sent": False,
-            "reason": "Email not configured (set SMTP, RESEND_API_KEY, or Microsoft Graph in .env)",
+            "reason": "Email not configured (set SENDGRID_API_KEY, RESEND_API_KEY, Microsoft Graph, or SMTP in .env)",
         }
 
     first = staff.split(" ")[0] if staff else "Scout"
@@ -1465,7 +1651,7 @@ def _send_multipart_email(
     if not email_configured():
         return {
             "sent": False,
-            "reason": "Email not configured (set SMTP, RESEND_API_KEY, or Microsoft Graph in .env)",
+            "reason": "Email not configured (set SENDGRID_API_KEY, RESEND_API_KEY, Microsoft Graph, or SMTP in .env)",
         }
 
     result = _send_email_payload(
