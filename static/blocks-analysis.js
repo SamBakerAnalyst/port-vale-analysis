@@ -697,12 +697,9 @@ const PE_ICONS_LEFT = [
   `<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="22" fill="none" stroke="currentColor" stroke-width="5"/><path d="M32 18v16l10 8" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/></svg>`,
 ];
 
-const PE_ICONS_RIGHT = [
-  `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 18h12l4 28 8-36 8 36 4-28h12" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-  `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M16 42l12-12 8 8 12-14" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><path d="M42 24h10v10" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-  `<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="18" cy="18" r="6" fill="currentColor"/><circle cx="46" cy="18" r="6" fill="currentColor"/><circle cx="32" cy="46" r="6" fill="currentColor"/><path d="M22 22l8 18M42 22l-8 18" fill="none" stroke="currentColor" stroke-width="4"/></svg>`,
-  `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 32c6-9 13-13 22-13s16 4 22 13c-6 9-13 13-22 13S16 41 10 32z" fill="none" stroke="currentColor" stroke-width="5"/><circle cx="32" cy="32" r="7" fill="currentColor"/></svg>`,
-];
+const PE_LABEL_OVERRIDES = {
+  offensiveInterventions: "Regains",
+};
 
 function reportTab(blockId) {
   return state.reportTabs[blockId] || "staff";
@@ -728,12 +725,21 @@ function playerExportTargetRow(spec, unit, stats, single, index) {
     : `<span class="ba-pe__mark ba-pe__mark--miss" aria-label="Target missed">✕</span>`;
   return `
     <div class="ba-pe__row">
-      <div class="ba-pe__icon ba-pe__icon--left">${PE_ICONS_LEFT[index % PE_ICONS_LEFT.length]}</div>
-      <p class="ba-pe__label">${escapeHtml(spec.label.toUpperCase())}</p>
-      <span class="ba-pe__req">REQ ${escapeHtml(req)}</span>
-      <span class="ba-pe__actual ${hit ? "is-hit" : "is-miss"}">${escapeHtml(actual)}</span>
-      ${mark}
-      <div class="ba-pe__icon ba-pe__icon--right">${PE_ICONS_RIGHT[index % PE_ICONS_RIGHT.length]}</div>
+      <div class="ba-pe__row-main">
+        <div class="ba-pe__icon">${PE_ICONS_LEFT[index % PE_ICONS_LEFT.length]}</div>
+        <p class="ba-pe__label">${escapeHtml((PE_LABEL_OVERRIDES[spec.key] || spec.label).toUpperCase())}</p>
+      </div>
+      <div class="ba-pe__scoreboard">
+        <div class="ba-pe__box ba-pe__box--req">
+          <span class="ba-pe__box-k">Req</span>
+          <span class="ba-pe__box-v">${escapeHtml(req)}</span>
+        </div>
+        <div class="ba-pe__box ba-pe__box--actual ${hit ? "is-hit" : "is-miss"}">
+          <span class="ba-pe__box-k">Actual</span>
+          <span class="ba-pe__box-v">${escapeHtml(actual)}</span>
+        </div>
+        ${mark}
+      </div>
     </div>
   `;
 }
@@ -741,11 +747,11 @@ function playerExportTargetRow(spec, unit, stats, single, index) {
 function playerExportSlideHtml(slide, { stats, single, fixture, page, totalPages }) {
   const specs = slideMetricSpecs(slide);
   const hit = specs.filter((spec) => metricAtReq(spec, slide.id, stats, single)).length;
+  const strapTone = hit === specs.length ? "all-hit" : hit === 0 ? "none-hit" : "partial";
   const opponent = fixture?.opponentName
     ? String(fixture.opponentName).replace(/\s+FC$/i, "").trim().toUpperCase()
     : "";
   const rows = specs.map((spec, index) => playerExportTargetRow(spec, slide.id, stats, single, index)).join("");
-  const vsHtml = opponent ? `<span class="ba-pe-slide__vs">(v ${escapeHtml(opponent)})</span>` : "";
   return `
     <article class="ba-pe-slide ba-pe-slide--${slide.id.toLowerCase()} ba-pe-slide--rows-${specs.length}">
       <div class="ba-pe-slide__grit" aria-hidden="true"></div>
@@ -754,17 +760,17 @@ function playerExportSlideHtml(slide, { stats, single, fixture, page, totalPages
       <header class="ba-pe-slide__hero">
         <div class="ba-pe-slide__hero-left">
           <img class="ba-pe-slide__badge" src="/standalone/port-vale-badge.png?v=2" alt="Port Vale" crossorigin="anonymous" />
-          <div class="ba-pe-slide__avatar" aria-hidden="true"></div>
           <div class="ba-pe-slide__titles">
             <div class="ba-pe-slide__club">PORT VALE</div>
-            <h2 class="ba-pe-slide__title">${escapeHtml(PE_UNIT_HEADINGS[slide.id] || slide.title.toUpperCase())}${vsHtml}</h2>
+            <h2 class="ba-pe-slide__title">${escapeHtml(PE_UNIT_HEADINGS[slide.id] || slide.title.toUpperCase())}</h2>
+            ${opponent ? `<p class="ba-pe-slide__vs">v ${escapeHtml(opponent)}</p>` : ""}
           </div>
         </div>
         <div class="ba-pe-slide__chip">${escapeHtml(slide.id)}</div>
       </header>
       <div class="ba-pe-slide__body">
         <div class="ba-pe-slide__targets">${rows}</div>
-        <footer class="ba-pe-slide__strap">
+        <footer class="ba-pe-slide__strap ba-pe-slide__strap--${strapTone}">
           <span>${hit} OF ${specs.length} TARGETS AT REQ</span>
           <span>${page} / ${totalPages}</span>
         </footer>
@@ -1896,6 +1902,7 @@ function render() {
   els.pageSubtitle.textContent = `${payload.competition || "League Two"} ${payload.season || ""} · ${payload.playedCount || 0} / ${payload.matchCount || 0} league games played · viewing Block ${viewBlockId}`;
   renderJump(blocks, viewBlockId);
   els.blocksRoot.innerHTML = blockPageHtml(block);
+  document.body.classList.toggle("is-player-export", reportTab(block.id) === "player-export");
   if (state.scrollToTop) {
     state.scrollToTop = false;
     window.scrollTo({ top: 0, behavior: "smooth" });
