@@ -4208,14 +4208,54 @@ a:hover { text-decoration: underline; }
   height: clamp(18px, 3cqw, 24px);
 }
 
-.ba-pe__label {
-  margin: 0;
-  font: 800 clamp(.68rem, 2.35cqh, 1.2rem)/1 "Barlow Condensed", sans-serif;
-  text-transform: uppercase;
+.ba-pe__copy {
+  min-width: 0;
 }
 
-.ba-pe-slide--rows-7 .ba-pe__label {
-  font-size: clamp(.62rem, 2.05cqh, 1.05rem);
+.ba-pe__name {
+  margin: 0;
+  font: 800 clamp(.72rem, 2.5cqh, 1.15rem)/1.05 "Barlow Condensed", sans-serif;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ba-pe-slide--rows-7 .ba-pe__name {
+  font-size: clamp(.64rem, 2.1cqh, 1rem);
+}
+
+.ba-pe__nums {
+  margin: .18rem 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .45rem .75rem;
+  font: 700 clamp(.58rem, 1.85cqh, .82rem)/1 "Inter", "DM Sans", sans-serif;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: rgba(247, 244, 238, .72);
+}
+
+.ba-pe__nums b {
+  font: 800 clamp(.78rem, 2.35cqh, 1.05rem)/1 "Barlow Condensed", sans-serif;
+  letter-spacing: .02em;
+}
+
+.ba-pe__req b {
+  color: var(--pe-gold2);
+}
+
+.ba-pe__act.is-hit b {
+  color: var(--pe-green);
+}
+
+.ba-pe__act.is-miss b {
+  color: #ffb4a8;
+}
+
+.ba-pe-slide--rows-7 .ba-pe__name {
+  font-size: clamp(.64rem, 2.1cqh, 1rem);
 }
 
 .ba-pe__mark {
@@ -4265,14 +4305,19 @@ body.is-pdf-capturing .ba-pe-slide .ba-pe__row {
   flex: 1 1 0;
 }
 
-.ba-pe-slide--pdf-capture .ba-pe__label,
-body.is-pdf-capturing .ba-pe-slide .ba-pe__label {
+.ba-pe-slide--pdf-capture .ba-pe__name,
+body.is-pdf-capturing .ba-pe-slide .ba-pe__name {
   font-size: 1.05rem;
 }
 
-.ba-pe-slide--pdf-capture.ba-pe-slide--rows-7 .ba-pe__label,
-body.is-pdf-capturing .ba-pe-slide.ba-pe-slide--rows-7 .ba-pe__label {
+.ba-pe-slide--pdf-capture.ba-pe-slide--rows-7 .ba-pe__name,
+body.is-pdf-capturing .ba-pe-slide.ba-pe-slide--rows-7 .ba-pe__name {
   font-size: .92rem;
+}
+
+.ba-pe-slide--pdf-capture .ba-pe__nums b,
+body.is-pdf-capturing .ba-pe-slide .ba-pe__nums b {
+  font-size: 1rem;
 }
 
 @media (max-width: 760px) {

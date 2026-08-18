@@ -699,17 +699,23 @@ function playerExportTargetRow(spec, unit, stats, single, index) {
   const row = (stats.units || {})[unit] || {};
   const bench = unitBenchValues(spec.key, unit, single, stats.played, row);
   const hit = metricAtReq(spec, unit, stats, single);
-  const reqPart = bench?.top7 == null
-    ? ""
-    : ` - REQ ${formatBench(bench.top7, { rate: spec.rate, digits: spec.digits })}`;
-  const label = `${spec.label.toUpperCase()}${reqPart}`;
+  const actual = unitValueText(spec.key, row);
+  const req = bench?.top7 == null
+    ? "—"
+    : formatBench(bench.top7, { rate: spec.rate, digits: spec.digits });
   const mark = hit
     ? `<span class="ba-pe__mark ba-pe__mark--hit" aria-label="Target met">✓</span>`
     : `<span class="ba-pe__mark ba-pe__mark--miss" aria-label="Target missed">✕</span>`;
   return `
     <div class="ba-pe__row">
       <div class="ba-pe__icon ba-pe__icon--left">${PE_ICONS_LEFT[index % PE_ICONS_LEFT.length]}</div>
-      <p class="ba-pe__label">${escapeHtml(label)}</p>
+      <div class="ba-pe__copy">
+        <p class="ba-pe__name">${escapeHtml(spec.label.toUpperCase())}</p>
+        <p class="ba-pe__nums">
+          <span class="ba-pe__req">REQ <b>${escapeHtml(req)}</b></span>
+          <span class="ba-pe__act ${hit ? "is-hit" : "is-miss"}">ACTUAL <b>${escapeHtml(actual)}</b></span>
+        </p>
+      </div>
       ${mark}
       <div class="ba-pe__icon ba-pe__icon--right">${PE_ICONS_RIGHT[index % PE_ICONS_RIGHT.length]}</div>
     </div>
