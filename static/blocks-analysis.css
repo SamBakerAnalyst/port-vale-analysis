@@ -122,6 +122,8 @@ a:hover { text-decoration: underline; }
 
 .ba-jump__btn.is-complete { color: #86efac; }
 .ba-jump__btn.is-complete.is-current { color: #111; }
+.ba-jump__btn.has-played:not(.is-complete) { color: #f5c518; }
+.ba-jump__btn.has-played.is-current { color: #111; }
 
 .ba-status {
   margin: 0 0 1rem;
