@@ -28,6 +28,12 @@ STAGES: tuple[dict[str, Any], ...] = (
         "color": "#3d8bfd",
     },
     {
+        "id": "scout_identified",
+        "title": "Scout identified",
+        "hint": "Flagged by a scout — not videoed yet",
+        "color": "#06b6d4",
+    },
+    {
         "id": "video_scouted",
         "title": "Video scouted",
         "hint": "Watched on video",

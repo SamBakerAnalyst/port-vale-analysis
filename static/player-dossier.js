@@ -589,6 +589,7 @@
 
   function pipelineStageLabel(stage) {
     if (stage === "data_identified") return "Data identified";
+    if (stage === "scout_identified") return "Scout identified";
     if (stage === "video_scouted") return "Video scouted";
     if (stage === "live_scouted") return "Live scouted";
     if (stage === "gone_elsewhere") return "Gone / turned us down";

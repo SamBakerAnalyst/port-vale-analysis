@@ -273,7 +273,7 @@ a:hover { text-decoration: underline; }
 
 .pp-board {
   display: grid;
-  grid-template-columns: repeat(5, minmax(190px, 1fr));
+  grid-template-columns: repeat(6, minmax(180px, 1fr));
   gap: 0.55rem;
   min-height: 0;
   overflow-x: auto;
