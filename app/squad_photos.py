@@ -66,6 +66,7 @@ CLUB_SQUAD_PAGES: dict[str, str] = {
     "wimbledon": "https://www.afcwimbledon.co.uk/squad/70",
 }
 PHOTO_CACHE_TTL_SECONDS = 6 * 60 * 60
+# Prefer compact club CDN crops for dashboard cards (960px originals are multi‑MB).
 PHOTO_STYLE = "cc_320x424"
 PHOTO_STYLE_FALLBACKS = ("cc_640x852", "medium", "cc_960x1280")
 
@@ -113,6 +114,7 @@ def _normalize_photo_source_url(url: str) -> str:
     text = str(url or "").strip()
     if not text:
         return text
+    # Take the first candidate if a srcset leaked through.
     first = text.split(",")[0].strip().split()[0].strip()
     for style in (PHOTO_STYLE, *PHOTO_STYLE_FALLBACKS):
         match = re.search(
@@ -126,7 +128,6 @@ def _normalize_photo_source_url(url: str) -> str:
     if "styles/cc_640x852/" in first:
         return first.replace("styles/cc_640x852/", f"styles/{PHOTO_STYLE}/")
     return first.replace("&amp;", "&")
-
 
 _photo_cache: dict[str, Any] = {"fetched_at": 0.0, "entries": []}
 
@@ -195,14 +196,14 @@ def _save_cached_squad_html(page_html: str, squad_url: str = SQUAD_PAGE_URL) -> 
 
 
 def _fetch_squad_page_with_cache(squad_url: str = SQUAD_PAGE_URL) -> tuple[str, bool]:
-    """Prefer live club HTML; fall back to the last good scrape when the host is blocked."""
+    """Return (html, from_cache). Prefer live page; fall back to last good scrape."""
     live_error: Exception | None = None
     try:
         page_html = _fetch_squad_page(squad_url)
         if "views-row o-players__list-item" in page_html:
             _save_cached_squad_html(page_html, squad_url)
             return page_html, False
-    except Exception as exc:
+    except Exception as exc:  # network / HTTP failures
         live_error = exc
         page_html = ""
 
@@ -220,19 +221,13 @@ def _parse_squad_photos(page_html: str, *, cdn_host: str) -> list[dict[str, str]
     rows = page_html.split("views-row o-players__list-item")
 
     for row in rows[1:]:
-        first = re.search(
-            r'm-playercard__name--first[\s\S]*?field__item">([^<]+)<',
-            row,
-        )
-        last = re.search(
-            r'm-playercard__name--last[\s\S]*?field__item">([^<]+)<',
-            row,
-        )
+        first_name = _playercard_name_part(row, "first")
+        last_name = _playercard_name_part(row, "last")
         image_url = _extract_player_image(row, cdn_host=cdn_host)
-        if not first or not last or not image_url:
+        if not first_name or not last_name or not image_url:
             continue
 
-        display_name = html.unescape(f"{first.group(1).strip()} {last.group(1).strip()}")
+        display_name = f"{first_name} {last_name}"
         entries.append(
             {
                 "key": _normalize_name_key(display_name),
@@ -246,23 +241,61 @@ def _parse_squad_photos(page_html: str, *, cdn_host: str) -> list[dict[str, str]
 
 CLUB_SECTION_TO_GROUP: dict[str, str] = {
     "Goalkeepers": "GK",
-    "Defenders": "CB",
-    "Midfielders": "CM",
+    "Defenders": "DEF",
+    "Midfielders": "MID",
     "Attackers": "ATT",
 }
 
-# Wingbacks listed under Defenders on port-vale.co.uk
-CLUB_WINGBACK_NAME_KEYS: frozenset[str] = frozenset(
+# First-team players confirmed signed but not yet on /squad/70 cards.
+CLUB_SQUAD_SUPPLEMENT: tuple[dict[str, Any], ...] = (
     {
-        _normalize_name_key(name)
-        for name in (
-            "Kyle John",
-            "Jordan Gabriel",
-            "Liam Gordon",
-            "Jaheim Headley",
-        )
-    }
+        "name": "Max Watters",
+        "position_group": "ATT",
+        "club_player_id": "supplement-max-watters",
+        "shirt_number": None,
+        "photo_url": None,
+        "highlight": None,
+    },
+    {
+        "name": "Tyreece Simpson",
+        "position_group": "ATT",
+        "club_player_id": "supplement-tyreece-simpson",
+        "shirt_number": None,
+        "photo_url": None,
+        "highlight": None,
+    },
 )
+
+
+def _playercard_name_part(row: str, which: str) -> str | None:
+    """Parse first/last name from a Clubcast player card (field item or plain text)."""
+    class_name = f"m-playercard__name--{which}"
+    match = re.search(
+        rf'{class_name}[\s\S]*?field__item">([^<]+)<',
+        row,
+    )
+    if match:
+        return html.unescape(match.group(1).strip())
+    match = re.search(
+        rf'{class_name}[^>]*>\s*([^<]+?)\s*<',
+        row,
+    )
+    if match:
+        return html.unescape(match.group(1).strip())
+    return None
+
+
+def _merge_club_squad_supplements(players: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    present = {_normalize_name_key(str(player.get("name") or "")) for player in players}
+    present.discard("")
+    merged = list(players)
+    for row in CLUB_SQUAD_SUPPLEMENT:
+        key = _normalize_name_key(str(row["name"]))
+        if not key or key in present:
+            continue
+        merged.append(dict(row))
+        present.add(key)
+    return merged
 
 
 def _player_name_from_club_page(club_player_id: str) -> str | None:
@@ -280,10 +313,7 @@ def _player_name_from_club_page(club_player_id: str) -> str | None:
 
 
 def _position_group_for_club_player(section: str, name: str) -> str:
-    group = CLUB_SECTION_TO_GROUP.get(section, "CM")
-    if group == "CB" and _normalize_name_key(name) in CLUB_WINGBACK_NAME_KEYS:
-        return "WB"
-    return group
+    return CLUB_SECTION_TO_GROUP.get(section, "MID")
 
 
 def _parse_club_squad_roster_page(
@@ -307,14 +337,8 @@ def _parse_club_squad_roster_page(
             if label in preceding:
                 section = label
 
-        first = re.search(
-            r'm-playercard__name--first[\s\S]*?field__item">([^<]+)<',
-            row,
-        )
-        last = re.search(
-            r'm-playercard__name--last[\s\S]*?field__item">([^<]+)<',
-            row,
-        )
+        first_name = _playercard_name_part(row, "first")
+        last_name = _playercard_name_part(row, "last")
         player_id_match = re.search(r"/player/(\d+)", row)
         if not player_id_match:
             continue
@@ -323,10 +347,9 @@ def _parse_club_squad_roster_page(
             continue
         seen_ids.add(club_player_id)
 
-        if first and last:
-            name = html.unescape(f"{first.group(1).strip()} {last.group(1).strip()}")
-        else:
+        if not first_name or not last_name:
             continue
+        name = f"{first_name} {last_name}"
 
         shirt_match = re.search(
             r'm-playercard__number[\s\S]*?field__item">([^<]+)<',
@@ -364,13 +387,16 @@ def fetch_club_squad_roster_for(club_name: str) -> list[dict[str, Any]]:
         page_html, _from_cache = _fetch_squad_page_with_cache(squad_url)
     except (requests.RequestException, RuntimeError):
         return []
-    return _parse_club_squad_roster_page(page_html, squad_url=squad_url)
+    players = _parse_club_squad_roster_page(page_html, squad_url=squad_url)
+    if squad_url == SQUAD_PAGE_URL:
+        players = _merge_club_squad_supplements(players)
+    return players
 
 
 def fetch_club_squad_roster(*, force: bool = False) -> list[dict[str, Any]]:
     del force  # always live-fetch; kept for call-site compatibility
     try:
-        page_html, _from_cache = _fetch_squad_page_with_cache()
+        page_html, from_cache = _fetch_squad_page_with_cache()
     except (requests.RequestException, RuntimeError) as exc:
         raise RuntimeError(f"Could not reach port-vale.co.uk ({exc})") from exc
 
@@ -382,6 +408,10 @@ def fetch_club_squad_roster(*, force: bool = False) -> list[dict[str, Any]]:
             f"(page markers={marker_count}, html={len(page_html)} bytes)."
         )
 
+    players = _merge_club_squad_supplements(players)
+    if from_cache:
+        for player in players:
+            player["_from_html_cache"] = True
     return players
 
 
@@ -413,6 +443,7 @@ def _refresh_club_photo_cache(
         raise
 
     entries = _parse_squad_photos(page_html, cdn_host=_cdn_host_for_squad_url(squad_url))
+    # Never replace a good cache with an empty/blocked scrape.
     if entries:
         cache["fetched_at"] = now
         cache["entries"] = entries
@@ -635,6 +666,7 @@ def fetch_photo_bytes(url: str) -> tuple[bytes, str]:
             content_type = response.headers.get("Content-Type") or "image/jpeg"
             if not content_type.startswith("image/"):
                 content_type = "image/jpeg"
+            # Guard against multi-MB originals if CDN ignores style rewrite.
             if len(response.content) > 1_500_000 and candidate == compact_url:
                 last_error = RuntimeError("Photo too large")
                 continue

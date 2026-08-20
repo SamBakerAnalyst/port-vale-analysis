@@ -318,7 +318,7 @@ async function persistAssignment(id) {
       state.assignments = data.assignments;
       saveAssignments();
     }
-    if data.email?.sent) {
+    if (data.email?.sent) {
       setStatus(`Assignment saved · email sent to ${data.email.to}`, "ok");
     } else if (data.email && !data.email.sent) {
       const failed = (data.email.results || []).find((row) => row?.eml_base64) || data.email;

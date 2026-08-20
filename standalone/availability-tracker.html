@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/availability-tracker.css?v=22" />
+  <link rel="stylesheet" href="/static/availability-tracker.css?v=44" />
 </head>
 <body>
   <div class="av-app">
@@ -15,7 +15,7 @@
       <div class="av-toolbar__left">
         <p class="av-toolbar__eyebrow">Strategy · <a href="/">← All apps</a></p>
         <h1 class="av-toolbar__title">Squad Availability</h1>
-        <p class="av-toolbar__subtitle" id="pageSubtitle">Match availability, injuries, and playing-time metrics from Impect</p>
+        <p class="av-toolbar__subtitle" id="pageSubtitle">Match availability, injuries, and playing-time metrics from FotMob</p>
       </div>
       <div class="av-toolbar__right">
         <div class="av-season-toggle" id="seasonToggle" role="group" aria-label="Season"></div>
@@ -28,6 +28,7 @@
       <button type="button" class="av-tab" data-view="roster">Roster</button>
       <button type="button" class="av-tab" data-view="injuries">Injury History</button>
       <button type="button" class="av-tab" data-view="matrix">Matrix</button>
+      <button type="button" class="av-tab" data-view="summary">Summary</button>
     </nav>
 
     <div id="statusBanner" class="av-status hidden" role="status"></div>
@@ -38,7 +39,7 @@
           <h2>Log availability</h2>
           <p id="logLandingIntro">Submit match availability ahead of a fixture, or log a longer-term injury. Saved sessions feed the Matrix and Roster.</p>
         </div>
-        <button type="button" class="av-btn av-btn--primary av-log-landing__sync hidden" id="syncRosterLandingBtn">Sync squad from Impect</button>
+        <button type="button" class="av-btn av-btn--primary av-log-landing__sync hidden" id="syncRosterLandingBtn">Sync squad</button>
         <div class="av-log-landing__actions">
           <button type="button" class="av-log-landing__btn av-log-landing__btn--match" id="submitMatchBtn">
             <span class="av-log-landing__btn-kicker">Match</span>
@@ -107,10 +108,11 @@
         <div class="av-roster__header">
           <div>
             <h2>Squad roster</h2>
-            <p>Minutes, points, and availability across league fixtures.</p>
+            <p>Minutes, points, and availability across completed fixtures (league + cup).</p>
           </div>
           <button type="button" class="av-btn av-btn--ghost" id="addPlayerBtn">Add player</button>
           <button type="button" class="av-btn av-btn--ghost" id="importRosterBtn">Sync squad</button>
+          <button type="button" class="av-btn av-btn--ghost hidden" id="purgeInactiveBtn">Remove departed</button>
         </div>
         <div id="rosterList" class="av-roster__list"></div>
       </div>
@@ -138,12 +140,22 @@
 
     <section id="matrixView" class="av-view hidden">
       <div class="av-controls card">
-        <label class="av-controls__checkbox">
-          <input type="checkbox" id="showMatchesToggle" checked />
-          Show matches
-        </label>
+        <div class="av-matrix-filter" role="group" aria-label="Fixture filter">
+          <button type="button" class="av-matrix-filter__btn av-matrix-filter__btn--active" data-matrix-filter="all">All fixtures</button>
+          <button type="button" class="av-matrix-filter__btn" data-matrix-filter="league">League fixtures</button>
+        </div>
       </div>
       <div class="av-matrix-wrap card" id="matrixRoot" aria-live="polite"></div>
+    </section>
+
+    <section id="summaryView" class="av-view hidden">
+      <div class="av-summary-toolbar">
+        <p>Minutes, availability, and who’s out — Present fills the screen, Esc to exit.</p>
+        <button type="button" class="av-btn av-btn--primary" id="presentSummaryBtn">Present</button>
+      </div>
+      <div class="av-slide-stage">
+        <article class="av-slide" id="summarySlide"></article>
+      </div>
     </section>
 
     <footer class="av-footer" id="statusBar">Loading…</footer>
@@ -179,6 +191,11 @@
         Comments
         <textarea id="injuryNotes" class="av-input av-textarea" rows="4" placeholder="e.g. hamstring strain — scan pending, rehab with physio"></textarea>
       </label>
+      <label class="av-check">
+        <input type="checkbox" id="injuryAwayFromClub" />
+        <span>Injured away from the club</span>
+      </label>
+      <p class="av-dialog__hint">Away injuries stay on the player’s personal record but are hidden from squad availability logging and the matrix.</p>
       <div class="av-dialog__actions">
         <button type="button" class="av-btn av-btn--ghost" id="clearInjuryBtn">Clear injury</button>
         <button type="button" class="av-btn av-btn--ghost" id="cancelInjuryBtn">Cancel</button>
@@ -208,12 +225,12 @@
         </select>
       </label>
       <div class="av-dialog__actions">
-        <button type="button" class="av-btn av-btn--ghost" id="deletePlayerBtn" class="hidden">Remove</button>
+        <button type="button" class="av-btn av-btn--danger hidden" id="deletePlayerBtn">Remove</button>
         <button type="submit" class="av-btn av-btn--primary">Save</button>
       </div>
     </form>
   </dialog>
 
-  <script defer src="/static/availability-tracker.js?v=22"></script>
+  <script defer src="/static/availability-tracker.js?v=44"></script>
 </body>
 </html>

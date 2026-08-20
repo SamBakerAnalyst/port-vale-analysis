@@ -1,6 +1,6 @@
 const DEFAULT_SEASON = "26/27";
 const INJURY_TRIGGER_STATUSES = new Set(["INJ"]);
-const FALLBACK_MATCH_STATUSES = ["AVAIL", "INJ", "UN", "N", "INT", "LOAN", "SUB"];
+const FALLBACK_MATCH_STATUSES = ["AVAIL", "INJ", "MM", "UN", "N", "INT", "LOAN", "SUB"];
 
 const state = {
   meta: null,
@@ -8,6 +8,7 @@ const state = {
   season: DEFAULT_SEASON,
   view: "log",
   showMatches: true,
+  matrixFilter: "all",
   logMode: "match",
   logSessionKey: "friendly:new",
   logMatchSessionId: "",
@@ -45,8 +46,11 @@ const els = {
   injuryDetailHead: document.getElementById("injuryDetailHead"),
   injuryDetailBody: document.getElementById("injuryDetailBody"),
   matrixRoot: document.getElementById("matrixRoot"),
-  showMatchesToggle: document.getElementById("showMatchesToggle"),
+  summaryView: document.getElementById("summaryView"),
+  summarySlide: document.getElementById("summarySlide"),
+  presentSummaryBtn: document.getElementById("presentSummaryBtn"),
   importRosterBtn: document.getElementById("importRosterBtn"),
+  purgeInactiveBtn: document.getElementById("purgeInactiveBtn"),
   logTitle: document.getElementById("logTitle"),
   logDescription: document.getElementById("logDescription"),
   logDate: document.getElementById("logDate"),
@@ -71,6 +75,7 @@ const els = {
   injurySince: document.getElementById("injurySince"),
   injuryReturnDate: document.getElementById("injuryReturnDate"),
   injuryNotes: document.getElementById("injuryNotes"),
+  injuryAwayFromClub: document.getElementById("injuryAwayFromClub"),
   clearInjuryBtn: document.getElementById("clearInjuryBtn"),
   cancelInjuryBtn: document.getElementById("cancelInjuryBtn"),
   playerDialog: document.getElementById("playerDialog"),
@@ -95,10 +100,20 @@ function setStatus(message, kind = "") {
 }
 
 async function fetchJson(url, options = {}) {
-  const res = await fetch(url, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-    ...options,
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+      ...options,
+    });
+  } catch (error) {
+    const reason = error?.message || "Failed to fetch";
+    throw new Error(
+      reason === "Failed to fetch"
+        ? "Network error talking to the hub. Check you’re on http://178.128.161.215 and try Refresh."
+        : reason
+    );
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const detail = data.detail;
@@ -204,7 +219,8 @@ function playerPhoto(player, className = "av-roster-card__photo") {
 function visibleSessions() {
   return (state.board?.sessions || []).filter((session) => {
     if (session.type === "training") return false;
-    if (session.type === "match" && !state.showMatches) return false;
+    if (session.type !== "match") return false;
+    if (state.matrixFilter === "league" && session.match_category !== "league") return false;
     return true;
   });
 }
@@ -219,11 +235,37 @@ function rosterPlayers({ activeOnly = false } = {}) {
   return roster.filter((player) => player.active !== false);
 }
 
-function playersByGroup({ activeOnly = false } = {}) {
+function isInjuredAway(player) {
+  return Boolean(
+    player?.away_from_club
+    || (player?.injury?.away_from_club && player?.injury?.status && player.injury.status !== "AVAIL")
+  );
+}
+
+function squadAvailabilityPlayers() {
+  return rosterPlayers({ activeOnly: true }).filter((player) => !isInjuredAway(player));
+}
+
+function injuredAwayPlayers() {
+  return rosterPlayers({ activeOnly: true }).filter((player) => isInjuredAway(player));
+}
+
+function renderInjuredAwayNote() {
+  const away = injuredAwayPlayers();
+  if (!away.length) return "";
+  const names = away.map((player) => player.name).join(", ");
+  const reason = away.length === 1
+    ? `${names} is injured away from the club and is tracked in personal availability only.`
+    : `${names} are injured away from the club and are tracked in personal availability only.`;
+  return `<p class="av-away-note">${escapeHtml(reason)}</p>`;
+}
+
+function playersByGroup({ activeOnly = false, squadOnly = false } = {}) {
   const groups = state.meta?.position_groups || [];
   const lookup = Object.fromEntries(groups.map((group) => [group.id, []]));
-  for (const player of rosterPlayers({ activeOnly })) {
-    const key = player.position_group || "CM";
+  const source = squadOnly ? squadAvailabilityPlayers() : rosterPlayers({ activeOnly });
+  for (const player of source) {
+    const key = player.position_group || "MID";
     if (!lookup[key]) lookup[key] = [];
     lookup[key].push(player);
   }
@@ -238,7 +280,7 @@ function playerById(playerId) {
 
 function defaultLogEntries() {
   const entries = {};
-  for (const player of rosterPlayers({ activeOnly: true })) {
+  for (const player of squadAvailabilityPlayers()) {
     if (player.injury?.status && player.injury.status !== "AVAIL") {
       entries[player.id] = { status: player.injury.status };
     } else {
@@ -387,7 +429,7 @@ function updateLogLanding() {
   const empty = !rosterPlayers({ activeOnly: true }).length;
   if (els.logLandingIntro) {
     els.logLandingIntro.textContent = empty
-      ? `No squad loaded for ${state.season} yet. Sync from Impect to pull in the current Port Vale squad.`
+      ? `No squad loaded for ${state.season} yet. Sync squad to pull the current first team from port-vale.co.uk.`
       : "Submit match availability ahead of a fixture, or log a longer-term injury. Saved sessions feed the Matrix and Roster.";
   }
   els.submitMatchBtn?.toggleAttribute("disabled", empty);
@@ -422,8 +464,14 @@ async function tryImportRosterIfEmpty({ quiet = false } = {}) {
       method: "POST",
     });
     if (!quiet && result.total) {
-      const source = result.source === "port-vale.co.uk" ? "club website" : "Impect";
-      setStatus(`Loaded ${result.total} players for ${state.season} from ${source}`, "ok");
+      const source = result.source === "port-vale.co.uk"
+        ? "port-vale.co.uk"
+        : (result.source_season && result.source_season !== state.season
+          ? `${result.source_season} Impect`
+          : "Impect");
+      let message = `Loaded ${result.total} players for ${state.season} from ${source}`;
+      if (result.warning) message += ` · ${result.warning}`;
+      setStatus(message, result.warning ? "warn" : "ok");
     }
     return (result.total || 0) > 0;
   } catch (error) {
@@ -524,13 +572,23 @@ function renderSeasonToggle() {
 
 function renderMatrix() {
   const sessions = visibleSessions();
-  const groups = playersByGroup();
+  const groups = playersByGroup({ squadOnly: true });
 
-  if (!state.board?.roster?.length) {
+  if (state.loading && !rosterPlayers({ activeOnly: false }).length) {
     els.matrixRoot.innerHTML = `
       <div style="padding:1.25rem;color:var(--text-muted)">
-        No squad roster yet. Use <strong>Sync from Impect</strong> or add players in the Roster tab.
+        Loading saved squad…
       </div>
+    `;
+    return;
+  }
+
+  if (!squadAvailabilityPlayers().length) {
+    els.matrixRoot.innerHTML = `
+      <div style="padding:1.25rem;color:var(--text-muted)">
+        No squad roster yet. Use <strong>Sync squad</strong> or add players in the Roster tab.
+      </div>
+      ${renderInjuredAwayNote()}
     `;
     return;
   }
@@ -565,7 +623,7 @@ function renderMatrix() {
       `;
       const playerRows = group.players.map((player) => {
         const injuryBadge = player.injury?.status && player.injury.status !== "AVAIL"
-          ? `<span class="av-injury-badge" title="${player.injury.notes || ""}">${player.injury.status}</span>`
+          ? `<span class="av-injury-badge av-injury-badge--${player.injury.status}" title="${player.injury.notes || ""}">${player.injury.status}</span>`
           : "";
         const photo = player.photo_url
           ? `<img class="av-player-photo" src="${player.photo_url}" alt="" loading="lazy" />`
@@ -576,9 +634,12 @@ function renderMatrix() {
             const display = cell.display ?? "";
             const status = cell.status || "AVAIL";
             const injuryClass = cell.source === "injury" ? " av-cell--injury" : "";
+            const managedClass = cell.managed_minutes || cell.source === "managed" || status === "MM"
+              ? " av-cell--managed"
+              : "";
             return `
               <td
-                class="av-cell av-cell--${status}${injuryClass}"
+                class="av-cell av-cell--${status}${injuryClass}${managedClass}"
                 data-player-id="${player.id}"
                 data-session-id="${session.id}"
                 data-status="${status}"
@@ -616,11 +677,8 @@ function renderMatrix() {
       </thead>
       <tbody>${bodyRows}</tbody>
     </table>
+    ${renderInjuredAwayNote()}
   `;
-
-  els.matrixRoot.querySelectorAll(".av-cell").forEach((cell) => {
-    cell.addEventListener("click", () => openCellEditor(cell));
-  });
 }
 
 function cycleStatus(current) {
@@ -636,6 +694,23 @@ function cycleStatus(current) {
   const options = quickStatusesForSession(session);
   const index = options.indexOf(currentStatus.toUpperCase());
   return options[(index + 1) % options.length];
+}
+
+async function setStandingPlayerStatus(playerId, status, { notes = "" } = {}) {
+  return fetchJson(`/api/availability/injury/${encodeURIComponent(playerId)}?season=${encodeURIComponent(state.season)}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      status,
+      since: todayIso(),
+      return_date: null,
+      notes,
+      away_from_club: false,
+    }),
+  });
+}
+
+async function clearStandingPlayerStatus(playerId) {
+  return setStandingPlayerStatus(playerId, "AVAIL");
 }
 
 async function applySessionStatus(playerId, sessionId, status) {
@@ -668,7 +743,23 @@ async function openCellEditor(cell) {
   }
 
   try {
-    await applySessionStatus(playerId, sessionId, nextStatus);
+    if (nextStatus === "MM") {
+      await setStandingPlayerStatus(playerId, "MM");
+      setStatus("Managed minutes set — matrix shows MM after games are played.", "ok");
+    } else if (previousStatus === "MM" || playerById(playerId)?.injury?.status === "MM") {
+      // Cycling away from MM clears the standing flag; also write the cell if needed.
+      if (nextStatus === "AVAIL") {
+        await clearStandingPlayerStatus(playerId);
+      } else {
+        await setStandingPlayerStatus(playerId, "AVAIL");
+        const session = sessionById(sessionId);
+        if (session?.complete || nextStatus !== "AVAIL") {
+          await applySessionStatus(playerId, sessionId, nextStatus);
+        }
+      }
+    } else {
+      await applySessionStatus(playerId, sessionId, nextStatus);
+    }
     await loadBoard({ quiet: true });
   } catch (error) {
     setStatus(error.message, "error");
@@ -713,7 +804,7 @@ function renderLogPlayerCard(player) {
 
 function bindQuickLogEvents() {
   els.logPlayers.querySelectorAll("[data-status]").forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
       const playerId = btn.dataset.playerId;
       const status = btn.dataset.status;
       const previousStatus = state.logEntries[playerId]?.status || "AVAIL";
@@ -727,6 +818,31 @@ function bindQuickLogEvents() {
         state.logEntries[playerId] = { status: "INJ" };
         renderQuickLog();
         openInjuryDialog(playerId, { fromStatus: true });
+        return;
+      }
+
+      if (status === "MM") {
+        try {
+          await setStandingPlayerStatus(playerId, "MM");
+          state.logEntries[playerId] = { status: "MM" };
+          setStatus("Managed minutes set for this player.", "ok");
+          await loadBoard({ quiet: true });
+          renderQuickLog();
+        } catch (error) {
+          setStatus(error.message, "error");
+        }
+        return;
+      }
+
+      if (playerById(playerId)?.injury?.status === "MM" && status === "AVAIL") {
+        try {
+          await clearStandingPlayerStatus(playerId);
+          state.logEntries[playerId] = { status: "AVAIL" };
+          await loadBoard({ quiet: true });
+          renderQuickLog();
+        } catch (error) {
+          setStatus(error.message, "error");
+        }
         return;
       }
 
@@ -752,7 +868,7 @@ function renderQuickLog() {
 
   updateLogHeader();
 
-  els.logPlayers.innerHTML = playersByGroup({ activeOnly: true })
+  els.logPlayers.innerHTML = playersByGroup({ squadOnly: true })
     .map((group) => `
       <section class="av-log-group">
         <h3 class="av-log-group__title">${group.label}</h3>
@@ -761,7 +877,7 @@ function renderQuickLog() {
         </div>
       </section>
     `)
-    .join("");
+    .join("") + renderInjuredAwayNote();
 
   bindQuickLogEvents();
 }
@@ -799,7 +915,7 @@ function renderInjuryLog() {
                   </div>
                 </div>
                 ${active
-                  ? `<p class="av-injury-log-card__status">Currently ${escapeHtml(active.status || "INJ")} since ${formatDateLabel(active.since)}</p>`
+                  ? `<p class="av-injury-log-card__status">Currently ${escapeHtml(active.status || "INJ")}${active.away_from_club ? " (away from club)" : ""} since ${formatDateLabel(active.since)}</p>`
                   : `<p class="av-injury-log-card__status av-muted">No active injury logged</p>`}
                 <button type="button" class="av-btn av-btn--secondary av-injury-log-btn" data-player-id="${escapeHtml(player.id)}">
                   ${active ? "Update injury" : "Log injury"}
@@ -845,7 +961,7 @@ function renderInjuriesList() {
             <h3>${escapeHtml(player.name)}</h3>
             <p class="av-muted">${escapeHtml(positionLabel(player.position_group))}</p>
             ${active
-              ? `<span class="av-tag av-tag--inj">Out · ${escapeHtml(active.status || "INJ")}</span>`
+              ? `<span class="av-tag av-tag--inj">Out · ${escapeHtml(active.status || "INJ")}${active.away_from_club ? " · Away" : ""}</span>`
               : episodes.length
                 ? `<span class="av-tag av-tag--ok">Fit</span>`
                 : `<span class="av-tag av-tag--muted">No injuries logged</span>`}
@@ -984,11 +1100,12 @@ function rosterStatusBadge(player) {
   }
   const injury = player.injury;
   if (injury?.status && injury.status !== "AVAIL") {
+    const away = Boolean(injury.away_from_club);
     const detail = [
-      statusLabel(injury.status),
+      away ? "Injured away" : statusLabel(injury.status),
       injury.return_date ? `back ${injury.return_date}` : "",
     ].filter(Boolean).join(" · ");
-    return `<span class="av-roster-card__badge av-roster-card__badge--${injury.status}" title="${injury.notes || ""}">${detail}</span>`;
+    return `<span class="av-roster-card__badge av-roster-card__badge--${away ? "away" : injury.status}" title="${injury.notes || ""}">${detail}</span>`;
   }
   return `<span class="av-roster-card__badge av-roster-card__badge--fit">Fit</span>`;
 }
@@ -1031,20 +1148,20 @@ function renderRosterPlayerCard(player) {
       <div class="av-roster-card__section">
         <div class="av-roster-card__section-title">Minutes played</div>
         <div class="av-roster-card__stats av-roster-card__stats--5">
-          ${renderRosterStat("Total mins", impact.minutes ?? 0, "Total league minutes played")}
-          ${renderRosterStat("% of L1 mins", formatPct(impact.pct_of_l1_mins), "Share of all possible league minutes (games × 90)")}
+          ${renderRosterStat("Total mins", impact.minutes ?? 0, "Total minutes played (league + cup)")}
+          ${renderRosterStat("% of mins", formatPct(impact.pct_of_l1_mins), "Share of all possible minutes across completed fixtures (team × 90)")}
           ${renderRosterStat("/Game played", formatNum(impact.mins_per_game_played), "Average minutes per appearance")}
           ${renderRosterStat("/Available", formatNum(impact.mins_per_available), "Average minutes across games marked available")}
-          ${renderRosterStat("/Possible", formatNum(impact.mins_per_possible), "Average minutes across all completed league games")}
+          ${renderRosterStat("/Possible", formatNum(impact.mins_per_possible), "Average minutes across all completed fixtures")}
         </div>
       </div>
 
       <div class="av-roster-card__section">
         <div class="av-roster-card__section-title">Points earned</div>
         <div class="av-roster-card__stats av-roster-card__stats--3">
-          ${renderRosterStat("Played", impact.appearances ?? 0, "League appearances")}
-          ${renderRosterStat("Points", impact.points ?? 0, "Team points from matches this player appeared in")}
-          ${renderRosterStat("PPG", formatNum(impact.ppg), "Points per appearance")}
+          ${renderRosterStat("Played", impact.appearances ?? 0, "Appearances (league + cup)")}
+          ${renderRosterStat("Points", impact.points ?? 0, "Team points from league matches this player appeared in")}
+          ${renderRosterStat("PPG", formatNum(impact.ppg), "Points per league appearance")}
         </div>
       </div>
 
@@ -1070,22 +1187,33 @@ function renderRosterPlayerCard(player) {
       <div class="av-roster-card__actions">
         <button type="button" class="av-btn av-btn--ghost av-edit-player-btn" data-player-id="${player.id}">Edit</button>
         <button type="button" class="av-btn av-btn--ghost av-injury-roster-btn" data-player-id="${player.id}">Injury</button>
+        <button type="button" class="av-btn av-btn--danger av-delete-player-btn" data-player-id="${player.id}">Remove</button>
       </div>
     </article>
   `;
 }
 
 function renderRoster() {
+  if (state.loading && !state.board?.roster?.length) {
+    els.rosterList.innerHTML = `<p style="color:var(--text-muted)">Loading saved squad…</p>`;
+    els.purgeInactiveBtn?.classList.add("hidden");
+    return;
+  }
   if (!state.board?.roster?.length) {
-    els.rosterList.innerHTML = `<p style="color:var(--text-muted)">No players yet. Sync from Impect or add players manually.</p>`;
+    els.rosterList.innerHTML = `<p style="color:var(--text-muted)">No players yet. Sync squad or add players manually.</p>`;
+    els.purgeInactiveBtn?.classList.add("hidden");
     return;
   }
 
-  const groups = playersByGroup();
+  const inactiveCount = rosterPlayers().filter((player) => player.active === false).length;
+  els.purgeInactiveBtn?.classList.toggle("hidden", inactiveCount === 0);
+
+  const activeGroups = playersByGroup({ activeOnly: true });
+  const inactivePlayers = rosterPlayers().filter((player) => player.active === false);
 
   els.rosterList.innerHTML = `
     <div class="av-roster-cards">
-      ${groups.map((group) => `
+      ${activeGroups.map((group) => `
         <section class="av-roster-group">
           <h3 class="av-roster-group__title">${group.label}</h3>
           <div class="av-roster-grid">
@@ -1093,8 +1221,16 @@ function renderRoster() {
           </div>
         </section>
       `).join("")}
+      ${inactivePlayers.length ? `
+        <section class="av-roster-group">
+          <h3 class="av-roster-group__title">Not at club / departed</h3>
+          <div class="av-roster-grid">
+            ${inactivePlayers.map((player) => renderRosterPlayerCard(player)).join("")}
+          </div>
+        </section>
+      ` : ""}
     </div>
-    <p class="av-roster-footnote">League minutes and points from Impect. Avail % comes from logged match availability. /Available uses games marked available; /Possible uses all completed league fixtures.</p>
+    <p class="av-roster-footnote">26/27 squad + headshots from port-vale.co.uk. Use Remove on anyone who has left.</p>
   `;
 
   els.rosterList.querySelectorAll(".av-edit-player-btn").forEach((btn) => {
@@ -1103,6 +1239,241 @@ function renderRoster() {
   els.rosterList.querySelectorAll(".av-injury-roster-btn").forEach((btn) => {
     btn.addEventListener("click", () => openInjuryDialog(btn.dataset.playerId, { manual: true }));
   });
+  els.rosterList.querySelectorAll(".av-delete-player-btn").forEach((btn) => {
+    btn.addEventListener("click", () => deletePlayerById(btn.dataset.playerId));
+  });
+}
+
+function standingStatus(player) {
+  const status = String(player?.injury?.status || "AVAIL").toUpperCase();
+  if (!status || status === "AVAIL") return "AVAIL";
+  return status;
+}
+
+function playerLastName(name) {
+  const parts = String(name || "").trim().split(/\s+/);
+  return parts[parts.length - 1] || name || "";
+}
+
+function formatReturnShort(iso) {
+  if (!iso) return "";
+  const date = new Date(`${iso}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
+function nextUpcomingMatch() {
+  return upcomingMatches()[0] || null;
+}
+
+function lastCompletedMatch() {
+  const done = (state.board?.sessions || []).filter((session) => session.type === "match" && session.complete);
+  return done[done.length - 1] || null;
+}
+
+function summaryBuckets() {
+  const players = rosterPlayers({ activeOnly: true });
+  const buckets = {
+    available: [],
+    injured: [],
+    mm: [],
+    other: [],
+    away: [],
+  };
+  for (const player of players) {
+    if (isInjuredAway(player)) {
+      buckets.away.push(player);
+      continue;
+    }
+    const status = standingStatus(player);
+    if (status === "INJ") buckets.injured.push(player);
+    else if (status === "MM") buckets.mm.push(player);
+    else if (["UN", "LOAN", "INT"].includes(status)) buckets.other.push(player);
+    else buckets.available.push(player);
+  }
+  return buckets;
+}
+
+function summaryStatusTag(player) {
+  if (isInjuredAway(player)) return { code: "AWAY", label: "Away" };
+  const status = standingStatus(player);
+  if (status === "AVAIL") return { code: "FIT", label: "Fit" };
+  if (status === "INJ") {
+    const back = player.injury?.return_date ? ` · ${formatReturnShort(player.injury.return_date)}` : "";
+    return { code: "INJ", label: `INJ${back}` };
+  }
+  if (status === "MM") return { code: "MM", label: "MM" };
+  return { code: status, label: status };
+}
+
+function playerWasAvailableOn(player, sessionDate) {
+  const blockers = [];
+  if (Array.isArray(player.injury_history)) blockers.push(...player.injury_history);
+  if (player.injury?.status && player.injury.status !== "AVAIL") blockers.push(player.injury);
+  for (const rec of blockers) {
+    const status = String(rec.status || "").toUpperCase();
+    if (!["INJ", "UN", "LOAN", "INT"].includes(status)) continue;
+    const since = String(rec.since || "").slice(0, 10);
+    const ended = String(rec.ended_at || "").slice(0, 10);
+    if (since && sessionDate < since) continue;
+    if (ended && sessionDate > ended) continue;
+    if (!ended && rec.active === false) continue;
+    return false;
+  }
+  return true;
+}
+
+function summaryDaysInjured(player) {
+  if (player.days_injured != null) return player.days_injured;
+  if (player.total_days_injured != null) return player.total_days_injured;
+  return 0;
+}
+
+function summaryMinuteShares(player) {
+  const completedSessions = (state.board?.sessions || []).filter(
+    (session) => session.type === "match" && session.complete
+  );
+  const possible = completedSessions.length * 90;
+  const played = Number(player.impact?.minutes || 0);
+  const availableGames = completedSessions.filter((session) => (
+    playerWasAvailableOn(player, String(session.date || "").slice(0, 10))
+  )).length;
+  const availableMins = availableGames * 90;
+  const unused = Math.max(0, availableMins - played);
+  const pct = (value) => (possible > 0 ? (100 * value) / possible : null);
+  return {
+    played,
+    unused,
+    playedPct: pct(played),
+    availablePct: pct(availableMins),
+    unusedPct: pct(unused),
+  };
+}
+
+function pctHeatColor(pct, invert) {
+  if (pct == null) return { bar: "transparent", text: "var(--text-muted)" };
+  const t = Math.max(0, Math.min(100, Number(pct))) / 100;
+  const v = invert ? 1 - t : t;
+  const hue = Math.round(v * 128);
+  return {
+    bar: `hsla(${hue}, 82%, 40%, .78)`,
+    text: `hsl(${hue}, 72%, 78%)`,
+  };
+}
+
+function renderSummaryBar(pct, variant, title) {
+  const width = pct == null ? 0 : Math.max(0, Math.min(100, Number(pct)));
+  const heat = pctHeatColor(pct, variant === "unused");
+  return `
+    <div class="av-slide-avail av-slide-avail--${variant}" title="${escapeHtml(title)}">
+      <span class="av-slide-avail__bar" style="width:${width}%;background:${heat.bar}"></span>
+      <strong style="color:${heat.text}">${formatPct(pct)}</strong>
+    </div>
+  `;
+}
+
+function renderSummaryRow(player) {
+  const impact = player.impact || {};
+  const shares = summaryMinuteShares(player);
+  const tag = summaryStatusTag(player);
+  return `
+    <tr class="av-slide-row av-slide-row--${tag.code}">
+      <td class="av-slide-player">
+        ${playerPhoto(player, "av-slide-chip__photo")}
+        <span>${escapeHtml(playerLastName(player.name))}</span>
+      </td>
+      <td>${shares.played}</td>
+      <td>${impact.appearances ?? 0}</td>
+      <td>${renderSummaryBar(shares.playedPct, "played", `Played ${shares.played} of possible minutes`)}</td>
+      <td>${renderSummaryBar(shares.availablePct, "available", "Share of possible minutes they were available to play")}</td>
+      <td>${renderSummaryBar(shares.unusedPct, "unused", `${shares.unused} minutes available but not involved`)}</td>
+      <td>${summaryDaysInjured(player) || "—"}</td>
+      <td><span class="av-slide-tag av-slide-tag--${tag.code}">${escapeHtml(tag.label)}</span></td>
+    </tr>
+  `;
+}
+
+function renderSummary() {
+  if (!els.summarySlide) return;
+  const buckets = summaryBuckets();
+  const next = nextUpcomingMatch();
+  const last = lastCompletedMatch();
+  const today = formatDateLabel(todayIso(), { isToday: true });
+  const nextLine = next
+    ? `Next · ${next.date} ${next.label || ""}`
+    : "No upcoming fixture";
+  const lastLine = last
+    ? `Last · ${last.label || last.date}${last.score ? ` ${last.result || ""} ${last.score}` : ""}`
+    : "";
+  const completed = state.board?.competition?.complete_matches || 0;
+  const possible = state.board?.competition?.possible_mins || completed * 90;
+  const groups = playersByGroup({ activeOnly: true }).map((group) => ({
+    ...group,
+    players: [...group.players].sort((a, b) => (b.impact?.minutes || 0) - (a.impact?.minutes || 0)),
+  }));
+  const outBits = [...buckets.injured, ...buckets.mm, ...buckets.other, ...buckets.away]
+    .map((player) => {
+      const tag = summaryStatusTag(player);
+      return `${playerLastName(player.name)} ${tag.label}`;
+    });
+  const awayNote = buckets.away.length
+    ? buckets.away.map((player) => player.name).join(", ") +
+      (buckets.away.length === 1
+        ? " is injured away from the club — personal record only."
+        : " are injured away from the club — personal record only.")
+    : "";
+
+  els.summarySlide.innerHTML = `
+    <header class="av-slide__head">
+      <div>
+        <p class="av-slide__kicker">Port Vale · ${escapeHtml(state.season)}</p>
+        <h2>Minutes &amp; availability</h2>
+      </div>
+      <div class="av-slide__meta">
+        <p>${escapeHtml(today)}</p>
+        <p>${escapeHtml(nextLine)}</p>
+        ${lastLine ? `<p>${escapeHtml(lastLine)}</p>` : ""}
+      </div>
+    </header>
+    <div class="av-slide__stats">
+      <div><strong>${completed}</strong><span>Completed</span></div>
+      <div><strong>${possible}</strong><span>Possible mins</span></div>
+      <div class="av-slide__stat--out"><strong>${buckets.injured.length}</strong><span>Injured</span></div>
+      <div class="av-slide__stat--mm"><strong>${buckets.mm.length}</strong><span>Managed mins</span></div>
+    </div>
+    <div class="av-slide-table-wrap">
+      <table class="av-slide-table">
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Mins</th>
+            <th>Apps</th>
+            <th title="Minutes played ÷ possible minutes">Played</th>
+            <th title="Minutes they were available ÷ possible minutes">Available</th>
+            <th title="Available minutes they did not play">Unused</th>
+            <th title="Days out in the current / logged injury spell">Days inj</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${groups.map((group) => `
+            <tr class="av-slide-group-row"><td colspan="8">${escapeHtml(group.label)}</td></tr>
+            ${group.players.map((player) => renderSummaryRow(player)).join("")}
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+    ${outBits.length ? `<p class="av-slide__out">Out now · ${escapeHtml(outBits.join("  ·  "))}</p>` : ""}
+    ${awayNote ? `<p class="av-slide__away">${escapeHtml(awayNote)}</p>` : ""}
+  `;
+}
+
+function setPresentMode(on) {
+  document.body.classList.toggle("av-present", Boolean(on));
+  if (on && state.view !== "summary") {
+    state.view = "summary";
+    renderView();
+  }
 }
 
 function renderView() {
@@ -1113,8 +1484,10 @@ function renderView() {
   els.logView.classList.toggle("hidden", state.view !== "log");
   els.rosterView.classList.toggle("hidden", state.view !== "roster");
   els.injuriesView?.classList.toggle("hidden", state.view !== "injuries");
+  els.summaryView?.classList.toggle("hidden", state.view !== "summary");
 
   if (state.view === "matrix") renderMatrix();
+  if (state.view === "summary") renderSummary();
   if (state.view === "log") {
     if (state.loggingActive) {
       showLogPanels({ session: true, injury: false });
@@ -1130,7 +1503,7 @@ function renderView() {
 }
 
 function populateSelects() {
-  const injuryOptions = ["INJ", "UN", "LOAN", "INT"].map((code) => `<option value="${code}">${statusLabel(code)}</option>`).join("");
+  const injuryOptions = ["INJ", "MM", "UN", "LOAN", "INT"].map((code) => `<option value="${code}">${statusLabel(code)}</option>`).join("");
   els.injuryStatus.innerHTML = injuryOptions;
 
   const positionOptions = (state.meta?.position_groups || [])
@@ -1154,6 +1527,9 @@ function openInjuryDialog(playerId, options = {}) {
   populateInjurySinceDropdown(player.injury?.since || todayIso());
   populateReturnDateDropdown(player.injury?.return_date || "");
   els.injuryNotes.value = player.injury?.notes || "";
+  if (els.injuryAwayFromClub) {
+    els.injuryAwayFromClub.checked = Boolean(player.injury?.away_from_club);
+  }
   const hasActiveInjury = Boolean(player.injury?.status && player.injury.status !== "AVAIL");
   els.clearInjuryBtn.classList.toggle("hidden", fromStatus || !hasActiveInjury);
   els.injuryDialog.showModal();
@@ -1176,7 +1552,7 @@ function openPlayerDialog(playerId = "") {
   els.playerEditId.value = playerId || "";
   els.playerDialogTitle.textContent = player ? `Edit ${player.name}` : "Add player";
   els.playerName.value = player?.name || "";
-  els.playerPosition.value = player?.position_group || "CM";
+  els.playerPosition.value = player?.position_group || "MID";
   els.playerHighlight.value = player?.highlight || "";
   els.deletePlayerBtn.classList.toggle("hidden", !playerId);
   els.playerDialog.showModal();
@@ -1221,7 +1597,14 @@ async function loadBoard({ quiet = false, refresh = false } = {}) {
     } else {
       state.logEntries = {};
     }
-    els.pageSubtitle.textContent = `${state.board.match_count || 0} matches · ${state.board.competition?.complete_matches || 0} completed`;
+    const allCount = state.board.match_count || 0;
+    const leagueCount = state.board.league_match_count ?? allCount;
+    const completed = state.board.competition?.complete_matches || 0;
+    const completedLeague = state.board.competition?.complete_league_matches;
+    const completedLabel = completedLeague != null && completedLeague !== completed
+      ? `${completed} completed (${completedLeague} league)`
+      : `${completed} completed`;
+    els.pageSubtitle.textContent = `${allCount} fixtures · ${leagueCount} league · ${completedLabel} · FotMob`;
     els.statusBar.textContent = `Updated ${state.board.updated_at ? new Date(state.board.updated_at).toLocaleString() : "just now"}`;
     if (!quiet) setStatus("");
     renderSeasonToggle();
@@ -1320,7 +1703,15 @@ async function importRoster() {
     if (result.updated) parts.push(`${result.updated} updated`);
     if (result.reactivated) parts.push(`${result.reactivated} back`);
     if (result.left_club) parts.push(`${result.left_club} marked not at club`);
-    setStatus(`Synced squad — ${parts.join(", ") || "no changes"} (${result.total} active)`, "ok");
+    if (result.impect_linked) parts.push(`${result.impect_linked} linked to Impect`);
+    const source = result.source === "port-vale.co.uk"
+      ? "port-vale.co.uk"
+      : (result.source_season && result.source_season !== state.season
+        ? `${result.source_season} Impect`
+        : "Impect");
+    let message = `Synced squad from ${source} — ${parts.join(", ") || "no changes"} (${result.total} active)`;
+    if (result.warning) message += ` · ${result.warning}`;
+    setStatus(message, result.warning ? "warn" : "ok");
     await loadBoard({ quiet: true, refresh: true });
   } catch (error) {
     setStatus(error.message, "error");
@@ -1333,6 +1724,7 @@ async function saveInjury(event) {
   const pending = state.injuryPending;
   const fromQuickLog = els.injuryStatusWrap.classList.contains("hidden");
   const status = fromQuickLog ? "INJ" : (els.injuryStatus.value || "INJ");
+  const awayFromClub = Boolean(els.injuryAwayFromClub?.checked) && status === "INJ";
   try {
     await fetchJson(`/api/availability/injury/${encodeURIComponent(playerId)}?season=${encodeURIComponent(state.season)}`, {
       method: "PUT",
@@ -1341,18 +1733,21 @@ async function saveInjury(event) {
         since: els.injurySince?.value || todayIso(),
         return_date: els.injuryReturnDate.value || null,
         notes: els.injuryNotes.value || "",
+        away_from_club: awayFromClub,
       }),
     });
 
-    if (pending?.source === "matrix" && pending.sessionId) {
+    if (pending?.source === "matrix" && pending.sessionId && !awayFromClub) {
       await applySessionStatus(playerId, pending.sessionId, status);
-    } else if (pending?.source === "log" || state.logEntries[playerId]) {
+    } else if ((pending?.source === "log" || state.logEntries[playerId]) && !awayFromClub) {
       state.logEntries[playerId] = { status };
+    } else if (awayFromClub) {
+      delete state.logEntries[playerId];
     }
 
     state.injuryPending = null;
     els.injuryDialog.close();
-    setStatus("Injury saved.", "ok");
+    setStatus(awayFromClub ? "Injured away from club saved." : "Injury saved.", "ok");
     await loadBoard({ quiet: true });
   } catch (error) {
     setStatus(error.message, "error");
@@ -1402,14 +1797,33 @@ async function savePlayer(event) {
   }
 }
 
-async function deletePlayer() {
-  const playerId = els.playerEditId.value;
+async function deletePlayerById(playerId) {
   if (!playerId || !window.confirm("Remove this player from the roster?")) return;
   try {
     await fetchJson(`/api/availability/roster/${encodeURIComponent(playerId)}?season=${encodeURIComponent(state.season)}`, {
       method: "DELETE",
     });
-    els.playerDialog.close();
+    els.playerDialog?.close();
+    setStatus("Player removed.", "ok");
+    await loadBoard({ quiet: true });
+  } catch (error) {
+    setStatus(error.message, "error");
+  }
+}
+
+async function deletePlayer() {
+  await deletePlayerById(els.playerEditId.value);
+}
+
+async function purgeInactivePlayers() {
+  const inactiveCount = rosterPlayers().filter((player) => player.active === false).length;
+  if (!inactiveCount) return;
+  if (!window.confirm(`Permanently remove ${inactiveCount} departed player${inactiveCount === 1 ? "" : "s"}?`)) return;
+  try {
+    const result = await fetchJson(`/api/availability/roster/inactive?season=${encodeURIComponent(state.season)}`, {
+      method: "DELETE",
+    });
+    setStatus(`Removed ${result.removed} departed player${result.removed === 1 ? "" : "s"}.`, "ok");
     await loadBoard({ quiet: true });
   } catch (error) {
     setStatus(error.message, "error");
@@ -1427,17 +1841,30 @@ function bindEvents() {
       if (tab.dataset.view !== "injuries") {
         state.injuryDetailPlayerId = "";
       }
+      if (tab.dataset.view !== "summary") {
+        setPresentMode(false);
+      }
       renderView();
     });
   });
 
   els.refreshBtn.addEventListener("click", () => loadBoard({ refresh: true }));
+  els.presentSummaryBtn?.addEventListener("click", () => setPresentMode(true));
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") setPresentMode(false);
+  });
   els.submitMatchBtn.addEventListener("click", startGameLog);
   els.submitInjuryBtn?.addEventListener("click", startInjuryLog);
   els.syncRosterLandingBtn?.addEventListener("click", importRoster);
-  els.showMatchesToggle.addEventListener("change", () => {
-    state.showMatches = els.showMatchesToggle.checked;
-    renderMatrix();
+  els.purgeInactiveBtn?.addEventListener("click", purgeInactivePlayers);
+  document.querySelectorAll("[data-matrix-filter]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.matrixFilter = btn.dataset.matrixFilter || "all";
+      document.querySelectorAll("[data-matrix-filter]").forEach((other) => {
+        other.classList.toggle("av-matrix-filter__btn--active", other === btn);
+      });
+      renderMatrix();
+    });
   });
   els.importRosterBtn.addEventListener("click", importRoster);
   els.saveSessionBtn.addEventListener("click", saveSession);
@@ -1470,10 +1897,15 @@ async function init() {
   populateDateDropdown(todayIso());
   populateReturnDateDropdown();
   bindEvents();
+  // Load the board immediately — roster lives on the hub disk and must not wait on Impect.
+  const boardPromise = loadBoard();
   try {
     await loadMeta();
-    await loadBoard();
-    await syncPositionsFromImpect({ quiet: true });
+  } catch (error) {
+    setStatus(error.message, "error");
+  }
+  try {
+    await boardPromise;
   } catch (error) {
     setStatus(error.message, "error");
   }

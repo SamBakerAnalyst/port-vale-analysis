@@ -36,8 +36,280 @@ DATA_PATH = DATA_DIR / "availability.json"
 _store_lock = threading.Lock()
 _match_minutes_cache: dict[tuple[int, int], tuple[float, dict[int, dict[int, dict[str, Any]]]]] = {}
 CACHE_TTL_SECONDS = 3600
+FIXTURES_CACHE_TTL_SECONDS = 300
+FOTMOB_TEAM_ID = 9799
+FOTMOB_LEAGUE_IDS = frozenset({108, 109})  # League One, League Two
+_fotmob_minutes_cache: dict[int, tuple[float, dict[str, Any]]] = {}
+_fotmob_fixtures_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 
-UNAVAILABLE_STATUSES = frozenset({"INJ", "UN", "LOAN", "N", "INT"})
+
+def _season_date_bounds(season: str) -> tuple[str, str]:
+    start_year = int(str(season).split("/")[0])
+    if start_year < 100:
+        start_year += 2000
+    return f"{start_year}-07-01", f"{start_year + 1}-06-30"
+
+
+def _normalize_player_key(name: str) -> str:
+    import re
+    import unicodedata
+
+    text = unicodedata.normalize("NFKD", str(name or ""))
+    text = "".join(char for char in text if not unicodedata.combining(char))
+    return re.sub(r"[^a-z0-9]+", "", text.casefold())
+
+
+def _fotmob_http_get(url: str, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    from app.fixture_planner import _http
+
+    response = _http.get(
+        url,
+        params=params or {},
+        headers={"User-Agent": "Mozilla/5.0"},
+        timeout=25,
+    )
+    if not response.ok:
+        raise HTTPException(status_code=502, detail=f"FotMob request failed ({response.status_code})")
+    payload = response.json()
+    return payload if isinstance(payload, dict) else {}
+
+
+def _fotmob_match_category(tournament: dict[str, Any] | None) -> str:
+    tournament = tournament or {}
+    try:
+        league_id = int(tournament.get("leagueId") or 0)
+    except (TypeError, ValueError):
+        league_id = 0
+    if league_id in FOTMOB_LEAGUE_IDS:
+        return "league"
+    name = str(tournament.get("name") or "").casefold()
+    if "friendly" in name:
+        return "friendly"
+    if name:
+        return "cup"
+    return "friendly"
+
+
+def _fotmob_fixtures_for_season(season: str) -> list[dict[str, Any]]:
+    season = _validate_season(season)
+    cached = _fotmob_fixtures_cache.get(season)
+    now = time.time()
+    if cached and now - cached[0] < FIXTURES_CACHE_TTL_SECONDS:
+        return cached[1]
+
+    payload = _fotmob_http_get(
+        "https://www.fotmob.com/api/data/teams",
+        params={"id": FOTMOB_TEAM_ID},
+    )
+    raw = (
+        ((payload.get("fixtures") or {}).get("allFixtures") or {}).get("fixtures")
+        or []
+    )
+    start, end = _season_date_bounds(season)
+    rows: list[dict[str, Any]] = []
+    for match in raw:
+        if not isinstance(match, dict):
+            continue
+        status = match.get("status") or {}
+        kickoff = str(status.get("utcTime") or "")
+        match_date = kickoff[:10]
+        if not match_date or match_date < start or match_date > end:
+            continue
+
+        home = match.get("home") or {}
+        away = match.get("away") or {}
+        tournament = match.get("tournament") or {}
+        try:
+            home_id = int(home.get("id") or 0)
+            away_id = int(away.get("id") or 0)
+        except (TypeError, ValueError):
+            continue
+        if FOTMOB_TEAM_ID not in (home_id, away_id):
+            continue
+
+        is_home = home_id == FOTMOB_TEAM_ID
+        opponent = away if is_home else home
+        finished = bool(status.get("finished"))
+        home_score = home.get("score") if finished else None
+        away_score = away.get("score") if finished else None
+        try:
+            home_goals = int(home_score) if home_score is not None else None
+            away_goals = int(away_score) if away_score is not None else None
+        except (TypeError, ValueError):
+            home_goals = away_goals = None
+
+        complete = finished and home_goals is not None and away_goals is not None
+        pv_goals = opp_goals = points = None
+        result = ""
+        score = ""
+        if complete:
+            pv_goals = home_goals if is_home else away_goals
+            opp_goals = away_goals if is_home else home_goals
+            if pv_goals > opp_goals:
+                result = "W"
+                points = 3
+            elif pv_goals < opp_goals:
+                result = "L"
+                points = 0
+            else:
+                result = "D"
+                points = 1
+            score = f"{home_goals}-{away_goals}"
+
+        short_name = str(opponent.get("name") or "TBC").strip() or "TBC"
+        prefix = "H" if is_home else "A"
+        category = _fotmob_match_category(tournament if isinstance(tournament, dict) else {})
+        competition = str(tournament.get("name") or "").strip() or (
+            "League" if category == "league" else "Cup"
+        )
+        match_id = int(match["id"])
+        rows.append(
+            {
+                "match_id": match_id,
+                "date": match_date,
+                "kickoff_utc": kickoff or None,
+                "label": f"{short_name} ({prefix})",
+                "match_day": None,
+                "competition": competition,
+                "match_category": category,
+                "opponent": short_name,
+                "opponent_short": short_name,
+                "is_home": is_home,
+                "venue": prefix,
+                "result": result,
+                "score": score,
+                "complete": complete,
+                "pv_goals": pv_goals,
+                "opp_goals": opp_goals,
+                "points": points,
+                "source": "fotmob",
+            }
+        )
+
+    rows.sort(key=lambda row: (str(row.get("date") or ""), int(row.get("match_id") or 0)))
+    _fotmob_fixtures_cache[season] = (now, rows)
+    return rows
+
+
+def _extract_fotmob_minutes(player_stats: dict[str, Any]) -> float:
+    for block in player_stats.get("stats") or []:
+        if not isinstance(block, dict):
+            continue
+        stats = block.get("stats") or {}
+        if not isinstance(stats, dict):
+            continue
+        for label in ("Minutes played", "Mins played", "Minutes"):
+            entry = stats.get(label)
+            if not isinstance(entry, dict):
+                continue
+            stat = entry.get("stat") or {}
+            try:
+                return float(stat.get("value") or 0.0)
+            except (TypeError, ValueError):
+                continue
+        minutes_key = stats.get("minutes_played") or stats.get("Minutes played")
+        if isinstance(minutes_key, dict):
+            try:
+                return float((minutes_key.get("stat") or {}).get("value") or 0.0)
+            except (TypeError, ValueError):
+                pass
+    return 0.0
+
+
+def _fotmob_match_minutes_by_name(match_id: int) -> dict[str, dict[str, Any]]:
+    cached = _fotmob_minutes_cache.get(match_id)
+    now = time.time()
+    if cached and now - cached[0] < CACHE_TTL_SECONDS:
+        return cached[1]
+
+    try:
+        payload = _fotmob_http_get(
+            "https://www.fotmob.com/api/data/matchDetails",
+            params={"matchId": match_id},
+        )
+    except HTTPException:
+        _fotmob_minutes_cache[match_id] = (now, {})
+        return {}
+
+    content = payload.get("content") or {}
+    player_stats = content.get("playerStats") or {}
+    lineup = content.get("lineup") or {}
+    starter_ids: set[int] = set()
+    for side_key in ("homeTeam", "awayTeam"):
+        side = lineup.get(side_key) or {}
+        if int(side.get("id") or 0) != FOTMOB_TEAM_ID:
+            continue
+        for player in side.get("starters") or []:
+            if isinstance(player, dict) and player.get("id") is not None:
+                starter_ids.add(int(player["id"]))
+
+    by_name: dict[str, dict[str, Any]] = {}
+    if isinstance(player_stats, dict):
+        for pid_token, row in player_stats.items():
+            if not isinstance(row, dict):
+                continue
+            try:
+                team_id = int(row.get("teamId") or 0)
+            except (TypeError, ValueError):
+                continue
+            if team_id != FOTMOB_TEAM_ID:
+                continue
+            minutes = _extract_fotmob_minutes(row)
+            if minutes <= 0:
+                continue
+            name = str(row.get("name") or "").strip()
+            if not name:
+                continue
+            try:
+                fotmob_player_id = int(row.get("id") or pid_token)
+            except (TypeError, ValueError):
+                fotmob_player_id = None
+            key = _normalize_player_key(name)
+            by_name[key] = {
+                "name": name,
+                "minutes": minutes,
+                "match_share": min(1.0, minutes / 90.0),
+                "started": fotmob_player_id in starter_ids if fotmob_player_id else minutes >= 45,
+                "fotmob_player_id": fotmob_player_id,
+            }
+
+    _fotmob_minutes_cache[match_id] = (now, by_name)
+    return by_name
+
+
+def _fotmob_minutes_by_match(
+    matches: list[dict[str, Any]],
+) -> dict[int, dict[str, dict[str, Any]]]:
+    result: dict[int, dict[str, dict[str, Any]]] = {}
+    for match in matches:
+        if not match.get("complete"):
+            continue
+        match_id = int(match["match_id"])
+        result[match_id] = _fotmob_match_minutes_by_name(match_id)
+    return result
+
+
+def _roster_minutes_for_match(
+    *,
+    player: dict[str, Any],
+    match_id: int,
+    minutes_by_match: dict[int, dict[str, dict[str, Any]]],
+) -> dict[str, Any] | None:
+    per_match = minutes_by_match.get(match_id) or {}
+    if not per_match:
+        return None
+    key = _normalize_player_key(str(player.get("name") or ""))
+    row = per_match.get(key)
+    if row:
+        return row
+    # Fallback: last-name match when full-name keys differ slightly.
+    last = key[-6:] if len(key) >= 6 else key
+    for candidate_key, candidate in per_match.items():
+        if candidate_key.endswith(last) or key.endswith(candidate_key[-6:]):
+            return candidate
+    return None
+
+UNAVAILABLE_STATUSES = frozenset({"INJ", "UN", "LOAN", "INT"})
 FIT_EXCLUDED_STATUSES = frozenset({"INJ", "UN", "LOAN", "INT"})
 TRAINING_UNAVAILABLE_STATUSES = frozenset({"INT", "SICK", "INJ", "REST", "OTHER", "NAC"})
 TRAINING_AVAILABLE_STATUSES = frozenset({"AVAIL", "PART"})
@@ -47,16 +319,23 @@ DEFAULT_SEASON = "26/27"
 
 POSITION_GROUPS: tuple[dict[str, str], ...] = (
     {"id": "GK", "label": "Goalkeepers"},
-    {"id": "CB", "label": "Defenders (CB)"},
-    {"id": "WB", "label": "Wingbacks (LWB & RWB)"},
-    {"id": "CM", "label": "Midfielders (CM)"},
+    {"id": "DEF", "label": "Defenders"},
+    {"id": "MID", "label": "Midfielders"},
     {"id": "ATT", "label": "Attackers"},
 )
+
+# Older availability boards used CB/WB/CM — map into the four simple groups.
+LEGACY_POSITION_GROUP_MAP: dict[str, str] = {
+    "CB": "DEF",
+    "WB": "DEF",
+    "CM": "MID",
+}
 
 STATUS_CODES: dict[str, dict[str, str]] = {
     "AVAIL": {"label": "Available", "short": "✓", "color": "#22c55e"},
     "PART": {"label": "Part training", "short": "PART", "color": "#84cc16"},
     "INJ": {"label": "Injured", "short": "INJ", "color": "#ef4444"},
+    "MM": {"label": "Managed minutes", "short": "MM", "color": "#14b8a6"},
     "SICK": {"label": "Sick", "short": "SICK", "color": "#f97316"},
     "REST": {"label": "Rested", "short": "REST", "color": "#a855f7"},
     "OTHER": {"label": "Other", "short": "OTH", "color": "#64748b"},
@@ -82,6 +361,7 @@ TRAINING_STATUSES: tuple[str, ...] = (
 MATCH_STATUSES: tuple[str, ...] = (
     "AVAIL",
     "INJ",
+    "MM",
     "UN",
     "N",
     "INT",
@@ -91,11 +371,11 @@ MATCH_STATUSES: tuple[str, ...] = (
 
 IMPECT_POSITION_TO_GROUP: dict[str, str] = {
     "GOALKEEPER": "GK",
-    "CENTRAL_DEFENDER": "CB",
-    "LEFT_WINGBACK_DEFENDER": "WB",
-    "RIGHT_WINGBACK_DEFENDER": "WB",
-    "DEFENSE_MIDFIELD": "CM",
-    "CENTRAL_MIDFIELD": "CM",
+    "CENTRAL_DEFENDER": "DEF",
+    "LEFT_WINGBACK_DEFENDER": "DEF",
+    "RIGHT_WINGBACK_DEFENDER": "DEF",
+    "DEFENSE_MIDFIELD": "MID",
+    "CENTRAL_MIDFIELD": "MID",
     "ATTACKING_MIDFIELD": "ATT",
     "LEFT_WINGER": "ATT",
     "RIGHT_WINGER": "ATT",
@@ -124,6 +404,7 @@ class InjuryUpdate(BaseModel):
     return_date: str | None = None
     notes: str = ""
     since: str | None = None
+    away_from_club: bool = False
 
 
 class SessionCreate(BaseModel):
@@ -199,21 +480,82 @@ def _empty_store() -> dict[str, Any]:
     }
 
 
+def _legacy_availability_paths() -> list[Path]:
+    home = Path.home() / ".cache" / "impect-availability" / "availability.json"
+    return [home]
+
+
+def _store_has_active_roster(store: dict[str, Any], season: str | None = None) -> bool:
+    roster_root = store.get("roster")
+    if not isinstance(roster_root, dict):
+        return False
+    seasons = [season] if season else list(roster_root.keys())
+    for key in seasons:
+        rows = roster_root.get(key)
+        if not isinstance(rows, list):
+            continue
+        if any(isinstance(row, dict) and row.get("active", True) is not False for row in rows):
+            return True
+    return False
+
+
+def _maybe_migrate_legacy_store(store: dict[str, Any]) -> dict[str, Any]:
+    """Fill missing season data from legacy ~/.cache when the DATA_ROOT store is thin."""
+    changed = False
+    for legacy_path in _legacy_availability_paths():
+        if not legacy_path.exists() or legacy_path.resolve() == DATA_PATH.resolve():
+            continue
+        try:
+            legacy = json.loads(legacy_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(legacy, dict):
+            continue
+
+        for key in ("roster", "injuries", "sessions", "injury_history"):
+            legacy_bucket = legacy.get(key)
+            if not isinstance(legacy_bucket, dict):
+                continue
+            current_bucket = store.setdefault(key, {})
+            if not isinstance(current_bucket, dict):
+                current_bucket = {}
+                store[key] = current_bucket
+            for season, value in legacy_bucket.items():
+                if season in current_bucket and current_bucket[season]:
+                    if key == "roster" and _store_has_active_roster(store, season):
+                        continue
+                    if key != "roster":
+                        continue
+                current_bucket[season] = value
+                changed = True
+
+        if changed:
+            store["version"] = int(legacy.get("version") or store.get("version") or 2)
+            store["updated_at"] = datetime.now(UTC).isoformat()
+            _save_store(store)
+            return store
+    return store
+
+
 def _load_store() -> dict[str, Any]:
     with _store_lock:
         if not DATA_PATH.exists():
-            return _empty_store()
-        try:
-            payload = json.loads(DATA_PATH.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return _empty_store()
-        if not isinstance(payload, dict):
-            return _empty_store()
-        for key in ("roster", "injuries", "sessions", "injury_history"):
-            bucket = payload.get(key)
-            if not isinstance(bucket, dict):
-                payload[key] = {}
-        return payload
+            store = _empty_store()
+        else:
+            try:
+                payload = json.loads(DATA_PATH.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                store = _empty_store()
+            else:
+                if not isinstance(payload, dict):
+                    store = _empty_store()
+                else:
+                    store = payload
+                    for key in ("roster", "injuries", "sessions", "injury_history"):
+                        bucket = store.get(key)
+                        if not isinstance(bucket, dict):
+                            store[key] = {}
+    return _maybe_migrate_legacy_store(store)
 
 
 def _save_store(payload: dict[str, Any]) -> None:
@@ -251,6 +593,7 @@ def _validate_season(season: str) -> str:
 def _validate_position_group(position_group: str) -> str:
     allowed = {row["id"] for row in POSITION_GROUPS}
     token = str(position_group or "").strip().upper()
+    token = LEGACY_POSITION_GROUP_MAP.get(token, token)
     if token not in allowed:
         raise HTTPException(
             status_code=400,
@@ -305,12 +648,10 @@ def _close_open_injury_record(records: list[dict[str, Any]], ended_at: str) -> N
 
 
 def _injury_period_end(record: dict[str, Any]) -> str:
+    """Actual end of the injury spell for counts (so far) — never the expected return date."""
     ended = record.get("ended_at")
     if ended:
         return str(ended)[:10]
-    return_date = _parse_date(record.get("return_date"))
-    if return_date:
-        return return_date.isoformat()
     return datetime.now(UTC).date().isoformat()
 
 
@@ -319,7 +660,21 @@ def _days_between_dates(start: str | None, end: str | None) -> int | None:
     end_date = _parse_date(end)
     if not start_date or not end_date:
         return None
+    # Inclusive calendar days from onset through end / today.
     return max(0, (end_date - start_date).days + 1)
+
+
+def _days_injured(injury: dict[str, Any] | None) -> int | None:
+    if not injury:
+        return None
+    status = str(injury.get("status") or "").upper()
+    if status not in {"INJ", "UN", "LOAN"}:
+        return None
+    since = _parse_date(injury.get("since"))
+    if not since:
+        return None
+    today = datetime.now(UTC).date()
+    return max(0, (today - since).days + 1)
 
 
 def _missed_sessions_for_period(
@@ -413,6 +768,7 @@ def _migrate_injury_history(
                 "return_date": injury.get("return_date"),
                 "ended_at": None,
                 "notes": str(injury.get("notes") or ""),
+                "away_from_club": bool(injury.get("away_from_club")),
                 "recorded_at": datetime.now(UTC).isoformat(),
             }
         )
@@ -444,6 +800,9 @@ def _roster_for_season(store: dict[str, Any], season: str) -> list[dict[str, Any
     if not isinstance(roster, list):
         roster = []
         store["roster"][season] = roster
+    if _normalize_roster_position_groups(roster):
+        store["roster"][season] = roster
+        _save_store(store)
     return roster
 
 
@@ -458,8 +817,22 @@ def _find_player(roster: list[dict[str, Any]], player_id: str) -> dict[str, Any]
     return None
 
 
+def _normalize_roster_position_groups(roster: list[dict[str, Any]]) -> bool:
+    """Rewrite legacy CB/WB/CM groups in place. Returns True if anything changed."""
+    changed = False
+    for player in roster:
+        if not isinstance(player, dict):
+            continue
+        raw = str(player.get("position_group") or "").strip().upper()
+        mapped = LEGACY_POSITION_GROUP_MAP.get(raw, raw) or "MID"
+        if player.get("position_group") != mapped:
+            player["position_group"] = mapped
+            changed = True
+    return changed
+
+
 def _impect_position_group(position: str | None) -> str:
-    return IMPECT_POSITION_TO_GROUP.get(str(position or "").strip(), "CM")
+    return IMPECT_POSITION_TO_GROUP.get(str(position or "").strip(), "MID")
 
 
 def _impect_primary_positions(iteration_id: int) -> dict[int, str]:
@@ -492,7 +865,13 @@ def _resolve_player_position_group(
     primary_positions: dict[int, str],
     position_minutes: dict[int, dict[str, float]],
     catalog_position: str | None = None,
-) -> str:
+    default: str | None = "MID",
+) -> str | None:
+    """Map Impect position data to a board group.
+
+    When ``default`` is None, return None unless Impect actually has a signal —
+    used by position sync so empty 26/27 Impect data cannot wipe club-site groups.
+    """
     if impect_id is not None:
         primary = primary_positions.get(int(impect_id))
         if primary:
@@ -505,11 +884,21 @@ def _resolve_player_position_group(
 
     if catalog_position:
         return _impect_position_group(catalog_position)
-    return "CM"
+    return default
 
 
 def _resolve_iteration(season: str) -> dict[str, Any]:
     return _resolve_port_vale_iteration(season)
+
+
+def _previous_allowed_season(season: str) -> str | None:
+    try:
+        index = ALLOWED_SEASONS.index(season)
+    except ValueError:
+        return None
+    if index + 1 >= len(ALLOWED_SEASONS):
+        return None
+    return ALLOWED_SEASONS[index + 1]
 
 
 def _port_vale_players_from_impect(iteration_id: int, squad_id: int) -> list[dict[str, Any]]:
@@ -536,7 +925,10 @@ def _port_vale_players_from_impect(iteration_id: int, squad_id: int) -> list[dic
         ),
         {"id": iteration_id},
     )
-    bundle = _load_iteration_bundle(iteration, "CENTRAL_MIDFIELD", 0)
+    try:
+        bundle = _load_iteration_bundle(iteration, "CENTRAL_MIDFIELD", 0)
+    except Exception:
+        return []
     seen: set[int] = set()
     fallback: list[dict[str, Any]] = []
     for row in bundle.get("score_rows") or []:
@@ -559,6 +951,43 @@ def _port_vale_players_from_impect(iteration_id: int, squad_id: int) -> list[dic
             }
         )
     return fallback
+
+
+def _impect_squad_players_for_season(season: str) -> dict[str, Any]:
+    """Load Port Vale squad players from Impect, falling back to the prior season if empty."""
+    season = _validate_season(season)
+    iteration = _resolve_iteration(season)
+    iteration_id = int(iteration["id"])
+    squad_id = _resolve_squad_id(iteration_id)
+    players = _port_vale_players_from_impect(iteration_id, squad_id)
+    source_season = season
+    warning: str | None = None
+
+    if not players:
+        prior = _previous_allowed_season(season)
+        if prior:
+            prior_iteration = _resolve_iteration(prior)
+            prior_iteration_id = int(prior_iteration["id"])
+            prior_squad_id = _resolve_squad_id(prior_iteration_id)
+            prior_players = _port_vale_players_from_impect(prior_iteration_id, prior_squad_id)
+            if prior_players:
+                players = prior_players
+                source_season = prior
+                iteration_id = prior_iteration_id
+                squad_id = prior_squad_id
+                warning = (
+                    f"Impect has no {season} Port Vale squad list yet "
+                    f"(access may still be closed). Used {prior} Impect squad — "
+                    "delete anyone who has left."
+                )
+
+    return {
+        "players": players,
+        "iteration_id": iteration_id,
+        "squad_id": squad_id,
+        "source_season": source_season,
+        "warning": warning,
+    }
 
 
 def _resolve_squad_id(iteration_id: int) -> int:
@@ -725,14 +1154,34 @@ def _port_vale_matches(iteration_id: int, squad_id: int) -> list[dict[str, Any]]
 
 
 def _injury_applies(injury: dict[str, Any] | None, session_date: str) -> bool:
+    """True when the session falls inside an unavailable spell (INJ / UN / LOAN)."""
+    return _standing_status_applies(injury, session_date, statuses={"INJ", "UN", "LOAN"})
+
+
+def _managed_minutes_applies(injury: dict[str, Any] | None, session_date: str) -> bool:
+    return _standing_status_applies(injury, session_date, statuses={"MM"})
+
+
+def _standing_status_applies(
+    injury: dict[str, Any] | None,
+    session_date: str,
+    *,
+    statuses: set[str],
+) -> bool:
+    """True when the session falls inside the actual standing-status spell (not expected return)."""
     if not injury:
         return False
     status = str(injury.get("status") or "").upper()
-    if status not in {"INJ", "UN", "LOAN"}:
+    if status not in statuses:
         return False
-    return_date = _parse_date(injury.get("return_date"))
     session = _parse_date(session_date)
-    if return_date and session and session > return_date:
+    if not session:
+        return False
+    since = _parse_date(injury.get("since"))
+    if since and session < since:
+        return False
+    ended = _parse_date(injury.get("ended_at"))
+    if ended and session > ended:
         return False
     return True
 
@@ -743,34 +1192,61 @@ def _effective_entry(
     session: dict[str, Any],
     manual_entries: dict[str, Any],
     injuries: dict[str, Any],
-    impect_minutes: float | None,
-    impect_id: int | None,
+    play_minutes: float | None,
+    has_player_identity: bool,
 ) -> dict[str, Any]:
-    session_id = str(session.get("id") or "")
     session_type = str(session.get("type") or "")
     session_date = str(session.get("date") or "")
-    manual = manual_entries.get(player_id)
-    if isinstance(manual, dict) and manual.get("status"):
-        status = str(manual["status"])
-        short = STATUS_CODES.get(status.upper(), {}).get("short", status)
-        return {
-            "status": status,
-            "display": short if not status.isdigit() else str(int(float(status))),
-            "source": "manual",
-            "minutes": int(float(status)) if status.isdigit() else None,
-        }
+    injury = injuries.get(player_id) if isinstance(injuries, dict) else None
+    complete = bool(session.get("complete"))
+    mm_active = complete and _managed_minutes_applies(injury, session_date)
 
-    if session_type == "match" and impect_minutes is not None and impect_minutes > 0:
-        minutes = int(round(impect_minutes))
+    # Completed match minutes win over manual codes so MM can annotate real play time.
+    if session_type == "match" and play_minutes is not None and play_minutes > 0:
+        minutes = int(round(play_minutes))
+        if mm_active:
+            return {
+                "status": "MM",
+                "display": f"{minutes} MM",
+                "source": "managed",
+                "minutes": minutes,
+                "managed_minutes": True,
+            }
         return {
             "status": str(minutes),
             "display": str(minutes),
-            "source": "impect",
+            "source": str(session.get("source") or "fotmob"),
             "minutes": minutes,
         }
 
-    injury = injuries.get(player_id)
-    if _injury_applies(injury, session_date):
+    manual = manual_entries.get(player_id)
+    if isinstance(manual, dict) and manual.get("status"):
+        status = str(manual["status"])
+        # Standing MM is shown only after completion — ignore session-level MM on fixtures yet to play.
+        if status.upper() == "MM" and not complete:
+            pass
+        else:
+            short = STATUS_CODES.get(status.upper(), {}).get("short", status)
+            display = short if not status.isdigit() else str(int(float(status)))
+            if complete and mm_active and status.isdigit():
+                display = f"{int(float(status))} MM"
+                return {
+                    "status": "MM",
+                    "display": display,
+                    "source": "managed",
+                    "minutes": int(float(status)),
+                    "managed_minutes": True,
+                }
+            if status.upper() != "MM" or complete:
+                return {
+                    "status": status,
+                    "display": display,
+                    "source": "manual",
+                    "minutes": int(float(status)) if status.isdigit() else None,
+                }
+
+    # Never predict injury / MM onto incomplete fixtures — only once the game is done.
+    if complete and _injury_applies(injury, session_date):
         status = str(injury.get("status") or "INJ").upper()
         return {
             "status": status,
@@ -781,11 +1257,20 @@ def _effective_entry(
             "return_date": injury.get("return_date"),
         }
 
-    if session_type == "match" and impect_id and session.get("complete"):
+    if mm_active:
+        return {
+            "status": "MM",
+            "display": "MM",
+            "source": "managed",
+            "minutes": None,
+            "managed_minutes": True,
+        }
+
+    if session_type == "match" and has_player_identity and complete:
         return {
             "status": "N",
             "display": "N",
-            "source": "impect",
+            "source": str(session.get("source") or "fotmob"),
             "minutes": 0,
         }
 
@@ -822,19 +1307,6 @@ def _is_available_status(status: str | None, *, session_type: str | None = None)
     if token.isdigit() or token.startswith("SUB"):
         return True
     return token not in UNAVAILABLE_STATUSES
-
-
-def _days_injured(injury: dict[str, Any] | None) -> int | None:
-    if not injury:
-        return None
-    status = str(injury.get("status") or "").upper()
-    if status not in {"INJ", "UN", "LOAN"}:
-        return None
-    since = _parse_date(injury.get("since"))
-    if not since:
-        return None
-    today = datetime.now(UTC).date()
-    return max(0, (today - since).days)
 
 
 def _is_fit_for_match(status: str | None) -> bool:
@@ -894,7 +1366,8 @@ def _availability_rates(
         "training_pct": round(100 * training_available / training_total, 1) if training_total else None,
         "training_available": training_available,
         "training_total": training_total,
-        # % of completed games marked available for selection (manual / morning log)
+        # % of completed games they were fit to play (not injured / loan / int).
+        # "N" (not selected) still counts as available.
         "games_available_pct": round(100 * games_available / games_available_total, 1)
         if games_available_total
         else None,
@@ -912,12 +1385,22 @@ def _availability_rates(
 
 
 def _competition_totals(matches: list[dict[str, Any]]) -> dict[str, Any]:
-    complete = [match for match in matches if match.get("complete")]
-    team_points = sum(int(match.get("points") or 0) for match in complete if match.get("points") is not None)
-    team_wins = sum(1 for match in complete if str(match.get("result") or "").upper() == "W")
-    complete_matches = len(complete)
+    all_complete = [match for match in matches if match.get("complete")]
+    league_complete = [
+        match
+        for match in all_complete
+        if str(match.get("match_category") or "league") == "league"
+    ]
+    team_points = sum(
+        int(match.get("points") or 0)
+        for match in league_complete
+        if match.get("points") is not None
+    )
+    team_wins = sum(1 for match in league_complete if str(match.get("result") or "").upper() == "W")
+    complete_matches = len(all_complete)
     return {
         "complete_matches": complete_matches,
+        "complete_league_matches": len(league_complete),
         "possible_mins": complete_matches * 90,
         "team_points": team_points,
         "team_wins": team_wins,
@@ -925,9 +1408,8 @@ def _competition_totals(matches: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _on_pitch_impact(
-    impect_id: int | None,
     matches: list[dict[str, Any]],
-    match_player_data: dict[int, dict[int, dict[str, Any]]],
+    player_rows_by_match: dict[int, dict[str, Any]],
     *,
     competition: dict[str, Any] | None = None,
     games_available: int | None = None,
@@ -953,18 +1435,16 @@ def _on_pitch_impact(
         "pct_of_wins": None,
         "pct_of_points": None,
     }
-    if impect_id is None:
-        return empty
 
     stats = dict(empty)
-    player_id = int(impect_id)
     goal_pm = 0.0
     points_pm = 0.0
     for match in matches:
         if not match.get("complete"):
             continue
+        is_league = str(match.get("match_category") or "league") == "league"
         match_id = int(match["match_id"])
-        row = (match_player_data.get(match_id) or {}).get(player_id)
+        row = player_rows_by_match.get(match_id)
         minutes = float((row or {}).get("minutes") or 0.0)
         if minutes <= 0:
             continue
@@ -974,6 +1454,10 @@ def _on_pitch_impact(
         stats["minutes"] += mins_int
         if (row or {}).get("started"):
             stats["starts"] += 1
+
+        # Cup/friendly minutes count as playing time; points / GD stay league-only.
+        if not is_league:
+            continue
 
         share = float((row or {}).get("match_share") or 0.0)
         if share <= 0:
@@ -997,7 +1481,6 @@ def _on_pitch_impact(
             goal_pm += match_gd * share
         if points is not None:
             stats["points"] += int(points)
-            # Win +2, draw 0, loss -1 vs a draw baseline (1 pt).
             points_pm += (int(points) - 1) * share
 
     stats["minutes"] = int(stats["minutes"])
@@ -1034,23 +1517,20 @@ def _on_pitch_impact(
 
 
 def availability_meta() -> dict[str, Any]:
-    seasons: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for season in ALLOWED_SEASONS:
-        if season in seen:
-            continue
-        try:
-            iteration = _resolve_port_vale_iteration(season)
-        except HTTPException:
-            continue
-        seasons.append(
-            {
-                "season": season,
-                "iteration_id": int(iteration["id"]),
-                "competition": str(iteration.get("competition_name") or ""),
-            }
-        )
-        seen.add(season)
+    # Keep this fast — the page boots on /meta. Do not call Impect here; iteration
+    # IDs are resolved when the board / import paths actually need them.
+    competition_by_season = {
+        "26/27": "League Two",
+        "25/26": "League One",
+    }
+    seasons = [
+        {
+            "season": season,
+            "iteration_id": None,
+            "competition": competition_by_season.get(season, ""),
+        }
+        for season in ALLOWED_SEASONS
+    ]
     return {
         "seasons": seasons,
         "default_season": DEFAULT_SEASON,
@@ -1072,6 +1552,8 @@ def build_availability_payload(*, season: str, refresh: bool = False) -> dict[st
     season = _validate_season(season)
     if refresh:
         _match_minutes_cache.clear()
+        _fotmob_minutes_cache.clear()
+        _fotmob_fixtures_cache.clear()
         squad_photo_map(force=True)
 
     store = _load_store()
@@ -1085,24 +1567,26 @@ def build_availability_payload(*, season: str, refresh: bool = False) -> dict[st
     if not isinstance(sessions, list):
         sessions = []
 
-    iteration = _resolve_iteration(season)
-    iteration_id = int(iteration["id"])
-    squad_id = _resolve_squad_id(iteration_id)
-    matches = _port_vale_matches(iteration_id, squad_id)
-    match_player_data = _match_player_data_by_match(iteration_id, squad_id)
-    minutes_map = {
-        match_id: {
-            player_id: float(row.get("minutes") or 0.0)
-            for player_id, row in players.items()
-        }
-        for match_id, players in match_player_data.items()
-    }
+    iteration = None
+    iteration_id = None
+    try:
+        iteration = _resolve_iteration(season)
+        iteration_id = int(iteration["id"])
+    except HTTPException:
+        iteration_id = None
 
-    impect_to_player = {
-        int(player["impect_id"]): str(player["id"])
-        for player in roster
-        if player.get("impect_id") is not None
-    }
+    try:
+        matches = _fotmob_fixtures_for_season(season)
+    except HTTPException:
+        matches = []
+        if iteration_id is not None:
+            squad_id = _resolve_squad_id(iteration_id)
+            matches = _port_vale_matches(iteration_id, squad_id)
+            for match in matches:
+                match.setdefault("match_category", "league")
+                match.setdefault("source", "impect")
+
+    minutes_by_match = _fotmob_minutes_by_match(matches)
 
     match_sessions_by_id = {
         int(session.get("match_id")): session
@@ -1120,10 +1604,12 @@ def build_availability_payload(*, season: str, refresh: bool = False) -> dict[st
     ]
 
     merged_sessions: list[dict[str, Any]] = []
+    fotmob_match_ids: set[int] = set()
     for match in matches:
         match_id = int(match["match_id"])
+        fotmob_match_ids.add(match_id)
         stored = match_sessions_by_id.get(match_id)
-        session_id = str(stored.get("id") if stored else f"m-{match_id}")
+        session_id = str(stored.get("id") if stored else f"fm-{match_id}")
         manual_entries = dict((stored or {}).get("entries") or {})
         merged_sessions.append(
             {
@@ -1132,20 +1618,22 @@ def build_availability_payload(*, season: str, refresh: bool = False) -> dict[st
                 "date": match["date"],
                 "label": match["label"],
                 "match_id": match_id,
-                "match_category": "league",
-                "match_day": match["match_day"],
-                "competition": match["competition"],
-                "opponent": match["opponent"],
-                "venue": match["venue"],
-                "result": match["result"],
-                "score": match["score"],
-                "complete": match["complete"],
+                "match_category": match.get("match_category") or "league",
+                "match_day": match.get("match_day"),
+                "competition": match.get("competition"),
+                "opponent": match.get("opponent"),
+                "venue": match.get("venue"),
+                "result": match.get("result"),
+                "score": match.get("score"),
+                "complete": match.get("complete"),
+                "source": match.get("source") or "fotmob",
                 "entries": manual_entries,
             }
         )
 
     for session in manual_match_sessions:
-        if session.get("match_id") is not None and int(session["match_id"]) in match_sessions_by_id:
+        session_match_id = session.get("match_id")
+        if session_match_id is not None and int(session_match_id) in fotmob_match_ids:
             continue
         merged_sessions.append(
             {
@@ -1153,13 +1641,14 @@ def build_availability_payload(*, season: str, refresh: bool = False) -> dict[st
                 "type": "match",
                 "date": session.get("date"),
                 "label": session.get("label") or session.get("date"),
-                "match_id": session.get("match_id"),
+                "match_id": session_match_id,
                 "match_category": session.get("match_category") or "friendly",
                 "opponent": session.get("opponent"),
                 "venue": session.get("venue"),
                 "result": session.get("result") or "",
                 "score": session.get("score") or "",
                 "complete": bool(session.get("complete")),
+                "source": "manual",
                 "entries": dict(session.get("entries") or {}),
             }
         )
@@ -1175,30 +1664,37 @@ def build_availability_payload(*, season: str, refresh: bool = False) -> dict[st
         total_minutes = 0.0
         sessions_played = 0
         cells: dict[str, Any] = {}
+        player_rows_by_match: dict[int, dict[str, Any]] = {}
 
         for session in merged_sessions:
-            impect_minutes = None
-            if session.get("type") == "match" and impect_id and session.get("match_id"):
-                match_minutes = minutes_map.get(int(session["match_id"]), {})
-                impect_minutes = match_minutes.get(int(impect_id))
-                if impect_minutes and impect_minutes > 0:
-                    total_minutes += impect_minutes
-                    sessions_played += 1
+            play_minutes = None
+            match_id = session.get("match_id")
+            if session.get("type") == "match" and match_id is not None:
+                row = _roster_minutes_for_match(
+                    player=player,
+                    match_id=int(match_id),
+                    minutes_by_match=minutes_by_match,
+                )
+                if row:
+                    player_rows_by_match[int(match_id)] = row
+                    play_minutes = float(row.get("minutes") or 0.0)
+                    if play_minutes > 0:
+                        total_minutes += play_minutes
+                        sessions_played += 1
 
             cells[str(session["id"])] = _effective_entry(
                 player_id=player_id,
                 session=session,
                 manual_entries=dict(session.get("entries") or {}),
                 injuries=injuries,
-                impect_minutes=impect_minutes,
-                impect_id=int(impect_id) if impect_id is not None else None,
+                play_minutes=play_minutes,
+                has_player_identity=True,
             )
 
         availability = _availability_rates(cells, merged_sessions)
         impact = _on_pitch_impact(
-            int(impect_id) if impect_id is not None else None,
             matches,
-            match_player_data,
+            player_rows_by_match,
             competition=competition,
             games_available=availability.get("games_available"),
         )
@@ -1223,6 +1719,11 @@ def build_availability_payload(*, season: str, refresh: bool = False) -> dict[st
                 "injury_history": history_records,
                 "injury_episodes": len(history_records),
                 "total_days_injured": total_days_injured,
+                "away_from_club": bool(
+                    isinstance(injuries.get(player_id), dict)
+                    and injuries[player_id].get("away_from_club")
+                    and str(injuries[player_id].get("status") or "").upper() == "INJ"
+                ),
                 "bracket": _minutes_bracket(total_minutes, sessions_played),
                 "season_minutes": int(round(total_minutes)),
                 "availability": availability,
@@ -1240,9 +1741,11 @@ def build_availability_payload(*, season: str, refresh: bool = False) -> dict[st
             "label": session.get("label") or session.get("date"),
             "match_id": session.get("match_id"),
             "match_category": session.get("match_category"),
+            "competition": session.get("competition"),
             "result": session.get("result"),
             "score": session.get("score"),
             "complete": session.get("complete", False),
+            "source": session.get("source"),
         }
         for session in merged_sessions
     ]
@@ -1255,13 +1758,21 @@ def build_availability_payload(*, season: str, refresh: bool = False) -> dict[st
         "sessions": session_columns,
         "injuries": injuries,
         "match_count": len([row for row in merged_sessions if row.get("type") == "match"]),
+        "league_match_count": len(
+            [row for row in merged_sessions if row.get("type") == "match" and row.get("match_category") == "league"]
+        ),
         "training_count": 0,
         "competition": competition,
+        "fixture_source": "fotmob",
     }
 
 
 def sync_roster_positions_from_impect(*, season: str) -> dict[str, Any]:
     season = _validate_season(season)
+    # 26/27 first-team groups come from port-vale.co.uk, not Impect (catalog empty).
+    if season == "26/27":
+        return {"updated": 0, "total": 0, "skipped": True, "reason": "club-website"}
+
     iteration = _resolve_iteration(season)
     iteration_id = int(iteration["id"])
     squad_id = _resolve_squad_id(iteration_id)
@@ -1281,7 +1792,10 @@ def sync_roster_positions_from_impect(*, season: str) -> dict[str, Any]:
             int(impect_id),
             primary_positions=primary_positions,
             position_minutes=position_minutes,
+            default=None,
         )
+        if next_group is None:
+            continue
         if player.get("position_group") != next_group:
             player["position_group"] = next_group
             updated += 1
@@ -1293,16 +1807,23 @@ def sync_roster_positions_from_impect(*, season: str) -> dict[str, Any]:
 
 def import_roster_from_impect(*, season: str, replace: bool = False) -> dict[str, Any]:
     season = _validate_season(season)
-    iteration = _resolve_iteration(season)
-    iteration_id = int(iteration["id"])
-    squad_id = _resolve_squad_id(iteration_id)
+    fetched = _impect_squad_players_for_season(season)
+    squad_players = list(fetched["players"] or [])
+    if not squad_players:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Impect returned no Port Vale players for {season}.",
+        )
 
-    impect = _impect()
+    iteration_id = int(fetched["iteration_id"])
+    squad_id = int(fetched["squad_id"])
+    source_season = str(fetched["source_season"] or season)
+    using_prior_season = source_season != season
+
     pre_match = _pre_match()
     primary_positions = _impect_primary_positions(iteration_id)
     match_player_data = _match_player_data_by_match(iteration_id, squad_id)
     position_minutes = _position_minutes_by_player(match_player_data)
-    squad_players = _port_vale_players_from_impect(iteration_id, squad_id)
     squad_players.sort(
         key=lambda row: (
             str(row.get("commonname") or pre_match._player_display_name(row)).casefold()
@@ -1320,12 +1841,17 @@ def import_roster_from_impect(*, season: str, replace: bool = False) -> dict[str
 
     added = 0
     updated = 0
+    reactivated = 0
+    seen_impect_ids: set[int] = set()
+    seen_names: set[str] = set()
     for index, player in enumerate(squad_players):
         impect_id = int(player["id"])
         name = (
             str(player.get("commonname") or "").strip()
             or pre_match._player_display_name(player)
         )
+        seen_impect_ids.add(impect_id)
+        seen_names.add(name.casefold())
         catalog_position = None
         positions = player.get("positions") or []
         if positions:
@@ -1343,6 +1869,10 @@ def import_roster_from_impect(*, season: str, replace: bool = False) -> dict[str
         if impect_id in existing_impect:
             existing = existing_impect[impect_id]
             existing["name"] = name
+            existing["impect_id"] = impect_id
+            if existing.get("active") is False:
+                existing["active"] = True
+                reactivated += 1
             if existing.get("position_group") != position_group:
                 existing["position_group"] = position_group
                 updated += 1
@@ -1351,6 +1881,9 @@ def import_roster_from_impect(*, season: str, replace: bool = False) -> dict[str
             existing = existing_names[name.casefold()]
             existing["impect_id"] = impect_id
             existing["name"] = name
+            if existing.get("active") is False:
+                existing["active"] = True
+                reactivated += 1
             if existing.get("position_group") != position_group:
                 existing["position_group"] = position_group
                 updated += 1
@@ -1369,16 +1902,50 @@ def import_roster_from_impect(*, season: str, replace: bool = False) -> dict[str
         )
         added += 1
 
+    left_club = 0
+    # Only mark departed when the Impect list is for this season. A prior-season
+    # fallback would incorrectly flag new signings as leavers.
+    if not using_prior_season:
+        for player in roster:
+            impect_id = player.get("impect_id")
+            name_key = str(player.get("name") or "").casefold()
+            still_here = (
+                (impect_id is not None and int(impect_id) in seen_impect_ids)
+                or name_key in seen_names
+            )
+            if still_here:
+                continue
+            if player.get("active", True) is not False:
+                player["active"] = False
+                left_club += 1
+
     store["roster"][season] = roster
     _save_store(store)
-    return {"added": added, "updated": updated, "total": len(roster)}
+    result = {
+        "added": added,
+        "updated": updated,
+        "reactivated": reactivated,
+        "left_club": left_club,
+        "total": len(_active_roster(roster)),
+        "total_including_inactive": len(roster),
+        "source": "impect",
+        "source_season": source_season,
+    }
+    if fetched.get("warning"):
+        result["warning"] = fetched["warning"]
+    return result
 
 
 def import_roster_from_club_website(*, season: str) -> dict[str, Any]:
     season = _validate_season(season)
-    club_players = fetch_club_squad_roster(force=True)
+    try:
+        club_players = fetch_club_squad_roster(force=True)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     if not club_players:
         raise HTTPException(status_code=502, detail="Could not load squad from port-vale.co.uk.")
+
+    from app.squad_photos import _normalize_name_key, _name_tokens
 
     store = _load_store()
     roster = _roster_for_season(store, season)
@@ -1388,7 +1955,42 @@ def import_roster_from_club_website(*, season: str) -> dict[str, Any]:
         if player.get("club_player_id") is not None
     }
     by_name = {str(player.get("name") or "").casefold(): player for player in roster}
+    by_norm = {
+        _normalize_name_key(str(player.get("name") or "")): player
+        for player in roster
+        if _normalize_name_key(str(player.get("name") or ""))
+    }
+    last_name_index: dict[str, list[dict[str, Any]]] = {}
+    for player in roster:
+        _, last = _name_tokens(str(player.get("name") or ""))
+        if last:
+            last_name_index.setdefault(last, []).append(player)
+
+    def _match_existing(name: str, club_player_id: str) -> dict[str, Any] | None:
+        existing = by_club_id.get(club_player_id) or by_name.get(name.casefold())
+        if existing is not None:
+            return existing
+        norm = _normalize_name_key(name)
+        if norm and norm in by_norm:
+            return by_norm[norm]
+        first, last = _name_tokens(name)
+        if not last:
+            return None
+        candidates = last_name_index.get(last) or []
+        if len(candidates) == 1:
+            return candidates[0]
+        if first and candidates:
+            tight = [
+                row
+                for row in candidates
+                if _name_tokens(str(row.get("name") or ""))[0][:3] == first[:3]
+            ]
+            if len(tight) == 1:
+                return tight[0]
+        return None
+
     club_ids_seen: set[str] = set()
+    matched_roster_ids: set[str] = set()
 
     added = 0
     updated = 0
@@ -1400,8 +2002,9 @@ def import_roster_from_club_website(*, season: str) -> dict[str, Any]:
         position_group = _validate_position_group(str(club_player["position_group"]))
         highlight = club_player.get("highlight")
 
-        existing = by_club_id.get(club_player_id) or by_name.get(name.casefold())
+        existing = _match_existing(name, club_player_id)
         if existing is not None:
+            matched_roster_ids.add(str(existing["id"]))
             changed = False
             if existing.get("name") != name:
                 existing["name"] = name
@@ -1423,6 +2026,7 @@ def import_roster_from_club_website(*, season: str) -> dict[str, Any]:
                 updated += 1
             by_club_id[club_player_id] = existing
             by_name[name.casefold()] = existing
+            by_norm[_normalize_name_key(name)] = existing
             continue
 
         player = {
@@ -1436,31 +2040,107 @@ def import_roster_from_club_website(*, season: str) -> dict[str, Any]:
             "active": True,
         }
         roster.append(player)
+        matched_roster_ids.add(str(player["id"]))
         by_club_id[club_player_id] = player
         by_name[name.casefold()] = player
+        by_norm[_normalize_name_key(name)] = player
         added += 1
 
     left_club = 0
     for player in roster:
-        club_player_id = player.get("club_player_id")
-        if club_player_id is not None and str(club_player_id) not in club_ids_seen:
-            if player.get("active", True) is not False:
-                player["active"] = False
-                left_club += 1
-                updated += 1
+        if str(player.get("id")) in matched_roster_ids:
+            continue
+        if player.get("active", True) is not False:
+            player["active"] = False
+            left_club += 1
+            updated += 1
 
     store["roster"][season] = roster
     _save_store(store)
     squad_photo_map(force=True)
+
+    impect_linked = _link_impect_ids_onto_roster(season=season)
+    store = _load_store()
+    roster = _roster_for_season(store, season)
+
     return {
         "added": added,
         "updated": updated,
         "reactivated": reactivated,
         "left_club": left_club,
+        "impect_linked": impect_linked,
         "total": len(_active_roster(roster)),
         "total_including_inactive": len(roster),
         "source": "port-vale.co.uk",
     }
+
+
+def _link_impect_ids_onto_roster(*, season: str) -> int:
+    """Attach Impect player IDs to roster rows by name when missing."""
+    try:
+        fetched = _impect_squad_players_for_season(season)
+    except HTTPException:
+        return 0
+    squad_players = list(fetched.get("players") or [])
+    if not squad_players:
+        return 0
+
+    from app.squad_photos import _normalize_name_key, _name_tokens
+
+    pre_match = _pre_match()
+    store = _load_store()
+    roster = _roster_for_season(store, season)
+    by_norm = {
+        _normalize_name_key(str(player.get("name") or "")): player
+        for player in roster
+        if player.get("active", True) is not False
+        and _normalize_name_key(str(player.get("name") or ""))
+    }
+    last_name_index: dict[str, list[dict[str, Any]]] = {}
+    for player in roster:
+        if player.get("active", True) is False:
+            continue
+        _, last = _name_tokens(str(player.get("name") or ""))
+        if last:
+            last_name_index.setdefault(last, []).append(player)
+
+    linked = 0
+    for row in squad_players:
+        try:
+            impect_id = int(row["id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        name = (
+            str(row.get("commonname") or "").strip()
+            or pre_match._player_display_name(row)
+        )
+        if not name:
+            continue
+        target = by_norm.get(_normalize_name_key(name))
+        if target is None:
+            first, last = _name_tokens(name)
+            candidates = last_name_index.get(last) or []
+            if len(candidates) == 1:
+                target = candidates[0]
+            elif first and candidates:
+                tight = [
+                    player
+                    for player in candidates
+                    if _name_tokens(str(player.get("name") or ""))[0][:3] == first[:3]
+                ]
+                if len(tight) == 1:
+                    target = tight[0]
+        if target is None:
+            continue
+        if target.get("impect_id") == impect_id:
+            continue
+        target["impect_id"] = impect_id
+        linked += 1
+
+    if linked:
+        store["roster"][season] = roster
+        _save_store(store)
+    return linked
 
 
 def add_roster_player(*, season: str, body: RosterPlayerCreate) -> dict[str, Any]:
@@ -1514,8 +2194,39 @@ def remove_roster_player(*, season: str, player_id: str) -> dict[str, Any]:
     injuries = _season_bucket(store, "injuries", season)
     if isinstance(injuries, dict):
         injuries.pop(player_id, None)
+    history_bucket = _injury_history_for_season(store, season)
+    if isinstance(history_bucket, dict):
+        history_bucket.pop(player_id, None)
     _save_store(store)
     return {"removed": player_id}
+
+
+def remove_inactive_roster_players(*, season: str) -> dict[str, Any]:
+    season = _validate_season(season)
+    store = _load_store()
+    roster = _roster_for_season(store, season)
+    keep: list[dict[str, Any]] = []
+    removed_ids: list[str] = []
+    for player in roster:
+        if player.get("active", True) is False:
+            removed_ids.append(str(player.get("id")))
+        else:
+            keep.append(player)
+    if not removed_ids:
+        return {"removed": 0, "total": len(keep)}
+
+    injuries = _season_bucket(store, "injuries", season)
+    history_bucket = _injury_history_for_season(store, season)
+    if isinstance(injuries, dict):
+        for player_id in removed_ids:
+            injuries.pop(player_id, None)
+    if isinstance(history_bucket, dict):
+        for player_id in removed_ids:
+            history_bucket.pop(player_id, None)
+
+    store["roster"][season] = keep
+    _save_store(store)
+    return {"removed": len(removed_ids), "total": len(keep)}
 
 
 def reorder_roster(*, season: str, body: RosterReorderRequest) -> dict[str, Any]:
@@ -1565,6 +2276,7 @@ def set_player_injury(*, season: str, player_id: str, body: InjuryUpdate) -> dic
             "return_date": body.return_date,
             "notes": body.notes.strip(),
             "since": since,
+            "away_from_club": bool(body.away_from_club) and status == "INJ",
         }
         records.append(
             {
@@ -1574,6 +2286,7 @@ def set_player_injury(*, season: str, player_id: str, body: InjuryUpdate) -> dic
                 "return_date": body.return_date,
                 "ended_at": None,
                 "notes": body.notes.strip(),
+                "away_from_club": bool(body.away_from_club) and status == "INJ",
                 "recorded_at": datetime.now(UTC).isoformat(),
             }
         )
@@ -1645,6 +2358,13 @@ def _session_entries_from_request(
             continue
         if apply_injuries and isinstance(injuries, dict) and _injury_applies(injuries.get(player_id), session_date):
             resolved[player_id] = {"status": str(injuries[player_id].get("status") or "INJ").upper()}
+        elif (
+            apply_injuries
+            and isinstance(injuries, dict)
+            and _managed_minutes_applies(injuries.get(player_id), session_date)
+        ):
+            # Still selectable — default the log pill to MM so staff see managed status.
+            resolved[player_id] = {"status": "MM"}
         else:
             resolved[player_id] = {"status": "AVAIL"}
     return resolved
@@ -1854,8 +2574,47 @@ def register_availability_tracker_routes(app: FastAPI) -> None:
         season: str = Query(DEFAULT_SEASON),
         replace: bool = Query(False),
     ) -> dict[str, Any]:
+        # Current season: official club site (names + headshots). Older seasons: Impect.
         if season == "26/27":
-            return import_roster_from_club_website(season=season)
+            try:
+                result = import_roster_from_club_website(season=season)
+                if result.get("total"):
+                    return result
+            except HTTPException as club_exc:
+                if club_exc.status_code < 500:
+                    raise
+                club_error = str(club_exc.detail)
+            else:
+                club_error = "port-vale.co.uk returned an empty squad."
+
+            store = _load_store()
+            if _store_has_active_roster(store, season):
+                roster = _active_roster(_roster_for_season(store, season))
+                return {
+                    "added": 0,
+                    "updated": 0,
+                    "reactivated": 0,
+                    "left_club": 0,
+                    "total": len(roster),
+                    "total_including_inactive": len(_roster_for_season(store, season)),
+                    "source": "cached",
+                    "warning": f"{club_error} Using the squad already saved on this machine.",
+                }
+
+            try:
+                result = import_roster_from_impect(season=season, replace=replace)
+                result["warning"] = (
+                    f"{club_error} Fell back to Impect"
+                    + (
+                        f" ({result.get('source_season')})"
+                        if result.get("source_season")
+                        else ""
+                    )
+                    + "."
+                )
+                return result
+            except HTTPException:
+                raise HTTPException(status_code=502, detail=club_error) from None
         return import_roster_from_impect(season=season, replace=replace)
 
     @app.post("/api/availability/roster/import-club")
@@ -1863,6 +2622,12 @@ def register_availability_tracker_routes(app: FastAPI) -> None:
         season: str = Query(DEFAULT_SEASON),
     ) -> dict[str, Any]:
         return import_roster_from_club_website(season=season)
+
+    @app.delete("/api/availability/roster/inactive")
+    def availability_roster_delete_inactive_route(
+        season: str = Query(DEFAULT_SEASON),
+    ) -> dict[str, Any]:
+        return remove_inactive_roster_players(season=season)
 
     @app.post("/api/availability/roster/sync-positions")
     def availability_roster_sync_positions_route(
@@ -1952,6 +2717,19 @@ def register_availability_tracker_routes(app: FastAPI) -> None:
 
     @app.get("/api/availability/photo")
     def availability_photo_route(name: str = Query(..., min_length=1)) -> Response:
+        # Prefer compact club-site crops. Local uploads can be multi‑MB originals.
+        source_url = resolve_squad_photo_url(name)
+        if source_url:
+            try:
+                image_bytes, content_type = fetch_photo_bytes(source_url)
+                return Response(
+                    content=image_bytes,
+                    media_type=content_type,
+                    headers={"Cache-Control": "public, max-age=86400"},
+                )
+            except RuntimeError:
+                pass
+
         local_path = resolve_local_photo_path(name)
         if local_path is not None:
             content_type = "image/jpeg"
@@ -1959,16 +2737,18 @@ def register_availability_tracker_routes(app: FastAPI) -> None:
                 content_type = "image/png"
             elif local_path.suffix.lower() == ".webp":
                 content_type = "image/webp"
-            return Response(content=local_path.read_bytes(), media_type=content_type)
+            data = local_path.read_bytes()
+            # Skip bloated local originals when a club crop should exist.
+            if len(data) <= 750_000 or source_url is None:
+                return Response(
+                    content=data,
+                    media_type=content_type,
+                    headers={"Cache-Control": "public, max-age=86400"},
+                )
 
-        source_url = resolve_squad_photo_url(name)
-        if not source_url:
-            raise HTTPException(status_code=404, detail=f"No squad photo found for {name}")
-        try:
-            image_bytes, content_type = fetch_photo_bytes(source_url)
-        except RuntimeError as exc:
-            raise HTTPException(status_code=502, detail=str(exc)) from exc
-        return Response(content=image_bytes, media_type=content_type)
+        if source_url:
+            raise HTTPException(status_code=502, detail=f"Could not download squad photo for {name}")
+        raise HTTPException(status_code=404, detail=f"No squad photo found for {name}")
 
     @app.post("/api/availability/photo/{player_id}")
     async def availability_photo_upload_route(
