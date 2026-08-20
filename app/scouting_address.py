@@ -166,13 +166,15 @@ def _geocode_address(query: str) -> dict[str, Any]:
         ) from exc
 
 
-def _osrm_durations_seconds(origin_lat: float, origin_lng: float, destinations: list[tuple[float, float]]) -> list[int | None]:
+def _osrm_table(
+    origin_lat: float, origin_lng: float, destinations: list[tuple[float, float]]
+) -> list[tuple[int | None, float | None]]:
+    """Return list of (duration_seconds, distance_meters) via OSRM road network."""
     if not destinations:
         return []
 
-    # OSRM public API limits URL length — batch in chunks of 50 destinations.
     batch_size = 50
-    merged: list[int | None] = []
+    merged: list[tuple[int | None, float | None]] = []
     for start in range(0, len(destinations), batch_size):
         chunk = destinations[start : start + batch_size]
         coords = ";".join([f"{origin_lng},{origin_lat}"] + [f"{lng},{lat}" for lat, lng in chunk])
@@ -180,42 +182,54 @@ def _osrm_durations_seconds(origin_lat: float, origin_lng: float, destinations: 
         try:
             payload = _http_get_json(
                 url,
-                params={"sources": "0", "annotations": "duration"},
+                params={"sources": "0", "annotations": "duration,distance"},
                 timeout=30.0,
             )
         except requests.RequestException:
-            merged.extend([None] * len(chunk))
+            merged.extend([(None, None)] * len(chunk))
             continue
 
         if payload.get("code") != "Ok":
-            merged.extend([None] * len(chunk))
+            merged.extend([(None, None)] * len(chunk))
             continue
 
         durations = payload.get("durations") or []
-        if not durations or not durations[0]:
-            merged.extend([None] * len(chunk))
+        distances = payload.get("distances") or []
+        if not durations or not durations[0] or not distances or not distances[0]:
+            merged.extend([(None, None)] * len(chunk))
             continue
-        merged.extend(
-            int(value) if value is not None else None for value in durations[0][1:]
-        )
+
+        for index in range(len(chunk)):
+            duration = durations[0][index + 1]
+            distance = distances[0][index + 1]
+            merged.append(
+                (
+                    int(duration) if duration is not None else None,
+                    float(distance) if distance is not None else None,
+                )
+            )
     return merged
 
 
 def _travel_times(origin_lat: float, origin_lng: float, stadiums: list[dict[str, Any]]) -> list[dict[str, Any]]:
     destinations = [(row["lat"], row["lng"]) for row in stadiums]
-    osrm_seconds = _osrm_durations_seconds(origin_lat, origin_lng, destinations)
+    osrm_rows = _osrm_table(origin_lat, origin_lng, destinations)
 
     enriched: list[dict[str, Any]] = []
     for index, stadium in enumerate(stadiums):
         drive_minutes: int | None = None
         drive_miles: float | None = None
         source = "estimate"
-        distance_km = _haversine_km(origin_lat, origin_lng, stadium["lat"], stadium["lng"])
-        if index < len(osrm_seconds) and osrm_seconds[index] is not None:
-            drive_minutes = max(1, round(osrm_seconds[index] / 60))
-            drive_miles = round((distance_km * ROAD_DISTANCE_FACTOR) * 0.621371, 1)
+        duration_sec, distance_m = (None, None)
+        if index < len(osrm_rows):
+            duration_sec, distance_m = osrm_rows[index]
+
+        if duration_sec is not None and distance_m is not None:
+            drive_minutes = max(1, round(duration_sec / 60))
+            drive_miles = round((distance_m / 1000.0) * 0.621371, 1)
             source = "osrm"
         else:
+            distance_km = _haversine_km(origin_lat, origin_lng, stadium["lat"], stadium["lng"])
             drive_minutes, drive_miles = _estimate_drive(distance_km)
 
         enriched.append(

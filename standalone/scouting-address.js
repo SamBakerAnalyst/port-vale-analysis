@@ -22,12 +22,14 @@ const LEAGUE_TO_FIXTURE = {
   "Scottish Prem": "Scottish Prem",
 };
 
-// Conservative UK scouting estimates: crow-flies → road distance, then mixed-road average speed.
-const ROAD_DISTANCE_FACTOR = 1.38;
-const AVG_SPEED_MPH = 36;
+// Road routing via OSRM. Haversine is only used as a coarse pre-filter (road ≥ crow-flies).
+const OSRM_TABLE_URL = "https://router.project-osrm.org/table/v1/driving";
+const OSRM_ROUTE_URL = "https://router.project-osrm.org/route/v1/driving";
+const OSRM_BATCH_SIZE = 40;
 const ARRIVE_BEFORE_KICKOFF_MIN = 15;
 const HALFTIME_MINUTE = 45;
 const FULLTIME_MINUTE = 90;
+const roadDriveCache = new Map();
 
 const state = {
   meta: null,
@@ -194,32 +196,10 @@ function kmToMiles(km) {
   return km * 0.621371;
 }
 
-function estimateDrive(distanceKmStraight) {
-  if (distanceKmStraight <= 0) {
-    return { minutes: 0, miles: 0 };
-  }
-  const roadKm = distanceKmStraight * ROAD_DISTANCE_FACTOR;
-  const miles = kmToMiles(roadKm);
-  const minutes = Math.max(1, Math.round((miles / AVG_SPEED_MPH) * 60));
-  return {
-    minutes,
-    miles: Math.round(miles * 10) / 10,
-  };
-}
-
-function maxStraightLineRadiusKm(maxMinutes) {
-  const maxRoadMiles = (maxMinutes / 60) * AVG_SPEED_MPH;
-  const maxRoadKm = maxRoadMiles / 0.621371;
-  return maxRoadKm / ROAD_DISTANCE_FACTOR;
-}
-
-function maxStraightLineRadiusKmFromMiles(maxMiles) {
-  const maxRoadKm = maxMiles / 0.621371;
-  return maxRoadKm / ROAD_DISTANCE_FACTOR;
-}
-
-function effectiveRadiusKm(maxMinutes, maxMiles) {
-  return Math.min(maxStraightLineRadiusKm(maxMinutes), maxStraightLineRadiusKmFromMiles(maxMiles));
+function roadCacheKey(lat1, lng1, lat2, lng2) {
+  const a = `${lat1.toFixed(5)},${lng1.toFixed(5)}`;
+  const b = `${lat2.toFixed(5)},${lng2.toFixed(5)}`;
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
 }
 
 function filterLimits() {
@@ -244,8 +224,96 @@ function formatDriveTime(row) {
   return formatDriveEstimate({ minutes: row.drive_minutes, miles: row.drive_miles });
 }
 
-function driveBetween(lat1, lng1, lat2, lng2) {
-  return estimateDrive(haversineKm(lat1, lng1, lat2, lng2));
+async function osrmTableFromOrigin(origin, destinations) {
+  const results = new Array(destinations.length).fill(null);
+  if (!destinations.length) return results;
+
+  for (let start = 0; start < destinations.length; start += OSRM_BATCH_SIZE) {
+    const chunk = destinations.slice(start, start + OSRM_BATCH_SIZE);
+    const coords = [`${origin.lng},${origin.lat}`]
+      .concat(chunk.map((row) => `${row.lng},${row.lat}`))
+      .join(";");
+    const url = `${OSRM_TABLE_URL}/${coords}?sources=0&annotations=duration,distance`;
+    try {
+      const response = await fetch(url);
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.code !== "Ok") continue;
+      const durations = payload.durations?.[0] || [];
+      const distances = payload.distances?.[0] || [];
+      chunk.forEach((_, index) => {
+        const durationSec = durations[index + 1];
+        const distanceM = distances[index + 1];
+        if (durationSec == null || distanceM == null) return;
+        const drive = {
+          minutes: Math.max(1, Math.round(durationSec / 60)),
+          miles: Math.round(kmToMiles(distanceM / 1000) * 10) / 10,
+          source: "osrm",
+        };
+        results[start + index] = drive;
+        roadDriveCache.set(
+          roadCacheKey(origin.lat, origin.lng, chunk[index].lat, chunk[index].lng),
+          drive
+        );
+      });
+    } catch {
+      // Leave nulls — caller falls back or drops candidates.
+    }
+  }
+  return results;
+}
+
+async function driveBetween(lat1, lng1, lat2, lng2) {
+  if (lat1 === lat2 && lng1 === lng2) return { minutes: 0, miles: 0, source: "osrm" };
+  const key = roadCacheKey(lat1, lng1, lat2, lng2);
+  if (roadDriveCache.has(key)) return roadDriveCache.get(key);
+
+  const url = `${OSRM_ROUTE_URL}/${lng1},${lat1};${lng2},${lat2}?overview=false&steps=false`;
+  try {
+    const response = await fetch(url);
+    const payload = await response.json().catch(() => ({}));
+    const route = payload.routes?.[0];
+    if (response.ok && payload.code === "Ok" && route) {
+      const drive = {
+        minutes: Math.max(1, Math.round(route.duration / 60)),
+        miles: Math.round(kmToMiles(route.distance / 1000) * 10) / 10,
+        source: "osrm",
+      };
+      roadDriveCache.set(key, drive);
+      return drive;
+    }
+  } catch {
+    // fall through
+  }
+  throw new Error("Road route unavailable");
+}
+
+async function computeReachable(origin, stadiums, maxMinutes, maxMiles) {
+  // Crow-flies can only be shorter than road, so reject impossible distance candidates first.
+  const candidates = stadiums.filter((stadium) => {
+    const crowMiles = kmToMiles(haversineKm(origin.lat, origin.lng, stadium.lat, stadium.lng));
+    return crowMiles <= maxMiles;
+  });
+
+  const drives = await osrmTableFromOrigin(origin, candidates);
+  return candidates
+    .map((stadium, index) => {
+      const drive = drives[index];
+      if (!drive) return null;
+      return {
+        ...stadium,
+        drive_minutes: drive.minutes,
+        drive_miles: drive.miles,
+        drive_source: drive.source,
+      };
+    })
+    .filter((row) => row && row.drive_minutes <= maxMinutes && row.drive_miles <= maxMiles)
+    .sort((a, b) => a.drive_minutes - b.drive_minutes || a.drive_miles - b.drive_miles);
+}
+
+function effectiveRadiusKm(maxMinutes, maxMiles) {
+  // Visual guide only — actual reachability uses road routing.
+  const milesCap = Math.min(maxMiles, (maxMinutes / 60) * 40);
+  return milesCap / 0.621371;
 }
 
 function formatClock(when) {
@@ -325,7 +393,7 @@ function enrichFixture(fixture) {
   };
 }
 
-function computeDayPlans() {
+async function computeDayPlans() {
   if (!state.origin || !state.allFixturesForPlanning.length) return [];
 
   const byDate = {};
@@ -337,64 +405,78 @@ function computeDayPlans() {
 
   const plans = [];
 
-  Object.keys(byDate)
-    .sort()
-    .forEach((dateKey) => {
-      const dayFixtures = byDate[dateKey].sort((a, b) => a.kickoff_at - b.kickoff_at);
-      for (let i = 0; i < dayFixtures.length; i += 1) {
-        const first = dayFixtures[i];
-        if (!isReachableFromHome(first.stadium)) continue;
+  for (const dateKey of Object.keys(byDate).sort()) {
+    const dayFixtures = byDate[dateKey].sort((a, b) => a.kickoff_at - b.kickoff_at);
+    for (let i = 0; i < dayFixtures.length; i += 1) {
+      const first = dayFixtures[i];
+      if (!isReachableFromHome(first.stadium)) continue;
 
-        const homeToFirst = driveBetween(
-          state.origin.lat,
-          state.origin.lng,
-          first.stadium.lat,
-          first.stadium.lng
-        );
-        const leaveHomeBy = new Date(
-          first.kickoff_at.getTime() - (homeToFirst.minutes + ARRIVE_BEFORE_KICKOFF_MIN) * 60000
-        );
+      let homeToFirst;
+      try {
+        // Prefer cached home→stadium road time from the reachable search.
+        const cached = state.reachable.find((row) => row.club === first.stadium.club);
+        homeToFirst = cached
+          ? { minutes: cached.drive_minutes, miles: cached.drive_miles, source: cached.drive_source }
+          : await driveBetween(
+              state.origin.lat,
+              state.origin.lng,
+              first.stadium.lat,
+              first.stadium.lng
+            );
+      } catch {
+        continue;
+      }
 
-        for (let j = i + 1; j < dayFixtures.length; j += 1) {
-          const second = dayFixtures[j];
-          if (!second.stadium || second.stadium.club === first.stadium.club) continue;
+      const leaveHomeBy = new Date(
+        first.kickoff_at.getTime() - (homeToFirst.minutes + ARRIVE_BEFORE_KICKOFF_MIN) * 60000
+      );
 
-          const between = driveBetween(
+      for (let j = i + 1; j < dayFixtures.length; j += 1) {
+        const second = dayFixtures[j];
+        if (!second.stadium || second.stadium.club === first.stadium.club) continue;
+
+        let between;
+        try {
+          between = await driveBetween(
             first.stadium.lat,
             first.stadium.lng,
             second.stadium.lat,
             second.stadium.lng
           );
-          const mustArriveSecond = new Date(
-            second.kickoff_at.getTime() - ARRIVE_BEFORE_KICKOFF_MIN * 60000
-          );
-          const leaveFirst = new Date(mustArriveSecond.getTime() - between.minutes * 60000);
-          const leaveByMinute =
-            (leaveFirst.getTime() - first.kickoff_at.getTime()) / 60000;
-
-          if (leaveByMinute < HALFTIME_MINUTE) continue;
-
-          const leaveInfo = formatLeaveByMinute(leaveByMinute, leaveFirst);
-          const arriveSecond = new Date(leaveFirst.getTime() + between.minutes * 60000);
-          const cushionAfterHalf = Math.floor(leaveByMinute - HALFTIME_MINUTE);
-
-          plans.push({
-            date_key: dateKey,
-            date_label: first.date_label,
-            first,
-            second,
-            homeToFirst,
-            between,
-            leaveHomeBy,
-            leaveFirst,
-            leaveByMinute: leaveInfo.minute,
-            leaveInfo,
-            arriveSecond,
-            cushionAfterHalf,
-          });
+        } catch {
+          continue;
         }
+
+        const mustArriveSecond = new Date(
+          second.kickoff_at.getTime() - ARRIVE_BEFORE_KICKOFF_MIN * 60000
+        );
+        const leaveFirst = new Date(mustArriveSecond.getTime() - between.minutes * 60000);
+        const leaveByMinute =
+          (leaveFirst.getTime() - first.kickoff_at.getTime()) / 60000;
+
+        if (leaveByMinute < HALFTIME_MINUTE) continue;
+
+        const leaveInfo = formatLeaveByMinute(leaveByMinute, leaveFirst);
+        const arriveSecond = new Date(leaveFirst.getTime() + between.minutes * 60000);
+        const cushionAfterHalf = Math.floor(leaveByMinute - HALFTIME_MINUTE);
+
+        plans.push({
+          date_key: dateKey,
+          date_label: first.date_label,
+          first,
+          second,
+          homeToFirst,
+          between,
+          leaveHomeBy,
+          leaveFirst,
+          leaveByMinute: leaveInfo.minute,
+          leaveInfo,
+          arriveSecond,
+          cushionAfterHalf,
+        });
       }
-    });
+    }
+  }
 
   return plans.sort((a, b) => {
     const dateCmp = a.date_key.localeCompare(b.date_key);
@@ -460,22 +542,6 @@ function renderDayPlans() {
         </article>`;
     })
     .join("");
-}
-
-function computeReachable(origin, stadiums, maxMinutes, maxMiles) {
-  return stadiums
-    .map((stadium) => {
-      const distanceKm = haversineKm(origin.lat, origin.lng, stadium.lat, stadium.lng);
-      const drive = estimateDrive(distanceKm);
-      return {
-        ...stadium,
-        drive_minutes: drive.minutes,
-        drive_miles: drive.miles,
-        drive_source: "estimate",
-      };
-    })
-    .filter((row) => row.drive_minutes <= maxMinutes && row.drive_miles <= maxMiles)
-    .sort((a, b) => a.drive_minutes - b.drive_minutes || a.drive_miles - b.drive_miles);
 }
 
 function renderLeagueToggle() {
@@ -749,16 +815,16 @@ async function loadFixturesForReachable() {
   }
 
   try {
-    setStatus("Loading fixtures for reachable grounds…", "info");
+    setStatus("Loading fixtures…", "info");
     const payload = await fetchJson(
       `/api/fixture-planner/fixtures?season=${encodeURIComponent(state.season)}`
     );
     const fixtures = payload.fixtures || [];
     const now = Date.now();
 
-    // Include a wider ring for day-plan second games (still matched to known stadiums).
+    setStatus("Routing day-plan legs over roads…", "info");
     const { maxMinutes, maxMiles } = filterLimits();
-    const planningPool = computeReachable(
+    const planningPool = await computeReachable(
       state.origin,
       state.allStadiums,
       Math.max(maxMinutes * 2, 120),
@@ -786,9 +852,9 @@ async function loadFixturesForReachable() {
         (a, b) =>
           String(a.date_key).localeCompare(String(b.date_key)) || a.kickoff_at - b.kickoff_at
       );
-    state.dayPlans = computeDayPlans();
+    state.dayPlans = await computeDayPlans();
     setStatus(
-      `${state.reachable.length} stadiums · ${state.fixtures.length} fixtures · ${state.dayPlans.length} day plans`,
+      `${state.reachable.length} stadiums · ${state.fixtures.length} fixtures · ${state.dayPlans.length} day plans (road routing)`,
       "ok"
     );
   } catch (error) {
@@ -849,11 +915,12 @@ async function loadStadiums() {
   applyStadiumFilter();
 }
 
-function applySearchResults() {
+async function applySearchResults() {
   const { maxMinutes, maxMiles } = filterLimits();
   const allowed = new Set(selectedLeagues());
   const pool = state.allStadiums.filter((row) => allowed.has(row.league));
-  state.reachable = computeReachable(state.origin, pool, maxMinutes, maxMiles);
+  setStatus("Calculating road drive times…", "info");
+  state.reachable = await computeReachable(state.origin, pool, maxMinutes, maxMiles);
   state.reachableClubs = new Set(state.reachable.map((row) => row.club));
   renderOriginMarker();
   renderStadiumMarkers();
@@ -873,7 +940,7 @@ async function runSearch() {
 
   try {
     state.origin = await geocodeQuery(query);
-    applySearchResults();
+    await applySearchResults();
     await loadFixturesForReachable();
 
     if (state.origin && state.reachable.length) {
@@ -884,9 +951,12 @@ async function runSearch() {
       state.map.fitBounds(bounds.pad(0.1));
     }
 
+    const roadCount = state.reachable.filter((row) => row.drive_source === "osrm").length;
     const { maxMinutes, maxMiles } = filterLimits();
     setStatus(
-      `${state.reachable.length} stadiums reachable within ${formatFilterSummary(maxMinutes, maxMiles)} · ${state.fixtures.length} fixtures · ${state.dayPlans.length} day plans`,
+      `${state.reachable.length} stadiums within ${formatFilterSummary(maxMinutes, maxMiles)} by road` +
+        (roadCount ? ` (${roadCount} OSRM routes)` : "") +
+        ` · ${state.fixtures.length} fixtures · ${state.dayPlans.length} day plans`,
       "ok"
     );
   } catch (error) {
@@ -919,7 +989,7 @@ function bindEvents() {
     renderLeagueToggle();
     applyStadiumFilter();
     if (state.origin) {
-      applySearchResults();
+      await applySearchResults();
       await loadFixturesForReachable();
     }
   });
@@ -932,10 +1002,10 @@ function bindEvents() {
     if (state.origin) await loadFixturesForReachable();
   });
 
-  function onFilterChange() {
+  async function onFilterChange() {
     if (state.origin) {
-      applySearchResults();
-      loadFixturesForReachable();
+      await applySearchResults();
+      await loadFixturesForReachable();
     }
   }
 

@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CSS = (ROOT / "standalone/scouting-address.css").read_text(encoding="utf-8")
 JS = (ROOT / "standalone/scouting-address.js").read_text(encoding="utf-8")
-BUILD = "webpage-v14"
+BUILD = "webpage-v15"
 
 HTML = f"""<!DOCTYPE html>
 <html lang="en">
@@ -107,7 +107,7 @@ HTML = f"""<!DOCTYPE html>
         </section>
         <section class="sa-fixtures card" id="dayPlansPanel" aria-live="polite">
           <h2 class="sa-panel-title">Day plans</h2>
-          <p class="sa-panel-hint">Same-day double headers — assumes you can leave the first game from half-time onwards. Shows the latest minute you can stay.</p>
+          <p class="sa-panel-hint">Same-day double headers using road routes — leave from half-time onwards. Shows the latest minute you can stay.</p>
           <div id="dayPlansList" class="sa-day-plans-list">
             <p class="sa-summary__empty">Enter your address to see feasible two-game days.</p>
           </div>
