@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse, Response
 from app.paths import CLUB_STRATEGY_CACHE_DIR
 from app.scouting import SCOUTING_DIR
 
-COMPETITIONS = ("League One", "League Two")
+COMPETITIONS = ("League Two", "League One")
 DEFAULT_COMPETITION = "League Two"
 FOCUS_SQUAD_TOKENS = ("port vale",)
 LEAGUE_MATCH_LIMIT = 46

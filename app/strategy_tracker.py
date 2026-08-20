@@ -1156,7 +1156,7 @@ def _assemble_tracker(
         )
     squad_id, club_name = vale
     vale_row = next((row for row in standings if int(row.get("squad_id") or 0) == squad_id), None) or {}
-    competition = str(report.get("competition") or competition or "League One").strip()
+    competition = str(report.get("competition") or competition or "League Two").strip()
     benches = _benchmarks_for(competition)
 
     try:

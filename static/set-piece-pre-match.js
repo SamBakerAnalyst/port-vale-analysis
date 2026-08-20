@@ -1753,7 +1753,7 @@ async function boot() {
     const preferredId = state.meta.default_iteration_id;
     const preferred =
       iterations.find((item) => Number(item.id) === Number(preferredId)) ||
-      iterations.find((item) => String(item.season || "").includes("25/26")) ||
+      iterations.find((item) => String(item.season || "").includes("26/27")) ||
       iterations[0];
     if (!preferred) {
       setStatus("No Impect seasons available.", "error");

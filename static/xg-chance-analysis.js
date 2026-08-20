@@ -885,9 +885,7 @@ async function init() {
   try {
     state.meta = await fetchJson("/api/xg-chance-analysis/meta");
     const seasons = filteredSeasons();
-    const withData = seasons.find((row) => row.hasData);
-    state.season = ALLOWED_SEASONS.find((s) => seasons.some((row) => row.value === s && row.hasData))
-      || withData?.value
+    state.season = ALLOWED_SEASONS.find((s) => seasons.some((row) => row.value === s))
       || state.meta.defaultSeason
       || ALLOWED_SEASONS[0]
       || "";

@@ -78,10 +78,10 @@ STRATEGY_DISK_CACHE = DATA_ROOT / "home-strategy-cache.json"
 
 PORT_VALE_FOTMOB_ID = "9799"
 PORT_VALE_NAME = "Port Vale"
-# League One 25/26 (played) + League Two 26/27 (upcoming) + cups via team feed.
+# League Two 26/27 (current) + League One 25/26 (history) + cups via team feed.
 PV_FOTMOB_LEAGUE_SEASONS: tuple[tuple[str, str, str], ...] = (
-    ("League One", "25/26", "108"),
     ("League Two", "26/27", "109"),
+    ("League One", "25/26", "108"),
 )
 
 
@@ -868,7 +868,7 @@ def build_recruitment_snapshot(
     force_refresh: bool = False,
     _from_background: bool = False,
 ) -> dict[str, Any]:
-    """Squad age + minutes-by-age recruitment KPIs, with League One avg + rank tables."""
+    """Squad age + minutes-by-age recruitment KPIs, with league avg + rank tables."""
     cache_key = "recruitment"
     cached = _recruitment_cache.get(cache_key)
     now = time.time()
@@ -1136,7 +1136,7 @@ def _schedule_strategy_refresh(competition: str) -> None:
 
 def build_strategy_snapshot(
     *,
-    competition: str = "League One",
+    competition: str = "League Two",
     force_refresh: bool = False,
     detail: bool = True,
     _from_background: bool = False,
@@ -2698,7 +2698,7 @@ def register_home_dashboard_routes(app: FastAPI) -> None:
 
     @app.get("/api/home/strategy")
     def home_strategy_route(
-        competition: str = Query("League One"),
+        competition: str = Query("League Two"),
         refresh: bool = Query(False),
         detail: bool = Query(True),
     ) -> dict[str, Any]:
@@ -2715,4 +2715,4 @@ def register_home_dashboard_routes(app: FastAPI) -> None:
     # Warm league recruitment + strategy detail caches in the background.
     # Stand outs warm on first tab open (heavy Impect traffic — avoid 429s at boot).
     _schedule_recruitment_refresh()
-    _schedule_strategy_refresh("League One")
+    _schedule_strategy_refresh("League Two")

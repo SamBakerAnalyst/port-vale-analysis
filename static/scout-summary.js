@@ -721,7 +721,7 @@ function rowSeason(row) {
   if (year === 2025) {
     return "25/26";
   }
-  return "25/26";
+  return "26/27";
 }
 
 async function loadMatchData(row) {

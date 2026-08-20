@@ -1033,8 +1033,10 @@ def _xg_chance_seasons() -> list[dict[str, Any]]:
 
 def _xg_chance_default_season() -> str:
     seasons = _xg_chance_seasons()
+    values = {str(row.get("value")) for row in seasons}
+    # Prefer 26/27 whenever listed — season has started.
     for preferred in ALLOWED_SEASONS:
-        if any(row.get("value") == preferred and row.get("hasData") for row in seasons):
+        if preferred in values:
             return preferred
     return seasons[0]["value"] if seasons else _default_port_vale_season()
 

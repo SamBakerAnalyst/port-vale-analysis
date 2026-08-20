@@ -109,7 +109,7 @@ def _add_comparison_page(pdf: SquadComparisonPDF, data: dict[str, Any]) -> None:
     pdf.set_font("Helvetica", "", 11)
     pdf._text_rgb((156, 163, 175))
     season_line = pdf_safe(
-        f"{data.get('competition', 'League One')} · {data.get('season', '')}"
+        f"{data.get('competition', 'League Two')} · {data.get('season', '')}"
     )
     pdf.cell(inner_w, 5, season_line)
 

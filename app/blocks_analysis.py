@@ -59,9 +59,9 @@ from app.scouting import SCOUTING_DIR
 # point at a previous season on some deploys.
 BLOCKS_ITERATION_ID = 2120
 BLOCKS_SEASON_LABEL = "26/27"
-PREVIOUS_LEAGUE_TWO_ITERATION_ID = 1464  # 25/26 — top-7 requirement until 26/27 has games
+PREVIOUS_LEAGUE_TWO_ITERATION_ID = 1464  # 25/26 — fallback only before any 26/27 league games
 DEMO_CUP_ITERATION_ID = 2227  # EFL Cup 26/27
-DEMO_MATCH_ID = 285444  # Wolves 7 Aug — demo until League Two is played
+DEMO_MATCH_ID = 285444  # EFL Cup demo match (Wolves)
 
 LONDON = ZoneInfo("Europe/London")
 BLOCK_COUNT = 9
@@ -1117,9 +1117,9 @@ def build_block_benchmarks(
         season_games = _iteration_max_league_games(iteration_id)
     except Exception:  # noqa: BLE001
         season_games = 0
-    # One or two games make “table top 7” a lottery (308 OI in a single match).
-    # Keep last season’s promotion line until a full block is in.
-    use_previous_req = season_games < GAMES_PER_BLOCK
+    # Before MD1, keep last season’s promotion line. Once 26/27 has league games,
+    # requirements come from the current season (even with a small sample).
+    use_previous_req = season_games < 1
     older = None
     for key, row in payload.items():
         have_current = row.get("top7") is not None and row.get("team") is not None
@@ -2323,7 +2323,7 @@ def build_unit_benchmarks(
     fresh = (
         not force_refresh
         and disk.get("v") == UNIT_TOP7_VERSION
-        and disk.get("iterationId") == PREVIOUS_LEAGUE_TWO_ITERATION_ID
+        and disk.get("iterationId") == BLOCKS_ITERATION_ID
         and now - float(disk.get("fetchedAt") or 0) < UNIT_TOP7_TTL
         and isinstance(top7, dict)
         and top7
@@ -2333,12 +2333,12 @@ def build_unit_benchmarks(
             pass
         else:
             try:
-                top7, pv_prev = _build_unit_top7_from_sample(PREVIOUS_LEAGUE_TWO_ITERATION_ID)
+                top7, pv_prev = _build_unit_top7_from_sample(BLOCKS_ITERATION_ID)
                 _save_unit_top7_disk(
                     {
                         "v": UNIT_TOP7_VERSION,
                         "fetchedAt": now,
-                        "iterationId": PREVIOUS_LEAGUE_TWO_ITERATION_ID,
+                        "iterationId": BLOCKS_ITERATION_ID,
                         "top7": top7,
                         "teamPrevious": pv_prev,
                     }

@@ -62,7 +62,7 @@
   const state = {
     data: null,
     metric: hashMetric(),
-    competition: new URLSearchParams(location.search).get("competition") || "",
+    competition: new URLSearchParams(location.search).get("competition") || "League Two",
     playerSort: { key: "minutes", dir: "desc" },
     presenting: false,
     slide: 0,

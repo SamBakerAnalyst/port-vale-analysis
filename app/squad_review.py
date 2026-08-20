@@ -27,7 +27,7 @@ _squad_minutes_cache: dict[tuple[int, int], dict[int, float]] = {}
 _port_vale_iteration_cache: dict[str, dict[str, Any]] = {}
 _port_vale_seasons_cache: list[dict[str, Any]] | None = None
 
-PORT_VALE_COMPETITIONS = ("League One", "League Two")
+PORT_VALE_COMPETITIONS = ("League Two", "League One")
 PORT_VALE_SQUAD_TOKENS = ("port vale",)
 
 POSITION_SHORT_LABELS: dict[str, str] = {
@@ -89,7 +89,7 @@ def _resolve_port_vale_squad_id(squad_names: dict[int, str]) -> int | None:
 
 
 def _iteration_competition(iteration: dict[str, Any]) -> str:
-    return str(iteration.get("competition_name", "League One")).strip()
+    return str(iteration.get("competition_name", "League Two")).strip()
 
 
 def _iteration_has_port_vale_scores(
@@ -180,14 +180,30 @@ def _resolve_port_vale_iteration(season: str | None = None) -> dict[str, Any]:
             detail=f"No Port Vale squad found for season {target}.",
         )
 
+    # Prefer 26/27 once Vale are in that iteration (scores first, then squad-only).
+    preferred_season = "26/27"
+    preferred_with_squad: dict[str, Any] | None = None
     for iteration in candidates:
         squad_names = impect._fetch_squad_names(int(iteration["id"]))
         port_vale_squad_id = _resolve_port_vale_squad_id(squad_names)
         if port_vale_squad_id is None:
             continue
-        if _port_vale_has_score_data(iteration, port_vale_squad_id):
+        season_label = str(iteration.get("season") or "").strip()
+        has_scores = _port_vale_has_score_data(iteration, port_vale_squad_id)
+        if season_label == preferred_season:
+            if has_scores:
+                _port_vale_iteration_cache[cache_key] = iteration
+                return iteration
+            if preferred_with_squad is None:
+                preferred_with_squad = iteration
+            continue
+        if has_scores:
             _port_vale_iteration_cache[cache_key] = iteration
             return iteration
+
+    if preferred_with_squad is not None:
+        _port_vale_iteration_cache[cache_key] = preferred_with_squad
+        return preferred_with_squad
 
     raise HTTPException(
         status_code=404,
@@ -248,6 +264,11 @@ def _default_port_vale_season() -> str:
     seasons = _available_port_vale_seasons()
     if not seasons:
         return ""
+    # Current season first — do not stick on 25/26 just because it has more scores.
+    for preferred in ("26/27",):
+        for season in seasons:
+            if str(season.get("value")) == preferred:
+                return preferred
     for season in seasons:
         if season.get("hasData"):
             return str(season["value"])
