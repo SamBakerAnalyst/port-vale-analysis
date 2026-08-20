@@ -689,23 +689,30 @@ class ScoutSummaryPDF(FPDF):
         video: int,
         not_seen: int,
         max_total: int,
+        played: int | None = None,
+        watched_home: int = 0,
+        watched_away: int = 0,
     ) -> float:
         label_w = 54.0
         total_w = 12.0
         track_w = max(width - label_w - total_w - 4, 50.0)
-        row_h = 7.5
-        total = live + video + not_seen
+        row_h = 9.5
+        played_count = played if played is not None else live + video + not_seen
         scale = track_w / max(max_total, 1)
 
-        self.set_xy(x, y + 1)
+        self.set_xy(x, y + 0.4)
         self.set_font("Helvetica", "B", 8.5)
         self._text_rgb(TEXT)
-        self.cell(label_w, 4.5, pdf_safe(team[:30]))
+        self.cell(label_w, 4.2, pdf_safe(team[:30]))
+        self.set_xy(x, y + 4.6)
+        self.set_font("Helvetica", "", 7)
+        self._text_rgb(MUTED)
+        self.cell(label_w, 3.5, pdf_safe(f"H {watched_home}  A {watched_away}"))
 
         track_x = x + label_w
         self._fill_rgb((38, 38, 38))
         self._draw_rgb(CARD_BORDER)
-        self.rect(track_x, y + 0.8, track_w, row_h - 1.5, style="DF")
+        self.rect(track_x, y + 2.0, track_w, row_h - 3.5, style="DF")
 
         cursor = track_x
         for count, color in ((live, LIVE), (video, VIDEO), (not_seen, NOT_COVERED)):
@@ -713,14 +720,14 @@ class ScoutSummaryPDF(FPDF):
             if seg_w <= 0:
                 continue
             self._fill_rgb(color)
-            self.rect(cursor, y + 0.8, seg_w, row_h - 1.5, style="F")
+            self.rect(cursor, y + 2.0, seg_w, row_h - 3.5, style="F")
             cursor += seg_w
 
-        self.set_xy(track_x + track_w + 2, y + 1.2)
+        self.set_xy(track_x + track_w + 2, y + 2.4)
         self.set_font("Helvetica", "", 8)
         self._text_rgb(MUTED)
-        self.cell(total_w, 4, pdf_safe(str(total)), align="R")
-        return y + 9.5
+        self.cell(total_w, 4, pdf_safe(str(played_count)), align="R")
+        return y + 11.0
 
     def add_team_exposure_slide(
         self,
@@ -754,7 +761,7 @@ class ScoutSummaryPDF(FPDF):
         self.set_xy(detail_x, detail_y)
         self.set_font("Helvetica", "B", 10)
         self._text_rgb(GOLD)
-        self.cell(detail_w, 5, "GAMES PER TEAM")
+        self.cell(detail_w, 5, "PLAYED FIXTURES PER TEAM")
         detail_y += 8
 
         legend_x = detail_x
@@ -766,6 +773,10 @@ class ScoutSummaryPDF(FPDF):
             self._text_rgb(MUTED)
             self.cell(24, 4, pdf_safe(label))
             legend_x += 30
+        self.set_xy(legend_x, detail_y)
+        self.set_font("Helvetica", "", 8)
+        self._text_rgb(MUTED)
+        self.cell(70, 4, "Right = played · H/A = watched home/away")
         detail_y += 10
 
         if not teams:
@@ -775,9 +786,9 @@ class ScoutSummaryPDF(FPDF):
             self.cell(detail_w, 5, "No team data for this league in the selected period.")
             return
 
-        max_total = max(int(row.get("total") or 0) for row in teams)
+        max_total = max(int(row.get("played") or row.get("total") or 0) for row in teams)
         for team_row in teams:
-            if detail_y > inner_y + inner_h - 12:
+            if detail_y > inner_y + inner_h - 14:
                 break
             detail_y = self._draw_stacked_team_row(
                 detail_x,
@@ -788,6 +799,9 @@ class ScoutSummaryPDF(FPDF):
                 video=int(team_row.get("video") or 0),
                 not_seen=int(team_row.get("not_seen") or 0),
                 max_total=max_total,
+                played=int(team_row.get("played") or team_row.get("total") or 0),
+                watched_home=int(team_row.get("watched_home") or 0),
+                watched_away=int(team_row.get("watched_away") or 0),
             )
 
     def add_one_pager_slide(

@@ -1200,18 +1200,49 @@ def register_scouting_routes(app: FastAPI) -> None:
     @app.get("/players-strategy", response_class=HTMLResponse)
     @app.get("/players-strategy/", response_class=HTMLResponse)
     def players_strategy_report_home() -> HTMLResponse:
-        for html_path in (
+        candidates = (
             STRATEGY_REPORTS_DIR / "players-strategy.html",
             STANDALONE_DIR / "players-strategy.html",
-        ):
+        )
+        for html_path in candidates:
             if html_path.is_file():
                 return HTMLResponse(html_path.read_text(encoding="utf-8"))
         raise HTTPException(status_code=404, detail="Players strategy report not found.")
+
+    @app.get("/players-strategy-staff", response_class=HTMLResponse)
+    @app.get("/players-strategy-staff/", response_class=HTMLResponse)
+    def players_strategy_staff_report_home() -> HTMLResponse:
+        candidates = (
+            STRATEGY_REPORTS_DIR / "players-strategy-staff.html",
+            STANDALONE_DIR / "players-strategy-staff.html",
+        )
+        for html_path in candidates:
+            if html_path.is_file():
+                return HTMLResponse(html_path.read_text(encoding="utf-8"))
+        raise HTTPException(status_code=404, detail="Players strategy staff report not found.")
+
+    @app.get("/players-strategy-values", response_class=HTMLResponse)
+    @app.get("/players-strategy-values/", response_class=HTMLResponse)
+    def players_strategy_values_report_home() -> HTMLResponse:
+        candidates = (
+            STRATEGY_REPORTS_DIR / "players-strategy-values.html",
+            STANDALONE_DIR / "players-strategy-values.html",
+        )
+        for html_path in candidates:
+            if html_path.is_file():
+                return HTMLResponse(html_path.read_text(encoding="utf-8"))
+        raise HTTPException(status_code=404, detail="Players strategy values report not found.")
 
     if STRATEGY_REPORTS_DIR.is_dir():
         app.mount(
             "/strategy/assets",
             StaticFiles(directory=STRATEGY_REPORTS_DIR),
+            name="strategy-reports-static",
+        )
+    elif STRATEGY_FALLBACK_HTML.exists():
+        app.mount(
+            "/strategy/assets",
+            StaticFiles(directory=SCOUTING_DIR),
             name="strategy-reports-static",
         )
 

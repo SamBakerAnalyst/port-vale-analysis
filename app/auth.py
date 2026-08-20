@@ -53,7 +53,6 @@ def _analysis_allowed_prefixes() -> tuple[str, ...]:
         # Boot-safe fallback if manifest import fails during early load.
         return (
             "/pre-match",
-            "/pre-match-handout",
             "/set-piece-pre-match",
             "/player-cards",
             "/xg-chance-analysis",
@@ -61,7 +60,7 @@ def _analysis_allowed_prefixes() -> tuple[str, ...]:
             "/blocks-analysis",
             "/schedule",
             "/api/pre-match",
-            "/api/pre-match-handout",
+            "/api/team-badge",
             "/api/set-piece-pre-match",
             "/api/player-cards",
             "/api/xg-chance-analysis",

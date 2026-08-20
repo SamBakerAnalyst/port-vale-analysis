@@ -14,8 +14,15 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from app.auth import current_user_payload
+from app.label_utils import humanize_profile_name
 from app.opponent_photos import opponent_photo_api_url
 from app.paths import DATA_ROOT, STANDALONE_DIR, ensure_data_dirs
+from app.scouting import _format_foot, _format_height
+from app.squad_planner import (
+    SQUAD_PLANNER_POSITION_IDS,
+    SquadPlannerPlayerRequest,
+    build_squad_planner_player,
+)
 
 PIPELINES_PATH = DATA_ROOT / "player-pipelines.json"
 _lock = threading.Lock()
@@ -104,6 +111,11 @@ class AddTargetBody(BaseModel):
     stage: str = "data_identified"
     tags: list[str] = Field(default_factory=list)
     manual: bool = False
+    iteration_ids: list[int] = Field(default_factory=list)
+
+
+class RefreshStatsBody(BaseModel):
+    target_ids: list[str] = Field(default_factory=list)
 
 
 class MoveTargetBody(BaseModel):
@@ -193,6 +205,104 @@ def _photo_url(name: str, club: str = "") -> str:
     return ""
 
 
+def _discover_player_iteration_ids(player_id: int) -> list[int]:
+    from app import main as impect_main
+
+    iterations = impect_main._fetch_iterations()
+    iteration_ids = impect_main._latest_iteration_ids(iterations)
+    if not iteration_ids:
+        return []
+    players_by_iteration = impect_main._fetch_players_parallel(iteration_ids)
+    found: list[int] = []
+    for iteration_id in iteration_ids:
+        for catalog_row in players_by_iteration.get(iteration_id, []):
+            try:
+                catalog_id = int(catalog_row.get("id", 0))
+            except (TypeError, ValueError):
+                continue
+            if catalog_id == player_id:
+                found.append(iteration_id)
+                break
+    return found
+
+
+def _attach_catalog_details(row: dict[str, Any], iteration_id: int, player_id: int) -> None:
+    from app import main as impect_main
+
+    players_by_iteration = impect_main._fetch_players_parallel([iteration_id])
+    for catalog_row in players_by_iteration.get(iteration_id, []):
+        try:
+            catalog_id = int(catalog_row.get("id", 0))
+        except (TypeError, ValueError):
+            continue
+        if catalog_id != player_id:
+            continue
+        row["foot"] = _format_foot(catalog_row.get("leg"))
+        row["height"] = _format_height(catalog_row)
+        if row.get("age") in (None, ""):
+            row["age"] = impect_main._player_age(catalog_row)
+        break
+
+
+def _enrich_target_stats(
+    row: dict[str, Any],
+    iteration_ids: list[int] | None = None,
+) -> None:
+    if row.get("manual") or not row.get("player_id"):
+        return
+    position = str(row.get("position") or "").strip()
+    if position not in SQUAD_PLANNER_POSITION_IDS:
+        return
+
+    player_id = int(row["player_id"])
+    name = str(row.get("name") or "")
+    ids = [int(i) for i in (iteration_ids or []) if int(i) > 0]
+    if not ids:
+        ids = _discover_player_iteration_ids(player_id)
+    if not ids:
+        return
+
+    try:
+        payload = build_squad_planner_player(
+            SquadPlannerPlayerRequest(
+                position=position,
+                player_key=f"pipeline:{row.get('id', player_id)}",
+                iteration_id=ids[0],
+                iteration_ids=ids,
+                impect_player_id=player_id,
+                name=name,
+            )
+        )
+    except HTTPException:
+        return
+
+    scores = payload.get("profileScores") or {}
+    values = [float(v) for v in scores.values() if v is not None]
+    if values:
+        row["overall_score"] = round(sum(values) / len(values))
+        top_api = max(scores, key=lambda key: float(scores[key] or 0))
+        row["top_profile"] = humanize_profile_name(top_api)
+        row["top_profile_score"] = round(float(scores[top_api] or 0))
+    else:
+        row["overall_score"] = None
+        row["top_profile"] = ""
+        row["top_profile_score"] = None
+
+    minutes = payload.get("minutes")
+    row["minutes"] = int(minutes) if minutes is not None else None
+    if payload.get("club") and not str(row.get("club") or "").strip():
+        row["club"] = payload["club"]
+    if payload.get("league") and not str(row.get("league") or "").strip():
+        row["league"] = payload["league"]
+    if payload.get("positionLabel") and not str(row.get("position_label") or "").strip():
+        row["position_label"] = payload["positionLabel"]
+
+    iteration_id = payload.get("iterationId")
+    if iteration_id is not None:
+        _attach_catalog_details(row, int(iteration_id), player_id)
+    row["stats_updated_at"] = _now()
+
+
 def _public_target(row: dict[str, Any]) -> dict[str, Any]:
     notes = row.get("notes") if isinstance(row.get("notes"), list) else []
     name = row.get("name") or "Unknown"
@@ -241,6 +351,13 @@ def _public_target(row: dict[str, Any]) -> dict[str, Any]:
             if isinstance(note, dict)
         ],
         "dossier_href": f"/player/{player_id_int}" if player_id_int else "",
+        "overall_score": row.get("overall_score"),
+        "minutes": row.get("minutes"),
+        "foot": row.get("foot") or "",
+        "height": row.get("height") or "",
+        "top_profile": row.get("top_profile") or "",
+        "top_profile_score": row.get("top_profile_score"),
+        "stats_updated_at": row.get("stats_updated_at") or "",
     }
 
 
@@ -360,6 +477,9 @@ def register_player_pipelines_routes(app: FastAPI) -> None:
             "sort": _next_sort(store["targets"], stage),
             "notes": [],
         }
+        if not is_manual and body.player_id and position:
+            _enrich_target_stats(row, body.iteration_ids)
+
         store["targets"].append(row)
         _save(store)
         return {"created": True, "target": _public_target(row)}
@@ -392,6 +512,8 @@ def register_player_pipelines_routes(app: FastAPI) -> None:
             )
         elif body.position_label is not None:
             row["position_label"] = str(body.position_label).strip()
+        if body.position is not None and row.get("player_id") and not row.get("manual"):
+            _enrich_target_stats(row)
         _save(store)
         return {"target": _public_target(row)}
 
@@ -444,6 +566,27 @@ def register_player_pipelines_routes(app: FastAPI) -> None:
             raise HTTPException(status_code=404, detail="Target not found.")
         _save(store)
         return {"ok": True}
+
+    @app.post("/api/player-pipelines/refresh-stats")
+    def player_pipelines_refresh_stats(body: RefreshStatsBody) -> dict[str, Any]:
+        store = _load()
+        wanted = {str(item).strip() for item in body.target_ids if str(item).strip()}
+        updated: list[dict[str, Any]] = []
+        for row in store["targets"]:
+            if not isinstance(row, dict):
+                continue
+            target_id = str(row.get("id") or "")
+            if wanted and target_id not in wanted:
+                continue
+            if row.get("manual") or not row.get("player_id"):
+                continue
+            if not wanted and row.get("overall_score") is not None:
+                continue
+            _enrich_target_stats(row)
+            updated.append(_public_target(row))
+        if updated:
+            _save(store)
+        return {"targets": updated, "count": len(updated)}
 
     @app.post("/api/player-pipelines/targets/{target_id}/notes")
     def player_pipelines_add_note(

@@ -85,12 +85,12 @@ def _resolve_player_photo_bytes(
     _player_photo_bytes_cache[cache_key] = (now, image_bytes, content_type)
     return image_bytes, content_type
 
-DEFAULT_COMPETITION = "League One"
+DEFAULT_COMPETITION = "League Two"
 PORT_VALE_TOKENS = ("port vale",)
-# Current + previous League One season for the pre-match designer toggle.
+# Current + previous seasons for the pre-match designer toggle.
 PRE_MATCH_SEASON_LIMIT = 2
-# While building the deck, open last season on a known completed fixture.
-PRE_MATCH_DEFAULT_SEASON_INDEX = 1
+# Prefer the newest season (26/27 League Two).
+PRE_MATCH_DEFAULT_SEASON_INDEX = 0
 
 # Impect occasionally omits squad crests (Burton Albion in 25/26). Fall back to FotMob.
 _SQUAD_CREST_FOTMOB_IDS: dict[str, int] = {

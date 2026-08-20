@@ -35,6 +35,19 @@ CHANCE_COLORS = {
     "very_poor": (239, 68, 68),
 }
 
+
+def _chance_rgb(xg: float) -> tuple[int, int, int]:
+    number = float(xg or 0)
+    if number >= 0.35:
+        return CHANCE_COLORS["excellent"]
+    if number >= 0.19:
+        return CHANCE_COLORS["very_good"]
+    if number >= 0.09:
+        return CHANCE_COLORS["ok"]
+    if number >= 0.04:
+        return CHANCE_COLORS["poor"]
+    return CHANCE_COLORS["very_poor"]
+
 from app.paths import PORT_VALE_BADGE
 
 
@@ -469,6 +482,127 @@ class XgChanceAnalysisPDF(FPDF):
         self._player_table(MARGIN, top, panel_w, panel_h, "Vale", players.get("vale") or {}, limit=10)
         self._player_table(MARGIN + panel_w + GAP, top, panel_w, panel_h, "Opposition", players.get("opp") or {}, limit=10)
 
+    def add_possession_map_slide(self, shots: dict[str, Any]) -> None:
+        self.add_page()
+        self._fill((244, 246, 248))
+        self.rect(0, 0, SLIDE_WIDTH_MM, SLIDE_HEIGHT_MM, style="F")
+        self._fill((17, 17, 17))
+        self.rect(0, 0, SLIDE_WIDTH_MM, 16, style="F")
+        self._fill(GOLD)
+        self.rect(0, 16, SLIDE_WIDTH_MM, 1.4, style="F")
+        self.set_xy(8, 4)
+        self.set_font("Helvetica", "B", 15)
+        self._text((255, 255, 255))
+        self.cell(SLIDE_WIDTH_MM - 16, 8, "IN POSSESSION  -  SHOTS & XG")
+
+        summary = shots.get("summary") or {}
+        pills = [
+            f"{int(summary.get('totalShots') or 0)} shots",
+            f"{summary.get('totalXgDisplay') or _fmt(summary.get('totalXg'))} shot xG",
+            f"{int(summary.get('goals') or 0)} goals",
+            f"{int(summary.get('onTarget') or 0)} on target",
+        ]
+        pill_x = 8.0
+        pill_y = 21.0
+        for label in pills:
+            text = pdf_safe(label)
+            self.set_font("Helvetica", "B", 8)
+            width = self.get_string_width(text) + 8
+            self._fill((255, 255, 255))
+            self._draw((213, 219, 227))
+            self.rect(pill_x, pill_y, width, 7.2, style="DF")
+            self.set_xy(pill_x, pill_y + 1.4)
+            self._text((17, 24, 39))
+            self.cell(width, 4.5, text, align="C")
+            pill_x += width + 3
+
+        table_x = 8.0
+        table_y = 32.0
+        table_w = 128.0
+        rows = shots.get("teamMetrics") or []
+        col_w = [table_w * 0.36, table_w * 0.20, table_w * 0.20, table_w * 0.24]
+        opponent = pdf_safe(str(shots.get("opponentLabel") or "Opponent")).upper()[:16]
+        self._fill((17, 17, 17))
+        self.rect(table_x, table_y, table_w, 8, style="F")
+        self.set_font("Helvetica", "B", 6.5)
+        self._text((255, 255, 255))
+        cursor = table_x
+        for header, width in zip(["METRIC", "7 GAME AVG", "TOP 7 AVG", opponent], col_w):
+            self.set_xy(cursor, table_y + 1.8)
+            self.cell(width, 4.5, header)
+            cursor += width
+        row_y = table_y + 8
+        row_h = 11.0
+        for row in rows[:6]:
+            hex_color = str(row.get("metricColor") or "#e2e8f0").lstrip("#")
+            try:
+                metric_rgb = tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+            except ValueError:
+                metric_rgb = (226, 232, 240)
+            self._fill(metric_rgb)
+            self.rect(table_x, row_y, col_w[0], row_h, style="F")
+            self._fill((255, 252, 235))
+            self.rect(table_x + col_w[0], row_y, table_w - col_w[0], row_h, style="F")
+            values = [
+                str(row.get("label") or ""),
+                str(row.get("avgDisplay") or "-"),
+                str(row.get("top7AvgDisplay") or "-"),
+                str(row.get("matchDisplay") or "-"),
+            ]
+            cursor = table_x
+            for col_i, (value, width) in enumerate(zip(values, col_w)):
+                self.set_xy(cursor + 1.2, row_y + 3)
+                self.set_font("Helvetica", "B" if col_i in {0, 3} else "", 7.5)
+                self._text((15, 23, 42))
+                self.cell(width - 2, 5, pdf_safe(value)[:22])
+                cursor += width
+            row_y += row_h
+
+        pitch_x = table_x + table_w + 8
+        pitch_y = 32.0
+        pitch_w = SLIDE_WIDTH_MM - pitch_x - 8
+        pitch_h = pitch_w * (35 / 68)
+        if pitch_y + pitch_h > SLIDE_HEIGHT_MM - 8:
+            pitch_h = SLIDE_HEIGHT_MM - pitch_y - 8
+            pitch_w = pitch_h * (68 / 35)
+        self._fill((46, 138, 58))
+        self.rect(pitch_x, pitch_y, pitch_w, pitch_h, style="F")
+        self._draw((255, 255, 255))
+        self.set_line_width(0.5)
+        self.rect(pitch_x, pitch_y, pitch_w, pitch_h, style="D")
+        pen_w = pitch_w * (40.32 / 68)
+        pen_h = pitch_h * (16.5 / 35)
+        six_w = pitch_w * (18.32 / 68)
+        six_h = pitch_h * (5.5 / 35)
+        self.rect(pitch_x + (pitch_w - pen_w) / 2, pitch_y, pen_w, pen_h, style="D")
+        self.rect(pitch_x + (pitch_w - six_w) / 2, pitch_y, six_w, six_h, style="D")
+
+        width_m = 68.0
+        goal_x = 52.5
+        min_x = 17.5
+        x_range = goal_x - min_x
+        for pt in shots.get("shotPoints") or []:
+            if pt.get("hasLocation") is False or pt.get("impectX") is None:
+                continue
+            try:
+                impect_x = float(pt.get("impectX"))
+                impect_y = float(pt.get("impectY"))
+                xg = float(pt.get("xg") or 0)
+            except (TypeError, ValueError):
+                continue
+            px = pitch_x + ((width_m / 2 - impect_y) / width_m) * pitch_w
+            py = pitch_y + ((goal_x - impect_x) / x_range) * pitch_h
+            color = _chance_rgb(xg)
+            radius = 1.8 + min(2.2, xg * 6)
+            self.set_fill_color(*color)
+            self.set_draw_color(17, 17, 17)
+            self.ellipse(px - radius, py - radius, radius * 2, radius * 2, style="DF")
+
+        self.set_xy(pitch_x, pitch_y + pitch_h + 1.5)
+        self.set_font("Helvetica", "", 7)
+        self._text((100, 116, 139))
+        self.cell(pitch_w, 4, "Markers coloured by chance rating")
+
     def add_last6_overview_slide(self, report: dict[str, Any]) -> None:
         averages = report.get("averages") or {}
         trends = report.get("trends") or {}
@@ -659,9 +793,12 @@ def build_xg_chance_analysis_pdf(
     report: dict[str, Any],
     *,
     scope: str = "match",
+    shots_payload: dict[str, Any] | None = None,
 ) -> bytes:
     pdf = XgChanceAnalysisPDF()
     normalized = (scope or "match").strip().lower()
+    if not report:
+        report = {}
     if normalized == "last6":
         pdf.add_last6_overview_slide(report)
         pdf.add_last6_matches_slide(report)
@@ -671,6 +808,8 @@ def build_xg_chance_analysis_pdf(
     else:
         pdf.add_match_summary_slide(report)
         pdf.add_match_players_slide(report)
+    if shots_payload:
+        pdf.add_possession_map_slide(shots_payload)
 
     output = pdf.output()
     if isinstance(output, (bytes, bytearray)):

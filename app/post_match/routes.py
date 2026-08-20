@@ -9,10 +9,16 @@ from pydantic import BaseModel, Field
 
 from app.paths import STANDALONE_DIR
 from app.scouting import SCOUTING_DIR
-from app.post_match.config import DEFAULT_ITERATION_ID, DEFAULT_MATCH_ID, PORT_VALE_SQUAD_ID
+from app.post_match.config import (
+    DEFAULT_ITERATION_ID,
+    DEFAULT_MATCH_ID,
+    DEFAULT_SEASON_LABEL,
+    PORT_VALE_SQUAD_ID,
+    POST_MATCH_COMPETITIONS,
+)
 from app.post_match.export_pdf import build_export_pdf, build_export_pdf_from_png_bytes
 from app.post_match.report import build_match_report
-from app.post_match.season_matches import build_season_matches
+from app.post_match.season_matches import build_combined_season_matches, build_season_matches
 from app.post_match.squad_badges import ensure_badge_cached, warm_iteration_badges
 
 _warm_started = False
@@ -29,6 +35,10 @@ def _warm_badges_once() -> None:
     def _run() -> None:
         try:
             warm_iteration_badges(DEFAULT_ITERATION_ID)
+            for comp in POST_MATCH_COMPETITIONS:
+                iid = int(comp.get("iterationId") or 0)
+                if iid and iid != DEFAULT_ITERATION_ID:
+                    warm_iteration_badges(iid)
         except Exception:
             pass
 
@@ -62,11 +72,13 @@ def register_post_match_routes(app: FastAPI) -> None:
         )
 
     @app.get("/api/post-match/config")
-    def post_match_config() -> dict[str, int]:
+    def post_match_config() -> dict[str, Any]:
         return {
             "defaultMatchId": DEFAULT_MATCH_ID,
             "defaultIterationId": DEFAULT_ITERATION_ID,
             "portValeSquadId": PORT_VALE_SQUAD_ID,
+            "seasonLabel": DEFAULT_SEASON_LABEL,
+            "competitions": POST_MATCH_COMPETITIONS,
         }
 
     @app.get("/api/post-match/badges/{squad_id}")
@@ -86,13 +98,31 @@ def register_post_match_routes(app: FastAPI) -> None:
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    @app.get("/api/post-match/season-matches")
+    def post_match_combined_season_matches(
+        squad_id: int = PORT_VALE_SQUAD_ID,
+        include_upcoming: bool = True,
+    ) -> dict[str, Any]:
+        try:
+            return build_combined_season_matches(
+                squad_id,
+                include_upcoming=include_upcoming,
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
     @app.get("/api/post-match/iterations/{iteration_id}/matches")
     def post_match_season_matches(
         iteration_id: int,
         squad_id: int = PORT_VALE_SQUAD_ID,
+        include_upcoming: bool = True,
     ) -> dict[str, Any]:
         try:
-            matches = build_season_matches(iteration_id, squad_id)
+            matches = build_season_matches(
+                iteration_id,
+                squad_id,
+                include_upcoming=include_upcoming,
+            )
             return {
                 "iterationId": iteration_id,
                 "focusSquadId": squad_id,

@@ -48,7 +48,7 @@ from app.pre_match import (
     build_pre_match_whatsapp_pdf,
     pre_match_meta,
 )
-from app.pre_match_handout import POSITION_ABBR, _height_short
+from app.match_player_utils import POSITION_ABBR, _height_short
 from app.post_match.impect_client import impect_get, v5_path
 from app.post_match.set_plays import (
     SHOT_XG_KPI_ID,

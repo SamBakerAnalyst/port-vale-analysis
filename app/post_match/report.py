@@ -226,6 +226,13 @@ def _match_meta(match_id: int, iteration_id: int | None = None) -> dict[str, Any
     }
 
 
+def _duration_to_minutes(player: dict[str, Any]) -> float:
+    """Match/player KPI rows: playDuration is seconds; playedMinutes is minutes."""
+    from app import main as impect
+
+    return float(impect._play_duration_minutes(player) or 0.0)
+
+
 def _flatten_player_kpis(
     raw_data: Any,
     player_names: dict[int, str],
@@ -253,7 +260,7 @@ def _flatten_player_kpis(
                         "squadName": squad_name,
                         "shirtNumber": player.get("shirtNumber"),
                         "position": player.get("position"),
-                        "minutes": player.get("playedMinutes") or player.get("playDuration"),
+                        "minutes": _duration_to_minutes(player),
                         "kpis": _parse_kpi_list(player.get("kpis")),
                     }
                 )
@@ -272,7 +279,7 @@ def _flatten_player_kpis(
                 "squadName": row.get("squadName"),
                 "shirtNumber": row.get("shirtNumber"),
                 "position": row.get("position"),
-                "minutes": row.get("playedMinutes") or row.get("playDuration"),
+                "minutes": _duration_to_minutes(row),
                 "kpis": _parse_kpi_list(row.get("kpis") or row),
             }
         )
@@ -349,7 +356,7 @@ def _combine_stint_kpi_values(values: list[float]) -> float:
 
 
 def _consolidate_player_match_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Merge Impect position-stint rows into one row per player with raw match totals."""
+    """Merge Impect position-stint rows into one row per player with match totals in minutes."""
     grouped: dict[int, dict[str, Any]] = {}
     kpi_stints: dict[int, dict[int, list[float]]] = {}
 
@@ -369,10 +376,10 @@ def _consolidate_player_match_rows(rows: list[dict[str, Any]]) -> list[dict[str,
             kpi_stints[player_id] = {}
 
         bucket = grouped[player_id]
-        stint_seconds = float(row.get("minutes") or 0)
-        bucket["minutes"] += stint_seconds
-        if stint_seconds >= float(bucket.get("_max_stint_seconds") or 0):
-            bucket["_max_stint_seconds"] = stint_seconds
+        stint_minutes = float(row.get("minutes") or 0)
+        bucket["minutes"] += stint_minutes
+        if stint_minutes >= float(bucket.get("_max_stint_minutes") or 0):
+            bucket["_max_stint_minutes"] = stint_minutes
             bucket["position"] = row.get("position")
             bucket["shirtNumber"] = row.get("shirtNumber")
 
@@ -386,7 +393,7 @@ def _consolidate_player_match_rows(rows: list[dict[str, Any]]) -> list[dict[str,
             kpi_id: _combine_stint_kpi_values(values)
             for kpi_id, values in kpi_stints[player_id].items()
         }
-        bucket.pop("_max_stint_seconds", None)
+        bucket.pop("_max_stint_minutes", None)
         consolidated.append(bucket)
 
     return _exclude_goalkeepers(consolidated)

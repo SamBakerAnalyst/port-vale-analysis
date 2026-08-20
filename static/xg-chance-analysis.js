@@ -1,4 +1,5 @@
 const ALLOWED_SEASONS = ["26/27", "25/26"];
+const FETCH_TIMEOUT_MS = 90000;
 
 const state = {
   meta: null,
@@ -9,6 +10,8 @@ const state = {
   scope: "match",
   view: "summary",
   loading: false,
+  loadToken: 0,
+  abort: null,
 };
 
 const els = {
@@ -47,16 +50,95 @@ function setStatus(message, kind = "") {
 
 async function fetchJson(url, options = {}) {
   const bustedUrl = url.includes("?") ? `${url}&_=${Date.now()}` : `${url}?_=${Date.now()}`;
-  const res = await fetch(bustedUrl, {
-    cache: "no-store",
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-    ...options,
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(data.detail || `Request failed (${res.status})`);
+  const externalSignal = options.signal || null;
+  const controller = new AbortController();
+  const timeoutMs = options.timeoutMs ?? FETCH_TIMEOUT_MS;
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  const onExternalAbort = () => controller.abort();
+  if (externalSignal) {
+    if (externalSignal.aborted) controller.abort();
+    else externalSignal.addEventListener("abort", onExternalAbort, { once: true });
   }
-  return data;
+
+  try {
+    const { signal: _ignore, timeoutMs: _t, ...rest } = options;
+    const res = await fetch(bustedUrl, {
+      cache: "no-store",
+      headers: { Accept: "application/json", ...(rest.headers || {}) },
+      ...rest,
+      signal: controller.signal,
+    });
+    const raw = await res.text();
+    let data = {};
+    if (raw) {
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        if (!res.ok) throw new Error(`Request failed (${res.status})`);
+        throw new Error("Server returned a non-JSON response. Is the hub running?");
+      }
+    }
+    if (!res.ok) {
+      const detail = data.detail;
+      const message = Array.isArray(detail)
+        ? detail.map((row) => row.msg || JSON.stringify(row)).join("; ")
+        : (detail || `Request failed (${res.status})`);
+      throw new Error(message);
+    }
+    return data;
+  } catch (err) {
+    if (err?.name === "AbortError") {
+      if (timedOut) {
+        const timeoutErr = new Error("Request timed out. Hit Refresh to try again.");
+        timeoutErr.code = "TIMEOUT";
+        throw timeoutErr;
+      }
+      const abortErr = new Error("Request cancelled");
+      abortErr.code = "ABORTED";
+      throw abortErr;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+    if (externalSignal) externalSignal.removeEventListener("abort", onExternalAbort);
+  }
+}
+
+function beginLoad() {
+  if (state.abort) {
+    try {
+      state.abort.abort();
+    } catch {
+      /* ignore */
+    }
+  }
+  state.abort = new AbortController();
+  state.loadToken += 1;
+  state.loading = true;
+  return { token: state.loadToken, signal: state.abort.signal };
+}
+
+function endLoad(token) {
+  if (token === state.loadToken) {
+    state.loading = false;
+  }
+}
+
+function showLoadingPanels(message) {
+  const html = `<p class="xca-empty">${escapeHtml(message)}</p>`;
+  if (els.xgCreatedPanel) els.xgCreatedPanel.innerHTML = html;
+  if (els.xgAgainstPanel) els.xgAgainstPanel.innerHTML = html;
+  if (els.gameStatePanel) els.gameStatePanel.innerHTML = html;
+  if (els.periodPanel) els.periodPanel.innerHTML = html;
+  if (els.matchHeader) {
+    els.matchHeader.classList.remove("hidden");
+    els.matchHeader.innerHTML = `<p class="xca-empty">${escapeHtml(message)}</p>`;
+  }
 }
 
 function filteredSeasons() {
@@ -134,7 +216,7 @@ function renderBucketPanel(container, title, summary) {
         <td>${row.goals}</td>
         <td>${row.count}</td>
         <td>${row.pct}%</td>
-        <td>${row.cumulativeXg.toFixed(3)}</td>
+        <td>${Number(row.cumulativeXg || 0).toFixed(3)}</td>
       </tr>`
     )
     .join("");
@@ -679,8 +761,11 @@ function renderAll() {
   els.statusBar.textContent = `Updated ${new Date(report.updatedAt).toLocaleString("en-GB")} · ${report.shots?.length || 0} shots`;
 }
 
-async function loadFixtures() {
-  const data = await fetchJson(`/api/xg-chance-analysis/fixtures?season=${encodeURIComponent(state.season)}`);
+async function loadFixtures(signal) {
+  const data = await fetchJson(
+    `/api/xg-chance-analysis/fixtures?season=${encodeURIComponent(state.season)}`,
+    signal ? { signal } : {}
+  );
   state.fixtures = data.fixtures || [];
   const validIds = new Set(
     state.fixtures
@@ -707,24 +792,35 @@ function selectedScopeLabel() {
 }
 
 async function loadReport() {
-  if (state.loading) return;
-  state.loading = true;
+  const { token, signal } = beginLoad();
   const scopeLabel = selectedScopeLabel();
   setStatus(`Loading shot analysis for ${scopeLabel}…`, "loading");
   els.statusBar.textContent = `Loading ${scopeLabel}…`;
+  showLoadingPanels(`Loading ${scopeLabel}…`);
   try {
     const params = new URLSearchParams({ season: state.season, scope: state.scope });
     if (state.scope === "match" && state.matchId) {
       params.set("matchId", state.matchId);
     }
-    state.report = await fetchJson(`/api/xg-chance-analysis/report?${params}`);
+    const report = await fetchJson(`/api/xg-chance-analysis/report?${params}`, { signal });
+    if (token !== state.loadToken) return;
+    state.report = report;
     setStatus("");
     renderAll();
   } catch (err) {
+    if (token !== state.loadToken) return;
+    if (err?.code === "ABORTED") return;
+    if (err?.code === "TIMEOUT") {
+      setStatus(err.message, "error");
+      els.statusBar.textContent = "Load timed out";
+      showLoadingPanels("Load timed out — hit Refresh.");
+      return;
+    }
     setStatus(err.message || "Failed to load report", "error");
     els.statusBar.textContent = "Error loading data";
+    showLoadingPanels(err.message || "Failed to load report");
   } finally {
-    state.loading = false;
+    endLoad(token);
   }
 }
 
@@ -784,22 +880,35 @@ async function exportPdf() {
 
 async function init() {
   els.statusBar.textContent = "Initialising…";
+  setStatus("Connecting to analysis hub…", "loading");
+  showLoadingPanels("Loading match data…");
   try {
     state.meta = await fetchJson("/api/xg-chance-analysis/meta");
     const seasons = filteredSeasons();
     const withData = seasons.find((row) => row.hasData);
     state.season = ALLOWED_SEASONS.find((s) => seasons.some((row) => row.value === s && row.hasData))
-      || state.meta.defaultSeason
       || withData?.value
+      || state.meta.defaultSeason
       || ALLOWED_SEASONS[0]
       || "";
     renderSeasonToggle();
     renderScopeToggle();
-    await loadFixtures();
-    await loadReport();
+    const { token, signal } = beginLoad();
+    try {
+      await loadFixtures(signal);
+      if (token !== state.loadToken) return;
+      // Re-enter loadReport via its own token so UI messaging stays consistent.
+      endLoad(token);
+      await loadReport();
+    } catch (err) {
+      if (token !== state.loadToken) return;
+      endLoad(token);
+      throw err;
+    }
   } catch (err) {
     setStatus(err.message || "Failed to initialise", "error");
     els.statusBar.textContent = "Initialisation failed";
+    showLoadingPanels(err.message || "Failed to initialise");
   }
 }
 
@@ -811,8 +920,21 @@ els.matchSelect.addEventListener("change", async () => {
 });
 
 els.refreshBtn.addEventListener("click", async () => {
-  await loadFixtures();
-  await loadReport();
+  setStatus("Refreshing…", "loading");
+  els.statusBar.textContent = "Refreshing…";
+  const { token, signal } = beginLoad();
+  try {
+    await loadFixtures(signal);
+    if (token !== state.loadToken) return;
+    endLoad(token);
+    await loadReport();
+  } catch (err) {
+    if (token !== state.loadToken) return;
+    endLoad(token);
+    setStatus(err.message || "Refresh failed", "error");
+    els.statusBar.textContent = "Refresh failed";
+    showLoadingPanels(err.message || "Refresh failed");
+  }
 });
 
 els.exportPdfBtn?.addEventListener("click", () => exportPdf());

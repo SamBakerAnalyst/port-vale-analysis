@@ -2024,7 +2024,7 @@ function renderFormSlide(report) {
       const result = match.result || "";
       const crestSrc =
         match.opponent_image_url
-        || (match.opponent_id ? `/api/pre-match-handout/badge/${match.opponent_id}` : "");
+        || (match.opponent_id ? `/api/team-badge/${match.opponent_id}` : "");
       const crest = crestSrc
         ? `<img class="pm-result-row__crest" src="${escapeHtml(crestSrc)}" alt="" loading="lazy" onerror="this.classList.add('pm-result-row__crest--empty');this.removeAttribute('src')" />`
         : `<span class="pm-result-row__crest pm-result-row__crest--empty" aria-hidden="true">${escapeHtml(crestInitials(match.opponent))}</span>`;

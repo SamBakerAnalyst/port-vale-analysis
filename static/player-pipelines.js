@@ -19,6 +19,9 @@
     drawerDossier: document.getElementById("ppDrawerDossier"),
     drawerRemove: document.getElementById("ppDrawerRemove"),
     drawerPosition: document.getElementById("ppDrawerPosition"),
+    drawerStatsBlock: document.getElementById("ppDrawerStatsBlock"),
+    drawerStats: document.getElementById("ppDrawerStats"),
+    drawerRefreshStats: document.getElementById("ppDrawerRefreshStats"),
     drawerTags: document.getElementById("ppDrawerTags"),
     drawerNotes: document.getElementById("ppDrawerNotes"),
     customTagForm: document.getElementById("ppCustomTagForm"),
@@ -79,6 +82,61 @@
       .slice(0, 2)
       .map((part) => part[0]?.toUpperCase() || "")
       .join("");
+  }
+
+  function formatMinutes(value) {
+    if (value == null || value === "") return "";
+    return `${Number(value).toLocaleString()}′`;
+  }
+
+  function scoreTier(score) {
+    if (score == null || Number.isNaN(Number(score))) return "";
+    const value = Number(score);
+    if (value >= 70) return "high";
+    if (value >= 50) return "mid";
+    return "low";
+  }
+
+  function scoreBadge(row, { compact = false } = {}) {
+    if (row.overall_score == null || row.overall_score === "") return "";
+    const tier = scoreTier(row.overall_score);
+    const label = Math.round(Number(row.overall_score));
+    const title = "League-relative data score (position percentiles)";
+    if (compact) {
+      return `<span class="pp-table__score pp-score--${tier}" title="${title}">${label}</span>`;
+    }
+    return `<span class="pp-score pp-score--${tier}" title="${title}">${label}</span>`;
+  }
+
+  function timeAgo(iso) {
+    if (!iso) return "";
+    const then = new Date(iso).getTime();
+    if (Number.isNaN(then)) return "";
+    const mins = Math.max(1, Math.floor((Date.now() - then) / 60000));
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 48) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    if (days < 60) return `${days}d ago`;
+    const months = Math.floor(days / 30);
+    return `${months}mo ago`;
+  }
+
+  function cardMeta(row) {
+    return [
+      row.position_label || row.position,
+      row.club,
+      row.age != null ? `${row.age}y` : "",
+      formatMinutes(row.minutes),
+      row.league,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  }
+
+  function profileHighlight(row) {
+    if (!row.top_profile || row.top_profile_score == null) return "";
+    return `Strong: ${row.top_profile} (${Math.round(Number(row.top_profile_score))})`;
   }
 
   function stageMeta(id) {
@@ -184,21 +242,24 @@
   }
 
   function cardHtml(row) {
-    const meta = [row.position_label, row.club, row.age != null ? `Age ${row.age}` : ""]
-      .filter(Boolean)
-      .join(" · ");
+    const meta = cardMeta(row);
+    const highlight = profileHighlight(row);
     const tags = (row.tags || [])
       .slice(0, 3)
       .map((tag) => `<span class="pp-chip">${esc(tag)}</span>`)
       .join("");
     const noteCount = (row.notes || []).length;
     const color = row.stage_color || stageColor(row.stage);
+    const updated = timeAgo(row.moved_at || row.added_at);
     return `<article class="pp-card" draggable="true" data-id="${esc(row.id)}" style="--stage:${esc(color)}">
       ${photoBlock(row)}
-      <div>
-        <p class="pp-card__name">${esc(row.name)}${row.manual ? ` <span class="pp-manual-badge">Manual</span>` : ""}</p>
+      <div class="pp-card__body">
+        <div class="pp-card__top">
+          <p class="pp-card__name">${esc(row.name)}${row.manual ? ` <span class="pp-manual-badge">Manual</span>` : ""}</p>
+          ${scoreBadge(row)}
+        </div>
         <p class="pp-card__meta">${esc(meta)}</p>
-        <p class="pp-card__who">${esc(row.added_by ? `Added by ${row.added_by}` : "")}</p>
+        ${highlight ? `<p class="pp-card__highlight">${esc(highlight)}</p>` : ""}
         ${
           row.stage === "not_the_right_fit" && row.close_reason
             ? `<p class="pp-card__reason">${esc(row.close_reason)}</p>`
@@ -207,6 +268,10 @@
         <div class="pp-card__tags">
           ${tags}
           ${noteCount ? `<span class="pp-chip pp-chip--note">${noteCount} note${noteCount === 1 ? "" : "s"}</span>` : ""}
+        </div>
+        <div class="pp-card__footer">
+          <p class="pp-card__who">${esc(row.added_by ? `Added by ${row.added_by}` : "")}</p>
+          ${updated ? `<p class="pp-card__when">Updated ${esc(updated)}</p>` : ""}
         </div>
       </div>
     </article>`;
@@ -298,6 +363,7 @@
           <div class="pp-table">
             <div class="pp-table__head">
               <span>Player</span>
+              <span>Score</span>
               <span>Position</span>
               <span>Club</span>
               <span>Age</span>
@@ -324,6 +390,7 @@
                       }
                     </span>
                   </span>
+                  <span>${scoreBadge(row, { compact: true }) || "—"}</span>
                   <span>${esc(row.position_label || "—")}</span>
                   <span>${esc(row.club || "—")}</span>
                   <span>${row.age != null ? esc(row.age) : "—"}</span>
@@ -346,6 +413,80 @@
 
   function targetById(id) {
     return state.targets.find((row) => row.id === id) || null;
+  }
+
+  function renderDrawerStats(row) {
+    if (!els.drawerStatsBlock || !els.drawerStats) return;
+    if (row.manual || !row.player_id) {
+      els.drawerStatsBlock.hidden = true;
+      els.drawerStats.innerHTML = "";
+      return;
+    }
+    els.drawerStatsBlock.hidden = false;
+    const stats = [
+      ["Data score", row.overall_score != null ? Math.round(Number(row.overall_score)) : "—"],
+      ["Minutes", row.minutes != null ? formatMinutes(row.minutes) : "—"],
+      [
+        "Top profile",
+        row.top_profile && row.top_profile_score != null
+          ? `${row.top_profile} (${Math.round(Number(row.top_profile_score))})`
+          : "—",
+      ],
+      ["Foot", row.foot || "—"],
+      ["Height", row.height || "—"],
+    ];
+    els.drawerStats.innerHTML = stats
+      .map(
+        ([label, value]) =>
+          `<div class="pp-drawer__stat"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`
+      )
+      .join("");
+    if (els.drawerRefreshStats) {
+      els.drawerRefreshStats.disabled = !row.position;
+      els.drawerRefreshStats.title = row.position
+        ? ""
+        : "Set a position first to load Impect data scores";
+    }
+  }
+
+  function mergeTargets(updatedTargets) {
+    if (!Array.isArray(updatedTargets) || !updatedTargets.length) return;
+    const byId = new Map(updatedTargets.map((row) => [row.id, row]));
+    state.targets = state.targets.map((row) => byId.get(row.id) || row);
+  }
+
+  async function refreshMissingStats() {
+    const missing = state.targets.filter(
+      (row) => !row.manual && row.player_id && row.position && row.overall_score == null
+    );
+    if (!missing.length) return;
+    try {
+      const data = await fetchJson("/api/player-pipelines/refresh-stats", {
+        method: "POST",
+        body: JSON.stringify({ target_ids: missing.map((row) => row.id) }),
+      });
+      mergeTargets(data.targets || []);
+      render();
+      if (state.openId) openDrawer(state.openId);
+    } catch {
+      /* background refresh — ignore */
+    }
+  }
+
+  async function refreshTargetStats(targetId) {
+    setStatus("Refreshing data score…");
+    try {
+      const data = await fetchJson("/api/player-pipelines/refresh-stats", {
+        method: "POST",
+        body: JSON.stringify({ target_ids: [targetId] }),
+      });
+      mergeTargets(data.targets || []);
+      render();
+      openDrawer(targetId);
+      setStatus("");
+    } catch (err) {
+      setStatus(err.message || String(err), true);
+    }
   }
 
   function openDrawer(id) {
@@ -385,6 +526,7 @@
     if (els.drawerPosition) {
       els.drawerPosition.value = row.position || "";
     }
+    renderDrawerStats(row);
     renderDrawerTags(row);
     renderDrawerNotes(row);
   }
@@ -437,6 +579,7 @@
       setView(state.view);
       if (state.openId) openDrawer(state.openId);
       setStatus("");
+      refreshMissingStats();
     } catch (err) {
       setStatus(err.message || String(err), true);
     }
@@ -458,6 +601,7 @@
           position_label: player.primary_position_label || player.position_label || "",
           age: player.age ?? null,
           photo_url: player.photo_url || "",
+          iteration_ids: player.chartable_season_ids || [],
           stage: "data_identified",
           manual: false,
         }),
@@ -698,6 +842,11 @@
     } catch (err) {
       setStatus(err.message || String(err), true);
     }
+  });
+
+  els.drawerRefreshStats?.addEventListener("click", () => {
+    if (!state.openId) return;
+    refreshTargetStats(state.openId);
   });
 
   els.customTagForm.addEventListener("submit", (event) => {

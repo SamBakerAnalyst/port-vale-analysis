@@ -127,6 +127,26 @@
     .match-bar__dot--win { background: #4ade80; }
     .match-bar__dot--loss { background: #f87171; }
     .match-bar__dot--draw { background: #a3a3a3; }
+    .match-bar__dot--pending { background: #f5c518; }
+    .match-bar__item--pending {
+      opacity: 0.78;
+    }
+    .match-bar__item--pending .match-bar__crest {
+      filter: grayscale(0.35) opacity(0.8);
+    }
+    .match-bar__comp {
+      font-size: 0.52rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #a3a3a3;
+    }
+    .match-bar__item--active .match-bar__comp { color: var(--pv-gold); }
+    .match-bar__score--pending {
+      display: block;
+      background: rgba(245, 197, 24, 0.2);
+      color: var(--pv-gold);
+    }
     .match-bar__score {
       display: none;
       font-family: "Barlow Condensed", sans-serif;
@@ -211,9 +231,11 @@
       margin: 0;
       box-shadow: none;
     }
-    /* PDF capture — 16:9 Keynote frame (same as pre-match WhatsApp PDFs) */
+    /* PDF capture — 16:9 frame with clear gutters (not edge-to-edge zoom). */
     .slide--pdf-capture,
     .deck--exporting .slide {
+      --pdf-inset-x: 64px;
+      --pdf-inset-y: 44px;
       width: 1920px !important;
       max-width: 1920px !important;
       height: 1080px !important;
@@ -226,14 +248,15 @@
       display: flex !important;
       flex-direction: column !important;
       box-sizing: border-box !important;
+      padding: var(--pdf-inset-y) var(--pdf-inset-x) 0 !important;
     }
     .slide--pdf-capture .slide__footer-bar,
     .deck--exporting .slide .slide__footer-bar {
       display: none !important;
     }
     .slide-export-footer {
-      flex: 0 0 44px;
-      height: 44px;
+      flex: 0 0 34px;
+      height: 34px;
       box-sizing: border-box;
       background: #111;
       color: #e2e8f0;
@@ -241,16 +264,20 @@
       align-items: center;
       justify-content: center;
       font-family: "Barlow Condensed", sans-serif;
-      font-size: 1.05rem;
+      font-size: 0.88rem;
       font-weight: 700;
-      letter-spacing: 0.14em;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
       border-top: 3px solid var(--pv-gold);
-      width: 100%;
+      width: calc(100% + (2 * var(--pdf-inset-x, 36px)));
+      margin-left: calc(-1 * var(--pdf-inset-x, 36px));
+      margin-right: calc(-1 * var(--pdf-inset-x, 36px));
       margin-top: auto;
     }
     .slide--pdf-capture.slide--title,
     .deck--exporting .slide--title {
+      --pdf-inset-x: 72px;
+      --pdf-inset-y: 48px;
       background:
         radial-gradient(ellipse 70% 46% at 50% 36%, rgba(245, 197, 24, 0.2), transparent 70%),
         linear-gradient(180deg, #fcfcfd 0%, #eceff3 58%, #e3e7ed 100%) !important;
@@ -262,31 +289,31 @@
       display: flex;
       flex-direction: column;
       justify-content: center;
-      padding: 2.25rem 3.5rem 1.75rem;
+      padding: 0.75rem 1.5rem 0.5rem;
     }
     .slide--pdf-capture .slide__crest-img,
     .deck--exporting .slide--title .slide__crest-img,
     .slide--pdf-capture .slide__crest,
     .deck--exporting .slide--title .slide__crest {
-      width: 320px !important;
-      height: 320px !important;
-      font-size: 5.5rem !important;
+      width: 168px !important;
+      height: 168px !important;
+      font-size: 3rem !important;
     }
     .slide--pdf-capture .slide__score-main,
     .deck--exporting .slide--title .slide__score-main {
-      font-size: 8.5rem !important;
+      font-size: 4.8rem !important;
       letter-spacing: 0.04em !important;
     }
     .slide--pdf-capture .slide__team-name,
     .deck--exporting .slide--title .slide__team-name {
-      font-size: 2.65rem !important;
-      max-width: 420px !important;
+      font-size: 1.65rem !important;
+      max-width: 300px !important;
       line-height: 1.1 !important;
     }
     .slide--pdf-capture .slide__score-ht,
     .deck--exporting .slide--title .slide__score-ht {
-      font-size: 1.65rem !important;
-      margin-top: 0.45rem !important;
+      font-size: 1.1rem !important;
+      margin-top: 0.25rem !important;
     }
     .slide--pdf-capture .slide__score-result,
     .deck--exporting .slide--title .slide__score-result {
@@ -294,30 +321,30 @@
     }
     .slide--pdf-capture .slide__date,
     .deck--exporting .slide--title .slide__date {
-      font-size: 1.75rem !important;
-      margin-top: 1.75rem !important;
+      font-size: 1.15rem !important;
+      margin-top: 1rem !important;
     }
     .slide--pdf-capture .slide__title-eyebrow,
     .deck--exporting .slide--title .slide__title-eyebrow {
-      font-size: 1.55rem !important;
-      margin-bottom: 1.75rem !important;
-      letter-spacing: 0.32em !important;
+      font-size: 0.95rem !important;
+      margin-bottom: 1rem !important;
+      letter-spacing: 0.28em !important;
     }
     .slide--pdf-capture .slide__footer-bar,
     .deck--exporting .slide--title .slide__footer-bar {
-      font-size: 1.95rem !important;
-      padding: 1.2rem !important;
-      letter-spacing: 0.28em !important;
+      font-size: 1.1rem !important;
+      padding: 0.65rem !important;
+      letter-spacing: 0.22em !important;
     }
     .slide--pdf-capture .slide__matchup,
     .deck--exporting .slide--title .slide__matchup {
-      gap: 4rem !important;
-      width: min(1500px, 100%) !important;
+      gap: 2.4rem !important;
+      width: min(1080px, 100%) !important;
     }
     .slide--pdf-capture .slide__corner,
     .deck--exporting .slide--title .slide__corner {
-      width: 7px !important;
-      height: 140px !important;
+      width: 5px !important;
+      height: 88px !important;
     }
     .slide--pdf-capture .prog-keynote,
     .slide--pdf-capture .cross-keynote,
@@ -329,7 +356,7 @@
     .deck--exporting .shots-keynote,
     .deck--exporting .set-plays-keynote,
     .deck--exporting .divide-keynote {
-      border-radius: 0 !important;
+      border-radius: 14px !important;
       box-shadow: none !important;
       border-color: #c5ccd6 !important;
       background-image: none !important;
@@ -416,11 +443,90 @@
     }
     .slide--pdf-capture .slide--duels-map-detail .duels-zone-heat__count,
     .deck--exporting .slide--duels-map-detail .duels-zone-heat__count {
-      font-size: 2.35rem !important;
+      font-size: 2rem !important;
     }
     .slide--pdf-capture .slide--duels-map-detail .duels-zone-heat__share,
     .deck--exporting .slide--duels-map-detail .duels-zone-heat__share {
-      font-size: 1.2rem !important;
+      font-size: 1.05rem !important;
+    }
+    .slide--pdf-capture.slide--duels-map-heat,
+    .deck--exporting .slide--duels-map-heat {
+      padding: var(--pdf-inset-y) var(--pdf-inset-x) 0 !important;
+      background: #111 !important;
+      border: none !important;
+    }
+    .slide--pdf-capture.slide--duels-map-heat .prog-keynote,
+    .deck--exporting .slide--duels-map-heat .prog-keynote {
+      flex: 1 1 0 !important;
+      min-height: 0 !important;
+      width: 100% !important;
+      max-height: none !important;
+    }
+    .slide--pdf-capture .slide--duels-map-heat .prog-keynote__body,
+    .deck--exporting .slide--duels-map-heat .prog-keynote__body {
+      grid-template-columns: minmax(0, 1.18fr) minmax(340px, 0.82fr) !important;
+      padding: 0.75rem 0.9rem 0.85rem !important;
+      gap: 0.85rem !important;
+      height: 100% !important;
+      min-height: 0 !important;
+    }
+    .slide--pdf-capture .slide--duels-map-heat .duels-map-wrap,
+    .deck--exporting .slide--duels-map-heat .duels-map-wrap {
+      padding: 0.65rem !important;
+      border-radius: 8px !important;
+    }
+    .slide--pdf-capture .slide--duels-map-heat .duels-press-summary__value,
+    .deck--exporting .slide--duels-map-heat .duels-press-summary__value {
+      font-size: 2.15rem !important;
+    }
+    .slide--pdf-capture .slide--duels-map-heat .duels-press-table,
+    .deck--exporting .slide--duels-map-heat .duels-press-table {
+      font-size: 1rem !important;
+    }
+    .slide--pdf-capture .slide--duels-map-heat .duels-press-table__name,
+    .deck--exporting .slide--duels-map-heat .duels-press-table__name {
+      font-size: 1.05rem !important;
+    }
+    .slide--pdf-capture .slide--duels-map-heat .duels-press-table__count,
+    .deck--exporting .slide--duels-map-heat .duels-press-table__count {
+      font-size: 1.12rem !important;
+    }
+    .slide--pdf-capture.slide--duels-map-markers,
+    .deck--exporting .slide--duels-map-markers {
+      padding: var(--pdf-inset-y) var(--pdf-inset-x) 0 !important;
+      background: #111 !important;
+      border: none !important;
+    }
+    .slide--pdf-capture.slide--duels-map-markers .prog-keynote,
+    .deck--exporting .slide--duels-map-markers .prog-keynote {
+      flex: 1 1 0 !important;
+      min-height: 0 !important;
+      width: 100% !important;
+      max-height: none !important;
+    }
+    .slide--pdf-capture .slide--duels-map-markers .prog-keynote__body,
+    .deck--exporting .slide--duels-map-markers .prog-keynote__body {
+      grid-template-columns: minmax(0, 1.18fr) minmax(340px, 0.82fr) !important;
+      padding: 0.75rem 0.9rem 0.85rem !important;
+      gap: 0.85rem !important;
+      height: 100% !important;
+      min-height: 0 !important;
+    }
+    .slide--pdf-capture .slide--duels-map-markers .duels-press-summary__value,
+    .deck--exporting .slide--duels-map-markers .duels-press-summary__value {
+      font-size: 2.15rem !important;
+    }
+    .slide--pdf-capture .slide--duels-map-markers .duels-press-table__name-main,
+    .deck--exporting .slide--duels-map-markers .duels-press-table__name-main {
+      font-size: 1.02rem !important;
+    }
+    .slide--pdf-capture .slide--duels-map-markers .duels-detail-tag,
+    .deck--exporting .slide--duels-map-markers .duels-detail-tag {
+      font-size: 0.72rem !important;
+    }
+    .slide--pdf-capture .slide--duels-map-markers .duels-press-summary__value--sm,
+    .deck--exporting .slide--duels-map-markers .duels-press-summary__value--sm {
+      font-size: 1.55rem !important;
     }
     .slide--pdf-capture .slide--duels-map-detail .duels-map-panel__title,
     .deck--exporting .slide--duels-map-detail .duels-map-panel__title {
@@ -555,6 +661,182 @@
       background: rgba(245, 197, 24, 0.08); border: 1px solid rgba(245, 197, 24, 0.25); color: var(--pv-gold);
     }
     .deck { display: grid; gap: 1.5rem; }
+    .filmstrip {
+      display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 1rem;
+      max-width: var(--slide-width); margin-left: auto; margin-right: auto;
+    }
+    .filmstrip__item {
+      padding: 0.35rem 0.65rem; border: 1px solid #3f3f46; border-radius: 999px;
+      background: #141414; color: #d4d4d8; font-size: 0.72rem; font-weight: 600;
+      cursor: pointer; opacity: 0.72; transition: opacity 0.15s, border-color 0.15s;
+    }
+    .filmstrip__item:hover { opacity: 1; }
+    .filmstrip__item.is-active { opacity: 1; border-color: var(--pv-gold); color: var(--pv-gold); }
+    .toolbar__btn--gold {
+      background: rgba(245, 197, 24, 0.22);
+    }
+    .toolbar__btn--pdf-mode { display: none; }
+    body.is-pdf-view .toolbar__btn--deck-mode { display: none; }
+    body.is-pdf-view .toolbar__btn--pdf-mode { display: inline-flex; }
+    body.is-pdf-view .toolbar__subnote::after {
+      content: " · PDF review mode — larger slides for a cleaner download";
+      color: var(--pv-gold);
+    }
+    body.is-pdf-view {
+      --slide-width: min(1760px, 96vw);
+    }
+    body.is-pdf-view .match-bar-wrap { display: none; }
+    body.is-pdf-view .deck {
+      gap: 2rem;
+      padding-bottom: 2rem;
+      max-width: var(--slide-width);
+      margin: 0 auto;
+    }
+    body.is-pdf-view .slide {
+      box-shadow: 0 28px 72px rgba(0, 0, 0, 0.55);
+    }
+    body.is-pdf-view .filmstrip {
+      max-width: var(--slide-width);
+    }
+    body.is-pdf-view .toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(10, 10, 10, 0.94);
+      backdrop-filter: blur(10px);
+      padding-bottom: 0.85rem;
+      border-bottom: 1px solid rgba(245, 197, 24, 0.22);
+    }
+    .toolbar__export-status {
+      width: 100%;
+      min-height: 1rem;
+      margin: 0 0 0.35rem;
+      font-size: 0.72rem;
+      color: #9ca3af;
+      text-align: right;
+      line-height: 1.35;
+    }
+    .toolbar__export-status--loading { color: #fbbf24; }
+    .toolbar__export-status--success { color: #86efac; }
+    .toolbar__export-status--error { color: #fca5a5; }
+    #export-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(10, 10, 10, 0.88);
+      color: #f5f5f5;
+      font-family: "Barlow Condensed", sans-serif;
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      pointer-events: all;
+    }
+    #export-overlay.is-active { display: flex; }
+    body.is-exporting .toolbar,
+    body.is-exporting .match-bar-wrap,
+    body.is-exporting .filmstrip,
+    body.is-exporting #banner,
+    body.is-exporting .present-ui {
+      display: none !important;
+    }
+    body.is-exporting .app { padding: 0; }
+    body.is-present { overflow: hidden; background: #000; }
+    body.is-present .app { padding: 0; height: 100vh; width: 100vw; }
+    body.is-present .toolbar,
+    body.is-present .match-bar-wrap,
+    body.is-present .filmstrip,
+    body.is-present #banner { display: none; }
+    body.is-present .deck {
+      position: relative;
+      gap: 0;
+      height: 100vh;
+      width: 100vw;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background: #000;
+    }
+    body.is-present .slide {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      width: min(100vw, calc(100vh * 16 / 9));
+      height: min(100vh, calc(100vw * 9 / 16));
+      max-width: 100vw;
+      max-height: 100vh;
+      margin: 0;
+      border-radius: 0;
+      box-shadow: none;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transform: scale(0.992);
+      z-index: 1;
+      transition: opacity 0.35s ease, transform 0.35s ease, visibility 0.35s;
+    }
+    body.is-present .slide.is-active {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      transform: scale(1);
+      z-index: 3;
+    }
+    .present-ui { display: none; position: fixed; z-index: 50; pointer-events: none; }
+    body.is-present .present-ui { display: block; }
+    .present-progress {
+      bottom: 1.1rem; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 0.35rem; pointer-events: auto;
+      padding: 0.45rem 0.6rem; border-radius: 999px;
+      background: rgba(0, 0, 0, 0.35); backdrop-filter: blur(8px);
+    }
+    .present-progress button {
+      width: 22px; height: 4px; border-radius: 999px;
+      background: rgba(255, 255, 255, 0.28); transition: 0.25s;
+      cursor: pointer; pointer-events: auto; border: none; padding: 0;
+    }
+    .present-progress button:hover { background: rgba(255, 255, 255, 0.55); }
+    .present-progress button.is-active { background: var(--pv-gold); width: 36px; }
+    .present-count {
+      top: 1rem; right: 1.2rem;
+      font-family: "Barlow Condensed", sans-serif;
+      font-size: 0.9rem; font-weight: 700;
+      color: rgba(255, 255, 255, 0.55);
+      letter-spacing: 0.06em;
+    }
+    .present-nav {
+      top: 50%; transform: translateY(-50%);
+      width: 3.2rem; height: 3.2rem;
+      border-radius: 999px;
+      border: 2px solid rgba(255, 255, 255, 0.35);
+      background: rgba(0, 0, 0, 0.45);
+      color: #fff;
+      font-size: 1.6rem;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      pointer-events: auto;
+      backdrop-filter: blur(8px);
+      opacity: 0.55;
+      transition: background 0.2s, border-color 0.2s, opacity 0.2s;
+    }
+    .present-nav:hover {
+      opacity: 1;
+      background: rgba(0, 0, 0, 0.7);
+      border-color: var(--pv-gold);
+    }
+    .present-nav--prev { left: 1rem; }
+    .present-nav--next { right: 1rem; }
+    .present-hint {
+      bottom: 3.4rem; left: 50%; transform: translateX(-50%);
+      font-size: 0.72rem; color: rgba(255, 255, 255, 0.45);
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+    }
     .slide {
       width: var(--slide-width); margin: 0 auto; border-radius: 12px;
       overflow: hidden; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
@@ -1427,22 +1709,22 @@
     }
     .touch-map-svg .zone-path:hover { filter: brightness(1.07); }
     .touch-map-svg .zone-val {
-      font-family: "Barlow Condensed", sans-serif;
+      font-family: "Barlow Condensed", Arial, sans-serif;
       font-weight: 800;
       pointer-events: none;
     }
-    .touch-map-svg .zone-val--ib { font-size: 24px; }
-    .touch-map-svg .zone-val--ib.zone-val--side { font-size: 19px; }
-    .touch-map-svg .zone-val--conv { font-size: 21px; }
-    .touch-map-svg .zone-val--conv.zone-val--side { font-size: 17px; }
+    .touch-map-svg .zone-val--ib { font-size: 20px; }
+    .touch-map-svg .zone-val--ib.zone-val--side { font-size: 15px; }
+    .touch-map-svg .zone-val--conv { font-size: 17px; }
+    .touch-map-svg .zone-val--conv.zone-val--side { font-size: 13px; }
     .touch-map-svg .zone-name {
-      font-family: "DM Sans", sans-serif;
-      font-size: 7.5px;
+      font-family: "DM Sans", Arial, sans-serif;
+      font-size: 6px;
       font-weight: 700;
       pointer-events: none;
       line-height: 1.1;
     }
-    .touch-map-svg .zone-name--narrow { font-size: 6.5px; }
+    .touch-map-svg .zone-name--narrow { font-size: 5px; }
     .touch-lists__grid {
       display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem;
     }
@@ -2034,45 +2316,63 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 0.15rem;
-      border-radius: 10px;
-      border: 1px solid rgba(255, 255, 255, 0.45);
+      gap: 0.1rem;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.28);
       background:
-        linear-gradient(rgba(254, 243, 199, calc(0.18 + var(--intensity, 0) * 0.72)), rgba(180, 83, 9, calc(0.12 + var(--intensity, 0) * 0.78))),
-        #3f9f45;
-      box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
-      padding: 0.35rem;
+        linear-gradient(
+          165deg,
+          rgba(254, 243, 199, calc(0.08 + var(--intensity, 0) * 0.55)),
+          rgba(180, 83, 9, calc(0.18 + var(--intensity, 0) * 0.72))
+        ),
+        #2f8f3f;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      padding: 0.4rem 0.35rem 0.35rem;
       min-height: 0;
     }
     .duels-zone-heat__cell.is-empty {
-      background: rgba(248, 250, 252, 0.14);
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.15);
     }
     .duels-zone-heat__cell.is-densest {
-      border-color: #fef3c7;
+      border-color: #fde68a;
       box-shadow:
-        inset 0 0 0 1px rgba(146, 64, 14, 0.35),
-        0 0 0 2px rgba(245, 158, 11, 0.45);
+        inset 0 0 0 1px rgba(254, 243, 199, 0.35),
+        0 0 0 2px rgba(245, 158, 11, 0.55);
+    }
+    .duels-zone-heat__zone {
+      position: absolute;
+      top: 0.28rem;
+      left: 0.32rem;
+      font-family: "Barlow Condensed", sans-serif;
+      font-size: 0.62rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.72);
     }
     .duels-zone-heat__count {
       font-family: "Barlow Condensed", sans-serif;
-      font-size: clamp(1.55rem, 2.8vw, 2.25rem);
+      font-size: clamp(1.85rem, 3.2vw, 2.65rem);
       font-weight: 800;
       line-height: 1;
-      color: #0f172a;
-      background: rgba(255, 255, 255, 0.94);
-      border-radius: 7px;
-      padding: 0.22rem 0.55rem 0.14rem;
-      min-width: 2.6rem;
+      color: #fff;
+      text-shadow: 0 1px 4px rgba(15, 23, 42, 0.45);
+      background: none;
+      border-radius: 0;
+      padding: 0;
+      min-width: 0;
       text-align: center;
     }
     .duels-zone-heat__share {
       font-family: "Barlow Condensed", sans-serif;
-      font-size: clamp(0.95rem, 1.5vw, 1.15rem);
-      font-weight: 800;
-      color: #0f172a;
-      background: rgba(255, 255, 255, 0.9);
-      border-radius: 999px;
-      padding: 0.1rem 0.5rem;
+      font-size: clamp(0.82rem, 1.2vw, 1rem);
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.92);
+      text-shadow: 0 1px 3px rgba(15, 23, 42, 0.4);
+      background: none;
+      border-radius: 0;
+      padding: 0;
       line-height: 1.1;
     }
     .duels-zone-heat__empty {
@@ -2317,6 +2617,350 @@
       color: #94a3b8;
       font-weight: 600;
       line-height: 1.3;
+    }
+    .slide--duels-map-heat .prog-keynote__body {
+      grid-template-columns: minmax(0, 1.22fr) minmax(320px, 0.78fr);
+      gap: 0.85rem;
+      padding: 0.75rem 0.85rem 0.8rem;
+    }
+    .duels-map-panel--heat,
+    .duels-map-panel--markers {
+      gap: 0.55rem;
+      padding: 0.75rem 0.8rem;
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid var(--slide-line);
+      border-radius: 8px;
+    }
+    .duels-map-panel--heat {
+      gap: 0.55rem;
+    }
+    .duels-press-summary {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.45rem;
+      flex: 0 0 auto;
+    }
+    .duels-press-summary__stat {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.12rem;
+      padding: 0.55rem 0.45rem;
+      border-radius: 8px;
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      background: rgba(255, 255, 255, 0.82);
+      text-align: center;
+    }
+    .duels-press-summary__stat--accent {
+      background: rgba(245, 158, 11, 0.14);
+      border-color: rgba(245, 158, 11, 0.35);
+    }
+    .duels-press-summary__stat--duel {
+      background: rgba(234, 179, 8, 0.14);
+      border-color: rgba(202, 138, 4, 0.35);
+    }
+    .duels-press-summary__stat--rose {
+      background: rgba(225, 29, 72, 0.1);
+      border-color: rgba(225, 29, 72, 0.28);
+    }
+    .duels-press-summary__stat--aerial {
+      background: rgba(56, 189, 248, 0.12);
+      border-color: rgba(14, 165, 233, 0.35);
+    }
+    .duels-duel-summary {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.45rem;
+      flex: 0 0 auto;
+    }
+    .duels-duel-summary__swatch {
+      width: 0.55rem;
+      height: 0.55rem;
+      border-radius: 2px;
+      flex: 0 0 auto;
+    }
+    .duels-duel-summary__swatch.is-ground { background: #eab308; }
+    .duels-duel-summary__swatch.is-aerial { background: #38bdf8; }
+    .duels-press-summary__stat--ground,
+    .duels-press-summary__stat--aerial {
+      flex-direction: row;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-content: center;
+      gap: 0.28rem 0.35rem;
+      padding: 0.48rem 0.4rem;
+    }
+    .duels-oop-breakdown-table__label.is-ground::before,
+    .duels-oop-breakdown-table__label.is-aerial::before {
+      content: "";
+      display: inline-block;
+      width: 0.5rem;
+      height: 0.5rem;
+      border-radius: 2px;
+      margin-right: 0.32rem;
+      vertical-align: middle;
+      transform: translateY(-1px);
+    }
+    .duels-oop-breakdown-table__label.is-ground::before { background: #eab308; }
+    .duels-oop-breakdown-table__label.is-aerial::before { background: #38bdf8; }
+    .duels-split-bar {
+      display: flex;
+      height: 0.55rem;
+      border-radius: 999px;
+      overflow: hidden;
+      min-width: 4px;
+      background: #e2e8f0;
+    }
+    .duels-split-bar__ground {
+      background: linear-gradient(90deg, #fde047, #ca8a04);
+      min-width: 2px;
+    }
+    .duels-split-bar__aerial {
+      background: linear-gradient(90deg, #7dd3fc, #0284c7);
+      min-width: 2px;
+    }
+    .duels-map-panel--duels .duels-press-table__name-detail {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.2rem 0.35rem;
+      white-space: normal;
+    }
+    .duels-detail-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.18rem;
+      font-size: 0.58rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: #475569;
+    }
+    .duels-detail-tag__dot {
+      width: 0.38rem;
+      height: 0.38rem;
+      border-radius: 2px;
+      flex: 0 0 auto;
+    }
+    .duels-detail-tag__dot.is-ground { background: #eab308; }
+    .duels-detail-tag__dot.is-aerial { background: #38bdf8; }
+    .duels-detail-tag__dot.is-regain { background: #f43f5e; }
+    .duels-press-summary__value--sm {
+      font-size: 1.45rem;
+      letter-spacing: 0.02em;
+    }
+    .duels-press-summary__value {
+      font-family: "Barlow Condensed", sans-serif;
+      font-size: 2rem;
+      font-weight: 800;
+      line-height: 1;
+      color: #0f172a;
+      font-variant-numeric: tabular-nums;
+    }
+    .duels-press-summary__label {
+      font-family: "Barlow Condensed", sans-serif;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #64748b;
+    }
+    .duels-press-table-wrap {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .duels-press-table {
+      width: 100%;
+      height: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      table-layout: fixed;
+      font-size: 0.88rem;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid var(--slide-line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .duels-press-table th,
+    .duels-press-table td {
+      border-right: 1px solid #e2e8f0;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 0.38rem 0.35rem;
+      vertical-align: middle;
+      color: #111;
+    }
+    .duels-press-table th:last-child,
+    .duels-press-table td:last-child { border-right: none; }
+    .duels-press-table tbody tr:last-child td { border-bottom: none; }
+    .duels-press-table th {
+      background: #111;
+      color: #fff;
+      font-family: "Barlow Condensed", sans-serif;
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      text-align: center;
+    }
+    .duels-press-table th:nth-child(2) { text-align: left; padding-left: 0.45rem; }
+    .duels-press-table__rank {
+      width: 8%;
+      text-align: center;
+      font-family: "Barlow Condensed", sans-serif;
+      font-weight: 800;
+      color: #94a3b8;
+    }
+    .duels-press-table__name {
+      font-family: "Barlow Condensed", sans-serif;
+      font-size: 0.92rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      text-align: left;
+      padding-left: 0.45rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .duels-press-table__bar {
+      width: 28%;
+      padding: 0.28rem 0.35rem !important;
+    }
+    .duels-press-table__bar span {
+      display: block;
+      height: 0.55rem;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #fbbf24, #d97706);
+      min-width: 4px;
+    }
+    .duels-press-table__bar span.is-regain {
+      background: linear-gradient(90deg, #fb7185, #e11d48);
+    }
+    .duels-press-table__bar span.is-duel {
+      background: linear-gradient(90deg, #fde047, #ca8a04);
+    }
+    .duels-press-table__bar span.is-aerial {
+      background: linear-gradient(90deg, #7dd3fc, #0284c7);
+    }
+    .duels-press-table__bar span.is-ground {
+      background: linear-gradient(90deg, #fde047, #ca8a04);
+    }
+    .duels-press-table__bar .duels-split-bar {
+      display: flex;
+      height: 0.55rem;
+      border-radius: 999px;
+      overflow: hidden;
+      min-width: 4px;
+      background: #e2e8f0;
+    }
+    .duels-press-table__name-cell {
+      padding-left: 0.45rem !important;
+      text-align: left !important;
+    }
+    .duels-press-table__name-main {
+      font-family: "Barlow Condensed", sans-serif;
+      font-size: 0.92rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: #0f172a;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .duels-press-table__name-detail {
+      margin-top: 0.06rem;
+      font-size: 0.62rem;
+      font-weight: 600;
+      color: #64748b;
+      line-height: 1.15;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .duels-oop-breakdown-wrap {
+      flex: 0 0 auto;
+    }
+    .duels-oop-breakdown-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      table-layout: fixed;
+      font-size: 0.82rem;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid var(--slide-line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .duels-oop-breakdown-table th,
+    .duels-oop-breakdown-table td {
+      border-right: 1px solid #e2e8f0;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 0.3rem 0.32rem;
+      vertical-align: middle;
+    }
+    .duels-oop-breakdown-table th:last-child,
+    .duels-oop-breakdown-table td:last-child { border-right: none; }
+    .duels-oop-breakdown-table tbody tr:last-child td { border-bottom: none; }
+    .duels-oop-breakdown-table th {
+      background: #111;
+      color: #fff;
+      font-family: "Barlow Condensed", sans-serif;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      text-align: center;
+    }
+    .duels-oop-breakdown-table th:first-child { text-align: left; padding-left: 0.45rem; }
+    .duels-oop-breakdown-table__label {
+      font-family: "Barlow Condensed", sans-serif;
+      font-size: 0.82rem;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      color: #334155;
+      text-align: left;
+      padding-left: 0.45rem !important;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .duels-oop-breakdown-table__value {
+      font-family: "Barlow Condensed", sans-serif;
+      font-size: 0.88rem;
+      font-weight: 800;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .slide--duels-map-markers .prog-keynote__body {
+      grid-template-columns: minmax(0, 1.22fr) minmax(320px, 0.78fr);
+      gap: 0.85rem;
+      padding: 0.75rem 0.85rem 0.8rem;
+    }
+    .duels-map-panel--heat .duels-map-key,
+    .duels-map-panel--markers .duels-map-key {
+      margin-top: auto;
+      padding-top: 0.35rem;
+      border-top: 1px solid #e2e8f0;
+    }
+    .duels-map-panel--heat .duels-map-panel__section-title,
+    .duels-map-panel--markers .duels-map-panel__section-title {
+      margin-top: 0.1rem;
+    }
+    .duels-press-table__count {
+      width: 16%;
+      text-align: center;
+      font-family: "Barlow Condensed", sans-serif;
+      font-size: 1rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+    .duels-press-table tbody {
+      height: 100%;
+    }
+    .duels-press-table tbody tr {
+      height: calc(100% / max(var(--press-rows, 1), 1));
     }
     @media (max-width: 900px) {
       .slide--duels-map-detail .prog-keynote__body {
@@ -2810,6 +3454,15 @@
     .shots-phase-table tbody tr {
       height: 1%;
     }
+    .shots-player-table tr.shots-player-table__total td {
+      background: rgba(241, 245, 249, 0.95);
+      border-top: 2px solid #cbd5e1;
+      font-weight: 800;
+    }
+    .shots-player-table tr.shots-player-table__total td.shots-player-table__name {
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
     .shots-player-table td.shots-player-table__name {
       font-family: "Barlow Condensed", sans-serif;
       font-size: 1.05rem;
@@ -2966,6 +3619,17 @@
     .set-plays-panel--solo .set-plays-pitch-wrap {
       max-width: min(100%, 720px);
       width: 100%;
+    }
+    .set-plays-panel--freekicks.set-plays-panel--solo .set-plays-pitch-wrap {
+      max-width: none;
+      flex: 1 1 auto;
+      min-height: 0;
+      align-items: stretch;
+    }
+    .set-plays-panel--freekicks .set-plays-pitch {
+      width: 100%;
+      height: 100%;
+      max-height: none;
     }
     .set-plays-panel--empty {
       justify-content: flex-start;
@@ -3154,7 +3818,18 @@
       padding: 0.25rem;
       flex: 1 1 auto;
       min-height: 0;
-      overflow: auto;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    .set-plays-metrics .prog-table {
+      flex: 1 1 auto;
+      height: 100%;
+      table-layout: fixed;
+    }
+    .set-plays-metrics .prog-table tbody tr {
+      height: calc(100% / max(var(--set-play-metric-rows, 5), 1));
     }
     @media (max-width: 900px) {
       .set-plays-panels { grid-template-columns: 1fr; }
@@ -3219,184 +3894,199 @@
     }
     @media (max-width: 720px) { .bar-row { grid-template-columns: 1fr; } }
 
-    /* ——— PDF capture polish: fill the frame, quieter chrome ——— */
+    /* ——— PDF capture polish: fit inside frame (breathing room, not zoomed) ——— */
     .slide--pdf-capture.slide--overview,
     .deck--exporting .slide--overview {
       display: flex !important;
       flex-direction: column !important;
-      padding: 1.35rem 1.65rem 1.15rem !important;
+      padding: var(--pdf-inset-y) var(--pdf-inset-x) 0 !important;
       background: #0c0c0c !important;
       border: none !important;
+      gap: 0.35rem;
     }
     .slide--pdf-capture.slide--overview .slide__header h2,
     .deck--exporting .slide--overview .slide__header h2 {
-      font-size: 2.05rem;
+      font-size: 1.7rem;
       letter-spacing: 0.04em;
     }
     .slide--pdf-capture.slide--overview .slide__header p,
     .deck--exporting .slide--overview .slide__header p {
-      font-size: 1.05rem;
+      font-size: 0.92rem;
     }
     .slide--pdf-capture.slide--overview .phase-section,
     .deck--exporting .slide--overview .phase-section {
-      margin-bottom: 0.75rem;
+      margin-bottom: 0.45rem;
       flex-shrink: 0;
     }
     .slide--pdf-capture.slide--overview .phase-section h3,
     .deck--exporting .slide--overview .phase-section h3 {
-      font-size: 1.35rem !important;
-      margin-bottom: 0.55rem !important;
+      font-size: 1.1rem !important;
+      margin-bottom: 0.4rem !important;
     }
     .slide--pdf-capture.slide--overview .phase-bar,
     .deck--exporting .slide--overview .phase-bar {
-      height: 88px !important;
+      height: 64px !important;
     }
     .slide--pdf-capture.slide--overview .phase-bar--baseline,
     .deck--exporting .slide--overview .phase-bar--baseline {
-      height: 48px !important;
+      height: 38px !important;
     }
     .slide--pdf-capture.slide--overview .phase-segment__pct,
     .deck--exporting .slide--overview .phase-segment__pct {
-      font-size: 1.45rem !important;
+      font-size: 1.15rem !important;
     }
     .slide--pdf-capture.slide--overview .phase-segment__label,
     .deck--exporting .slide--overview .phase-segment__label {
-      font-size: 0.92rem !important;
+      font-size: 0.78rem !important;
       font-weight: 700 !important;
     }
     .slide--pdf-capture.slide--overview .phase-bar--baseline .phase-segment__pct,
     .deck--exporting .slide--overview .phase-bar--baseline .phase-segment__pct {
-      font-size: 1.05rem !important;
+      font-size: 0.9rem !important;
     }
     .slide--pdf-capture.slide--overview .phase-bar--baseline .phase-segment__label,
     .deck--exporting .slide--overview .phase-bar--baseline .phase-segment__label {
-      font-size: 0.78rem !important;
+      font-size: 0.68rem !important;
     }
     .slide--pdf-capture.slide--overview .phase-baseline-caption,
     .deck--exporting .slide--overview .phase-baseline-caption {
-      font-size: 0.9rem !important;
+      font-size: 0.78rem !important;
     }
     .slide--pdf-capture.slide--overview .overview-grid,
     .deck--exporting .slide--overview .overview-grid {
       flex: 1 1 auto;
       min-height: 0;
-      margin-top: 0.25rem;
+      margin-top: 0.15rem;
     }
     .slide--pdf-capture.slide--overview .overview-story,
     .deck--exporting .slide--overview .overview-story {
       min-height: 0;
       height: 100%;
       border-radius: 12px;
-      padding: 0.95rem 1.1rem 0.85rem !important;
+      padding: 0.75rem 0.9rem 0.65rem !important;
       box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
     }
     .slide--pdf-capture.slide--overview .overview-story__head h3,
     .deck--exporting .slide--overview .overview-story__head h3 {
-      font-size: 1.35rem !important;
+      font-size: 1.15rem !important;
     }
     .slide--pdf-capture.slide--overview .xg-race-scoreline,
     .deck--exporting .slide--overview .xg-race-scoreline {
-      font-size: 1.05rem !important;
+      font-size: 0.92rem !important;
     }
     .slide--pdf-capture.slide--overview .momentum-hint,
     .deck--exporting .slide--overview .momentum-hint {
-      font-size: 0.82rem !important;
-      margin-bottom: 0.35rem !important;
+      font-size: 0.72rem !important;
+      margin-bottom: 0.25rem !important;
     }
     .slide--pdf-capture.slide--overview .momentum-flow-row,
     .deck--exporting .slide--overview .momentum-flow-row {
-      height: 220px !important;
-      min-height: 220px !important;
-      flex-basis: 220px !important;
+      height: 175px !important;
+      min-height: 175px !important;
+      flex-basis: 175px !important;
     }
     .slide--pdf-capture.slide--overview .momentum-flow__pct,
     .deck--exporting .slide--overview .momentum-flow__pct {
-      font-size: 1.15rem !important;
+      font-size: 1rem !important;
     }
     .slide--pdf-capture.slide--overview .momentum-flow__label,
     .deck--exporting .slide--overview .momentum-flow__label {
-      font-size: 0.88rem !important;
-      margin-top: 0.35rem !important;
+      font-size: 0.78rem !important;
+      margin-top: 0.28rem !important;
     }
     .slide--pdf-capture.slide--overview .momentum-flow__duel-pct,
     .slide--pdf-capture.slide--overview .momentum-flow__press-eff,
     .deck--exporting .slide--overview .momentum-flow__duel-pct,
     .deck--exporting .slide--overview .momentum-flow__press-eff {
-      font-size: 0.78rem !important;
-      margin-top: 0.15rem !important;
+      font-size: 0.7rem !important;
+      margin-top: 0.1rem !important;
     }
     .slide--pdf-capture.slide--overview .momentum-press-card,
     .deck--exporting .slide--overview .momentum-press-card {
-      max-width: 148px !important;
-      width: 98% !important;
-      padding: 0.55rem 0.35rem 0.45rem !important;
-      border-radius: 10px !important;
+      max-width: 128px !important;
+      width: 96% !important;
+      padding: 0.4rem 0.28rem 0.32rem !important;
+      border-radius: 9px !important;
     }
     .slide--pdf-capture.slide--overview .momentum-press-card__count,
     .deck--exporting .slide--overview .momentum-press-card__count {
-      font-size: 1.95rem !important;
+      font-size: 1.55rem !important;
     }
     .slide--pdf-capture.slide--overview .momentum-press-card__label,
     .deck--exporting .slide--overview .momentum-press-card__label {
-      font-size: 0.82rem !important;
+      font-size: 0.72rem !important;
     }
     .slide--pdf-capture.slide--overview .momentum-press-card__eff,
     .deck--exporting .slide--overview .momentum-press-card__eff {
-      font-size: 1.45rem !important;
+      font-size: 1.2rem !important;
     }
     .slide--pdf-capture.slide--overview .momentum-press-card__eff-label,
     .deck--exporting .slide--overview .momentum-press-card__eff-label {
-      font-size: 0.78rem !important;
+      font-size: 0.68rem !important;
     }
     .slide--pdf-capture.slide--overview .momentum-press-card__intensity,
     .slide--pdf-capture.slide--overview .momentum-press-card__wins,
     .deck--exporting .slide--overview .momentum-press-card__intensity,
     .deck--exporting .slide--overview .momentum-press-card__wins {
-      font-size: 0.82rem !important;
+      font-size: 0.72rem !important;
     }
     .slide--pdf-capture.slide--overview .momentum-xg-cell,
     .deck--exporting .slide--overview .momentum-xg-cell {
-      max-width: 110px !important;
-      width: 96% !important;
-      padding: 0.28rem 0.18rem 0.22rem !important;
+      max-width: 96px !important;
+      width: 94% !important;
+      padding: 0.22rem 0.14rem 0.18rem !important;
     }
     .slide--pdf-capture.slide--overview .momentum-xg-cell__vals,
     .deck--exporting .slide--overview .momentum-xg-cell__vals {
-      font-size: 1.1rem !important;
+      font-size: 0.95rem !important;
     }
     .slide--pdf-capture.slide--overview .momentum-xg-cell__shots,
     .slide--pdf-capture.slide--overview .momentum-xg-cell__goals,
     .deck--exporting .slide--overview .momentum-xg-cell__shots,
     .deck--exporting .slide--overview .momentum-xg-cell__goals {
-      font-size: 0.85rem !important;
+      font-size: 0.74rem !important;
     }
     .slide--pdf-capture.slide--overview .momentum-goal-marker__icon,
     .deck--exporting .slide--overview .momentum-goal-marker__icon {
-      font-size: 1rem !important;
+      font-size: 0.9rem !important;
     }
     .slide--pdf-capture.slide--overview .momentum-goal-marker__min,
     .deck--exporting .slide--overview .momentum-goal-marker__min {
-      font-size: 0.72rem !important;
+      font-size: 0.65rem !important;
     }
     .slide--pdf-capture.slide--overview .momentum-axis,
     .deck--exporting .slide--overview .momentum-axis {
-      font-size: 0.85rem !important;
+      font-size: 0.74rem !important;
     }
     .slide--pdf-capture.slide--overview .overview-story__xg-label,
     .deck--exporting .slide--overview .overview-story__xg-label {
-      font-size: 0.95rem !important;
+      font-size: 0.82rem !important;
     }
     .slide--pdf-capture.slide--overview .overview-story__xg-chart,
     .deck--exporting .slide--overview .overview-story__xg-chart {
       flex: 1 1 auto;
       height: auto;
-      min-height: 280px;
+      min-height: 210px;
+      max-height: 250px;
     }
     .slide--pdf-capture.slide--overview .momentum-stat-boxes,
     .deck--exporting .slide--overview .momentum-stat-boxes,
     .slide--pdf-capture.slide--overview .momentum-summary,
     .deck--exporting .slide--overview .momentum-summary {
       display: none !important;
+    }
+    .slide--pdf-capture.slide--shots,
+    .deck--exporting .slide--shots {
+      padding: var(--pdf-inset-y) var(--pdf-inset-x) 0 !important;
+      background: #111 !important;
+      border: none !important;
+    }
+    .slide--pdf-capture.slide--shots .shots-keynote,
+    .deck--exporting .slide--shots .shots-keynote {
+      flex: 1 1 0 !important;
+      min-height: 0 !important;
+      width: 100% !important;
+      max-height: none !important;
     }
     /* Bigger pitches on export */
     .slide--pdf-capture .shots-pitch,
@@ -3410,11 +4100,80 @@
       flex: 1 1 auto;
       height: 100%;
       grid-template-columns: minmax(340px, 32%) minmax(0, 1fr) !important;
-      grid-template-rows: minmax(0, 1fr) minmax(240px, 0.42fr) !important;
+      grid-template-rows: minmax(0, 1fr) auto !important;
       column-gap: 0.9rem !important;
-      row-gap: 0.65rem !important;
+      row-gap: 0.55rem !important;
       align-content: stretch !important;
       padding: 0.7rem 0.85rem 0.8rem !important;
+    }
+    .slide--pdf-capture .shots-bottom,
+    .deck--exporting .shots-bottom {
+      width: 100% !important;
+      max-width: none !important;
+      margin-left: 0 !important;
+      align-items: stretch !important;
+      gap: 0.85rem !important;
+      min-height: 0 !important;
+      overflow: hidden !important;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    }
+    .slide--pdf-capture .shots-player-table,
+    .slide--pdf-capture .shots-phase-table,
+    .deck--exporting .shots-player-table,
+    .deck--exporting .shots-phase-table {
+      font-size: 1rem !important;
+      height: 100% !important;
+    }
+    .slide--pdf-capture .shots-player-table th,
+    .slide--pdf-capture .shots-phase-table th,
+    .deck--exporting .shots-player-table th,
+    .deck--exporting .shots-phase-table th {
+      font-size: 0.95rem !important;
+      padding: 0.38rem 0.42rem !important;
+      height: auto !important;
+    }
+    .slide--pdf-capture .shots-player-table td,
+    .slide--pdf-capture .shots-phase-table td,
+    .deck--exporting .shots-player-table td,
+    .deck--exporting .shots-phase-table td {
+      padding: 0.32rem 0.36rem !important;
+    }
+    .slide--pdf-capture .shots-player-table td.shots-player-table__name,
+    .slide--pdf-capture .shots-phase-table td.shots-phase-table__phase,
+    .deck--exporting .shots-player-table td.shots-player-table__name,
+    .deck--exporting .shots-phase-table td.shots-phase-table__phase {
+      font-size: 1.05rem !important;
+    }
+    .slide--pdf-capture .shots-player-table td.shots-player-table__shots,
+    .slide--pdf-capture .shots-player-table td.shots-player-table__xg,
+    .slide--pdf-capture .shots-phase-table__val,
+    .deck--exporting .shots-player-table td.shots-player-table__shots,
+    .deck--exporting .shots-player-table td.shots-player-table__xg,
+    .deck--exporting .shots-phase-table__val {
+      font-size: 1.08rem !important;
+    }
+    .slide--pdf-capture .shots-player-table--compact,
+    .deck--exporting .shots-player-table--compact {
+      font-size: 0.88rem !important;
+    }
+    .slide--pdf-capture .shots-player-table--compact th,
+    .deck--exporting .shots-player-table--compact th {
+      font-size: 0.82rem !important;
+      padding: 0.26rem 0.3rem !important;
+    }
+    .slide--pdf-capture .shots-player-table--compact td,
+    .deck--exporting .shots-player-table--compact td {
+      padding: 0.2rem 0.26rem !important;
+    }
+    .slide--pdf-capture .shots-player-table--compact td.shots-player-table__name,
+    .deck--exporting .shots-player-table--compact td.shots-player-table__name {
+      font-size: 0.86rem !important;
+    }
+    .slide--pdf-capture .shots-player-table--compact td.shots-player-table__shots,
+    .slide--pdf-capture .shots-player-table--compact td.shots-player-table__xg,
+    .deck--exporting .shots-player-table--compact td.shots-player-table__shots,
+    .deck--exporting .shots-player-table--compact td.shots-player-table__xg {
+      font-size: 0.9rem !important;
     }
     .slide--pdf-capture .shots-summary__chip,
     .deck--exporting .shots-summary__chip {
@@ -3429,55 +4188,10 @@
     .deck--exporting .shots-legend__item {
       font-size: 0.95rem !important;
     }
-    .slide--pdf-capture .shots-bottom,
-    .deck--exporting .shots-bottom {
-      width: 100% !important;
-      max-width: none !important;
-      margin-left: 0 !important;
-      align-items: stretch !important;
-      gap: 0.85rem !important;
-      min-height: 0 !important;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
-    }
-    .slide--pdf-capture .shots-player-table,
-    .slide--pdf-capture .shots-phase-table,
-    .deck--exporting .shots-player-table,
-    .deck--exporting .shots-phase-table {
-      font-size: 1.2rem !important;
-      height: 100% !important;
-    }
-    .slide--pdf-capture .shots-player-table th,
-    .slide--pdf-capture .shots-phase-table th,
-    .deck--exporting .shots-player-table th,
-    .deck--exporting .shots-phase-table th {
-      font-size: 1.1rem !important;
-      padding: 0.6rem 0.5rem !important;
-      height: 2.55rem !important;
-    }
-    .slide--pdf-capture .shots-player-table td,
-    .slide--pdf-capture .shots-phase-table td,
-    .deck--exporting .shots-player-table td,
-    .deck--exporting .shots-phase-table td {
-      padding: 0.58rem 0.48rem !important;
-    }
-    .slide--pdf-capture .shots-player-table td.shots-player-table__name,
-    .slide--pdf-capture .shots-phase-table td.shots-phase-table__phase,
-    .deck--exporting .shots-player-table td.shots-player-table__name,
-    .deck--exporting .shots-phase-table td.shots-phase-table__phase {
-      font-size: 1.32rem !important;
-    }
-    .slide--pdf-capture .shots-player-table td.shots-player-table__shots,
-    .slide--pdf-capture .shots-player-table td.shots-player-table__xg,
-    .slide--pdf-capture .shots-phase-table__val,
-    .deck--exporting .shots-player-table td.shots-player-table__shots,
-    .deck--exporting .shots-player-table td.shots-player-table__xg,
-    .deck--exporting .shots-phase-table__val {
-      font-size: 1.38rem !important;
-    }
     .slide--pdf-capture .shots-phase-table__avg,
     .deck--exporting .shots-phase-table__avg {
-      font-size: 0.95rem !important;
-      padding: 0.15rem 0.45rem !important;
+      font-size: 0.85rem !important;
+      padding: 0.12rem 0.38rem !important;
     }
     .slide--pdf-capture .shots-phase-panel,
     .deck--exporting .shots-phase-panel {
@@ -3563,31 +4277,6 @@
       max-height: 980px !important;
       width: 100% !important;
     }
-    .slide--pdf-capture .touch-map-svg .zone-val--ib,
-    .deck--exporting .touch-map-svg .zone-val--ib {
-      font-size: 26px !important;
-    }
-    .slide--pdf-capture .touch-map-svg .zone-val--ib.zone-val--side,
-    .deck--exporting .touch-map-svg .zone-val--ib.zone-val--side {
-      font-size: 20px !important;
-    }
-    .slide--pdf-capture .touch-map-svg .zone-val--conv,
-    .deck--exporting .touch-map-svg .zone-val--conv {
-      font-size: 22px !important;
-    }
-    .slide--pdf-capture .touch-map-svg .zone-val--conv.zone-val--side,
-    .deck--exporting .touch-map-svg .zone-val--conv.zone-val--side {
-      font-size: 18px !important;
-    }
-    .slide--pdf-capture .touch-map-svg .zone-name,
-    .deck--exporting .touch-map-svg .zone-name {
-      font-size: 7.2px !important;
-      font-weight: 700 !important;
-    }
-    .slide--pdf-capture .touch-map-svg .zone-name--narrow,
-    .deck--exporting .touch-map-svg .zone-name--narrow {
-      font-size: 6.4px !important;
-    }
     .slide--pdf-capture .xg-goal-overlay__ball,
     .deck--exporting .xg-goal-overlay__ball {
       font-size: 1.25rem !important;
@@ -3604,17 +4293,17 @@
     .deck--exporting .cross-keynote__bar,
     .deck--exporting .prog-keynote__bar,
     .deck--exporting .set-plays-keynote__bar {
-      font-size: 1.55rem !important;
-      padding: 0.9rem 1.25rem !important;
+      font-size: 1.28rem !important;
+      padding: 0.7rem 1.05rem !important;
     }
     .slide--pdf-capture.slide--touch,
     .deck--exporting .slide--touch {
       display: flex !important;
       flex-direction: column !important;
-      padding: 1rem 1.15rem 0.95rem !important;
+      padding: var(--pdf-inset-y) var(--pdf-inset-x) 0 !important;
       background: #0c0c0c !important;
       border: none !important;
-      gap: 0.45rem;
+      gap: 0.35rem;
     }
     .slide--pdf-capture.slide--touch .slide__header,
     .deck--exporting .slide--touch .slide__header {
@@ -3623,52 +4312,53 @@
     }
     .slide--pdf-capture.slide--touch .slide__header h2,
     .deck--exporting .slide--touch .slide__header h2 {
-      font-size: 1.85rem !important;
+      font-size: 1.55rem !important;
     }
     .slide--pdf-capture.slide--touch .slide__header p,
     .deck--exporting .slide--touch .slide__header p {
-      font-size: 0.92rem !important;
+      font-size: 0.82rem !important;
       color: #cbd5e1 !important;
-      margin-top: 0.2rem !important;
+      margin-top: 0.15rem !important;
     }
     .slide--pdf-capture.slide--touch .touch-columns,
     .deck--exporting .slide--touch .touch-columns {
       flex: 1 1 auto;
       min-height: 0;
       align-items: stretch;
-      gap: 0.85rem !important;
-      margin-top: 0.15rem !important;
+      gap: 0.7rem !important;
+      margin-top: 0.1rem !important;
     }
     .slide--pdf-capture.slide--touch .touch-column,
     .deck--exporting .slide--touch .touch-column {
       display: flex;
       flex-direction: column;
       min-height: 0;
-      padding: 0.75rem 0.8rem 0.7rem !important;
-      gap: 0.55rem !important;
+      padding: 0.55rem 0.65rem 0.5rem !important;
+      gap: 0.4rem !important;
     }
     .slide--pdf-capture.slide--touch .touch-column__title,
     .deck--exporting .slide--touch .touch-column__title {
-      font-size: 1.1rem !important;
+      font-size: 0.95rem !important;
       letter-spacing: 0.1em !important;
     }
     .slide--pdf-capture.slide--touch .touch-stat,
     .deck--exporting .slide--touch .touch-stat {
-      padding: 0.28rem 0.55rem !important;
+      padding: 0.2rem 0.45rem !important;
     }
     .slide--pdf-capture.slide--touch .touch-stat__val,
     .deck--exporting .slide--touch .touch-stat__val {
-      font-size: 1.25rem !important;
+      font-size: 1.05rem !important;
     }
     .slide--pdf-capture.slide--touch .touch-stat__lbl,
     .deck--exporting .slide--touch .touch-stat__lbl {
-      font-size: 0.75rem !important;
+      font-size: 0.68rem !important;
     }
     .slide--pdf-capture.slide--touch .touch-map,
     .deck--exporting .slide--touch .touch-map {
-      flex: 0 1 auto !important;
+      flex: 0 1 42% !important;
       width: 100% !important;
       max-width: 100% !important;
+      max-height: 360px !important;
       min-height: 0 !important;
       overflow: hidden !important;
     }
@@ -3676,46 +4366,49 @@
     .deck--exporting .slide--touch .touch-lists__grid {
       flex: 1 1 auto;
       min-height: 0;
-      gap: 0.6rem !important;
+      gap: 0.5rem !important;
       align-items: stretch;
     }
     .slide--pdf-capture.slide--touch .touch-list-panel,
     .deck--exporting .slide--touch .touch-list-panel {
-      padding: 0.6rem 0.65rem 0.55rem !important;
+      padding: 0.45rem 0.5rem 0.4rem !important;
       display: flex;
       flex-direction: column;
       min-height: 0;
+      overflow: hidden;
     }
     .slide--pdf-capture.slide--touch .touch-list-panel__title,
     .deck--exporting .slide--touch .touch-list-panel__title {
-      font-size: 1rem !important;
-      margin-bottom: 0.4rem !important;
+      font-size: 0.85rem !important;
+      margin-bottom: 0.28rem !important;
       letter-spacing: 0.08em !important;
     }
     .slide--pdf-capture.slide--touch .touch-player-cards,
     .deck--exporting .slide--touch .touch-player-cards {
       flex: 1 1 auto;
-      justify-content: space-evenly;
+      justify-content: flex-start;
+      gap: 0.15rem;
+      overflow: hidden;
     }
     .slide--pdf-capture.slide--touch .touch-player-card,
     .deck--exporting .slide--touch .touch-player-card {
-      padding: 0.45rem 0 !important;
+      padding: 0.22rem 0 !important;
     }
     .slide--pdf-capture.slide--touch .touch-player-card__name,
     .deck--exporting .slide--touch .touch-player-card__name {
-      font-size: 1.15rem !important;
+      font-size: 0.95rem !important;
       font-weight: 600 !important;
     }
     .slide--pdf-capture.slide--touch .touch-player-card__count,
     .deck--exporting .slide--touch .touch-player-card__count {
-      min-width: 42px !important;
-      height: 34px !important;
-      font-size: 1.2rem !important;
-      border-radius: 7px !important;
+      min-width: 34px !important;
+      height: 26px !important;
+      font-size: 0.95rem !important;
+      border-radius: 6px !important;
     }
     .slide--pdf-capture.slide--touch .touch-detail__empty,
     .deck--exporting .slide--touch .touch-detail__empty {
-      font-size: 0.95rem !important;
+      font-size: 0.85rem !important;
     }
     .slide--pdf-capture .prog-keynote,
     .slide--pdf-capture .cross-keynote,
@@ -3748,7 +4441,7 @@
     }
     .slide--pdf-capture.slide--set-plays,
     .deck--exporting .slide--set-plays {
-      padding: 1.1rem 1.25rem 1.05rem !important;
+      padding: var(--pdf-inset-y) var(--pdf-inset-x) 0 !important;
       background: #0c0c0c !important;
       box-sizing: border-box !important;
       display: flex !important;
@@ -3802,6 +4495,40 @@
       min-height: 0 !important;
       max-height: none !important;
     }
+    .slide--pdf-capture.slide--set-plays-freekicks .set-plays-keynote__body,
+    .deck--exporting .slide--set-plays-freekicks .set-plays-keynote__body {
+      flex: 1 1 auto !important;
+      height: 100% !important;
+      min-height: 0 !important;
+      padding: 0.55rem 0.65rem 0.6rem !important;
+    }
+    .slide--pdf-capture.slide--set-plays-freekicks .set-plays-panels,
+    .deck--exporting .slide--set-plays-freekicks .set-plays-panels {
+      flex: 1 1 auto !important;
+      height: 100% !important;
+      min-height: 0 !important;
+    }
+    .slide--pdf-capture.slide--set-plays-freekicks .set-plays-panel,
+    .deck--exporting .slide--set-plays-freekicks .set-plays-panel {
+      height: 100% !important;
+      min-height: 0 !important;
+      display: flex !important;
+      flex-direction: column !important;
+    }
+    .slide--pdf-capture.slide--set-plays-freekicks .set-plays-panel--solo .set-plays-pitch-wrap,
+    .deck--exporting .slide--set-plays-freekicks .set-plays-panel--solo .set-plays-pitch-wrap {
+      flex: 1 1 auto !important;
+      max-width: none !important;
+      width: 100% !important;
+      min-height: 0 !important;
+      align-items: stretch !important;
+    }
+    .slide--pdf-capture.slide--set-plays-freekicks .set-plays-pitch,
+    .deck--exporting .slide--set-plays-freekicks .set-plays-pitch {
+      width: 100% !important;
+      height: 100% !important;
+      max-height: none !important;
+    }
     .slide--pdf-capture .set-plays-legend,
     .deck--exporting .set-plays-legend {
       font-size: 0.85rem !important;
@@ -3820,33 +4547,108 @@
     .deck--exporting .set-plays-table-wrap--sparse .set-plays-table tbody tr {
       height: calc(100% / max(var(--set-play-rows, 1), 1)) !important;
     }
+    .slide--pdf-capture.slide--set-plays-metrics .set-plays-keynote__body,
+    .deck--exporting .slide--set-plays-metrics .set-plays-keynote__body {
+      flex: 1 1 auto !important;
+      height: 100% !important;
+      min-height: 0 !important;
+      padding: 0.65rem 0.75rem 0.7rem !important;
+    }
+    .slide--pdf-capture.slide--set-plays-metrics .set-plays-metrics,
+    .deck--exporting .slide--set-plays-metrics .set-plays-metrics {
+      flex: 1 1 auto !important;
+      height: 100% !important;
+      min-height: 0 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      overflow: hidden !important;
+      padding: 0.35rem !important;
+    }
+    .slide--pdf-capture.slide--set-plays-metrics .set-plays-metrics .prog-table,
+    .deck--exporting .slide--set-plays-metrics .set-plays-metrics .prog-table {
+      flex: 1 1 auto !important;
+      height: 100% !important;
+      min-height: 0 !important;
+    }
+    .slide--pdf-capture.slide--set-plays-metrics .set-plays-metrics .prog-table th,
+    .deck--exporting .slide--set-plays-metrics .set-plays-metrics .prog-table th {
+      font-size: 1.35rem !important;
+      padding: 0.85rem 0.55rem !important;
+    }
+    .slide--pdf-capture.slide--set-plays-metrics .set-plays-metrics .prog-table td,
+    .deck--exporting .slide--set-plays-metrics .set-plays-metrics .prog-table td {
+      padding: 0.75rem 0.55rem !important;
+      vertical-align: middle !important;
+    }
+    .slide--pdf-capture.slide--set-plays-metrics .set-plays-metrics .prog-table__metric,
+    .deck--exporting .slide--set-plays-metrics .set-plays-metrics .prog-table__metric {
+      font-size: 1.55rem !important;
+      line-height: 1.15 !important;
+      letter-spacing: 0.04em !important;
+    }
+    .slide--pdf-capture.slide--set-plays-metrics .set-plays-metrics .prog-table__avg-val,
+    .slide--pdf-capture.slide--set-plays-metrics .set-plays-metrics .prog-table__match,
+    .slide--pdf-capture.slide--set-plays-metrics .set-plays-metrics .prog-table__top7,
+    .deck--exporting .slide--set-plays-metrics .set-plays-metrics .prog-table__avg-val,
+    .deck--exporting .slide--set-plays-metrics .set-plays-metrics .prog-table__match,
+    .deck--exporting .slide--set-plays-metrics .set-plays-metrics .prog-table__top7 {
+      font-size: 1.75rem !important;
+      line-height: 1.05 !important;
+    }
+    .slide--pdf-capture.slide--set-plays-metrics .set-plays-metrics .prog-table__rank,
+    .deck--exporting .slide--set-plays-metrics .set-plays-metrics .prog-table__rank {
+      font-size: 1.05rem !important;
+    }
     .slide--pdf-capture .shots-keynote__body,
     .deck--exporting .shots-keynote__body {
       padding: 0.75rem 0.9rem 0.85rem !important;
     }
+    .slide--pdf-capture.slide--expected-threat,
+    .deck--exporting .slide--expected-threat {
+      padding: var(--pdf-inset-y) var(--pdf-inset-x) 0 !important;
+      background: #111 !important;
+      border: none !important;
+    }
+    .slide--pdf-capture.slide--expected-threat .prog-keynote,
+    .deck--exporting .slide--expected-threat .prog-keynote {
+      flex: 1 1 0 !important;
+      min-height: 0 !important;
+      width: 100% !important;
+      max-height: none !important;
+    }
     .slide--pdf-capture.slide--expected-threat .prog-keynote__body,
     .deck--exporting .slide--expected-threat .prog-keynote__body {
       grid-template-columns: minmax(280px, 28%) minmax(0, 1fr) !important;
-      align-items: start !important;
+      align-items: stretch !important;
+      align-content: stretch !important;
       gap: 0.75rem !important;
-      padding: 0.65rem 0.75rem 0.7rem !important;
+      padding: 0.75rem 0.85rem 0.8rem !important;
       min-height: 0 !important;
+      flex: 1 1 auto !important;
       height: 100% !important;
       overflow: hidden !important;
     }
     .slide--pdf-capture.slide--expected-threat .prog-team-table,
     .deck--exporting .slide--expected-threat .prog-team-table {
-      align-self: start !important;
-      height: auto !important;
+      align-self: stretch !important;
+      height: 100% !important;
       width: 100%;
       table-layout: fixed;
+    }
+    .slide--pdf-capture.slide--expected-threat .prog-team-table tbody,
+    .deck--exporting .slide--expected-threat .prog-team-table tbody {
+      height: calc(100% - 2.65rem);
+    }
+    .slide--pdf-capture.slide--expected-threat .prog-team-table tbody tr,
+    .deck--exporting .slide--expected-threat .prog-team-table tbody tr {
+      height: calc(100% / max(var(--prog-rows, 1), 1));
     }
     .slide--pdf-capture.slide--expected-threat .prog-team-table th,
     .slide--pdf-capture.slide--expected-threat .prog-team-table td,
     .deck--exporting .slide--expected-threat .prog-team-table th,
     .deck--exporting .slide--expected-threat .prog-team-table td {
-      padding: 0.42rem 0.32rem !important;
-      font-size: 0.88rem !important;
+      padding: 0.58rem 0.38rem !important;
+      font-size: 0.96rem !important;
     }
     .slide--pdf-capture.slide--expected-threat .prog-team-table .prog-table__metric,
     .deck--exporting .slide--expected-threat .prog-team-table .prog-table__metric {
@@ -3859,39 +4661,50 @@
     .slide--pdf-capture.slide--expected-threat .prog-team-table .prog-table__match,
     .deck--exporting .slide--expected-threat .prog-team-table .prog-table__avg-val,
     .deck--exporting .slide--expected-threat .prog-team-table .prog-table__match {
-      font-size: 1.05rem !important;
+      font-size: 1.28rem !important;
     }
     .slide--pdf-capture.slide--expected-threat .prog-team-table .prog-table__rank,
     .deck--exporting .slide--expected-threat .prog-team-table .prog-table__rank {
-      font-size: 0.72rem !important;
+      font-size: 0.78rem !important;
     }
     .slide--pdf-capture.slide--expected-threat .prog-keynote__body > div,
     .deck--exporting .slide--expected-threat .prog-keynote__body > div {
       min-width: 0 !important;
       min-height: 0 !important;
+      height: 100% !important;
       max-height: 100% !important;
       overflow: hidden !important;
       display: flex !important;
       flex-direction: column !important;
+      flex: 1 1 auto !important;
     }
     .slide--pdf-capture.slide--expected-threat .prog-player-table--pxt,
     .deck--exporting .slide--expected-threat .prog-player-table--pxt {
       width: 100%;
       table-layout: fixed;
-      flex: 1 1 auto;
-      min-height: 0;
+      flex: 1 1 auto !important;
+      height: 100% !important;
+      min-height: 0 !important;
+    }
+    .slide--pdf-capture.slide--expected-threat .prog-player-table--pxt tbody,
+    .deck--exporting .slide--expected-threat .prog-player-table--pxt tbody {
+      height: calc(100% - 2.65rem);
+    }
+    .slide--pdf-capture.slide--expected-threat .prog-player-table--pxt tbody tr,
+    .deck--exporting .slide--expected-threat .prog-player-table--pxt tbody tr {
+      height: calc(100% / max(var(--prog-rows, 1), 1));
     }
     .slide--pdf-capture.slide--expected-threat .prog-player-table--pxt th,
     .slide--pdf-capture.slide--expected-threat .prog-player-table--pxt td,
     .deck--exporting .slide--expected-threat .prog-player-table--pxt th,
     .deck--exporting .slide--expected-threat .prog-player-table--pxt td {
-      padding: 0.22rem 0.2rem !important;
-      font-size: 0.78rem !important;
+      padding: 0.38rem 0.24rem !important;
+      font-size: 0.9rem !important;
       line-height: 1.15 !important;
     }
     .slide--pdf-capture.slide--expected-threat .prog-player-table--pxt .prog-table__metric,
     .deck--exporting .slide--expected-threat .prog-player-table--pxt .prog-table__metric {
-      font-size: 0.82rem !important;
+      font-size: 0.92rem !important;
       text-align: left !important;
       padding-left: 0.35rem !important;
       overflow: hidden;
@@ -3900,12 +4713,12 @@
     }
     .slide--pdf-capture.slide--expected-threat .perf-cell__val,
     .deck--exporting .slide--expected-threat .perf-cell__val {
-      font-size: 0.92rem !important;
+      font-size: 1.05rem !important;
       line-height: 1.05 !important;
     }
     .slide--pdf-capture.slide--expected-threat .perf-cell__avg,
     .deck--exporting .slide--expected-threat .perf-cell__avg {
-      font-size: 0.55rem !important;
+      font-size: 0.62rem !important;
       line-height: 1.05 !important;
     }
     .slide--pdf-capture.slide--expected-threat .perf-cell__stack,
@@ -3915,33 +4728,62 @@
     }
     .slide--pdf-capture.slide--expected-threat .perf-legend,
     .deck--exporting .slide--expected-threat .perf-legend {
-      font-size: 0.78rem !important;
-      padding-bottom: 0.3rem !important;
+      font-size: 0.82rem !important;
+      padding-bottom: 0.35rem !important;
       flex: 0 0 auto !important;
     }
-    /* Ball Progression — keep both tables on the page */
+    /* Ball Progression — fit inside inset frame, stretch rows gently */
+    .slide--pdf-capture.slide--progression:not(.slide--expected-threat),
+    .deck--exporting .slide--progression:not(.slide--expected-threat) {
+      padding: var(--pdf-inset-y) var(--pdf-inset-x) 0 !important;
+      background: #111 !important;
+      border: none !important;
+    }
+    .slide--pdf-capture.slide--progression .prog-keynote,
+    .deck--exporting .slide--progression .prog-keynote {
+      flex: 1 1 0 !important;
+      min-height: 0 !important;
+      width: 100% !important;
+      max-height: none !important;
+    }
+    .slide--pdf-capture.slide--progression .prog-keynote__body,
+    .deck--exporting .slide--progression .prog-keynote__body {
+      grid-template-rows: minmax(0, 1fr) !important;
+      align-items: stretch !important;
+      align-content: stretch !important;
+    }
     .slide--pdf-capture.slide--progression:not(.slide--expected-threat) .prog-keynote__body,
     .deck--exporting .slide--progression:not(.slide--expected-threat) .prog-keynote__body {
       grid-template-columns: minmax(260px, 28%) minmax(0, 1fr) !important;
-      align-items: start !important;
-      padding: 0.65rem 0.75rem 0.7rem !important;
-      gap: 0.75rem !important;
+      align-items: stretch !important;
+      align-content: stretch !important;
+      padding: 0.75rem 0.85rem 0.8rem !important;
+      gap: 0.8rem !important;
       min-height: 0 !important;
+      flex: 1 1 auto !important;
       height: 100% !important;
       overflow: hidden !important;
     }
     .slide--pdf-capture.slide--progression:not(.slide--expected-threat) .prog-team-table,
     .deck--exporting .slide--progression:not(.slide--expected-threat) .prog-team-table {
-      height: auto !important;
-      align-self: start !important;
+      height: 100% !important;
+      align-self: stretch !important;
       table-layout: fixed;
+    }
+    .slide--pdf-capture.slide--progression:not(.slide--expected-threat) .prog-team-table tbody,
+    .deck--exporting .slide--progression:not(.slide--expected-threat) .prog-team-table tbody {
+      height: calc(100% - 2.65rem);
+    }
+    .slide--pdf-capture.slide--progression:not(.slide--expected-threat) .prog-team-table tbody tr,
+    .deck--exporting .slide--progression:not(.slide--expected-threat) .prog-team-table tbody tr {
+      height: calc(100% / max(var(--prog-rows, 1), 1));
     }
     .slide--pdf-capture.slide--progression:not(.slide--expected-threat) .prog-team-table th,
     .slide--pdf-capture.slide--progression:not(.slide--expected-threat) .prog-team-table td,
     .deck--exporting .slide--progression:not(.slide--expected-threat) .prog-team-table th,
     .deck--exporting .slide--progression:not(.slide--expected-threat) .prog-team-table td {
-      padding: 0.48rem 0.35rem !important;
-      font-size: 0.9rem !important;
+      padding: 0.58rem 0.38rem !important;
+      font-size: 0.96rem !important;
     }
     .slide--pdf-capture.slide--progression:not(.slide--expected-threat) .prog-team-table .prog-table__metric,
     .deck--exporting .slide--progression:not(.slide--expected-threat) .prog-team-table .prog-table__metric {
@@ -3955,11 +4797,11 @@
     .deck--exporting .slide--progression:not(.slide--expected-threat) .prog-table__avg-val,
     .deck--exporting .slide--progression:not(.slide--expected-threat) .prog-table__match,
     .deck--exporting .slide--progression:not(.slide--expected-threat) .prog-table__top7 {
-      font-size: 1.1rem !important;
+      font-size: 1.28rem !important;
     }
     .slide--pdf-capture.slide--progression:not(.slide--expected-threat) .prog-table__rank,
     .deck--exporting .slide--progression:not(.slide--expected-threat) .prog-table__rank {
-      font-size: 0.72rem !important;
+      font-size: 0.78rem !important;
     }
     .slide--pdf-capture.slide--progression:not(.slide--expected-threat) .perf-legend,
     .deck--exporting .slide--progression:not(.slide--expected-threat) .perf-legend {
@@ -3971,25 +4813,38 @@
     .deck--exporting .slide--progression:not(.slide--expected-threat) .prog-keynote__body > div {
       min-width: 0 !important;
       min-height: 0 !important;
+      height: 100% !important;
       max-height: 100% !important;
       overflow: hidden !important;
       display: flex !important;
       flex-direction: column !important;
+      flex: 1 1 auto !important;
     }
     .slide--pdf-capture.slide--progression:not(.slide--expected-threat) .prog-player-table,
     .deck--exporting .slide--progression:not(.slide--expected-threat) .prog-player-table {
       width: 100%;
       table-layout: fixed;
+      flex: 1 1 auto !important;
+      height: 100% !important;
+      min-height: 0 !important;
+    }
+    .slide--pdf-capture.slide--progression:not(.slide--expected-threat) .prog-player-table tbody,
+    .deck--exporting .slide--progression:not(.slide--expected-threat) .prog-player-table tbody {
+      height: calc(100% - 2.65rem);
+    }
+    .slide--pdf-capture.slide--progression:not(.slide--expected-threat) .prog-player-table tbody tr,
+    .deck--exporting .slide--progression:not(.slide--expected-threat) .prog-player-table tbody tr {
+      height: calc(100% / max(var(--prog-rows, 1), 1));
     }
     .slide--pdf-capture.slide--progression:not(.slide--expected-threat) .prog-player-table th,
     .deck--exporting .slide--progression:not(.slide--expected-threat) .prog-player-table th {
-      font-size: 0.82rem !important;
-      padding: 0.35rem 0.28rem !important;
+      font-size: 0.88rem !important;
+      padding: 0.42rem 0.3rem !important;
     }
     .slide--pdf-capture.slide--progression:not(.slide--expected-threat) .prog-player-table td,
     .deck--exporting .slide--progression:not(.slide--expected-threat) .prog-player-table td {
-      font-size: 0.88rem !important;
-      padding: 0.28rem 0.28rem !important;
+      font-size: 0.94rem !important;
+      padding: 0.42rem 0.3rem !important;
     }
     .slide--pdf-capture.slide--progression:not(.slide--expected-threat) .prog-player-table .prog-table__metric,
     .deck--exporting .slide--progression:not(.slide--expected-threat) .prog-player-table .prog-table__metric {
@@ -4002,12 +4857,12 @@
     }
     .slide--pdf-capture.slide--progression:not(.slide--expected-threat) .perf-cell__val,
     .deck--exporting .slide--progression:not(.slide--expected-threat) .perf-cell__val {
-      font-size: 1.02rem !important;
+      font-size: 1.18rem !important;
       line-height: 1.05 !important;
     }
     .slide--pdf-capture.slide--progression:not(.slide--expected-threat) .perf-cell__avg,
     .deck--exporting .slide--progression:not(.slide--expected-threat) .perf-cell__avg {
-      font-size: 0.58rem !important;
+      font-size: 0.68rem !important;
       line-height: 1.05 !important;
     }
     .slide--pdf-capture.slide--progression:not(.slide--expected-threat) .perf-cell__stack,
@@ -4112,18 +4967,18 @@
     .deck--exporting .slide--tilt {
       display: flex !important;
       flex-direction: column !important;
-      padding: 1.45rem 1.85rem 1.35rem !important;
+      padding: var(--pdf-inset-y) var(--pdf-inset-x) 0 !important;
       background: #0c0c0c !important;
       border: none !important;
-      gap: 0.85rem;
+      gap: 0.55rem;
     }
     .slide--pdf-capture.slide--tilt .slide__header h2,
     .deck--exporting .slide--tilt .slide__header h2 {
-      font-size: 2.1rem !important;
+      font-size: 1.7rem !important;
     }
     .slide--pdf-capture.slide--tilt .slide__header p,
     .deck--exporting .slide--tilt .slide__header p {
-      font-size: 1.05rem !important;
+      font-size: 0.9rem !important;
     }
     .slide--pdf-capture.slide--tilt .tilt-body,
     .deck--exporting .slide--tilt .tilt-body {
@@ -4131,7 +4986,7 @@
       min-height: 0;
       display: flex;
       flex-direction: column;
-      gap: 1.1rem;
+      gap: 0.75rem;
     }
     .slide--pdf-capture.slide--tilt .tilt-viz,
     .deck--exporting .slide--tilt .tilt-viz {
@@ -4140,18 +4995,18 @@
       display: flex;
       flex-direction: column;
       justify-content: space-evenly;
-      gap: 0.85rem;
+      gap: 0.55rem;
     }
     .slide--pdf-capture.slide--tilt .tilt-bar,
     .deck--exporting .slide--tilt .tilt-bar {
-      height: 110px !important;
+      height: 78px !important;
       margin-top: 0 !important;
-      border-radius: 12px !important;
+      border-radius: 10px !important;
       flex-shrink: 0;
     }
     .slide--pdf-capture.slide--tilt .tilt-segment,
     .deck--exporting .slide--tilt .tilt-segment {
-      font-size: 1.55rem !important;
+      font-size: 1.25rem !important;
       font-family: "Barlow Condensed", sans-serif;
       font-weight: 800;
     }
@@ -4162,51 +5017,51 @@
     }
     .slide--pdf-capture.slide--tilt .tilt-baseline__row-label,
     .deck--exporting .slide--tilt .tilt-baseline__row-label {
-      font-size: 0.95rem !important;
+      font-size: 0.82rem !important;
     }
     .slide--pdf-capture.slide--tilt .tilt-block--baseline-avg,
     .deck--exporting .slide--tilt .tilt-block--baseline-avg {
-      height: 64px !important;
+      height: 48px !important;
     }
     .slide--pdf-capture.slide--tilt .tilt-baseline__tag,
     .deck--exporting .slide--tilt .tilt-baseline__tag {
-      font-size: 0.92rem !important;
-      padding: 0.28rem 0.65rem !important;
+      font-size: 0.78rem !important;
+      padding: 0.22rem 0.5rem !important;
     }
     .slide--pdf-capture.slide--tilt .tilt-baseline__summary,
     .deck--exporting .slide--tilt .tilt-baseline__summary {
-      font-size: 1.15rem !important;
-      margin-top: 0.65rem !important;
+      font-size: 0.95rem !important;
+      margin-top: 0.45rem !important;
     }
     .slide--pdf-capture.slide--tilt .tilt-timeline,
     .deck--exporting .slide--tilt .tilt-timeline {
       margin-top: 0 !important;
-      gap: 0.75rem !important;
+      gap: 0.55rem !important;
       flex: 1 1 auto;
-      min-height: 180px;
+      min-height: 140px;
       align-items: stretch;
     }
     .slide--pdf-capture.slide--tilt .tilt-block-wrap,
     .deck--exporting .slide--tilt .tilt-block-wrap {
-      gap: 0.4rem !important;
+      gap: 0.3rem !important;
       height: 100%;
     }
     .slide--pdf-capture.slide--tilt .tilt-block,
     .deck--exporting .slide--tilt .tilt-block {
       height: auto !important;
       flex: 1 1 auto;
-      min-height: 120px !important;
+      min-height: 95px !important;
       border-radius: 8px !important;
     }
     .slide--pdf-capture.slide--tilt .tilt-block__label,
     .deck--exporting .slide--tilt .tilt-block__label {
-      font-size: 1.45rem !important;
+      font-size: 1.2rem !important;
       font-family: "Barlow Condensed", sans-serif;
       font-weight: 800;
     }
     .slide--pdf-capture.slide--tilt .tilt-block__time,
     .deck--exporting .slide--tilt .tilt-block__time {
-      font-size: 1rem !important;
+      font-size: 0.85rem !important;
     }
     .slide--pdf-capture.slide--tilt .tilt-block__avg,
     .deck--exporting .slide--tilt .tilt-block__avg {
@@ -4248,35 +5103,75 @@
     .deck--exporting .slide--data {
       border: none !important;
     }
+    /* Keynote family — dark letterbox so gutters are visible around rounded cards */
+    .slide--pdf-capture.slide--crosses,
+    .slide--pdf-capture.slide--crosses-oop,
+    .slide--pdf-capture.slide--duels,
+    .slide--pdf-capture.slide--divide,
+    .slide--pdf-capture.slide--shots-oop,
+    .deck--exporting .slide--crosses,
+    .deck--exporting .slide--crosses-oop,
+    .deck--exporting .slide--duels,
+    .deck--exporting .slide--divide,
+    .deck--exporting .slide--shots-oop {
+      padding: var(--pdf-inset-y) var(--pdf-inset-x) 0 !important;
+      background: #111 !important;
+      border: none !important;
+    }
   </style>
 </head>
 <body>
   <div class="app">
     <header class="toolbar">
       <div>
-        <p class="toolbar__eyebrow">Port Vale FC · <a href="/" style="color:inherit;text-decoration:none;opacity:.75">← All apps</a></p>
+        <p class="toolbar__eyebrow">Port Vale FC · <a href="http://127.0.0.1:8000/" style="color:inherit;text-decoration:none;opacity:.75">← All apps</a></p>
         <h1 class="toolbar__title">Post-Match Data Dashboard</h1>
+        <p class="toolbar__subnote" style="margin:0.25rem 0 0;font-size:0.84rem;color:#9ca3af">League Two 26/27 · cups included · scroll in normal view</p>
       </div>
-      <div class="toolbar__actions">
-        <button id="exportPdfBtn" class="toolbar__btn" type="button" title="1920×1080 Keynote PDF for WhatsApp">Export PDF (WhatsApp)</button>
-        <button id="exportPngBtn" class="toolbar__btn toolbar__btn--secondary" type="button" title="Debug only — individual PNG pages">PNG pages (debug)</button>
-        <input id="matchId" type="hidden" value="216415" />
-        <button id="refreshBtn" class="toolbar__btn" type="button">Refresh</button>
+      <div class="toolbar__actions" style="flex-direction:column;align-items:flex-end">
+        <p class="toolbar__export-status" id="exportStatus" role="status" aria-live="polite"></p>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;justify-content:flex-end">
+          <button id="presentBtn" class="toolbar__btn toolbar__btn--gold toolbar__btn--deck-mode" type="button">Present</button>
+          <button id="pdfViewBtn" class="toolbar__btn toolbar__btn--gold toolbar__btn--deck-mode" type="button">PDF version</button>
+          <button id="refreshBtn" class="toolbar__btn toolbar__btn--deck-mode" type="button">Refresh</button>
+          <button id="pdfBackBtn" class="toolbar__btn toolbar__btn--pdf-mode" type="button">Back to deck</button>
+          <button id="exportPdfBtn" class="toolbar__btn toolbar__btn--gold toolbar__btn--pdf-mode" type="button" title="1920×1080 Keynote PDF for WhatsApp">Download PDF</button>
+          <button id="exportPngBtn" class="toolbar__btn toolbar__btn--secondary toolbar__btn--pdf-mode" type="button" title="Debug only — individual PNG pages">PNG pages (debug)</button>
+          <input id="matchId" type="hidden" value="216415" />
+        </div>
       </div>
     </header>
     <div class="match-bar-wrap">
       <div id="matchBar" class="match-bar" role="listbox" aria-label="Season matches"></div>
     </div>
+    <nav class="filmstrip" id="filmstrip" aria-label="Slides"></nav>
     <div id="banner"></div>
     <main id="deck" class="deck"></main>
   </div>
+  <div id="export-overlay" aria-live="polite" aria-busy="true"></div>
+  <div class="present-ui present-count" id="presentCount"></div>
+  <div class="present-ui present-progress" id="presentProgress" role="tablist" aria-label="Slides"></div>
+  <button type="button" class="present-ui present-nav present-nav--prev" id="presentPrev" aria-label="Previous slide">‹</button>
+  <button type="button" class="present-ui present-nav present-nav--next" id="presentNext" aria-label="Next slide">›</button>
+  <div class="present-ui present-hint" id="presentHint">← Back · Click or → Forward · Esc exit</div>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script>
     let config = null;
     let seasonMatches = [];
+    let selectedIterationId = null;
     let xgRaceChartInstance = null;
+    let deckSlides = [];
+    let presentIndex = 0;
+
+    const presentBtn = document.getElementById("presentBtn");
+    const pdfViewBtn = document.getElementById("pdfViewBtn");
+    const pdfBackBtn = document.getElementById("pdfBackBtn");
+    const filmstripEl = document.getElementById("filmstrip");
+    const presentCountEl = document.getElementById("presentCount");
+    const presentProgressEl = document.getElementById("presentProgress");
+    const exportStatusEl = document.getElementById("exportStatus");
 
     function fmtDate(raw) {
       if (!raw) return "";
@@ -4313,7 +5208,7 @@
       if (!url) {
         return `<div class="${className} slide__crest" style="width:36px;height:36px;font-size:0.7rem;margin:0">${fallback}</div>`;
       }
-      return `<img class="${className}" src="${url}" alt="${label}" />`;
+      return `<img class="${className}" src="${url}" alt="${label}" crossorigin="anonymous" />`;
     }
 
     function crestImgLarge(team) {
@@ -4323,7 +5218,7 @@
       if (!url) {
         return `<div class="slide__crest">${fallback}</div>`;
       }
-      return `<img class="slide__crest-img" src="${url}" alt="${label}" />`;
+      return `<img class="slide__crest-img" src="${url}" alt="${label}" crossorigin="anonymous" />`;
     }
 
     function fmtShortDate(raw) {
@@ -4342,23 +5237,41 @@
       }
       bar.innerHTML = seasonMatches.map((match) => {
         const active = match.matchId === selectedMatchId;
-        const dotClass = match.outcome ? `match-bar__dot--${match.outcome}` : "";
-        const scoreClass = match.outcome ? `match-bar__score--${match.outcome}` : "";
-        const matchDay = match.matchDay != null ? `Matchday ${match.matchDay + 1}` : "Match";
+        const pending = match.available === false;
+        const dotClass = match.outcome
+          ? `match-bar__dot--${match.outcome}`
+          : pending
+            ? "match-bar__dot--pending"
+            : "";
+        const scoreClass = match.outcome
+          ? `match-bar__score--${match.outcome}`
+          : pending
+            ? "match-bar__score--pending"
+            : "";
+        const competition = match.competitionShort || match.competitionLabel || "";
+        const matchDay =
+          match.matchDay != null
+            ? `Matchday ${match.matchDay + 1}`
+            : competition || "Match";
         const crestUrl = squadBadgeSrc(match.opponent);
         const crestInitials = match.opponent?.initials || (match.opponent?.name || "?").slice(0, 1);
         const crest = crestUrl
           ? `<img class="match-bar__crest" src="${crestUrl}" alt="${match.opponent.name || ""}" />`
           : `<div class="match-bar__crest" style="display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;background:#27272a;border-radius:4px">${crestInitials}</div>`;
+        const scoreLabel = match.scoreLabel || (pending ? "Soon" : "—");
         return `
-          <button type="button" class="match-bar__item${active ? " match-bar__item--active" : ""}"
-            data-match-id="${match.matchId}" aria-selected="${active}">
+          <button type="button" class="match-bar__item${active ? " match-bar__item--active" : ""}${pending ? " match-bar__item--pending" : ""}"
+            data-match-id="${match.matchId}"
+            data-iteration-id="${match.iterationId || ""}"
+            aria-selected="${active}"
+            title="${match.opponent?.name || "Opponent"}${competition ? ` · ${competition}` : ""}${pending ? " · report unlocks after Impect posts data" : ""}">
             <div class="match-bar__meta">
               <span>${matchDay}</span>
               <span>${fmtShortDate(match.scheduledDate)}</span>
+              ${competition ? `<span class="match-bar__comp">${competition}</span>` : ""}
             </div>
             ${crest}
-            <span class="match-bar__score ${scoreClass}">${match.scoreLabel || "—"}</span>
+            <span class="match-bar__score ${scoreClass}">${scoreLabel}</span>
             <span class="match-bar__dot ${dotClass}"></span>
           </button>`;
       }).join("");
@@ -4366,9 +5279,11 @@
       bar.querySelectorAll(".match-bar__item").forEach((btn) => {
         btn.addEventListener("click", () => {
           const id = Number(btn.dataset.matchId);
+          const iterationId = Number(btn.dataset.iterationId) || null;
           const current = Number(document.getElementById("matchId").value);
-          if (id !== current) {
+          if (id !== current || iterationId !== selectedIterationId) {
             document.getElementById("matchId").value = id;
+            selectedIterationId = iterationId;
             loadReport();
           }
         });
@@ -4378,6 +5293,54 @@
       if (activeEl) {
         activeEl.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
       }
+    }
+
+    function matchById(matchId) {
+      return seasonMatches.find((match) => match.matchId === Number(matchId)) || null;
+    }
+
+    async function fetchSeasonMatches() {
+      const response = await fetch(
+        `/api/post-match/season-matches?squad_id=${config.portValeSquadId}&include_upcoming=true`,
+      );
+      if (!response.ok) throw new Error(await response.text());
+      return response.json();
+    }
+
+    function renderPendingMatchDeck(match) {
+      const home = match?.home || {};
+      const away = match?.away || {};
+      const competition = match?.competitionLabel || "Match";
+      const kickoff = fmtDate(match?.scheduledDate);
+      document.getElementById("deck").innerHTML = `
+        <section class="slide slide--title" data-export-title="${home.name || "Home"} vs ${away.name || "Away"}">
+          <div class="slide__title-top-rule" aria-hidden="true"></div>
+          <div class="slide__corner slide__corner--left"></div>
+          <div class="slide__corner slide__corner--right"></div>
+          <div class="slide__title-body">
+            <p class="slide__title-eyebrow">${competition} · ${match?.seasonLabel || "26/27"}</p>
+            <div class="slide__matchup">
+              <div class="slide__team">
+                ${crestImgLarge(home)}
+                <p class="slide__team-name">${home.name || "Home"}</p>
+              </div>
+              <div class="slide__score-block">
+                <p class="slide__score-main">vs</p>
+                <p class="slide__score-ht">Report unlocks after full time</p>
+              </div>
+              <div class="slide__team">
+                ${crestImgLarge(away)}
+                <p class="slide__team-name">${away.name || "Away"}</p>
+              </div>
+            </div>
+            <p class="slide__date">${kickoff || "Kick-off TBC"}</p>
+            <p style="margin:1.25rem 0 0;max-width:36rem;color:#64748b;font-size:0.95rem;line-height:1.45">
+              Impect has the fixture booked. Hit <strong>Refresh</strong> once the match is marked available — usually shortly after the whistle — and the full post-match deck will build.
+            </p>
+          </div>
+          <div class="slide__footer-bar">POST-MATCH · WAITING FOR IMPECT DATA</div>
+        </section>`;
+      refreshDeckState();
     }
 
     function renderTitle(report) {
@@ -5071,43 +6034,64 @@
     const ZONE_LAYOUT = {
       IBWL: {
         d: `M8,${PITCH_IB_TOP} Q18,${PITCH_TOP} ${PITCH_LX},${PITCH_IB_TOP} L${PITCH_LX},${PITCH_SEAM} L8,${PITCH_SEAM} Z`,
-        cx: 28, valY: 52, nameY: 64,
-        name: ["In-Behind", "Wide Left"],
+        cx: 28, valY: 46, nameY: 58,
+        name: ["IB · L"],
         narrow: true, variant: "ib",
       },
       IBWR: {
         d: `M${PITCH_RX},${PITCH_IB_TOP} Q222,${PITCH_TOP} 232,${PITCH_IB_TOP} L232,${PITCH_SEAM} L${PITCH_RX},${PITCH_SEAM} Z`,
-        cx: 212, valY: 52, nameY: 64,
-        name: ["In-Behind", "Wide Right"],
+        cx: 212, valY: 46, nameY: 58,
+        name: ["IB · R"],
         narrow: true, variant: "ib",
       },
       IB: {
         d: `M${PITCH_LX},${PITCH_IB_TOP} Q${PITCH_MX},${PITCH_TOP} ${PITCH_RX},${PITCH_IB_TOP} L${PITCH_RX},${PITCH_SEAM} Q${PITCH_MX},${PITCH_SEAM_CURVE} ${PITCH_LX},${PITCH_SEAM} Z`,
-        cx: PITCH_MX, valY: 52, nameY: 64,
+        cx: PITCH_MX, valY: 46, nameY: 60,
         name: ["In-Behind", "Central"],
         variant: "ib",
       },
       WL: {
         d: `M8,${PITCH_SEAM} L${PITCH_LX},${PITCH_SEAM} L${PITCH_LX},162 L8,162 Z`,
-        cx: 28, valY: 124, nameY: 138,
-        name: ["Wide Left"],
+        cx: 28, valY: 118, nameY: 132,
+        name: ["Wide L"],
         narrow: true, variant: "conv",
       },
       WR: {
         d: `M${PITCH_RX},${PITCH_SEAM} L232,${PITCH_SEAM} L232,162 L${PITCH_RX},162 Z`,
-        cx: 212, valY: 124, nameY: 138,
-        name: ["Wide Right"],
+        cx: 212, valY: 118, nameY: 132,
+        name: ["Wide R"],
         narrow: true, variant: "conv",
       },
       AM: {
         d: `M${PITCH_LX},${PITCH_SEAM} Q${PITCH_MX},${PITCH_SEAM_CURVE} ${PITCH_RX},${PITCH_SEAM} L${PITCH_RX},${PITCH_AM_BASE} Q${PITCH_MX},136 ${PITCH_LX},${PITCH_AM_BASE} Z`,
-        cx: PITCH_MX, valY: 104, nameY: 116,
-        name: ["Attacking-Mid"],
+        cx: PITCH_MX, valY: 100, nameY: 114,
+        name: ["Att Mid"],
         variant: "conv",
       },
     };
 
     const ZONE_DRAW_ORDER = ["WL", "WR", "AM", "IBWL", "IBWR", "IB"];
+
+    function touchZoneValFontSize(layout) {
+      const sizes = layout.variant === "ib"
+        ? { center: 20, side: 15 }
+        : { center: 17, side: 13 };
+      return layout.narrow ? sizes.side : sizes.center;
+    }
+
+    function touchZoneNameFontSize(narrow) {
+      return narrow ? 5 : 5.8;
+    }
+
+    function touchZoneValAttrs(layout) {
+      const size = touchZoneValFontSize(layout);
+      return `font-family="Barlow Condensed, Arial Narrow, Arial, sans-serif" font-size="${size}" font-weight="800"`;
+    }
+
+    function touchZoneNameAttrs(narrow) {
+      const size = touchZoneNameFontSize(narrow);
+      return `font-family="DM Sans, Arial, sans-serif" font-size="${size}" font-weight="700"`;
+    }
 
     function fmtTouchStat(value) {
       if (value == null) return "—";
@@ -5140,16 +6124,16 @@
     }
 
     function renderZoneName(cx, nameY, lines, fill, narrow) {
-      const cls = narrow ? "zone-name zone-name--narrow" : "zone-name";
       if (!lines?.length) return "";
+      const attrs = touchZoneNameAttrs(narrow);
       if (lines.length === 1) {
-        return `<text class="${cls}" x="${cx}" y="${nameY}" text-anchor="middle" fill="${fill}">${lines[0]}</text>`;
+        return `<text x="${cx}" y="${nameY}" text-anchor="middle" fill="${fill}" ${attrs}>${lines[0]}</text>`;
       }
-      const lh = narrow ? 8.2 : 9;
+      const lh = narrow ? 6.8 : 7.4;
       const startY = nameY - lh / 2;
       const tspans = lines.map((line, i) =>
         `<tspan x="${cx}" dy="${i === 0 ? 0 : lh}">${line}</tspan>`).join("");
-      return `<text class="${cls}" x="${cx}" y="${startY}" text-anchor="middle" fill="${fill}">${tspans}</text>`;
+      return `<text x="${cx}" y="${startY}" text-anchor="middle" fill="${fill}" ${attrs}>${tspans}</text>`;
     }
 
     function renderPitchZone(zone, id, maxVal) {
@@ -5160,8 +6144,6 @@
         ? ibTouchHeat(val, maxVal)
         : conversionZoneHeat(val, maxVal);
       const shown = fmtTouchStat(val);
-      const sideClass = layout.narrow ? " zone-val--side" : "";
-      const valClass = `zone-val zone-val--${layout.variant}${sideClass}`;
       const labelText = layout.name.join(" ");
       const title = layout.variant === "ib"
         ? `${shown} touches · ${labelText}`
@@ -5170,8 +6152,8 @@
         <g class="zone-group">
           <title>${title}</title>
           <path class="zone-path" d="${layout.d}" fill="${colors.fill}"/>
-          <text class="${valClass}" x="${layout.cx}" y="${layout.valY}"
-                text-anchor="middle" fill="${colors.text}">${shown}</text>
+          <text x="${layout.cx}" y="${layout.valY}" text-anchor="middle" dominant-baseline="middle"
+                fill="${colors.text}" ${touchZoneValAttrs(layout)}>${shown}</text>
           ${renderZoneName(layout.cx, layout.nameY, layout.name, colors.text, layout.narrow)}
         </g>`;
     }
@@ -5204,6 +6186,9 @@
                 <rect width="7" height="170" fill="rgba(255,255,255,0.025)"/>
               </pattern>
             </defs>
+            <style>
+              .zone-path { stroke: rgba(255,255,255,0.18); stroke-width: 0.65; stroke-linejoin: round; }
+            </style>
             <rect x="6" y="6" width="228" height="158" rx="10" fill="url(#${gid}-grass)"/>
             <rect x="6" y="6" width="228" height="158" rx="10" fill="url(#${gid}-stripes)"/>
             <rect x="6" y="6" width="228" height="158" rx="10" fill="none"
@@ -5753,12 +6738,15 @@
           </tr>`).join("")
         : `<tr><td colspan="5">No player data for this match.</td></tr>`;
 
+      const teamRowCount = data.teamMetrics.length;
+      const playerRowCount = Math.max(players.length, 1);
+
       return `
         <section class="slide slide--progression">
           <div class="prog-keynote">
             <div class="prog-keynote__bar">In-Possession — Ball Progression</div>
             <div class="prog-keynote__body">
-              <table class="prog-table prog-team-table">
+              <table class="prog-table prog-team-table" style="--prog-rows:${teamRowCount}">
                 <thead>
                   <tr>
                     <th>Metric</th>
@@ -5771,7 +6759,7 @@
               </table>
               <div>
                 ${renderPerfLegend(data.legend)}
-                <table class="prog-table prog-player-table">
+                <table class="prog-table prog-player-table" style="--prog-rows:${playerRowCount}">
                   <thead>
                     <tr>
                       <th>Player</th>
@@ -5825,12 +6813,15 @@
           </tr>`).join("")
         : `<tr><td colspan="${columns.length + 3}">No player data for this match.</td></tr>`;
 
+      const teamRowCount = data.teamMetrics.length;
+      const playerRowCount = Math.max(players.length, 1);
+
       return `
         <section class="slide slide--progression slide--expected-threat">
           <div class="prog-keynote">
             <div class="prog-keynote__bar">In-Possession — Expected Threat</div>
             <div class="prog-keynote__body">
-              <table class="prog-table prog-team-table">
+              <table class="prog-table prog-team-table" style="--prog-rows:${teamRowCount}">
                 <thead>
                   <tr>
                     <th>Metric</th>
@@ -5843,7 +6834,7 @@
               </table>
               <div>
                 ${renderPerfLegend(data.legend)}
-                <table class="prog-table prog-player-table prog-player-table--pxt">
+                <table class="prog-table prog-player-table prog-player-table--pxt" style="--prog-rows:${playerRowCount}">
                   <thead>
                     <tr>
                       <th>Player</th>
@@ -6423,8 +7414,9 @@
 
       const summaryChips = renderShotsSummaryChips(data.summary);
 
-      const playerRows = (data.players || []).length
-        ? data.players.map((row) => {
+      const players = data.players || [];
+      const playerBodyRows = players.length
+        ? players.map((row) => {
           const xgClass = row.highlightXg ? "shots-player-table__xg shots-player-table__xg--top" : "shots-player-table__xg";
           return `
           <tr>
@@ -6434,6 +7426,22 @@
           </tr>`;
         }).join("")
         : `<tr><td colspan="3">No shots recorded for this match.</td></tr>`;
+
+      const playerRowCount = players.length
+        ? players.length + 1
+        : 1;
+      const playerTableClass = players.length >= 7
+        ? "shots-player-table shots-player-table--compact"
+        : "shots-player-table";
+      const totalRow = players.length
+        ? `<tr class="shots-player-table__total">
+            <td class="shots-player-table__name">Total</td>
+            <td class="shots-player-table__shots">${data.summary?.totalShots ?? players.reduce((sum, row) => sum + (row.shots || 0), 0)}</td>
+            <td class="shots-player-table__xg">${data.summary?.totalXgDisplay ?? "—"}</td>
+          </tr>`
+        : "";
+
+      const playerRows = `${playerBodyRows}${totalRow}`;
 
       const phaseRows = (data.phases || []).map((row) => `
           <tr class="${row.isTotal ? "shots-phase-table__total" : ""}">
@@ -6471,7 +7479,7 @@
                 <div class="shots-pitch-wrap">${renderShotsPitchSvg(data)}</div>
               </div>
               <div class="shots-bottom">
-                <table class="shots-player-table">
+                <table class="${playerTableClass}" style="--shot-player-rows:${playerRowCount}">
                   <thead>
                     <tr>
                       <th>Player</th>
@@ -6893,7 +7901,8 @@
         const densest = !empty && key === densestKey;
         const body = empty
           ? `<span class="duels-zone-heat__empty">—</span>`
-          : `<span class="duels-zone-heat__count">${cell.count}</span>
+          : `<span class="duels-zone-heat__zone">${shortOopZoneLabel(key)}</span>
+             <span class="duels-zone-heat__count">${cell.count}</span>
              <span class="duels-zone-heat__share">${cell.sharePct}%</span>`;
         return `<div class="duels-zone-heat__cell${empty ? " is-empty" : ""}${densest ? " is-densest" : ""}"
           style="--intensity:${intensity}" title="${key}: ${cell.count} (${cell.sharePct}%)">
@@ -7085,62 +8094,241 @@
         .replace("Defensive third · right", "Def · R");
     }
 
-    function renderDuelsActivityLayerPanel(layer) {
-      const breakdownTitle = layer.breakdownMode === "subtype" ? "By type" : "By zone";
+    function renderDuelsZoneHeatPanel(layer) {
       const playersTitle =
-        layer.id === "defenderRegain"
-          ? "Who got the regains"
-          : layer.id === "duelWin"
-            ? "Top duel winners"
-            : "Top pressers";
-      const breakdownRows =
-        layer.breakdownMode === "zone"
-          ? buildOopZoneHeatFromLayer(layer).map((cell) => ({
-              label: shortOopZoneLabel(cell.key),
-              count: cell.count,
-              sharePct: cell.sharePct,
-            }))
-          : (layer.breakdown || []).slice(0, 6);
+        layer.id === "press" ? "Top pressers" : "Top players";
       const densestShort = layer.densestZone ? shortOopZoneLabel(layer.densestZone) : "";
-      const breakdown = breakdownRows
-        .map(
-          (row) => `<div class="duels-map-breakdown__row">
-            <span class="duels-map-breakdown__label">${row.label}</span>
-            <span class="duels-map-breakdown__value">${row.count} · ${row.sharePct}%</span>
-          </div>`,
-        )
-        .join("") || `<div class="duels-map-breakdown__row"><span class="duels-map-breakdown__label">No events</span></div>`;
-      const players = (layer.topPlayers || [])
-        .map(
-          (row, index) => `<div class="duels-map-player">
-            <span class="duels-map-player__rank">${index + 1}</span>
-            <div>
-              <div class="duels-map-player__name">${row.playerName}</div>
-              ${row.detail ? `<div class="duels-map-player__detail">${row.detail}</div>` : ""}
-            </div>
-            <span class="duels-map-player__count">${row.count}</span>
-          </div>`,
-        )
-        .join("") || `<div class="duels-map-player"><span class="duels-map-player__name">No players</span></div>`;
+      const topPlayers = layer.topPlayers || [];
+      const maxCount = Math.max(1, ...topPlayers.map((row) => Number(row.count) || 0));
+      const playerRows = topPlayers
+        .map((row, index) => {
+          const count = Number(row.count) || 0;
+          const barPct = Math.max(4, Math.round((count / maxCount) * 100));
+          return `<tr>
+            <td class="duels-press-table__rank">${index + 1}</td>
+            <td class="duels-press-table__name">${row.playerName}</td>
+            <td class="duels-press-table__bar"><span style="width:${barPct}%"></span></td>
+            <td class="duels-press-table__count">${count}</td>
+          </tr>`;
+        })
+        .join("") || `<tr><td colspan="4">No players recorded.</td></tr>`;
+      const rowCount = Math.max(topPlayers.length, 1);
 
       return `
-        <aside class="duels-map-panel">
-          <h3 class="duels-map-panel__title">${layer.title || layer.label}</h3>
-          <div class="duels-map-panel__meta">
-            <span class="duels-map-panel__chip">
-              ${layer.id === "duelWin"
-                ? `<span class="duels-map-summary__swatch" style="background:#facc15"></span><span class="duels-map-summary__swatch" style="background:#38bdf8;margin-left:2px;"></span>`
-                : `<span class="duels-map-summary__swatch" style="background:${layer.color}"></span>`}
-              ${layer.count} ${layer.label}
-            </span>
-            ${densestShort ? `<span class="duels-map-panel__chip">Densest · ${densestShort}</span>` : ""}
+        <aside class="duels-map-panel duels-map-panel--heat">
+          <div class="duels-press-summary">
+            <div class="duels-press-summary__stat duels-press-summary__stat--accent">
+              <span class="duels-press-summary__value">${layer.count ?? 0}</span>
+              <span class="duels-press-summary__label">${layer.label || "Events"}</span>
+            </div>
+            <div class="duels-press-summary__stat">
+              <span class="duels-press-summary__value">${densestShort || "—"}</span>
+              <span class="duels-press-summary__label">Densest zone</span>
+            </div>
           </div>
-          <p class="duels-map-panel__section-title">${breakdownTitle}</p>
-          <div class="duels-map-breakdown">${breakdown}</div>
           <p class="duels-map-panel__section-title">${playersTitle}</p>
-          <div class="duels-map-players">${players}</div>
+          <div class="duels-press-table-wrap">
+            <table class="duels-press-table" style="--press-rows:${rowCount}">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Player</th>
+                  <th></th>
+                  <th>Count</th>
+                </tr>
+              </thead>
+              <tbody>${playerRows}</tbody>
+            </table>
+          </div>
           ${renderDuelsMapKey(layer)}
         </aside>`;
+    }
+
+    function parseSubtypeCounts(detail) {
+      const out = {};
+      if (!detail) return out;
+      for (const part of String(detail).split("·")) {
+        const trimmed = part.trim();
+        const lastSpace = trimmed.lastIndexOf(" ");
+        if (lastSpace <= 0) continue;
+        const label = trimmed.slice(0, lastSpace).trim();
+        const count = Number(trimmed.slice(lastSpace + 1));
+        if (label && Number.isFinite(count)) out[label] = count;
+      }
+      return out;
+    }
+
+    function renderDuelDetailTags(detail) {
+      const subtypes = parseSubtypeCounts(detail);
+      const entries = Object.entries(subtypes);
+      if (!entries.length) return "";
+      return entries.map(([label, count]) => {
+        const dotClass = label === "Ground"
+          ? "is-ground"
+          : label === "Aerial"
+            ? "is-aerial"
+            : "is-regain";
+        return `<span class="duels-detail-tag"><span class="duels-detail-tag__dot ${dotClass}"></span>${label} ${count}</span>`;
+      }).join("");
+    }
+
+    function renderDuelSplitBar(subtypes, totalCount, maxCount) {
+      const ground = Number(subtypes.Ground) || 0;
+      const aerial = Number(subtypes.Aerial) || 0;
+      const sum = ground + aerial || totalCount;
+      const outerPct = Math.max(4, Math.round((sum / maxCount) * 100));
+      if (!sum) {
+        return `<div class="duels-split-bar" style="width:${outerPct}%"><span class="duels-split-bar__ground" style="width:100%"></span></div>`;
+      }
+      const groundPct = Math.round((ground / sum) * 100);
+      const aerialPct = Math.max(0, 100 - groundPct);
+      return `<div class="duels-split-bar" style="width:${outerPct}%">
+        ${ground ? `<span class="duels-split-bar__ground" style="width:${groundPct}%"></span>` : ""}
+        ${aerial ? `<span class="duels-split-bar__aerial" style="width:${aerialPct}%"></span>` : ""}
+      </div>`;
+    }
+
+    function renderDuelsOopBreakdownTable(rows, layer) {
+      const maxCount = Math.max(1, ...rows.map((row) => Number(row.count) || 0));
+      return rows
+        .map((row) => {
+          const count = Number(row.count) || 0;
+          const barPct = Math.max(4, Math.round((count / maxCount) * 100));
+          const labelClass = row.label === "Ground"
+            ? " is-ground"
+            : row.label === "Aerial"
+              ? " is-aerial"
+              : "";
+          const barClass = row.label === "Ground"
+            ? "is-ground"
+            : row.label === "Aerial"
+              ? "is-aerial"
+              : layer.id === "defenderRegain"
+                ? "is-regain"
+                : "";
+          return `<tr>
+            <td class="duels-oop-breakdown-table__label${labelClass}">${row.label}</td>
+            <td class="duels-press-table__bar"><span class="${barClass}" style="width:${barPct}%"></span></td>
+            <td class="duels-oop-breakdown-table__value">${count} · ${row.sharePct}%</td>
+          </tr>`;
+        })
+        .join("") || `<tr><td colspan="3">No events</td></tr>`;
+    }
+
+    function renderDuelsWonSummary(layer, breakdownRows, densestShort) {
+      const groundRow = breakdownRows.find((row) => row.label === "Ground");
+      const aerialRow = breakdownRows.find((row) => row.label === "Aerial");
+      return `
+        <div class="duels-duel-summary">
+          <div class="duels-press-summary__stat duels-press-summary__stat--duel">
+            <span class="duels-press-summary__value">${layer.count ?? 0}</span>
+            <span class="duels-press-summary__label">Duels won</span>
+          </div>
+          <div class="duels-press-summary__stat">
+            <span class="duels-press-summary__value duels-press-summary__value--sm">${densestShort || "—"}</span>
+            <span class="duels-press-summary__label">Densest zone</span>
+          </div>
+          <div class="duels-press-summary__stat duels-press-summary__stat--ground">
+            <span class="duels-duel-summary__swatch is-ground"></span>
+            <span class="duels-press-summary__value">${groundRow?.count ?? 0}</span>
+            <span class="duels-press-summary__label">Ground · ${groundRow?.sharePct ?? 0}%</span>
+          </div>
+          <div class="duels-press-summary__stat duels-press-summary__stat--aerial">
+            <span class="duels-duel-summary__swatch is-aerial"></span>
+            <span class="duels-press-summary__value">${aerialRow?.count ?? 0}</span>
+            <span class="duels-press-summary__label">Aerial · ${aerialRow?.sharePct ?? 0}%</span>
+          </div>
+        </div>`;
+    }
+
+    function renderDuelsMarkersPanel(layer) {
+      const breakdownRows = (layer.breakdown || []).slice(0, 6);
+      const densestShort = layer.densestZone ? shortOopZoneLabel(layer.densestZone) : "";
+      const topPlayers = layer.topPlayers || [];
+      const maxCount = Math.max(1, ...topPlayers.map((row) => Number(row.count) || 0));
+      const isDuels = layer.id === "duelWin";
+      const panelExtraClass = isDuels ? " duels-map-panel--duels" : "";
+      const breakdownTitle = layer.breakdownMode === "subtype" ? "By type" : "By zone";
+      const playersTitle = layer.id === "defenderRegain"
+        ? "Who got the regains"
+        : isDuels
+          ? "Top duel winners"
+          : "Top players";
+      const summaryHtml = isDuels
+        ? renderDuelsWonSummary(layer, breakdownRows, densestShort)
+        : `<div class="duels-press-summary">
+            <div class="duels-press-summary__stat duels-press-summary__stat--rose">
+              <span class="duels-press-summary__value">${layer.count ?? 0}</span>
+              <span class="duels-press-summary__label">${layer.label || "Events"}</span>
+            </div>
+            <div class="duels-press-summary__stat">
+              <span class="duels-press-summary__value">${densestShort || "—"}</span>
+              <span class="duels-press-summary__label">Densest zone</span>
+            </div>
+          </div>`;
+
+      const playerRows = topPlayers
+        .map((row, index) => {
+          const count = Number(row.count) || 0;
+          const subtypes = parseSubtypeCounts(row.detail);
+          const detailHtml = row.detail
+            ? `<div class="duels-press-table__name-detail">${isDuels ? renderDuelDetailTags(row.detail) : row.detail}</div>`
+            : "";
+          const barHtml = isDuels
+            ? renderDuelSplitBar(subtypes, count, maxCount)
+            : `<span class="is-regain" style="width:${Math.max(4, Math.round((count / maxCount) * 100))}%"></span>`;
+          return `<tr>
+            <td class="duels-press-table__rank">${index + 1}</td>
+            <td class="duels-press-table__name-cell">
+              <div class="duels-press-table__name-main">${row.playerName}</div>
+              ${detailHtml}
+            </td>
+            <td class="duels-press-table__bar">${barHtml}</td>
+            <td class="duels-press-table__count">${count}</td>
+          </tr>`;
+        })
+        .join("") || `<tr><td colspan="4">No players recorded.</td></tr>`;
+      const rowCount = Math.max(topPlayers.length, 1);
+
+      return `
+        <aside class="duels-map-panel duels-map-panel--markers${panelExtraClass}">
+          ${summaryHtml}
+          <p class="duels-map-panel__section-title">${breakdownTitle}</p>
+          <div class="duels-oop-breakdown-wrap">
+            <table class="duels-oop-breakdown-table">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th></th>
+                  <th>Share</th>
+                </tr>
+              </thead>
+              <tbody>${renderDuelsOopBreakdownTable(breakdownRows, layer)}</tbody>
+            </table>
+          </div>
+          <p class="duels-map-panel__section-title">${playersTitle}</p>
+          <div class="duels-press-table-wrap">
+            <table class="duels-press-table" style="--press-rows:${rowCount}">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Player</th>
+                  <th></th>
+                  <th>Count</th>
+                </tr>
+              </thead>
+              <tbody>${playerRows}</tbody>
+            </table>
+          </div>
+          ${renderDuelsMapKey(layer)}
+        </aside>`;
+    }
+
+    function renderDuelsActivityLayerPanel(layer) {
+      if (layerUsesZoneHeat(layer)) {
+        return renderDuelsZoneHeatPanel(layer);
+      }
+      return renderDuelsMarkersPanel(layer);
     }
 
     function renderDuelsActivityMapSlides(report) {
@@ -7153,8 +8341,11 @@
           const mapHtml = layerUsesZoneHeat(layer)
             ? renderOopZoneHeatHtml(layer)
             : renderDuelsActivityMapSvg(activityMap, [layer]);
+          const panelClass = layerUsesZoneHeat(layer)
+            ? " slide--duels-map-heat"
+            : " slide--duels-map-markers";
           return `
-            <section class="slide slide--duels slide--duels-map slide--duels-map-detail">
+            <section class="slide slide--duels slide--duels-map slide--duels-map-detail${panelClass}">
               <div class="prog-keynote">
                 <div class="prog-keynote__bar">Out of Possession — ${title}</div>
                 <div class="prog-keynote__body">
@@ -7489,7 +8680,7 @@
         ? ""
         : renderSetPlayChainsTable(side.chains, { defending });
       return `
-        <div class="set-plays-panel${solo ? " set-plays-panel--solo" : ""}">
+        <div class="set-plays-panel${solo ? " set-plays-panel--solo" : ""}${freeKicks ? " set-plays-panel--freekicks" : ""}">
           <div class="set-plays-panel__title">${title}</div>
           ${renderSetPlaySummaryChips(side.summary)}
           ${scope}
@@ -7513,14 +8704,14 @@
         </section>`;
     }
 
-    function renderSetPlayKeynoteSlide(barTitle, panelsHtml, { metricsHtml = "" } = {}) {
+    function renderSetPlayKeynoteSlide(barTitle, panelsHtml, { extraSlideClass = "" } = {}) {
+      const slideClass = extraSlideClass ? ` ${extraSlideClass}` : "";
       return `
-        <section class="slide slide--data slide--set-plays">
+        <section class="slide slide--data slide--set-plays${slideClass}">
           <div class="set-plays-keynote">
             <div class="set-plays-keynote__bar">${barTitle}</div>
             <div class="set-plays-keynote__body">
               ${panelsHtml}
-              ${metricsHtml}
             </div>
           </div>
         </section>`;
@@ -7553,7 +8744,9 @@
       const opponent = data.opponentLabel || "Opponent";
       const side = against ? data.freeKicksAgainst : data.freeKicksFor;
       if (!side) return "";
-      const pitch = data.pitch;
+      const pitch = (data.freeKickPitch && Object.keys(data.freeKickPitch).length)
+        ? data.freeKickPitch
+        : data.pitch;
       const barTitle = against
         ? `Free Kicks Against — ${opponent}`
         : "Free Kicks For";
@@ -7564,17 +8757,18 @@
         <div class="set-plays-panels set-plays-panels--solo">
           ${renderSetPlayPanel(side, panelTitle, pitch, { solo: true, against, freeKicks: true })}
         </div>`;
-      return renderSetPlayKeynoteSlide(barTitle, panels);
+      return renderSetPlayKeynoteSlide(barTitle, panels, { extraSlideClass: "slide--set-plays-freekicks" });
     }
 
     function renderSetPlayMetricsSlide(report) {
       const data = report.setPlays;
       if (!data || !(data.teamMetrics || []).length) return "";
       const leagueSize = data.leagueSize || 24;
+      const rowCount = Math.max((data.teamMetrics || []).length, 1);
       const teamRows = renderProgTeamMetricRows(data.teamMetrics, leagueSize);
       const metrics = `
-        <div class="set-plays-metrics">
-          <table class="prog-table">
+        <div class="set-plays-metrics" style="--set-play-metric-rows:${rowCount}">
+          <table class="prog-table prog-team-table set-plays-metrics-table">
             <thead>
               <tr>
                 <th>Set play KPI</th>
@@ -7586,7 +8780,7 @@
             <tbody>${teamRows}</tbody>
           </table>
         </div>`;
-      return renderSetPlayKeynoteSlide("Set Play KPIs", metrics);
+      return renderSetPlayKeynoteSlide("Set Play KPIs", metrics, { extraSlideClass: "slide--set-plays-metrics" });
     }
 
     function renderSetPlaysSlides(report) {
@@ -7614,9 +8808,215 @@
     // Same 16:9 Keynote frame as pre-match WhatsApp PDFs.
     const SLIDE_EXPORT_HEIGHT = 1080;
     const EXPORT_SCALE = 2;
-    // Full-quality WhatsApp encode — no soft downscale.
+    const WHATSAPP_CAPTURE_SCALE = 1;
     const WHATSAPP_PDF_MAX_WIDTH = 1920;
     const WHATSAPP_PDF_JPEG_QUALITY = 0.93;
+    const EXPORT_PDF_W_MM = 338.67;
+    const EXPORT_PDF_H_MM = 190.5;
+
+    function exportSlidePadY(slide) {
+      const cs = getComputedStyle(slide);
+      return (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+    }
+
+    function exportSlideContentHeight(slide, footer) {
+      const slideH = slide.clientHeight || SLIDE_EXPORT_HEIGHT;
+      const footerH = footer?.offsetHeight || 34;
+      const padY = exportSlidePadY(slide);
+      // Leave clearer air so stretch doesn't feel edge-to-edge / over-zoomed.
+      return Math.max(0, slideH - footerH - padY - 16);
+    }
+
+    function deckSlideLabel(slide, index) {
+      return (
+        slide.dataset.label ||
+        slide.querySelector(".slide__header h2, .prog-keynote__bar, .slide__title-eyebrow")?.textContent?.trim() ||
+        `Slide ${index + 1}`
+      );
+    }
+
+    function refreshDeckState() {
+      deckSlides = [...document.querySelectorAll("#deck .slide:not(.slide--placeholder)")];
+      deckSlides.forEach((slide, index) => {
+        slide.dataset.label = deckSlideLabel(slide, index);
+      });
+      if (presentIndex >= deckSlides.length) presentIndex = 0;
+      renderFilmstrip();
+      updatePresentChrome();
+    }
+
+    function renderFilmstrip() {
+      if (!filmstripEl) return;
+      if (!deckSlides.length || document.body.classList.contains("is-present")) {
+        filmstripEl.innerHTML = "";
+        filmstripEl.style.display = "none";
+        return;
+      }
+      filmstripEl.style.display = "flex";
+      filmstripEl.innerHTML = deckSlides
+        .map(
+          (slide, index) =>
+            `<button type="button" class="filmstrip__item${index === presentIndex ? " is-active" : ""}" data-slide-index="${index}">${deckSlideLabel(slide, index)}</button>`,
+        )
+        .join("");
+      filmstripEl.querySelectorAll(".filmstrip__item").forEach((button) => {
+        button.addEventListener("click", () => {
+          const next = Number(button.dataset.slideIndex);
+          if (document.body.classList.contains("is-present")) {
+            showSlide(next);
+          } else {
+            presentIndex = next;
+            deckSlides[next]?.scrollIntoView({ behavior: "smooth", block: "start" });
+            updatePresentChrome();
+          }
+        });
+      });
+    }
+
+    function updatePresentChrome() {
+      if (presentCountEl) {
+        presentCountEl.textContent = deckSlides.length
+          ? `${String(presentIndex + 1).padStart(2, "0")} / ${deckSlides.length}`
+          : "";
+      }
+      filmstripEl?.querySelectorAll(".filmstrip__item").forEach((el, index) => {
+        el.classList.toggle("is-active", index === presentIndex);
+      });
+      presentProgressEl?.querySelectorAll("button").forEach((el, index) => {
+        el.classList.toggle("is-active", index === presentIndex);
+      });
+      const prevBtn = document.getElementById("presentPrev");
+      const nextBtn = document.getElementById("presentNext");
+      if (prevBtn) prevBtn.disabled = presentIndex <= 0;
+      if (nextBtn) nextBtn.disabled = presentIndex >= deckSlides.length - 1;
+    }
+
+    function renderPresentProgress() {
+      if (!presentProgressEl) return;
+      presentProgressEl.innerHTML = deckSlides
+        .map(
+          (_, index) =>
+            `<button type="button" aria-label="Slide ${index + 1}" data-slide-index="${index}" class="${index === presentIndex ? "is-active" : ""}"></button>`,
+        )
+        .join("");
+      presentProgressEl.querySelectorAll("button").forEach((button) => {
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          showSlide(Number(button.dataset.slideIndex));
+        });
+      });
+    }
+
+    function showSlide(nextIndex) {
+      if (!deckSlides.length) return;
+      const clamped = Math.max(0, Math.min(nextIndex, deckSlides.length - 1));
+      deckSlides.forEach((slide, index) => {
+        slide.classList.toggle("is-active", index === clamped);
+      });
+      presentIndex = clamped;
+      updatePresentChrome();
+    }
+
+    function setPresent(on) {
+      if (on && document.body.classList.contains("is-pdf-view")) setPdfView(false);
+      document.body.classList.toggle("is-present", on);
+      if (presentBtn) presentBtn.textContent = on ? "Exit present" : "Present";
+      if (on) {
+        try {
+          document.documentElement.requestFullscreen();
+        } catch (_) {}
+        showSlide(presentIndex);
+        renderPresentProgress();
+      } else {
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+        deckSlides.forEach((slide) => slide.classList.remove("is-active"));
+        renderFilmstrip();
+      }
+      updatePresentChrome();
+    }
+
+    function setPdfView(on) {
+      if (on && document.body.classList.contains("is-present")) setPresent(false);
+      document.body.classList.toggle("is-pdf-view", on);
+      if (on) {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        setExportStatus("PDF version — scroll the large slides, then Download PDF.", "success");
+      } else {
+        setExportStatus("");
+      }
+      renderFilmstrip();
+    }
+
+    function setExportStatus(message, type = "") {
+      if (!exportStatusEl) return;
+      exportStatusEl.textContent = message || "";
+      exportStatusEl.className = `toolbar__export-status${type ? ` toolbar__export-status--${type}` : ""}`;
+    }
+
+    function setExportOverlay(message) {
+      const overlay = document.getElementById("export-overlay");
+      if (!overlay) return;
+      if (message) {
+        overlay.textContent = message;
+        overlay.classList.add("is-active");
+      } else {
+        overlay.textContent = "";
+        overlay.classList.remove("is-active");
+      }
+    }
+
+    function loadExportScript(src) {
+      return new Promise((resolve, reject) => {
+        if (document.querySelector(`script[src="${src}"]`)) {
+          resolve();
+          return;
+        }
+        const script = document.createElement("script");
+        script.src = src;
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error("Could not load export library."));
+        document.head.appendChild(script);
+      });
+    }
+
+    function goForward() {
+      if (!document.body.classList.contains("is-present")) return;
+      if (presentIndex < deckSlides.length - 1) showSlide(presentIndex + 1);
+    }
+
+    function goBack() {
+      if (!document.body.classList.contains("is-present")) return;
+      if (presentIndex > 0) showSlide(presentIndex - 1);
+    }
+
+    function exportErrorMessage(err, fallback = "PDF export failed") {
+      if (!err) return fallback;
+      if (typeof err === "string") return err.trim() || fallback;
+      if (typeof err?.message === "string" && err.message.trim()) return err.message.trim();
+      return fallback;
+    }
+
+    async function exportApiErrorMessage(response, fallback = "PDF export failed") {
+      const raw = await response.text();
+      if (!raw) return `${fallback} (HTTP ${response.status})`;
+      try {
+        const payload = JSON.parse(raw);
+        if (typeof payload?.detail === "string") return payload.detail;
+        if (Array.isArray(payload?.detail)) {
+          return payload.detail.map((item) => item?.msg || item).join("; ");
+        }
+      } catch {
+        // plain-text error body
+      }
+      return raw.trim() || `${fallback} (HTTP ${response.status})`;
+    }
+
+    function slideExportLabel(slide, index) {
+      const heading =
+        slide.querySelector(".slide__header h2, .slide__title-eyebrow, .slide__factor-name")?.textContent?.trim() ||
+        slide.className.replace(/\bslide--/g, "").replace(/\bslide\b/g, "").trim();
+      return heading ? `Slide ${index + 1} (${heading})` : `Slide ${index + 1}`;
+    }
 
     function exportDocumentTitle() {
       const titleSlide = document.querySelector(".slide--title");
@@ -7634,6 +9034,21 @@
       root.style.maxHeight = `${SLIDE_EXPORT_HEIGHT}px`;
       root.style.minHeight = `${SLIDE_EXPORT_HEIGHT}px`;
       root.style.overflow = "hidden";
+      if (root.classList.contains("slide--progression")) {
+        stretchProgressionSlideForExport(root);
+      }
+      if (root.classList.contains("slide--shots")) {
+        stretchShotsSlideForExport(root);
+      }
+      if (root.classList.contains("slide--duels-map-detail")) {
+        stretchDuelsMapSlideForExport(root);
+      }
+      if (root.classList.contains("slide--set-plays-metrics")) {
+        stretchSetPlayMetricsSlideForExport(root);
+      }
+      if (root.classList.contains("slide--set-plays-freekicks")) {
+        stretchSetPlayFreeKicksSlideForExport(root);
+      }
     }
 
     async function rasterizeExportSvgs(slide) {
@@ -7724,34 +9139,407 @@
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     }
 
-    function fitProgressionTablesForExport(slide) {
-      if (!slide.classList.contains("slide--progression")) return () => {};
+    function captureInlineStyle(node, keys) {
+      const snap = {};
+      for (const key of keys) snap[key] = node.style[key];
+      return snap;
+    }
+
+    function restoreInlineStyle(node, snap) {
+      if (!node || !snap) return;
+      for (const [key, value] of Object.entries(snap)) node.style[key] = value;
+    }
+
+    function stretchDuelsMapSlideForExport(slide) {
+      if (!slide.classList.contains("slide--duels-map-detail")) return () => {};
+
+      const keynote = slide.querySelector(".prog-keynote");
+      const bar = slide.querySelector(".prog-keynote__bar");
       const body = slide.querySelector(".prog-keynote__body");
-      const playerWrap = body?.querySelector(":scope > div");
-      const playerTable = playerWrap?.querySelector(".prog-player-table");
-      if (!body || !playerWrap || !playerTable) return () => {};
+      const footer = slide.querySelector(".slide-export-footer");
+      if (!keynote || !body) return () => {};
 
       const prev = {
-        transform: playerWrap.style.transform,
-        transformOrigin: playerWrap.style.transformOrigin,
-        width: playerWrap.style.width,
+        keynote: captureInlineStyle(keynote, ["flex", "height", "minHeight", "width"]),
+        body: captureInlineStyle(body, ["height", "minHeight"]),
       };
-      playerWrap.style.transformOrigin = "top left";
+
+      const keynoteH = exportSlideContentHeight(slide, footer);
+      const barH = bar?.offsetHeight || 0;
+      const bodyH = Math.max(0, keynoteH - barH);
+
+      keynote.style.flex = "1 1 0";
+      keynote.style.width = "100%";
+      keynote.style.height = `${keynoteH}px`;
+      keynote.style.minHeight = `${keynoteH}px`;
+      body.style.height = `${bodyH}px`;
+      body.style.minHeight = `${bodyH}px`;
+
+      if (!slide.classList.contains("slide--duels-map-heat")
+        && !slide.classList.contains("slide--duels-map-markers")) {
+        return () => {
+          restoreInlineStyle(keynote, prev.keynote);
+          restoreInlineStyle(body, prev.body);
+        };
+      }
+
+      const pressTable = slide.querySelector(".duels-press-table");
+      const pressWrap = slide.querySelector(".duels-press-table-wrap");
+      const prevTable = pressTable
+        ? {
+            table: captureInlineStyle(pressTable, ["height"]),
+            tbody: captureInlineStyle(pressTable.querySelector("tbody"), ["height"]),
+            rows: [...pressTable.querySelectorAll("tbody tr")].map((tr) => captureInlineStyle(tr, ["height"])),
+            wrap: pressWrap ? captureInlineStyle(pressWrap, ["height", "flex"]) : null,
+          }
+        : null;
+
+      if (pressTable && pressWrap) {
+        pressWrap.style.flex = "1 1 auto";
+        pressWrap.style.height = "100%";
+        pressWrap.style.minHeight = "0";
+        pressTable.style.height = "100%";
+        const rows = pressTable.querySelectorAll("tbody tr");
+        const rowCount = Math.max(rows.length, 1);
+        const theadH = pressTable.querySelector("thead")?.offsetHeight || 32;
+        const wrapH = pressWrap.clientHeight || bodyH * 0.55;
+        const tbodyH = Math.max(0, wrapH - theadH - 2);
+        const tbody = pressTable.querySelector("tbody");
+        if (tbody) tbody.style.height = `${tbodyH}px`;
+        rows.forEach((tr) => {
+          tr.style.height = `${tbodyH / rowCount}px`;
+        });
+      }
+
+      return () => {
+        restoreInlineStyle(keynote, prev.keynote);
+        restoreInlineStyle(body, prev.body);
+        if (pressTable && prevTable) {
+          restoreInlineStyle(pressTable, prevTable.table);
+          restoreInlineStyle(pressTable.querySelector("tbody"), prevTable.tbody);
+          prevTable.rows.forEach((snap, i) => restoreInlineStyle(pressTable.querySelectorAll("tbody tr")[i], snap));
+          if (pressWrap && prevTable.wrap) restoreInlineStyle(pressWrap, prevTable.wrap);
+        }
+      };
+    }
+
+    function stretchShotsSlideForExport(slide) {
+      if (!slide.classList.contains("slide--shots")) return () => {};
+
+      const keynote = slide.querySelector(".shots-keynote");
+      const bar = slide.querySelector(".shots-keynote__bar");
+      const body = slide.querySelector(".shots-keynote__body");
+      const footer = slide.querySelector(".slide-export-footer");
+      const bottom = slide.querySelector(".shots-bottom");
+      const playerTable = slide.querySelector(".shots-player-table");
+      const phasePanel = slide.querySelector(".shots-phase-panel");
+      const phaseTable = slide.querySelector(".shots-phase-table");
+      if (!keynote || !body || !bottom || !playerTable) return () => {};
+
+      const prev = {
+        keynote: captureInlineStyle(keynote, ["flex", "height", "minHeight", "width"]),
+        body: captureInlineStyle(body, ["height", "minHeight", "gridTemplateRows"]),
+        bottom: captureInlineStyle(bottom, ["height", "minHeight", "maxHeight", "overflow"]),
+        playerTable: captureInlineStyle(playerTable, ["height"]),
+        playerTbody: captureInlineStyle(playerTable.querySelector("tbody"), ["height"]),
+        playerRows: [...playerTable.querySelectorAll("tbody tr")].map((tr) => captureInlineStyle(tr, ["height"])),
+        phasePanel: phasePanel ? captureInlineStyle(phasePanel, ["height"]) : null,
+        phaseTable: phaseTable ? captureInlineStyle(phaseTable, ["height"]) : null,
+        phaseTbody: phaseTable ? captureInlineStyle(phaseTable.querySelector("tbody"), ["height"]) : null,
+        phaseRows: phaseTable
+          ? [...phaseTable.querySelectorAll("tbody tr")].map((tr) => captureInlineStyle(tr, ["height"]))
+          : [],
+      };
+
+      const keynoteH = exportSlideContentHeight(slide, footer);
+      const barH = bar?.offsetHeight || 0;
+      const bodyH = Math.max(0, keynoteH - barH);
+      const rowGap = 8;
+
+      keynote.style.flex = "1 1 0";
+      keynote.style.width = "100%";
+      keynote.style.height = `${keynoteH}px`;
+      keynote.style.minHeight = `${keynoteH}px`;
+      body.style.height = `${bodyH}px`;
+      body.style.minHeight = `${bodyH}px`;
+
+      const playerRows = playerTable.querySelectorAll("tbody tr");
+      const rowCount = Math.max(playerRows.length, 1);
+      const theadH = playerTable.querySelector("thead")?.offsetHeight || 32;
+      const compact = playerTable.classList.contains("shots-player-table--compact");
+      const targetRowH = compact
+        ? (rowCount >= 10 ? 24 : rowCount >= 9 ? 26 : 28)
+        : (rowCount >= 9 ? 30 : rowCount >= 7 ? 31 : 33);
+      const minPitchH = rowCount >= 10 ? 120 : rowCount >= 9 ? 135 : rowCount >= 7 ? 155 : 175;
+      const minBottomH = theadH + rowCount * targetRowH + 6;
+      const maxBottomH = Math.max(minBottomH, bodyH - minPitchH - rowGap);
+      const bottomH = Math.min(maxBottomH, minBottomH);
+      const pitchH = Math.max(minPitchH, bodyH - bottomH - rowGap);
+
+      body.style.gridTemplateRows = `${pitchH}px ${bottomH}px`;
+      bottom.style.height = `${bottomH}px`;
+      bottom.style.minHeight = `${bottomH}px`;
+      bottom.style.maxHeight = `${bottomH}px`;
+      bottom.style.overflow = "hidden";
+      playerTable.style.height = "100%";
+      if (phasePanel) phasePanel.style.height = "100%";
+      if (phaseTable) phaseTable.style.height = "100%";
+
+      const playerTbodyH = Math.max(0, bottomH - theadH - 2);
+      const playerTbody = playerTable.querySelector("tbody");
+      if (playerTbody) playerTbody.style.height = `${playerTbodyH}px`;
+      playerRows.forEach((tr) => {
+        tr.style.height = `${playerTbodyH / rowCount}px`;
+      });
+
+      if (phaseTable) {
+        const phaseRowEls = phaseTable.querySelectorAll("tbody tr");
+        const phaseRowCount = Math.max(phaseRowEls.length, 1);
+        const phaseTheadH = phaseTable.querySelector("thead")?.offsetHeight || 36;
+        const phaseTbodyH = Math.max(0, bottomH - phaseTheadH - 2);
+        const phaseTbody = phaseTable.querySelector("tbody");
+        if (phaseTbody) phaseTbody.style.height = `${phaseTbodyH}px`;
+        phaseRowEls.forEach((tr) => {
+          tr.style.height = `${phaseTbodyH / phaseRowCount}px`;
+        });
+      }
+
+      return () => {
+        restoreInlineStyle(keynote, prev.keynote);
+        restoreInlineStyle(body, prev.body);
+        restoreInlineStyle(bottom, prev.bottom);
+        restoreInlineStyle(playerTable, prev.playerTable);
+        restoreInlineStyle(playerTable.querySelector("tbody"), prev.playerTbody);
+        prev.playerRows.forEach((snap, i) => restoreInlineStyle(playerTable.querySelectorAll("tbody tr")[i], snap));
+        if (phasePanel && prev.phasePanel) restoreInlineStyle(phasePanel, prev.phasePanel);
+        if (phaseTable && prev.phaseTable) restoreInlineStyle(phaseTable, prev.phaseTable);
+        if (phaseTable && prev.phaseTbody) restoreInlineStyle(phaseTable.querySelector("tbody"), prev.phaseTbody);
+        if (phaseTable) {
+          prev.phaseRows.forEach((snap, i) => restoreInlineStyle(phaseTable.querySelectorAll("tbody tr")[i], snap));
+        }
+      };
+    }
+
+    function stretchSetPlayFreeKicksSlideForExport(slide) {
+      if (!slide.classList.contains("slide--set-plays-freekicks")) return () => {};
+
+      const keynote = slide.querySelector(".set-plays-keynote");
+      const bar = slide.querySelector(".set-plays-keynote__bar");
+      const body = slide.querySelector(".set-plays-keynote__body");
+      const footer = slide.querySelector(".slide-export-footer");
+      const panels = slide.querySelector(".set-plays-panels");
+      const panel = slide.querySelector(".set-plays-panel");
+      const pitchWrap = slide.querySelector(".set-plays-pitch-wrap");
+      const pitch = pitchWrap?.querySelector(".set-plays-pitch");
+      if (!keynote || !body || !panels || !panel || !pitchWrap || !pitch) return () => {};
+
+      const prev = {
+        keynote: captureInlineStyle(keynote, ["flex", "height", "minHeight", "width"]),
+        body: captureInlineStyle(body, ["height", "minHeight", "flex"]),
+        panels: captureInlineStyle(panels, ["height", "flex", "minHeight"]),
+        panel: captureInlineStyle(panel, ["height", "flex", "minHeight", "display"]),
+        pitchWrap: captureInlineStyle(pitchWrap, ["height", "flex", "maxWidth", "width", "minHeight"]),
+        pitch: captureInlineStyle(pitch, ["height", "width", "maxHeight"]),
+      };
+
+      const keynoteH = exportSlideContentHeight(slide, footer);
+      const barH = bar?.offsetHeight || 0;
+      const bodyH = Math.max(0, keynoteH - barH);
+
+      keynote.style.flex = "1 1 0";
+      keynote.style.width = "100%";
+      keynote.style.height = `${keynoteH}px`;
+      keynote.style.minHeight = `${keynoteH}px`;
+      body.style.flex = "1 1 auto";
+      body.style.height = `${bodyH}px`;
+      body.style.minHeight = `${bodyH}px`;
+      panels.style.flex = "1 1 auto";
+      panels.style.height = `${bodyH}px`;
+      panels.style.minHeight = `${bodyH}px`;
+      panel.style.height = `${bodyH}px`;
+      panel.style.minHeight = `${bodyH}px`;
+      panel.style.display = "flex";
+      panel.style.flexDirection = "column";
+
+      const title = panel.querySelector(".set-plays-panel__title");
+      const summary = panel.querySelector(".set-plays-summary");
+      const scope = panel.querySelector(".set-plays-scope");
+      const legend = panel.querySelector(".set-plays-legend");
+      const bodyPad = 20;
+      const panelPad = 16;
+      const gaps = 14;
+      const fixedH = (title?.offsetHeight || 0)
+        + (summary?.offsetHeight || 0)
+        + (scope?.offsetHeight || 0)
+        + (legend?.offsetHeight || 0)
+        + bodyPad
+        + panelPad
+        + gaps;
+      const pitchH = Math.max(240, bodyH - fixedH);
+
+      pitchWrap.style.flex = "1 1 auto";
+      pitchWrap.style.height = `${pitchH}px`;
+      pitchWrap.style.minHeight = `${pitchH}px`;
+      pitchWrap.style.maxWidth = "none";
+      pitchWrap.style.width = "100%";
+      pitch.style.height = "100%";
+      pitch.style.width = "100%";
+      pitch.style.maxHeight = "none";
+
+      return () => {
+        restoreInlineStyle(keynote, prev.keynote);
+        restoreInlineStyle(body, prev.body);
+        restoreInlineStyle(panels, prev.panels);
+        restoreInlineStyle(panel, prev.panel);
+        restoreInlineStyle(pitchWrap, prev.pitchWrap);
+        restoreInlineStyle(pitch, prev.pitch);
+      };
+    }
+
+    function stretchSetPlayMetricsSlideForExport(slide) {
+      if (!slide.classList.contains("slide--set-plays-metrics")) return () => {};
+
+      const keynote = slide.querySelector(".set-plays-keynote");
+      const bar = slide.querySelector(".set-plays-keynote__bar");
+      const body = slide.querySelector(".set-plays-keynote__body");
+      const footer = slide.querySelector(".slide-export-footer");
+      const metricsWrap = slide.querySelector(".set-plays-metrics");
+      const table = metricsWrap?.querySelector(".prog-table");
+      if (!keynote || !body || !metricsWrap || !table) return () => {};
+
+      const prev = {
+        keynote: captureInlineStyle(keynote, ["flex", "height", "minHeight", "width"]),
+        body: captureInlineStyle(body, ["height", "minHeight", "flex", "display"]),
+        metricsWrap: captureInlineStyle(metricsWrap, ["height", "flex", "minHeight"]),
+        table: captureInlineStyle(table, ["height"]),
+        tbody: captureInlineStyle(table.querySelector("tbody"), ["height"]),
+        rows: [...table.querySelectorAll("tbody tr")].map((tr) => captureInlineStyle(tr, ["height"])),
+      };
+
+      const keynoteH = exportSlideContentHeight(slide, footer);
+      const barH = bar?.offsetHeight || 0;
+      const bodyH = Math.max(0, keynoteH - barH);
+
+      keynote.style.flex = "1 1 0";
+      keynote.style.width = "100%";
+      keynote.style.height = `${keynoteH}px`;
+      keynote.style.minHeight = `${keynoteH}px`;
+      body.style.flex = "1 1 auto";
+      body.style.height = `${bodyH}px`;
+      body.style.minHeight = `${bodyH}px`;
+      metricsWrap.style.flex = "1 1 auto";
+      metricsWrap.style.height = `${bodyH}px`;
+      metricsWrap.style.minHeight = `${bodyH}px`;
+
+      const wrapPad = 12;
+      const tableH = Math.max(0, bodyH - wrapPad);
+      table.style.height = `${tableH}px`;
+
+      const theadH = table.querySelector("thead")?.offsetHeight || 52;
+      const rowCount = Math.max(table.querySelectorAll("tbody tr").length, 1);
+      const tbodyH = Math.max(0, tableH - theadH);
+      const tbody = table.querySelector("tbody");
+      if (tbody) tbody.style.height = `${tbodyH}px`;
+      table.querySelectorAll("tbody tr").forEach((tr) => {
+        tr.style.height = `${tbodyH / rowCount}px`;
+      });
+
+      return () => {
+        restoreInlineStyle(keynote, prev.keynote);
+        restoreInlineStyle(body, prev.body);
+        restoreInlineStyle(metricsWrap, prev.metricsWrap);
+        restoreInlineStyle(table, prev.table);
+        restoreInlineStyle(tbody, prev.tbody);
+        prev.rows.forEach((snap, i) => restoreInlineStyle(table.querySelectorAll("tbody tr")[i], snap));
+      };
+    }
+
+    function stretchProgressionSlideForExport(slide) {
+      if (!slide.classList.contains("slide--progression")) return () => {};
+
+      const keynote = slide.querySelector(".prog-keynote");
+      const bar = slide.querySelector(".prog-keynote__bar");
+      const body = slide.querySelector(".prog-keynote__body");
+      const footer = slide.querySelector(".slide-export-footer");
+      const teamTable = slide.querySelector(".prog-team-table");
+      const playerWrap = body?.querySelector(":scope > div");
+      const playerTable = playerWrap?.querySelector(".prog-player-table, .prog-player-table--pxt");
+      if (!keynote || !body || !teamTable || !playerWrap || !playerTable) return () => {};
+
+      const prev = {
+        keynote: captureInlineStyle(keynote, ["flex", "height", "minHeight", "width"]),
+        body: captureInlineStyle(body, ["height", "minHeight", "gridTemplateRows"]),
+        teamTable: captureInlineStyle(teamTable, ["height"]),
+        teamTbody: captureInlineStyle(teamTable.querySelector("tbody"), ["height"]),
+        teamRows: [...teamTable.querySelectorAll("tbody tr")].map((tr) => captureInlineStyle(tr, ["height"])),
+        playerWrap: captureInlineStyle(playerWrap, ["height", "flex", "transform", "transformOrigin", "width"]),
+        playerTable: captureInlineStyle(playerTable, ["height"]),
+        playerTbody: captureInlineStyle(playerTable.querySelector("tbody"), ["height"]),
+        playerRows: [...playerTable.querySelectorAll("tbody tr")].map((tr) => captureInlineStyle(tr, ["height"])),
+      };
+
+      const keynoteH = exportSlideContentHeight(slide, footer);
+      const barH = bar?.offsetHeight || 0;
+      const bodyH = Math.max(0, keynoteH - barH);
+
+      keynote.style.flex = "1 1 0";
+      keynote.style.width = "100%";
+      keynote.style.height = `${keynoteH}px`;
+      keynote.style.minHeight = `${keynoteH}px`;
+      body.style.height = `${bodyH}px`;
+      body.style.minHeight = `${bodyH}px`;
+      body.style.gridTemplateRows = "minmax(0, 1fr)";
+
+      teamTable.style.height = `${bodyH}px`;
+      playerWrap.style.height = `${bodyH}px`;
+      playerWrap.style.flex = "1 1 auto";
       playerWrap.style.transform = "";
+      playerWrap.style.transformOrigin = "";
       playerWrap.style.width = "";
 
-      const available = body.clientHeight;
+      const legend = playerWrap.querySelector(".perf-legend");
+      const legendH = legend?.offsetHeight || 0;
+      const playerTableH = Math.max(0, bodyH - legendH - 4);
+      playerTable.style.height = `${playerTableH}px`;
+
+      const teamTheadH = teamTable.querySelector("thead")?.offsetHeight || 42;
+      const playerTheadH = playerTable.querySelector("thead")?.offsetHeight || 42;
+      const teamRowCount = Math.max(teamTable.querySelectorAll("tbody tr").length, 1);
+      const playerRowCount = Math.max(playerTable.querySelectorAll("tbody tr").length, 1);
+      const teamTbodyH = Math.max(0, bodyH - teamTheadH);
+      const playerTbodyH = Math.max(0, playerTableH - playerTheadH);
+      const teamTbody = teamTable.querySelector("tbody");
+      const playerTbody = playerTable.querySelector("tbody");
+
+      if (teamTbody) teamTbody.style.height = `${teamTbodyH}px`;
+      if (playerTbody) playerTbody.style.height = `${playerTbodyH}px`;
+      teamTable.querySelectorAll("tbody tr").forEach((tr) => {
+        tr.style.height = `${teamTbodyH / teamRowCount}px`;
+      });
+      playerTable.querySelectorAll("tbody tr").forEach((tr) => {
+        tr.style.height = `${playerTbodyH / playerRowCount}px`;
+      });
+
+      // Safety scale-down if the player block still overflows after stretch.
+      const available = bodyH;
       const needed = playerWrap.scrollHeight;
       if (available > 0 && needed > available + 2) {
         const scale = Math.max(0.72, Math.min(1, available / needed));
+        playerWrap.style.transformOrigin = "top left";
         playerWrap.style.transform = `scale(${scale})`;
         playerWrap.style.width = `${100 / scale}%`;
       }
 
       return () => {
-        playerWrap.style.transform = prev.transform;
-        playerWrap.style.transformOrigin = prev.transformOrigin;
-        playerWrap.style.width = prev.width;
+        restoreInlineStyle(keynote, prev.keynote);
+        restoreInlineStyle(body, prev.body);
+        restoreInlineStyle(teamTable, prev.teamTable);
+        restoreInlineStyle(teamTbody, prev.teamTbody);
+        prev.teamRows.forEach((snap, i) => restoreInlineStyle(teamTable.querySelectorAll("tbody tr")[i], snap));
+        restoreInlineStyle(playerWrap, prev.playerWrap);
+        restoreInlineStyle(playerTable, prev.playerTable);
+        restoreInlineStyle(playerTbody, prev.playerTbody);
+        prev.playerRows.forEach((snap, i) => restoreInlineStyle(playerTable.querySelectorAll("tbody tr")[i], snap));
       };
     }
 
@@ -7791,9 +9579,9 @@
           ySize: opts.scales?.y?.ticks?.font?.size,
           titleSize: opts.scales?.x?.title?.font?.size,
         };
-        if (opts.scales?.x?.ticks?.font) opts.scales.x.ticks.font.size = 16;
-        if (opts.scales?.y?.ticks?.font) opts.scales.y.ticks.font.size = 16;
-        if (opts.scales?.x?.title?.font) opts.scales.x.title.font.size = 16;
+        if (opts.scales?.x?.ticks?.font) opts.scales.x.ticks.font.size = 13;
+        if (opts.scales?.y?.ticks?.font) opts.scales.y.ticks.font.size = 13;
+        if (opts.scales?.x?.title?.font) opts.scales.x.title.font.size = 13;
         if (opts.scales?.x?.ticks) opts.scales.x.ticks.color = "#0f172a";
         if (opts.scales?.y?.ticks) opts.scales.y.ticks.color = "#0f172a";
         xgRaceChartInstance.update("none");
@@ -7804,7 +9592,17 @@
       const restoreMaps = await rasterizeExportSvgs(slide);
       await waitForImages(slide);
       await waitForPaint();
-      const restoreFit = fitProgressionTablesForExport(slide);
+      const restoreFit = slide.classList.contains("slide--progression")
+        ? stretchProgressionSlideForExport(slide)
+        : slide.classList.contains("slide--shots")
+          ? stretchShotsSlideForExport(slide)
+          : slide.classList.contains("slide--duels-map-detail")
+            ? stretchDuelsMapSlideForExport(slide)
+            : slide.classList.contains("slide--set-plays-metrics")
+              ? stretchSetPlayMetricsSlideForExport(slide)
+              : slide.classList.contains("slide--set-plays-freekicks")
+                ? stretchSetPlayFreeKicksSlideForExport(slide)
+                : () => {};
       await waitForPaint();
       return () => {
         restoreFit();
@@ -7851,23 +9649,26 @@
       if (slide.classList.contains("slide--overview")) return "#0c0c0c";
       if (slide.classList.contains("slide--touch")) return "#0c0c0c";
       if (slide.classList.contains("slide--tilt")) return "#0c0c0c";
-      if (slide.classList.contains("slide--crosses")) return "#eef2f6";
-      if (slide.classList.contains("slide--crosses-oop")) return "#eef2f6";
-      if (slide.classList.contains("slide--shots")) return "#eef2f6";
-      if (slide.classList.contains("slide--shots-oop")) return "#eef2f6";
-      if (slide.classList.contains("slide--divide")) return "#eef2f6";
-      if (slide.classList.contains("slide--progression")) return "#eef2f6";
-      if (slide.classList.contains("slide--duels")) return "#eef2f6";
-      if (slide.classList.contains("slide--duels-map")) return "#eef2f6";
       if (slide.classList.contains("slide--set-plays")) return "#0c0c0c";
+      // Keynote cards sit on a dark letterbox so gutters read clearly in WhatsApp PDFs.
+      if (slide.classList.contains("slide--crosses")) return "#111111";
+      if (slide.classList.contains("slide--crosses-oop")) return "#111111";
+      if (slide.classList.contains("slide--shots")) return "#111111";
+      if (slide.classList.contains("slide--shots-oop")) return "#111111";
+      if (slide.classList.contains("slide--divide")) return "#111111";
+      if (slide.classList.contains("slide--progression")) return "#111111";
+      if (slide.classList.contains("slide--duels")) return "#111111";
+      if (slide.classList.contains("slide--duels-map")) return "#111111";
       return "#0c0c0c";
     }
 
-    async function captureSlideCanvas(slide) {
+    async function captureSlideCanvas(slide, { scale = EXPORT_SCALE } = {}) {
       return html2canvas(slide, {
         backgroundColor: slideExportBackground(slide),
-        scale: EXPORT_SCALE,
+        scale,
         useCORS: true,
+        allowTaint: false,
+        foreignObjectRendering: false,
         logging: false,
         width: SLIDE_EXPORT_WIDTH,
         height: SLIDE_EXPORT_HEIGHT,
@@ -7906,66 +9707,90 @@
     }
 
     function setExportButtonsDisabled(disabled) {
-      const pdfBtn = document.getElementById("exportPdfBtn");
-      const pngBtn = document.getElementById("exportPngBtn");
-      if (pdfBtn) pdfBtn.disabled = disabled;
-      if (pngBtn) pngBtn.disabled = disabled;
+      ["exportPdfBtn", "exportPngBtn", "pdfViewBtn", "pdfBackBtn", "presentBtn", "refreshBtn"].forEach((id) => {
+        const btn = document.getElementById(id);
+        if (btn) btn.disabled = disabled;
+      });
     }
 
-    async function exportPdf() {
+    async function captureAllSlidesForExport(onProgress) {
       if (typeof html2canvas !== "function") {
-        setBanner("PDF export unavailable — reload the page.", "error");
-        return;
+        throw new Error("PDF export unavailable — reload the page.");
       }
       const deck = document.querySelector(".deck");
-      const slides = [...document.querySelectorAll(".deck .slide:not(.slide--placeholder)")];
+      const slides = deckSlides.length
+        ? deckSlides
+        : [...document.querySelectorAll(".deck .slide:not(.slide--placeholder)")];
       if (!slides.length) {
-        setBanner("Load a report before exporting.", "error");
-        return;
+        throw new Error("Load a report before exporting.");
       }
 
-      setExportButtonsDisabled(true);
+      if (document.body.classList.contains("is-present")) setPresent(false);
+      document.body.classList.add("is-exporting");
       deck?.classList.add("deck--exporting");
-      setBanner("Building WhatsApp PDF (1920×1080)…", "loading");
+
       try {
-        const form = new FormData();
-        form.append("document_title", exportDocumentTitle());
+        const canvases = [];
         for (let i = 0; i < slides.length; i += 1) {
           const slide = slides[i];
-          setBanner(`Capturing slides… ${i + 1}/${slides.length}`, "loading");
+          const message = `Capturing slide ${i + 1} of ${slides.length}…`;
+          onProgress?.(message);
+          setExportOverlay(message);
           const restoreSlide = await prepareSlideForExport(slide, {
             pageNum: i + 1,
             totalPages: slides.length,
           });
           try {
-            const canvas = await captureSlideCanvas(slide);
-            const blob = await canvasToWhatsAppPageBlob(canvas);
-            const page = String(i + 1).padStart(2, "0");
-            form.append("pages", blob, `page-${page}.jpg`);
+            const canvas = await captureSlideCanvas(slide, { scale: WHATSAPP_CAPTURE_SCALE });
+            if (!canvas?.width || !canvas?.height) {
+              throw new Error("capture returned an empty canvas");
+            }
+            canvases.push(canvas);
+          } catch (slideErr) {
+            throw new Error(`${slideExportLabel(slide, i)}: ${exportErrorMessage(slideErr, "capture failed")}`);
           } finally {
             restoreSlide();
           }
         }
+        return canvases;
+      } finally {
+        document.body.classList.remove("is-exporting");
+        deck?.classList.remove("deck--exporting");
+        setExportOverlay("");
+        refreshDeckState();
+      }
+    }
 
-        setBanner("Joining pages into one PDF…", "loading");
-        const response = await fetch("/api/post-match/export-pdf-pages", {
-          method: "POST",
-          body: form,
+    async function exportPdf() {
+      setExportButtonsDisabled(true);
+      try {
+        if (!document.body.classList.contains("is-pdf-view")) setPdfView(true);
+        setExportStatus("Preparing PDF from large slides…", "loading");
+        const canvases = await captureAllSlidesForExport((msg) => setExportStatus(msg, "loading"));
+        await loadExportScript("https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js");
+        const { jsPDF } = window.jspdf;
+        if (!jsPDF) throw new Error("PDF library failed to load.");
+        const pdf = new jsPDF({
+          orientation: "landscape",
+          unit: "mm",
+          format: [EXPORT_PDF_W_MM, EXPORT_PDF_H_MM],
+          compress: true,
         });
-        if (!response.ok) throw new Error(await response.text());
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `${slideExportFileStem()}.pdf`;
-        link.click();
-        URL.revokeObjectURL(url);
-        setBanner(`WhatsApp PDF ready (${(blob.size / (1024 * 1024)).toFixed(1)} MB)`);
+        canvases.forEach((canvas, index) => {
+          const imageData = canvas.toDataURL("image/jpeg", WHATSAPP_PDF_JPEG_QUALITY);
+          if (index > 0) pdf.addPage([EXPORT_PDF_W_MM, EXPORT_PDF_H_MM], "landscape");
+          pdf.addImage(imageData, "JPEG", 0, 0, EXPORT_PDF_W_MM, EXPORT_PDF_H_MM);
+        });
+        pdf.save(`${slideExportFileStem()}.pdf`);
+        setExportStatus(`PDF downloaded (${canvases.length} slides). Still in PDF version — Back to deck when done.`, "success");
+        setBanner(`WhatsApp PDF ready (${canvases.length} slides)`, "loading");
         setTimeout(() => setBanner(""), 4000);
       } catch (err) {
-        setBanner(err.message || "PDF export failed", "error");
+        console.error("Post-match PDF export failed", err);
+        const message = exportErrorMessage(err);
+        setExportStatus(message, "error");
+        setBanner(message, "error");
       } finally {
-        deck?.classList.remove("deck--exporting");
         setExportButtonsDisabled(false);
       }
     }
@@ -8033,20 +9858,36 @@
       try {
         if (!config) {
           config = await fetch("/api/post-match/config").then((r) => r.json());
-          if (!document.getElementById("matchId").value) {
-            document.getElementById("matchId").value = config.defaultMatchId;
-          }
-          const season = await fetch(
-            `/api/post-match/iterations/${config.defaultIterationId}/matches?squad_id=${config.portValeSquadId}`,
-          ).then(async (r) => {
-            if (!r.ok) throw new Error(await r.text());
-            return r.json();
-          });
-          seasonMatches = season.matches || [];
         }
-        renderMatchBar(matchId);
+        const season = await fetchSeasonMatches();
+        seasonMatches = season.matches || [];
+        if (!document.getElementById("matchId").value && season.defaultMatchId) {
+          document.getElementById("matchId").value = season.defaultMatchId;
+        }
+        const selected = matchById(matchId) || matchById(Number(document.getElementById("matchId").value));
+        const activeMatchId = selected?.matchId || matchId;
+        document.getElementById("matchId").value = activeMatchId;
+        selectedIterationId =
+          selected?.iterationId ||
+          selectedIterationId ||
+          config.defaultIterationId ||
+          null;
+        renderMatchBar(activeMatchId);
+
+        if (selected && selected.available === false) {
+          renderPendingMatchDeck(selected);
+          setBanner(
+            `${selected.competitionLabel || "Match"} vs ${selected.opponent?.name || "opponent"} is booked in Impect — report unlocks after full time.`,
+            "loading",
+          );
+          return;
+        }
+
+        const iterationQuery = selectedIterationId
+          ? `&iteration_id=${selectedIterationId}`
+          : "";
         const report = await fetch(
-          `/api/post-match/match/${matchId}/report?squad_id=${config.portValeSquadId}`,
+          `/api/post-match/match/${activeMatchId}/report?squad_id=${config.portValeSquadId}${iterationQuery}`,
         ).then(async (r) => {
           if (!r.ok) throw new Error(await r.text());
           return r.json();
@@ -8068,8 +9909,18 @@
           renderDuelsActivityMapSlides(report) +
           renderSetPlaysSlides(report);
         drawXgRaceChart(report, "xgRaceChartOverview");
+        refreshDeckState();
       } catch (err) {
-        setBanner(err.message || "Failed to load report", "error");
+        const selected = matchById(Number(document.getElementById("matchId").value));
+        if (selected && selected.available === false) {
+          renderPendingMatchDeck(selected);
+          setBanner(
+            "Match data not in Impect yet — refresh after full time.",
+            "loading",
+          );
+        } else {
+          setBanner(err.message || "Failed to load report", "error");
+        }
       } finally {
         btn.disabled = false;
         btn.textContent = "Refresh";
@@ -8080,13 +9931,18 @@
       try {
         config = await fetch("/api/post-match/config").then((r) => r.json());
         document.getElementById("matchId").value = config.defaultMatchId;
-        const season = await fetch(
-          `/api/post-match/iterations/${config.defaultIterationId}/matches?squad_id=${config.portValeSquadId}`,
-        ).then(async (r) => {
-          if (!r.ok) throw new Error(await r.text());
-          return r.json();
-        });
+        selectedIterationId = config.defaultIterationId;
+        const season = await fetchSeasonMatches();
         seasonMatches = season.matches || [];
+        const preferred =
+          matchById(config.defaultMatchId) ||
+          matchById(season.defaultMatchId) ||
+          seasonMatches[0] ||
+          null;
+        if (preferred) {
+          document.getElementById("matchId").value = preferred.matchId;
+          selectedIterationId = preferred.iterationId || config.defaultIterationId;
+        }
       } catch (err) {
         setBanner(err.message || "Failed to load season matches", "error");
       }
@@ -8096,6 +9952,57 @@
     document.getElementById("refreshBtn").addEventListener("click", loadReport);
     document.getElementById("exportPdfBtn").addEventListener("click", exportPdf);
     document.getElementById("exportPngBtn").addEventListener("click", exportPngs);
+    presentBtn?.addEventListener("click", () => setPresent(!document.body.classList.contains("is-present")));
+    pdfViewBtn?.addEventListener("click", () => setPdfView(true));
+    pdfBackBtn?.addEventListener("click", () => setPdfView(false));
+    document.getElementById("presentPrev")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      goBack();
+    });
+    document.getElementById("presentNext")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      goForward();
+    });
+    document.addEventListener("fullscreenchange", () => {
+      if (!document.fullscreenElement && document.body.classList.contains("is-present")) {
+        setPresent(false);
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.target && /input|textarea|select/i.test(event.target.tagName)) return;
+      if (event.key === "p" || event.key === "P") {
+        if (!document.body.classList.contains("is-pdf-view")) {
+          setPresent(!document.body.classList.contains("is-present"));
+        }
+        return;
+      }
+      if (!document.body.classList.contains("is-present")) return;
+      if (event.key === "ArrowRight" || event.key === " " || event.key === "PageDown") {
+        event.preventDefault();
+        goForward();
+      }
+      if (event.key === "ArrowLeft" || event.key === "PageUp" || event.key === "Backspace") {
+        event.preventDefault();
+        goBack();
+      }
+      if (event.key === "Home") {
+        event.preventDefault();
+        showSlide(0);
+      }
+      if (event.key === "End") {
+        event.preventDefault();
+        showSlide(deckSlides.length - 1);
+      }
+      if (event.key === "Escape") setPresent(false);
+    });
+    document.getElementById("deck")?.addEventListener("click", (event) => {
+      if (!document.body.classList.contains("is-present")) return;
+      if (event.target.closest(".present-ui, button, a, select")) return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      if (x < rect.width * 0.28) goBack();
+      else goForward();
+    });
     initApp();
   </script>
   <script defer src="/static/hub-feedback.js?v=1"></script>

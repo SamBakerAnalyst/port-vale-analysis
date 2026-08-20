@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from app.pre_match import (
@@ -21,6 +21,7 @@ from app.pre_match import (
     _squads_map,
     _unwrap_items,
 )
+from app.paths import STANDALONE_DIR
 from app.scouting import SCOUTING_DIR
 from app.squad_review import (
     _available_port_vale_seasons,
@@ -54,12 +55,58 @@ ALLOWED_SEASONS = ("26/27", "25/26")
 _match_events_cache: dict[int, tuple[float, list[dict[str, Any]]]] = {}
 _ekpi_cache: dict[int, tuple[float, dict[int, float]]] = {}
 _player_directory_cache: dict[int, tuple[float, dict[int, str]]] = {}
+_iteration_matches_cache: dict[int, tuple[float, dict[int, dict[str, Any]]]] = {}
 
 
 def _impect():
     from app import main as impect_main
 
     return impect_main
+
+
+def _iteration_matches_by_id(iteration_id: int) -> dict[int, dict[str, Any]]:
+    now = time.time()
+    cached = _iteration_matches_cache.get(iteration_id)
+    if cached and now - cached[0] < 300 and cached[1]:
+        return cached[1]
+    impect = _impect()
+    matches = _unwrap_items(
+        impect._impect_get(
+            f"/v5/{impect._api_prefix()}/iterations/{iteration_id}/matches"
+        )["data"]
+    )
+    mapping = {int(m["id"]): m for m in matches if m.get("id") is not None}
+    _iteration_matches_cache[iteration_id] = (now, mapping)
+    return mapping
+
+
+def _competition_iteration_ids(primary_iteration_id: int) -> list[int]:
+    ids = [int(primary_iteration_id)]
+    try:
+        from app.post_match.config import POST_MATCH_COMPETITIONS
+
+        for row in POST_MATCH_COMPETITIONS:
+            iid = int(row.get("iterationId") or 0)
+            if iid and iid not in ids:
+                ids.append(iid)
+    except Exception:
+        pass
+    return ids
+
+
+def _locate_matches(
+    match_ids: list[int], primary_iteration_id: int
+) -> list[tuple[int, dict[str, Any]]]:
+    found: dict[int, tuple[int, dict[str, Any]]] = {}
+    for iid in _competition_iteration_ids(primary_iteration_id):
+        mapping = _iteration_matches_by_id(iid)
+        for mid in match_ids:
+            if mid in mapping and mid not in found:
+                found[mid] = (iid, mapping[mid])
+    missing = [mid for mid in match_ids if mid not in found]
+    if missing:
+        raise ValueError(f"No completed matches found for this selection: {missing}")
+    return [found[mid] for mid in match_ids]
 
 
 def _parse_impect_minute(game_time: dict[str, Any]) -> float:
@@ -814,27 +861,24 @@ def build_xg_chance_report(
     if port_vale_id is None:
         raise ValueError("Port Vale squad not found for this iteration.")
 
-    squads = _squads_map(iteration_id)
-    player_names = _player_directory(iteration_id)
-    impect = _impect()
-    matches = _unwrap_items(
-        impect._impect_get(
-            f"/v5/{impect._api_prefix()}/iterations/{iteration_id}/matches"
-        )["data"]
+    league_matches_by_id = _iteration_matches_by_id(iteration_id)
+    completed_ids = _completed_vale_match_ids(
+        list(league_matches_by_id.values()), league_matches_by_id, port_vale_id
     )
-    matches_by_id = {int(m["id"]): m for m in matches if m.get("id") is not None}
-    completed_ids = _completed_vale_match_ids(matches, matches_by_id, port_vale_id)
 
     normalized_scope = (scope or "").strip().lower()
+    located: list[tuple[int, dict[str, Any]]] | None = None
     if match_ids:
-        selected_ids = [int(mid) for mid in match_ids if int(mid) in matches_by_id]
-        normalized_scope = normalized_scope or "custom"
+        located = _locate_matches([int(mid) for mid in match_ids], iteration_id)
+        selected_ids = [int(match["id"]) for _, match in located]
+        normalized_scope = normalized_scope or ("match" if len(selected_ids) == 1 else "custom")
     elif normalized_scope == "last6":
         selected_ids = completed_ids[-6:]
     elif normalized_scope == "season":
         selected_ids = completed_ids
     elif match_id:
-        selected_ids = [int(match_id)] if int(match_id) in matches_by_id else []
+        located = _locate_matches([int(match_id)], iteration_id)
+        selected_ids = [int(match["id"]) for _, match in located]
         normalized_scope = "match"
     elif normalized_scope == "match" and completed_ids:
         selected_ids = [completed_ids[-1]]
@@ -844,14 +888,19 @@ def build_xg_chance_report(
 
     if not selected_ids:
         raise ValueError("No completed matches found for this selection.")
+    if located is None:
+        located = [(iteration_id, league_matches_by_id[mid]) for mid in selected_ids]
+    located_by_id = {int(match["id"]): (iid, match) for iid, match in located}
 
     def _process_match(mid: int) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
-        match = matches_by_id[mid]
+        match_iteration_id, match = located_by_id[mid]
+        squads = _squads_map(match_iteration_id)
+        player_names = _player_directory(match_iteration_id)
         home_id = int(match.get("homeSquadId") or -1)
         away_id = int(match.get("awaySquadId") or -1)
         meta = _match_meta(match, port_vale_id, squads)
         shots, dismissals = _build_match_shots(
-            mid, iteration_id, port_vale_id, home_id, away_id, player_names
+            mid, match_iteration_id, port_vale_id, home_id, away_id, player_names
         )
         for shot in shots:
             shot["matchId"] = mid
@@ -1008,12 +1057,9 @@ def xg_chance_meta() -> dict[str, Any]:
 
 
 def register_xg_chance_analysis_routes(app: FastAPI) -> None:
-    @app.get("/xg-chance-analysis", response_class=HTMLResponse)
-    def xg_chance_analysis_page() -> HTMLResponse:
-        html_path = SCOUTING_DIR / "xg-chance-analysis.html"
-        if not html_path.exists():
-            raise HTTPException(status_code=404, detail="xG Chance Analysis UI not found.")
-        return HTMLResponse(html_path.read_text(encoding="utf-8"))
+    @app.get("/xg-chance-analysis")
+    def xg_chance_analysis_page() -> FileResponse:
+        return FileResponse(STANDALONE_DIR / "xg-chance-analysis.html")
 
     @app.get("/api/xg-chance-analysis/meta")
     def xg_chance_meta_route() -> dict[str, Any]:
@@ -1058,6 +1104,7 @@ def register_xg_chance_analysis_routes(app: FastAPI) -> None:
         season: str | None = Query(None),
         scope: str | None = Query("match"),
         match_id: int | None = Query(None, alias="matchId"),
+        match_ids: str | None = Query(None, alias="matchIds"),
     ) -> Response:
         from app.xg_chance_analysis_pdf import build_xg_chance_analysis_pdf
 
@@ -1065,13 +1112,29 @@ def register_xg_chance_analysis_routes(app: FastAPI) -> None:
         if normalized not in {"match", "last6", "season"}:
             raise HTTPException(status_code=400, detail="scope must be match, last6, or season")
 
+        selected_ids: list[int] | None = None
+        if match_ids:
+            try:
+                selected_ids = [int(part) for part in match_ids.split(",") if part.strip()]
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail="matchIds must be integers") from exc
+
+        if selected_ids and len(selected_ids) == 1:
+            match_id = selected_ids[0]
+            selected_ids = None
+            normalized = "match"
+
         try:
             report = build_xg_chance_report(
                 season=season,
-                match_id=match_id if normalized == "match" else None,
-                scope=normalized,
+                match_id=match_id if not selected_ids else None,
+                match_ids=selected_ids,
+                scope=None if selected_ids else normalized,
             )
-            pdf_bytes = build_xg_chance_analysis_pdf(report, scope=normalized)
+            pdf_scope = "match" if int(report.get("matchCount") or 0) <= 1 else "last6"
+            if normalized == "season" and not selected_ids:
+                pdf_scope = "season"
+            pdf_bytes = build_xg_chance_analysis_pdf(report, scope=pdf_scope)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:

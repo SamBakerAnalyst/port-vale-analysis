@@ -319,7 +319,7 @@ def _compute_player_baselines(
             if int(row.get("squadId") or 0) == focus_squad_id
         ]
         for row in _consolidate_player_match_rows(squad_rows):
-            minutes = float(row.get("minutes") or 0) / 60.0
+            minutes = float(row.get("minutes") or 0)
             if minutes <= 0:
                 continue
             metrics = _extract_player_metrics(row.get("kpis") or {})
@@ -700,7 +700,7 @@ def _aggregate_players(
 
     rows: list[dict[str, Any]] = []
     for row in consolidated:
-        minutes = float(row.get("minutes") or 0) / 60.0
+        minutes = float(row.get("minutes") or 0)
         if minutes <= 0:
             continue
         metrics = _extract_player_metrics(row.get("kpis") or {})

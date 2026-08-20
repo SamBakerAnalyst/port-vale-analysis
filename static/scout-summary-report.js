@@ -21,6 +21,25 @@ const state = {
   report: null,
   loading: false,
   lastQuery: null,
+  pendingFormat: "full",
+};
+
+const REPORT_COPY = {
+  two_pager: {
+    title: "Export two-pager",
+    eyebrow: "2-page ops pack",
+    hint: "Short meeting pack — coverage totals and focus points. Choose the date window to include.",
+  },
+  player_position: {
+    title: "Export player & position",
+    eyebrow: "Player book",
+    hint: "Report counts by player and position. Choose the date window for marked reports.",
+  },
+  full: {
+    title: "Export full review",
+    eyebrow: "Full coverage review",
+    hint: "Complete PDF with staff, leagues, players, recommendations and exposure. Choose the date window.",
+  },
 };
 
 const els = {
@@ -33,6 +52,14 @@ const els = {
   exportPdfBtn: document.getElementById("exportPdfBtn"),
   exportTwoPagerBtn: document.getElementById("exportTwoPagerBtn"),
   exportPlayerPosBtn: document.getElementById("exportPlayerPosBtn"),
+  exportModal: document.getElementById("exportModal"),
+  exportModalTitle: document.getElementById("exportModalTitle"),
+  exportModalEyebrow: document.getElementById("exportModalEyebrow"),
+  exportModalHint: document.getElementById("exportModalHint"),
+  exportModalError: document.getElementById("exportModalError"),
+  exportModalStatus: document.getElementById("exportModalStatus"),
+  exportConfirmBtn: document.getElementById("exportConfirmBtn"),
+  previewBtn: document.getElementById("previewBtn"),
   statusBar: document.getElementById("statusBar"),
   reportEmpty: document.getElementById("reportEmpty"),
   reportPreview: document.getElementById("reportPreview"),
@@ -440,8 +467,10 @@ function renderPlayerReports(rows) {
     .join("");
 }
 
-function renderStackedTeamBar(team, live, video, notSeen, maxTotal) {
-  const total = live + video + notSeen;
+function renderStackedTeamBar(team, live, video, notSeen, maxTotal, meta = {}) {
+  const played = Number(meta.played ?? live + video + notSeen) || 0;
+  const watchedHome = Number(meta.watched_home || 0);
+  const watchedAway = Number(meta.watched_away || 0);
   const scale = maxTotal ? 100 / maxTotal : 0;
   const segments = [
     { key: "live", count: live, color: coverageColors.live },
@@ -457,9 +486,12 @@ function renderStackedTeamBar(team, live, video, notSeen, maxTotal) {
     .join("");
   return `
     <div class="so-report-stacked-bar-row">
-      <span class="so-report-stacked-bar-row__label">${team}</span>
+      <div class="so-report-stacked-bar-row__identity">
+        <span class="so-report-stacked-bar-row__label">${team}</span>
+        <span class="so-report-stacked-bar-row__sides" title="Watched home / away">H ${watchedHome} · A ${watchedAway}</span>
+      </div>
       <div class="so-report-stacked-bar-row__track">${fills}</div>
-      <span class="so-report-stacked-bar-row__total">${total}</span>
+      <span class="so-report-stacked-bar-row__total" title="Fixtures already played">${played}</span>
     </div>
   `;
 }
@@ -472,7 +504,10 @@ function renderLeagueTeamExposure(rows) {
   els.leagueTeamExposureGrid.innerHTML = rows
     .map((leagueRow) => {
       const teams = leagueRow.teams || [];
-      const maxTotal = Math.max(...teams.map((team) => team.total || 0), 1);
+      const maxTotal = Math.max(
+        ...teams.map((team) => Number(team.played ?? team.total) || 0),
+        1
+      );
       const bars = teams
         .map((team) =>
           renderStackedTeamBar(
@@ -480,7 +515,12 @@ function renderLeagueTeamExposure(rows) {
             team.live || 0,
             team.video || 0,
             team.not_seen || 0,
-            maxTotal
+            maxTotal,
+            {
+              played: team.played ?? team.total,
+              watched_home: team.watched_home,
+              watched_away: team.watched_away,
+            }
           )
         )
         .join("");
@@ -493,6 +533,7 @@ function renderLeagueTeamExposure(rows) {
             <li><span class="so-report-legend__swatch" style="background:${coverageColors.video}"></span>Video</li>
             <li><span class="so-report-legend__swatch" style="background:${coverageColors.not_covered}"></span>Not seen</li>
           </ul>
+          <p class="so-report-team-exposure-card__meta">Right = played · H/A = watched home / away</p>
         </header>
         <div class="so-report-stacked-bars">${bars}</div>
       </article>
@@ -502,9 +543,87 @@ function renderLeagueTeamExposure(rows) {
 }
 
 function setExportEnabled(enabled) {
-  els.exportPdfBtn.disabled = !enabled;
+  if (els.exportPdfBtn) els.exportPdfBtn.disabled = !enabled;
   if (els.exportTwoPagerBtn) els.exportTwoPagerBtn.disabled = !enabled;
   if (els.exportPlayerPosBtn) els.exportPlayerPosBtn.disabled = !enabled;
+}
+
+function showExportError(message) {
+  if (!els.exportModalError) return;
+  if (!message) {
+    els.exportModalError.textContent = "";
+    els.exportModalError.classList.add("so-export-modal__error--hidden");
+    return;
+  }
+  showExportStatus("");
+  els.exportModalError.textContent = message;
+  els.exportModalError.classList.remove("so-export-modal__error--hidden");
+}
+
+function showExportStatus(message) {
+  if (!els.exportModalStatus) return;
+  if (!message) {
+    els.exportModalStatus.textContent = "";
+    els.exportModalStatus.classList.add("so-export-modal__status--hidden");
+    return;
+  }
+  els.exportModalStatus.textContent = message;
+  els.exportModalStatus.classList.remove("so-export-modal__status--hidden");
+}
+
+function setExportModalBusy(busy, { status = "", previewLabel = "Preview only", confirmLabel = "Download PDF" } = {}) {
+  const panel = els.exportModal?.querySelector(".so-export-modal__panel");
+  panel?.classList.toggle("so-export-modal__panel--busy", Boolean(busy));
+  panel?.setAttribute("aria-busy", busy ? "true" : "false");
+
+  document.querySelectorAll("[data-export-preset], #dateFrom, #dateTo").forEach((node) => {
+    node.disabled = Boolean(busy);
+  });
+
+  if (els.previewBtn) {
+    els.previewBtn.disabled = Boolean(busy);
+    els.previewBtn.textContent = busy ? previewLabel : "Preview only";
+  }
+  if (els.exportConfirmBtn) {
+    els.exportConfirmBtn.disabled = Boolean(busy);
+    els.exportConfirmBtn.textContent = busy ? confirmLabel : "Download PDF";
+  }
+
+  if (busy) {
+    showExportError("");
+    showExportStatus(status || "Working…");
+  } else if (!els.exportModalError?.textContent) {
+    showExportStatus("");
+  }
+}
+
+function openExportModal(reportFormat = "full") {
+  state.pendingFormat = reportFormat;
+  const copy = REPORT_COPY[reportFormat] || REPORT_COPY.full;
+  if (els.exportModalTitle) els.exportModalTitle.textContent = copy.title;
+  if (els.exportModalEyebrow) els.exportModalEyebrow.textContent = copy.eyebrow;
+  if (els.exportModalHint) els.exportModalHint.textContent = copy.hint;
+  showExportError("");
+  showExportStatus("");
+  setExportModalBusy(false);
+  if (!state.preset && !els.dateFrom?.value && !els.dateTo?.value) {
+    setPreset("this_month");
+  } else {
+    updateRangeSummary();
+  }
+  if (els.exportModal) {
+    els.exportModal.classList.remove("so-export-modal--hidden");
+    els.exportModal.setAttribute("aria-hidden", "false");
+  }
+}
+
+function closeExportModal() {
+  if (!els.exportModal) return;
+  els.exportModal.classList.add("so-export-modal--hidden");
+  els.exportModal.setAttribute("aria-hidden", "true");
+  showExportError("");
+  showExportStatus("");
+  setExportModalBusy(false);
 }
 
 function showReport(report) {
@@ -536,27 +655,37 @@ function showReport(report) {
   if (!hasData) {
     els.statusBar.textContent = "No assignments found for this date range. Try widening the window.";
   } else {
-    els.statusBar.textContent = `Report ready — ${totals.assigned} games covered. Export two-pager, full review, or player & position.`;
+    els.statusBar.textContent = `Preview ready — ${totals.assigned} games covered.`;
   }
 }
 
-async function generateReport() {
+async function generateReport({ modalStatus = "" } = {}) {
   state.loading = true;
-  els.generateBtn.disabled = true;
+  if (els.generateBtn) els.generateBtn.disabled = true;
+  if (els.exportConfirmBtn) els.exportConfirmBtn.disabled = true;
+  if (els.previewBtn) els.previewBtn.disabled = true;
   setExportEnabled(false);
   els.statusBar.textContent = "Generating report…";
+  if (modalStatus) {
+    showExportStatus(modalStatus);
+  }
 
   try {
     const params = buildReportParams();
     const report = await fetchJson(`/api/fixture-planner/scout-summary/report?${params}`);
     showReport(report);
+    return report;
   } catch (error) {
     els.statusBar.textContent = error.message;
+    showExportError(error.message);
     els.reportEmpty.classList.remove("so-report-preview--hidden");
     els.reportPreview.classList.add("so-report-preview--hidden");
+    throw error;
   } finally {
     state.loading = false;
-    els.generateBtn.disabled = false;
+    if (els.generateBtn) els.generateBtn.disabled = false;
+    if (els.exportConfirmBtn) els.exportConfirmBtn.disabled = false;
+    if (els.previewBtn) els.previewBtn.disabled = false;
   }
 }
 
@@ -572,6 +701,7 @@ async function exportPdf(reportFormat = "full") {
     one_pager: "one pager",
   };
   setExportEnabled(false);
+  if (els.exportConfirmBtn) els.exportConfirmBtn.disabled = true;
   els.statusBar.textContent = `Exporting ${labels[reportFormat] || "report"}…`;
   try {
     const params = new URLSearchParams(state.lastQuery.params);
@@ -594,11 +724,54 @@ async function exportPdf(reportFormat = "full") {
     link.remove();
     URL.revokeObjectURL(url);
     els.statusBar.textContent = `${labels[reportFormat] || "Report"} downloaded.`;
+    closeExportModal();
   } catch (error) {
     els.statusBar.textContent = error.message;
+    showExportError(error.message);
   } finally {
     const hasData = Number(state.report?.totals?.assigned || 0) > 0;
     setExportEnabled(hasData);
+    if (els.exportConfirmBtn) els.exportConfirmBtn.disabled = false;
+  }
+}
+
+async function downloadSelectedReport() {
+  showExportError("");
+  setExportModalBusy(true, {
+    status: "Building PDF… this can take 10–30 seconds for a full season.",
+    previewLabel: "Please wait…",
+    confirmLabel: "Building PDF…",
+  });
+  try {
+    await generateReport({
+      modalStatus: "Gathering coverage data…",
+    });
+    showExportStatus("Creating PDF…");
+    await exportPdf(state.pendingFormat || "full");
+  } catch {
+    /* status already set */
+  } finally {
+    if (els.exportModal && !els.exportModal.classList.contains("so-export-modal--hidden")) {
+      setExportModalBusy(false);
+    }
+  }
+}
+
+async function previewSelectedReport() {
+  showExportError("");
+  setExportModalBusy(true, {
+    status: "Building on-screen preview… this can take 10–30 seconds for a full season.",
+    previewLabel: "Building…",
+    confirmLabel: "Please wait…",
+  });
+  try {
+    await generateReport({
+      modalStatus: "Building on-screen preview… this can take 10–30 seconds for a full season.",
+    });
+    closeExportModal();
+    els.reportPreview?.scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch {
+    setExportModalBusy(false);
   }
 }
 
@@ -626,6 +799,10 @@ async function init() {
     renderStaffToggle();
   });
 
+  document.querySelectorAll("[data-report-format]").forEach((button) => {
+    button.addEventListener("click", () => openExportModal(button.dataset.reportFormat || "full"));
+  });
+
   document.querySelectorAll("[data-export-preset]").forEach((button) => {
     button.addEventListener("click", () => setPreset(button.dataset.exportPreset || ""));
   });
@@ -645,15 +822,26 @@ async function init() {
     updateRangeSummary();
   });
 
+  els.exportModal?.querySelectorAll("[data-export-close]").forEach((btn) => {
+    btn.addEventListener("click", closeExportModal);
+  });
+  els.exportConfirmBtn?.addEventListener("click", () => downloadSelectedReport());
+  els.previewBtn?.addEventListener("click", () => previewSelectedReport());
   els.generateBtn?.addEventListener("click", () => generateReport());
   els.exportPdfBtn?.addEventListener("click", () => exportPdf("full"));
   els.exportTwoPagerBtn?.addEventListener("click", () => exportPdf("two_pager"));
   els.exportPlayerPosBtn?.addEventListener("click", () => exportPdf("player_position"));
 
-  if (params.get("from")) {
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && els.exportModal && !els.exportModal.classList.contains("so-export-modal--hidden")) {
+      closeExportModal();
+    }
+  });
+
+  if (params.get("from") && els.dateFrom) {
     els.dateFrom.value = params.get("from");
   }
-  if (params.get("to")) {
+  if (params.get("to") && els.dateTo) {
     els.dateTo.value = params.get("to");
   }
   if (params.get("preset")) {
@@ -662,10 +850,10 @@ async function init() {
   updateRangeSummary();
 
   if (params.get("autogen") === "1" && (els.dateFrom?.value || els.dateTo?.value)) {
-    generateReport();
+    generateReport().catch(() => {});
   }
 }
 
 init().catch((error) => {
-  els.statusBar.textContent = error.message;
+  if (els.statusBar) els.statusBar.textContent = error.message;
 });

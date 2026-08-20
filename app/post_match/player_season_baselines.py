@@ -133,7 +133,7 @@ def _load_match_player_rows(
     consolidated = _consolidate_player_match_rows(flat)
     out: list[dict[str, Any]] = []
     for row in consolidated:
-        minutes = float(row.get("minutes") or 0) / 60.0
+        minutes = float(row.get("minutes") or 0)
         if minutes <= 0:
             continue
         out.append(

@@ -43,6 +43,14 @@ def decode_image_data(data_url: str) -> bytes:
     return base64.b64decode(payload)
 
 
+def image_type_for_bytes(image_bytes: bytes) -> str:
+    if image_bytes.startswith(b"\xff\xd8\xff"):
+        return "JPEG"
+    if image_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "PNG"
+    raise ValueError("Export page image must be JPEG or PNG.")
+
+
 class SlideDeckPDF(FPDF):
     """Full-bleed 16:9 pages — slide bitmaps already include the footer."""
 
@@ -74,6 +82,7 @@ class SlideDeckPDF(FPDF):
             y=0,
             w=self.w,
             h=self.h,
+            type=image_type_for_bytes(image_bytes),
         )
 
     def add_slide_page(
@@ -111,9 +120,12 @@ def build_export_pdf_from_png_bytes(
             total_pages=total_pages,
         )
 
-    buffer = BytesIO()
-    pdf.output(buffer)
-    return buffer.getvalue()
+    output = pdf.output()
+    if isinstance(output, bytearray):
+        return bytes(output)
+    if isinstance(output, bytes):
+        return output
+    return output.encode("latin-1")
 
 
 def build_export_pdf(

@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/fixture-planner.css?v=7" />
-  <link rel="stylesheet" href="/static/scout-ops.css?v=17" />
+  <link rel="stylesheet" href="/static/fixture-planner.css?v=16" />
+  <link rel="stylesheet" href="/static/scout-ops.css?v=22" />
 </head>
 <body>
   <div class="so-app">
@@ -16,71 +16,81 @@
       <div class="so-toolbar__left">
         <p class="so-toolbar__eyebrow">Recruitment · <a href="/">← All apps</a></p>
         <h1 class="so-toolbar__title">Generate scout summary</h1>
-        <p class="so-toolbar__subtitle">Pick a date range, preview, then export Two-pager, Full review, or Player &amp; position totals</p>
+        <p class="so-toolbar__subtitle">Create a PDF for the board / recruitment — pick a report type, then choose the date range</p>
       </div>
       <div class="so-toolbar__right">
         <nav class="so-toolbar__nav" aria-label="Related pages">
           <a href="/scout-summary" class="fp-btn fp-btn--ghost">Scout summary</a>
           <a href="/fixture-planner" class="fp-btn fp-btn--ghost">Fixture planner</a>
+          <a href="/played-fixtures" class="fp-btn fp-btn--ghost">Played fixtures</a>
         </nav>
-        <button type="button" class="fp-btn fp-btn--ghost" id="exportTwoPagerBtn" disabled>Export two-pager</button>
-        <button type="button" class="fp-btn fp-btn--ghost" id="exportPlayerPosBtn" disabled>Export player &amp; position</button>
-        <button type="button" class="fp-btn fp-btn--primary" id="exportPdfBtn" disabled>Export full review</button>
       </div>
     </header>
+
+    <section class="so-report-hero" aria-labelledby="reportHeroTitle">
+      <div class="so-report-hero__intro">
+        <p class="so-report-hero__eyebrow">Key feature</p>
+        <h2 id="reportHeroTitle" class="so-report-hero__title">Choose what to create</h2>
+        <p class="so-report-hero__copy">
+          Each button builds a different PDF from the same coverage data (Fixture Planner + Played Fixtures).
+          Click one, pick the date range, and download.
+        </p>
+      </div>
+
+      <div class="so-report-types" role="list">
+        <button type="button" class="so-report-type" data-report-format="two_pager" role="listitem">
+          <span class="so-report-type__badge">2 pages</span>
+          <span class="so-report-type__name">Two-pager</span>
+          <span class="so-report-type__blurb">
+            Short ops pack for meetings — coverage totals, busiest scouts, and the main focus points on two slides.
+          </span>
+          <span class="so-report-type__cta">Select dates →</span>
+        </button>
+
+        <button type="button" class="so-report-type" data-report-format="player_position" role="listitem">
+          <span class="so-report-type__badge">Players</span>
+          <span class="so-report-type__name">Player &amp; position</span>
+          <span class="so-report-type__blurb">
+            Who we’ve written up — report counts by player and by position. Best for spotting gaps in the scouting book.
+          </span>
+          <span class="so-report-type__cta">Select dates →</span>
+        </button>
+
+        <button type="button" class="so-report-type so-report-type--primary" data-report-format="full" role="listitem">
+          <span class="so-report-type__badge">Full PDF</span>
+          <span class="so-report-type__name">Full review</span>
+          <span class="so-report-type__blurb">
+            Complete coverage review — staff teams, every scout, league charts, player reports, recommendations and team exposure.
+          </span>
+          <span class="so-report-type__cta">Select dates →</span>
+        </button>
+      </div>
+    </section>
 
     <section class="so-report-controls card">
       <div class="so-controls__row">
         <div class="so-controls__group">
-          <span class="fp-controls__label">Season</span>
+          <span class="fp-controls__label">Season filter (optional)</span>
           <div id="seasonToggle" class="fp-season-toggle" role="group" aria-label="Season"></div>
         </div>
         <div class="so-controls__group so-controls__group--grow">
-          <span class="fp-controls__label">Staff</span>
+          <span class="fp-controls__label">Staff filter (optional)</span>
           <div id="staffToggle" class="fp-league-toggle so-staff-toggle" role="group" aria-label="Filter by staff"></div>
         </div>
       </div>
-
-      <div class="so-report-controls__dates">
-        <span class="fp-controls__label">Display from</span>
-        <div class="so-export-modal__presets so-report-presets" role="group" aria-label="Quick date ranges">
-          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="all_time">All time</button>
-          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="this_week">This week</button>
-          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="last_week">Last week</button>
-          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="next_week">Next week</button>
-          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="this_month">This month</button>
-          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="last_month">Last month</button>
-          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="last_3_months">Last 3 months</button>
-          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="last_6_months">Last 6 months</button>
-          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="this_season">This season</button>
-          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="last_season">Last season</button>
-          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="upcoming">Upcoming</button>
-        </div>
-        <div class="so-export-modal__dates">
-          <label class="so-export-modal__date-field">
-            <span>From</span>
-            <input type="date" id="dateFrom" class="fp-input" />
-          </label>
-          <label class="so-export-modal__date-field">
-            <span>To</span>
-            <input type="date" id="dateTo" class="fp-input" />
-          </label>
-        </div>
-        <p id="rangeSummary" class="so-export-modal__summary" aria-live="polite">Choose a date range</p>
-        <button type="button" class="fp-btn fp-btn--primary" id="generateBtn">Generate report</button>
-      </div>
+      <p class="so-report-controls__hint">These filters apply to whichever report you download next. Leave on All for a club-wide pack.</p>
     </section>
 
-    <p id="statusBar" class="so-footer" role="status" aria-live="polite">Set a date range and click Generate report.</p>
+    <p id="statusBar" class="so-footer" role="status" aria-live="polite">Pick a report type above to choose dates and download.</p>
 
     <section id="reportEmpty" class="card so-report-empty">
-      <p>No report generated yet. Pick dates above and click <strong>Generate report</strong> to preview coverage, charts, and player reports.</p>
+      <p>No preview yet. Choose a report type, set dates in the popup, and download — a preview of the full review will also appear here when generated.</p>
     </section>
 
     <article id="reportPreview" class="so-report-preview so-report-preview--hidden" aria-live="polite">
       <header class="so-report-preview__head card">
         <div>
-          <p class="so-report-preview__eyebrow">Scout coverage report</p>
+          <p class="so-report-preview__eyebrow">On-screen preview</p>
           <h2 id="reportTitle" class="so-report-preview__title">—</h2>
           <p id="reportMeta" class="so-report-preview__meta"></p>
         </div>
@@ -159,13 +169,63 @@
 
       <section class="card so-report-section">
         <h3 class="so-section-title">Team exposure</h3>
-        <p class="so-report-charts__hint">Per league — games per team split by live, video, and not seen.</p>
+        <p class="so-report-charts__hint">Per league — played fixtures only, with live / video / not seen plus watched home vs away.</p>
         <div id="leagueTeamExposureGrid" class="so-report-team-exposure-grid"></div>
       </section>
     </article>
   </div>
 
-  <script defer src="/static/scout-summary-report.js?v=7"></script>
+  <div id="exportModal" class="so-export-modal so-export-modal--hidden" aria-hidden="true">
+    <div class="so-export-modal__backdrop" data-export-close></div>
+    <div class="so-export-modal__panel" role="dialog" aria-modal="true" aria-labelledby="exportModalTitle">
+      <header class="so-export-modal__header">
+        <div>
+          <p class="so-export-modal__eyebrow" id="exportModalEyebrow">Create report</p>
+          <h2 class="so-export-modal__title" id="exportModalTitle">Choose date range</h2>
+        </div>
+        <button type="button" class="so-export-modal__close" data-export-close aria-label="Close">×</button>
+      </header>
+      <div class="so-export-modal__body">
+        <p class="so-export-modal__hint" id="exportModalHint">Pick a quick range or set custom dates, then download the PDF.</p>
+        <div class="so-export-modal__presets" role="group" aria-label="Quick date ranges">
+          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="this_week">This week</button>
+          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="last_week">Last week</button>
+          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="this_month">This month</button>
+          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="last_month">Last month</button>
+          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="last_3_months">Last 3 months</button>
+          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="this_season">This season</button>
+          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="last_season">Last season</button>
+          <button type="button" class="fp-btn fp-btn--ghost so-export-preset" data-export-preset="all_time">All time</button>
+        </div>
+        <div class="so-export-modal__dates">
+          <label class="so-export-modal__date-field">
+            <span>From</span>
+            <input type="date" id="dateFrom" class="fp-input" />
+          </label>
+          <label class="so-export-modal__date-field">
+            <span>To</span>
+            <input type="date" id="dateTo" class="fp-input" />
+          </label>
+        </div>
+        <p id="rangeSummary" class="so-export-modal__summary" aria-live="polite">Choose a date range</p>
+        <p id="exportModalStatus" class="so-export-modal__status so-export-modal__status--hidden" aria-live="polite"></p>
+        <p id="exportModalError" class="so-export-modal__error so-export-modal__error--hidden" role="alert"></p>
+      </div>
+      <footer class="so-export-modal__footer">
+        <button type="button" class="fp-btn fp-btn--ghost" data-export-close>Cancel</button>
+        <button type="button" class="fp-btn fp-btn--ghost" id="previewBtn">Preview only</button>
+        <button type="button" class="fp-btn fp-btn--primary" id="exportConfirmBtn">Download PDF</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Keep legacy ids for JS compatibility (hidden; not used in UI) -->
+  <button type="button" id="generateBtn" class="hidden" hidden aria-hidden="true"></button>
+  <button type="button" id="exportPdfBtn" class="hidden" hidden aria-hidden="true"></button>
+  <button type="button" id="exportTwoPagerBtn" class="hidden" hidden aria-hidden="true"></button>
+  <button type="button" id="exportPlayerPosBtn" class="hidden" hidden aria-hidden="true"></button>
+
+  <script defer src="/static/scout-summary-report.js?v=11"></script>
   <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>

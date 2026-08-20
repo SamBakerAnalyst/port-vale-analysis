@@ -90,13 +90,101 @@ APPS: list[dict[str, Any]] = [
         "router": "player_cards",
     },
     {
+        "id": "post-match",
+        "group": "analysis",
+        "title": "Post-Match Report",
+        "description": (
+            "Full post-match slide deck — shots, progression, crosses, duels, "
+            "set plays, xG race and PDF export."
+        ),
+        "href": "/post-match",
+        "icon": "📊",
+        "accent": "#34d399",
+        "tags": ["Match day"],
+        "roles": ("analysis", "admin"),
+        "api_prefixes": ("/post-match", "/api/post-match"),
+        "router": "post_match",
+    },
+    {
+        "id": "match-story",
+        "group": "analysis",
+        "title": "Match Story",
+        "description": "15-minute blocks, presses, duels and the xG race. For / against and combine games.",
+        "href": "/match-dashboards?view=story",
+        "icon": "⏱️",
+        "accent": "#34d399",
+        "tags": ["Match", "Momentum"],
+        "roles": ("analysis", "admin"),
+        "api_prefixes": ("/match-dashboards", "/api/match-dashboards"),
+        "router": "match_dashboards",
+    },
+    {
+        "id": "ball-progression",
+        "group": "analysis",
+        "title": "Ball Progression",
+        "description": "Team packing KPIs and player progression. For / against and combine games.",
+        "href": "/match-dashboards?view=progression",
+        "icon": "⏩",
+        "accent": "#22c55e",
+        "tags": ["In possession"],
+        "roles": ("analysis", "admin"),
+        "api_prefixes": ("/match-dashboards", "/api/match-dashboards"),
+        "router": "match_dashboards",
+    },
+    {
+        "id": "crosses-dashboard",
+        "group": "analysis",
+        "title": "Crosses",
+        "description": "Cross origins, flank packing and threat. For / against and combine games.",
+        "href": "/match-dashboards?view=crosses",
+        "icon": "➕",
+        "accent": "#14b8a6",
+        "tags": ["In possession"],
+        "roles": ("analysis", "admin"),
+        "api_prefixes": ("/match-dashboards", "/api/match-dashboards"),
+        "router": "match_dashboards",
+    },
+    {
+        "id": "shots-xg",
+        "group": "analysis",
+        "title": "Shots & xG",
+        "description": (
+            "Shot map coloured by chance rating, plus game state, half/manpower "
+            "and player xG tags. For / against and combine games."
+        ),
+        "href": "/match-dashboards?view=shots",
+        "icon": "🎯",
+        "accent": "#38bdf8",
+        "tags": ["xG", "Shots", "Game state"],
+        "roles": ("analysis", "admin"),
+        "api_prefixes": (
+            "/match-dashboards",
+            "/api/match-dashboards",
+            "/xg-chance-analysis",
+            "/api/xg-chance-analysis",
+        ),
+        "router": "match_dashboards",
+    },
+    {
+        "id": "duels-pressing",
+        "group": "analysis",
+        "title": "Duels & Pressing",
+        "description": "Team duels, press height and player duel rows. For / against and combine games.",
+        "href": "/match-dashboards?view=duels",
+        "icon": "🛡️",
+        "accent": "#f97316",
+        "tags": ["Out of possession"],
+        "roles": ("analysis", "admin"),
+        "api_prefixes": ("/match-dashboards", "/api/match-dashboards"),
+        "router": "match_dashboards",
+    },
+    {
         "id": "xg-chance-analysis",
         "group": "analysis",
         "title": "xG Chance Analysis",
         "description": (
             "Break down shot quality by chance rating, game state, half, and "
-            "manpower. See which players take high vs low xG shots — season or "
-            "single match."
+            "manpower. Season or single match."
         ),
         "href": "/xg-chance-analysis",
         "icon": "🎯",
@@ -105,22 +193,6 @@ APPS: list[dict[str, Any]] = [
         "roles": ("analysis", "admin"),
         "api_prefixes": ("/xg-chance-analysis", "/api/xg-chance-analysis"),
         "router": "xg_chance_analysis",
-    },
-    {
-        "id": "post-match",
-        "group": "analysis",
-        "title": "Post-Match Report",
-        "description": (
-            "Live post-match data slides — xG race, momentum, zones, player "
-            "bars, and PDF export."
-        ),
-        "href": "/post-match",
-        "icon": "📊",
-        "accent": "#34d399",
-        "tags": ["Match day", "Export"],
-        "roles": ("analysis", "admin"),
-        "api_prefixes": ("/post-match", "/api/post-match"),
-        "router": "post_match",
     },
     {
         "id": "blocks-analysis",
@@ -224,7 +296,7 @@ APPS: list[dict[str, Any]] = [
         "title": "Player Pipelines",
         "description": (
             "Shared recruitment board — add targets, drag between Data identified, "
-            "Video scouted, Live scouted, and Gone / turned us down. Notes and tags "
+            "Video scouted, Live scouted, Gone / turned us down, and Not the right fit. Notes and tags "
             "are visible to the whole team."
         ),
         "href": "/player-pipelines",
@@ -476,16 +548,55 @@ APPS: list[dict[str, Any]] = [
 ]
 
 
-def apps_for_role(role: str) -> list[dict[str, Any]]:
+# Live staff sidebar this week — everything else is comingSoon on live.
+# Staging (HUB_ENV=staging) reveals all tools so you can break/fix safely.
+LIVE_ESSENTIAL_IDS = frozenset(
+    {
+        # Analysis
+        "pre-match",
+        "set-piece-pre-match",
+        "player-cards",
+        "xg-chance-analysis",
+        "blocks-analysis",
+        # Recruitment
+        "who-to-scout",
+        "player-pipelines",
+        # Scouts
+        "fixture-planner",
+        "played-fixtures",
+        "scouting-address",
+        "scout-summary",
+        "scouts-calendar",
+        # Strategy
+        "availability-tracker",
+        "league-two-progress",
+    }
+)
+
+
+def _is_staging_env() -> bool:
+    import os
+
+    return os.getenv("HUB_ENV", "").strip().lower() == "staging"
+
+
+def apps_for_role(role: str, *, include_hidden: bool = False) -> list[dict[str, Any]]:
     role_key = (role or "analysis").strip().lower()
     if role_key == "admin":
-        return list(APPS)
-    return [app for app in APPS if role_key in tuple(app.get("roles") or ())]
+        apps = list(APPS)
+    else:
+        apps = [app for app in APPS if role_key in tuple(app.get("roles") or ())]
+    if include_hidden:
+        return apps
+    return [app for app in apps if app.get("sidebar") is not False]
 
 
-def public_app_payload(app: dict[str, Any]) -> dict[str, Any]:
+def public_app_payload(app: dict[str, Any], *, reveal_all: bool = False) -> dict[str, Any]:
     """Sidebar-safe fields (no internal router keys required by the client)."""
-    return {
+    coming_soon = bool(app.get("comingSoon"))
+    if not reveal_all and app["id"] not in LIVE_ESSENTIAL_IDS:
+        coming_soon = True
+    payload = {
         "id": app["id"],
         "group": app["group"],
         "title": app["title"],
@@ -495,6 +606,10 @@ def public_app_payload(app: dict[str, Any]) -> dict[str, Any]:
         "accent": app.get("accent") or "#3d8bfd",
         "tags": list(app.get("tags") or []),
     }
+    if coming_soon:
+        payload["comingSoon"] = True
+        payload["note"] = str(app.get("note") or "Coming soon")
+    return payload
 
 
 def analysis_path_prefixes() -> tuple[str, ...]:
@@ -514,15 +629,26 @@ def analysis_path_prefixes() -> tuple[str, ...]:
 
 
 def required_sidebar_titles() -> list[str]:
-    return [str(app["title"]) for app in APPS]
+    return [str(app["title"]) for app in APPS if app.get("sidebar") is not False]
+
+
+def essential_sidebar_titles() -> list[str]:
+    return [
+        str(app["title"])
+        for app in APPS
+        if app["id"] in LIVE_ESSENTIAL_IDS and app.get("sidebar") is not False
+    ]
 
 
 def manifest_payload(*, role: str = "admin") -> dict[str, Any]:
-    apps = [public_app_payload(app) for app in apps_for_role(role)]
+    reveal_all = _is_staging_env()
+    apps = [public_app_payload(app, reveal_all=reveal_all) for app in apps_for_role(role)]
     groups_used = {app["group"] for app in apps}
     groups = [g for g in APP_GROUPS if g["id"] in groups_used]
     return {
         "groups": groups,
         "apps": apps,
-        "titles": [app["title"] for app in apps],
+        "titles": [app["title"] for app in apps if not app.get("comingSoon")],
+        "all_titles": [app["title"] for app in apps],
+        "staging": reveal_all,
     }

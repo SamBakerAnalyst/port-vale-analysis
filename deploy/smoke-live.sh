@@ -55,46 +55,52 @@ PY
 )
 if [[ "${#REQUIRED_APPS[@]}" -eq 0 ]]; then
   REQUIRED_APPS=(
-    "Pre-Match Handout"
     "Pre-Match Report"
     "Set Piece Pre-Match"
     "Player Cards"
     "xG Chance Analysis"
-    "Post-Match Report"
     "Blocks Analysis"
-    "Schedule"
-    "Player Comparison Tool"
     "Who To Scout"
-    "Player Search Dashboard"
-    "Squad Balance"
-    "Squad Planner"
+    "Player Pipelines"
     "Fixture Planner"
     "Played Fixtures"
     "Scouting Address Tool"
-    "Generate Scout Summary"
     "Scout Summary"
     "Scouts Calendar"
-    "Squad Comparison"
     "Squad Availability"
-    "Club Strategy"
-    "League Two Strategy Report"
-    "Players Strategy Report"
     "Season Progress Report"
   )
 fi
 
-MIN_SIDEBAR=20
+MIN_SIDEBAR=12
 if [[ "${#REQUIRED_APPS[@]}" -lt "$MIN_SIDEBAR" ]]; then
-  bad "sidebar title count ${#REQUIRED_APPS[@]} < $MIN_SIDEBAR — registry incomplete"
+  bad "active sidebar title count ${#REQUIRED_APPS[@]} < $MIN_SIDEBAR — essentials incomplete"
 else
-  pass "sidebar title count ${#REQUIRED_APPS[@]}"
+  pass "active sidebar title count ${#REQUIRED_APPS[@]}"
 fi
 
 for need in "${REQUIRED_APPS[@]}"; do
   if grep -Fq "\"$need\"" "$apps_file" || grep -Fq "$need" "$apps_file"; then
-    pass "sidebar: $need"
+    pass "sidebar live: $need"
   else
-    bad "sidebar MISSING: $need — left rail incomplete"
+    bad "sidebar MISSING live essential: $need"
+  fi
+done
+
+# Essentials must not be flagged comingSoon on live.
+for need in "${REQUIRED_APPS[@]}"; do
+  if python3 - <<PY 2>/dev/null
+import json
+data = json.load(open("/tmp/pv-smoke-apps.json"))
+for app in data.get("apps") or []:
+    if app.get("title") == """$need""" and app.get("comingSoon"):
+        raise SystemExit(1)
+raise SystemExit(0)
+PY
+  then
+    pass "essential open: $need"
+  else
+    bad "essential marked comingSoon: $need"
   fi
 done
 if grep -Fq '"comingSoon": true' "$apps_file" || grep -Fq 'comingSoon: true' "$apps_file"; then
@@ -144,6 +150,7 @@ fi
 
 # Key tool pages must open (not 404/502) after a sidebar restore.
 for path in \
+  "/post-match" \
   "/set-piece-pre-match" \
   "/player-cards" \
   "/blocks-analysis" \

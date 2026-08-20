@@ -160,7 +160,7 @@ def _aggregate_players(
 
     rows: list[dict[str, Any]] = []
     for row in consolidated:
-        minutes = float(row.get("minutes") or 0) / 60.0
+        minutes = float(row.get("minutes") or 0)
         if minutes <= 0:
             continue
         kpis = row.get("kpis") or {}

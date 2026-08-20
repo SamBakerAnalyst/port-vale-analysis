@@ -1,8 +1,6 @@
 /**
  * Hub app registry FALLBACK (offline / API failure).
- *
  * Source of truth: app/apps_manifest.py via GET /api/apps.
- * Retired ids (never list here): pre-match-handout
  */
 window.IMPECT_APP_GROUPS = [
   {
@@ -77,10 +75,97 @@ window.IMPECT_APPS = [
     ]
   },
   {
+    "id": "post-match",
+    "group": "analysis",
+    "title": "Post-Match Report",
+    "description": "Full post-match slide deck — shots, progression, crosses, duels, set plays, xG race and PDF export.",
+    "href": "/post-match",
+    "icon": "📊",
+    "accent": "#34d399",
+    "tags": [
+      "Match day"
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
+  },
+  {
+    "id": "match-story",
+    "group": "analysis",
+    "title": "Match Story",
+    "description": "15-minute blocks, presses, duels and the xG race. For / against and combine games.",
+    "href": "/match-dashboards?view=story",
+    "icon": "⏱️",
+    "accent": "#34d399",
+    "tags": [
+      "Match",
+      "Momentum"
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
+  },
+  {
+    "id": "ball-progression",
+    "group": "analysis",
+    "title": "Ball Progression",
+    "description": "Team packing KPIs and player progression. For / against and combine games.",
+    "href": "/match-dashboards?view=progression",
+    "icon": "⏩",
+    "accent": "#22c55e",
+    "tags": [
+      "In possession"
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
+  },
+  {
+    "id": "crosses-dashboard",
+    "group": "analysis",
+    "title": "Crosses",
+    "description": "Cross origins, flank packing and threat. For / against and combine games.",
+    "href": "/match-dashboards?view=crosses",
+    "icon": "➕",
+    "accent": "#14b8a6",
+    "tags": [
+      "In possession"
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
+  },
+  {
+    "id": "shots-xg",
+    "group": "analysis",
+    "title": "Shots & xG",
+    "description": "Shot map coloured by chance rating, plus game state, half/manpower and player xG tags. For / against and combine games.",
+    "href": "/match-dashboards?view=shots",
+    "icon": "🎯",
+    "accent": "#38bdf8",
+    "tags": [
+      "xG",
+      "Shots",
+      "Game state"
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
+  },
+  {
+    "id": "duels-pressing",
+    "group": "analysis",
+    "title": "Duels & Pressing",
+    "description": "Team duels, press height and player duel rows. For / against and combine games.",
+    "href": "/match-dashboards?view=duels",
+    "icon": "🛡️",
+    "accent": "#f97316",
+    "tags": [
+      "Out of possession"
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
+  },
+  {
     "id": "xg-chance-analysis",
     "group": "analysis",
     "title": "xG Chance Analysis",
-    "description": "Break down shot quality by chance rating, game state, half, and manpower. See which players take high vs low xG shots — season or single match.",
+    "description": "Break down shot quality by chance rating, game state, half, and manpower. Season or single match.",
     "href": "/xg-chance-analysis",
     "icon": "🎯",
     "accent": "#38bdf8",
@@ -88,19 +173,6 @@ window.IMPECT_APPS = [
       "xG",
       "Shots",
       "Game state"
-    ]
-  },
-  {
-    "id": "post-match",
-    "group": "analysis",
-    "title": "Post-Match Report",
-    "description": "Live post-match data slides — xG race, momentum, zones, player bars, and PDF export.",
-    "href": "/post-match",
-    "icon": "📊",
-    "accent": "#34d399",
-    "tags": [
-      "Match day",
-      "Export"
     ]
   },
   {
@@ -129,7 +201,9 @@ window.IMPECT_APPS = [
       "Training",
       "Fixtures",
       "Calendar"
-    ]
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
   },
   {
     "id": "player-comparison",
@@ -142,7 +216,9 @@ window.IMPECT_APPS = [
     "tags": [
       "Charts",
       "Profiles"
-    ]
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
   },
   {
     "id": "who-to-scout",
@@ -169,7 +245,9 @@ window.IMPECT_APPS = [
     "tags": [
       "Scouting",
       "Search"
-    ]
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
   },
   {
     "id": "squad-balance",
@@ -182,13 +260,15 @@ window.IMPECT_APPS = [
     "tags": [
       "Squad",
       "Balance"
-    ]
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
   },
   {
     "id": "player-pipelines",
     "group": "recruitment",
     "title": "Player Pipelines",
-    "description": "Shared recruitment board — add targets, drag between Data identified, Video scouted, Live scouted, and Gone / turned us down. Notes and tags are visible to the whole team.",
+    "description": "Shared recruitment board — add targets, drag between Data identified, Video scouted, Live scouted, Gone / turned us down, and Not the right fit. Notes and tags are visible to the whole team.",
     "href": "/player-pipelines",
     "icon": "📌",
     "accent": "#a78bfa",
@@ -209,7 +289,9 @@ window.IMPECT_APPS = [
     "tags": [
       "Squad",
       "Planning"
-    ]
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
   },
   {
     "id": "fixture-planner",
@@ -264,7 +346,9 @@ window.IMPECT_APPS = [
       "Scouts",
       "Reports",
       "PDF"
-    ]
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
   },
   {
     "id": "scout-summary",
@@ -303,7 +387,9 @@ window.IMPECT_APPS = [
     "tags": [
       "Squad",
       "Internal"
-    ]
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
   },
   {
     "id": "availability-tracker",
@@ -331,7 +417,9 @@ window.IMPECT_APPS = [
       "League Two",
       "FGS",
       "xG"
-    ]
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
   },
   {
     "id": "league-two-strategy",
@@ -344,7 +432,9 @@ window.IMPECT_APPS = [
     "tags": [
       "League Two",
       "Strategy"
-    ]
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
   },
   {
     "id": "players-strategy",
@@ -358,7 +448,9 @@ window.IMPECT_APPS = [
       "League Two",
       "Players",
       "Presentation"
-    ]
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
   },
   {
     "id": "players-strategy-staff",
@@ -372,7 +464,9 @@ window.IMPECT_APPS = [
       "League Two",
       "Staff",
       "Presentation"
-    ]
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
   },
   {
     "id": "players-strategy-values",
@@ -386,7 +480,9 @@ window.IMPECT_APPS = [
       "League Two",
       "Values",
       "Presentation"
-    ]
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
   },
   {
     "id": "league-two-progress",

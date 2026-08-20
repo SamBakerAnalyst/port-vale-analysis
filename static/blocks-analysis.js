@@ -690,12 +690,23 @@ const PE_UNIT_HEADINGS = {
   ATT: "ATTACK TARGETS",
 };
 
-const PE_ICONS_LEFT = [
-  `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M31 8l-10 18h8l-4 14 18-23h-8l5-9z" fill="currentColor"/></svg>`,
-  `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M18 50c9-5 16-13 20-23 3 4 7 8 12 11-7 2-13 6-18 12-2-1-8 0-14 0z" fill="currentColor"/><circle cx="30" cy="18" r="7" fill="currentColor"/></svg>`,
-  `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 18c-8 0-14 6-14 14 0 10 14 24 14 24s14-14 14-24c0-8-6-14-14-14z" fill="currentColor"/></svg>`,
-  `<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="22" fill="none" stroke="currentColor" stroke-width="5"/><path d="M32 18v16l10 8" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/></svg>`,
-];
+const PE_METRIC_ICONS = {
+  duelRate: `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M14 38c6-8 14-12 18-12s12 4 18 12l-6 4c-4-5-9-8-12-8s-8 3-12 8l-6-4z" fill="currentColor"/><path d="M22 22l8 8-8 8-8-8 8-8zm20 0l8 8-8 8-8-8 8-8z" fill="currentColor"/></svg>`,
+  defensiveInterventions: `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 8l18 8v16c0 14-10 24-18 28-8-4-18-14-18-28V16l18-8z" fill="currentColor"/><path d="M32 22v22" stroke="#17130e" stroke-width="4" stroke-linecap="round"/><path d="M24 32h16" stroke="#17130e" stroke-width="4" stroke-linecap="round"/></svg>`,
+  offensiveInterventions: `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M31 8l-10 18h8l-4 14 18-23h-8l5-9z" fill="currentColor"/></svg>`,
+  defendersBypassed: `<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="46" cy="20" r="6" fill="currentColor"/><path d="M46 28c-6 0-10 4-10 10v8h20v-8c0-6-4-10-10-10z" fill="currentColor"/><circle cx="18" cy="24" r="5" fill="currentColor" opacity=".55"/><path d="M18 31c-5 0-8 3-8 8v6h16v-6c0-5-3-8-8-8z" fill="currentColor" opacity=".55"/><path d="M28 36l14-6" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>`,
+  ballProgression: `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 40c10-6 18-8 24-8s14 2 24 8" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M44 28l14 4-14 4v-8z" fill="currentColor"/><circle cx="18" cy="42" r="7" fill="currentColor"/></svg>`,
+  xg: `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M8 28h14v28H8V28zm34 0h14v28H42V28z" fill="currentColor"/><path d="M22 28h20v6H22v-6z" fill="currentColor"/><circle cx="32" cy="40" r="7" fill="currentColor"/><path d="M29 40h6M32 37v6" stroke="#17130e" stroke-width="2.5" stroke-linecap="round"/></svg>`,
+  shots: `<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="48" cy="32" r="10" fill="none" stroke="currentColor" stroke-width="4"/><circle cx="48" cy="32" r="3" fill="currentColor"/><path d="M8 46c12-16 22-22 28-22 2 0 4 0 6 1" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="14" cy="44" r="6" fill="currentColor"/></svg>`,
+  crossPxt: `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M8 44c12-10 22-14 30-14 6 0 12 2 18 6" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M46 18v20h20" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="46" r="5" fill="currentColor"/></svg>`,
+  regainsFromDefenders: `<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="40" cy="22" r="6" fill="currentColor" opacity=".55"/><path d="M40 30c-5 0-9 4-9 9v7h18v-7c0-5-4-9-9-9z" fill="currentColor" opacity=".55"/><circle cx="22" cy="34" r="7" fill="currentColor"/><path d="M22 43c-7 0-12 5-12 11v2h24v-2c0-6-5-11-12-11z" fill="currentColor"/></svg>`,
+};
+
+const PE_ICON_FALLBACK = `<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="18" fill="none" stroke="currentColor" stroke-width="4"/><path d="M32 18v14l9 7" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>`;
+
+function peMetricIcon(metricKey) {
+  return PE_METRIC_ICONS[metricKey] || PE_ICON_FALLBACK;
+}
 
 const PE_LABEL_OVERRIDES = {
   offensiveInterventions: "Regains",
@@ -705,6 +716,10 @@ function reportTab(blockId) {
   return state.reportTabs[blockId] || "staff";
 }
 
+function isPlayerDeckTab(tab) {
+  return tab === "player-export" || tab === "wall-targets";
+}
+
 function metricAtReq(spec, unit, stats, single) {
   const row = (stats.units || {})[unit] || {};
   const bench = unitBenchValues(spec.key, unit, single, stats.played, row);
@@ -712,22 +727,40 @@ function metricAtReq(spec, unit, stats, single) {
   return meterTone(row[spec.key], bench?.top7, higherBetter) === "hot";
 }
 
-function playerExportTargetRow(spec, unit, stats, single, index) {
+function playerExportTargetRow(spec, unit, stats, single, index, { reqOnly = false } = {}) {
   const row = (stats.units || {})[unit] || {};
   const bench = unitBenchValues(spec.key, unit, single, stats.played, row);
-  const hit = metricAtReq(spec, unit, stats, single);
-  const actual = unitValueText(spec.key, row);
   const req = bench?.top7 == null
     ? "—"
     : formatBench(bench.top7, { rate: spec.rate, digits: spec.digits });
+  const label = escapeHtml((PE_LABEL_OVERRIDES[spec.key] || spec.label).toUpperCase());
+  const icon = peMetricIcon(spec.key);
+  if (reqOnly) {
+    return `
+    <div class="ba-pe__row">
+      <div class="ba-pe__row-main">
+        <div class="ba-pe__icon">${icon}</div>
+        <p class="ba-pe__label">${label}</p>
+      </div>
+      <div class="ba-pe__scoreboard ba-pe__scoreboard--req-only">
+        <div class="ba-pe__box ba-pe__box--req ba-pe__box--solo">
+          <span class="ba-pe__box-k">Req</span>
+          <span class="ba-pe__box-v">${escapeHtml(req)}</span>
+        </div>
+      </div>
+    </div>
+  `;
+  }
+  const hit = metricAtReq(spec, unit, stats, single);
+  const actual = unitValueText(spec.key, row);
   const mark = hit
     ? `<span class="ba-pe__mark ba-pe__mark--hit" aria-label="Target met">✓</span>`
     : `<span class="ba-pe__mark ba-pe__mark--miss" aria-label="Target missed">✕</span>`;
   return `
     <div class="ba-pe__row">
       <div class="ba-pe__row-main">
-        <div class="ba-pe__icon">${PE_ICONS_LEFT[index % PE_ICONS_LEFT.length]}</div>
-        <p class="ba-pe__label">${escapeHtml((PE_LABEL_OVERRIDES[spec.key] || spec.label).toUpperCase())}</p>
+        <div class="ba-pe__icon">${icon}</div>
+        <p class="ba-pe__label">${label}</p>
       </div>
       <div class="ba-pe__scoreboard">
         <div class="ba-pe__box ba-pe__box--req">
@@ -744,16 +777,21 @@ function playerExportTargetRow(spec, unit, stats, single, index) {
   `;
 }
 
-function playerExportSlideHtml(slide, { stats, single, fixture, page, totalPages }) {
+function playerExportSlideHtml(slide, { stats, single, fixture, page, totalPages, reqOnly = false }) {
   const specs = slideMetricSpecs(slide);
   const hit = specs.filter((spec) => metricAtReq(spec, slide.id, stats, single)).length;
   const strapTone = hit === specs.length ? "all-hit" : hit === 0 ? "none-hit" : "partial";
   const opponent = fixture?.opponentName
     ? String(fixture.opponentName).replace(/\s+FC$/i, "").trim().toUpperCase()
     : "";
-  const rows = specs.map((spec, index) => playerExportTargetRow(spec, slide.id, stats, single, index)).join("");
+  const rows = specs.map((spec, index) => playerExportTargetRow(spec, slide.id, stats, single, index, { reqOnly })).join("");
+  const reqOnlyClass = reqOnly ? " ba-pe-slide--req-only" : "";
+  const strapText = reqOnly
+    ? "LEAGUE TWO TOP-7 REQ · SCALED TO THIS XI"
+    : `${hit} OF ${specs.length} TARGETS AT REQ`;
+  const strapClass = reqOnly ? "ba-pe-slide__strap--req-only" : `ba-pe-slide__strap--${strapTone}`;
   return `
-    <article class="ba-pe-slide ba-pe-slide--${slide.id.toLowerCase()} ba-pe-slide--rows-${specs.length}">
+    <article class="ba-pe-slide ba-pe-slide--${slide.id.toLowerCase()} ba-pe-slide--rows-${specs.length}${reqOnlyClass}">
       <div class="ba-pe-slide__grit" aria-hidden="true"></div>
       <div class="ba-pe-slide__slash ba-pe-slide__slash--one" aria-hidden="true"></div>
       <div class="ba-pe-slide__slash ba-pe-slide__slash--two" aria-hidden="true"></div>
@@ -763,15 +801,16 @@ function playerExportSlideHtml(slide, { stats, single, fixture, page, totalPages
           <div class="ba-pe-slide__titles">
             <div class="ba-pe-slide__club">PORT VALE</div>
             <h2 class="ba-pe-slide__title">${escapeHtml(PE_UNIT_HEADINGS[slide.id] || slide.title.toUpperCase())}</h2>
-            ${opponent ? `<p class="ba-pe-slide__vs">v ${escapeHtml(opponent)}</p>` : ""}
+            ${!reqOnly && opponent ? `<p class="ba-pe-slide__vs">v ${escapeHtml(opponent)}</p>` : ""}
+            ${reqOnly ? `<p class="ba-pe-slide__vs">REQ TARGETS · LEAGUE TWO TOP-7</p>` : ""}
           </div>
         </div>
         <div class="ba-pe-slide__chip">${escapeHtml(slide.id)}</div>
       </header>
       <div class="ba-pe-slide__body">
         <div class="ba-pe-slide__targets">${rows}</div>
-        <footer class="ba-pe-slide__strap ba-pe-slide__strap--${strapTone}">
-          <span>${hit} OF ${specs.length} TARGETS AT REQ</span>
+        <footer class="ba-pe-slide__strap ${strapClass}">
+          <span>${strapText}</span>
           <span>${page} / ${totalPages}</span>
         </footer>
       </div>
@@ -779,12 +818,15 @@ function playerExportSlideHtml(slide, { stats, single, fixture, page, totalPages
   `;
 }
 
-function playerExportHtml(block) {
+function playerTargetsDeckHtml(block, { reqOnly = false } = {}) {
   const { stats, single, fixture } = selectedStats(block);
   if (!single) {
+    const hint = reqOnly
+      ? "Select one game above to open the wall targets — each slide shows the Req line only (League Two top-7, scaled to this XI)."
+      : "Select one game above to open the player export — each unit target shows a tick or cross vs the League Two top-7 Req line.";
     return `
       <section class="ba-pe ba-pe--empty">
-        <p class="ba-pe__hint">Select one game above to open the player export — each unit target shows a tick or cross vs the League Two top-7 Req line.</p>
+        <p class="ba-pe__hint">${hint}</p>
       </section>
     `;
   }
@@ -794,14 +836,22 @@ function playerExportHtml(block) {
     fixture,
     page: index + 1,
     totalPages: UNIT_SLIDES.length,
+    reqOnly,
   })).join("");
   const opp = fixture?.opponentName ? shortOpponent(fixture.opponentName) : "match";
+  const lead = reqOnly
+    ? `3 wall target slides · Req only · ${escapeHtml(opp)} · Print or export PNGs for the dressing room`
+    : `3 unit target slides · ${escapeHtml(opp)} · Export PNGs for WhatsApp (zip + Desktop folder)`;
   return `
-    <section class="ba-pe">
-      <p class="ba-pe__lead ba-export-hide">3 unit target slides · ${escapeHtml(opp)} · Export PNGs for WhatsApp (zip + Desktop folder)</p>
+    <section class="ba-pe ${reqOnly ? "ba-pe--req-only" : ""}">
+      <p class="ba-pe__lead ba-export-hide">${lead}</p>
       ${slides}
     </section>
   `;
+}
+
+function playerExportHtml(block) {
+  return playerTargetsDeckHtml(block, { reqOnly: false });
 }
 
 function unitSheetHtml(slide, { mast, stats, single, players, page, outcome, foot }) {
@@ -1749,6 +1799,8 @@ function dashHtml(block) {
 
   const tab = reportTab(block.id);
   const playerExport = tab === "player-export";
+  const wallTargets = tab === "wall-targets";
+  const playerDeck = isPlayerDeckTab(tab);
   const reportChrome = `
       <div class="ba-report__chrome ba-export-hide">
         <div class="ba-report__heading">
@@ -1756,12 +1808,13 @@ function dashHtml(block) {
           <div class="ba-report__tabs" role="tablist" aria-label="Report view for block ${block.id}">
           <button type="button" role="tab" class="ba-report__tab ${tab === "staff" ? "is-active" : ""}" data-report-tab="staff" data-block="${block.id}" aria-selected="${tab === "staff"}">Staff report</button>
           <button type="button" role="tab" class="ba-report__tab ${playerExport ? "is-active" : ""}" data-report-tab="player-export" data-block="${block.id}" aria-selected="${playerExport}">Player export</button>
+          <button type="button" role="tab" class="ba-report__tab ${wallTargets ? "is-active" : ""}" data-report-tab="wall-targets" data-block="${block.id}" aria-selected="${wallTargets}">Wall targets</button>
           </div>
         </div>
         <div class="ba-report__tools">
           <div class="ba-filter" role="group" aria-label="Filter block ${block.id} to one game">${pills}</div>
           <div class="ba-report__actions">
-            ${playerExport ? `
+            ${playerDeck ? `
               <button type="button" class="ba-btn" data-print-player="${block.id}" ${playedInBlock ? "" : "disabled"}>Print</button>
               <button type="button" class="ba-btn ba-btn--print" data-png-player="${block.id}" ${playedInBlock ? "" : "disabled"}>Export PNGs</button>
               <button type="button" class="ba-btn ba-btn--print" data-pdf-player="${block.id}" ${playedInBlock ? "" : "disabled"}>Export PDF</button>
@@ -1852,7 +1905,9 @@ function dashHtml(block) {
   return `
     <section class="ba-report">
       ${reportChrome}
-      ${playerExport ? playerExportHtml(block) : staffSheets}
+      ${playerDeck
+    ? playerTargetsDeckHtml(block, { reqOnly: wallTargets })
+    : staffSheets}
     </section>
   `;
 }
@@ -1876,8 +1931,8 @@ function renderJump(blocks, viewBlockId) {
 }
 
 function blockPageHtml(block) {
-  const playerExport = reportTab(block.id) === "player-export";
-  if (playerExport) {
+  const playerDeck = isPlayerDeckTab(reportTab(block.id));
+  if (playerDeck) {
     return `
       <article class="ba-block ba-block--player-export" id="block-${block.id}">
         ${dashHtml(block)}
@@ -1903,11 +1958,11 @@ function render() {
   els.pageSubtitle.textContent = `${payload.competition || "League Two"} ${payload.season || ""} · ${payload.playedCount || 0} / ${payload.matchCount || 0} league games played · viewing Block ${viewBlockId}`;
   renderJump(blocks, viewBlockId);
   els.blocksRoot.innerHTML = blockPageHtml(block);
-  document.body.classList.toggle("is-player-export", reportTab(block.id) === "player-export");
+  document.body.classList.toggle("is-player-export", isPlayerDeckTab(reportTab(block.id)));
   if (state.scrollToTop) {
     state.scrollToTop = false;
     window.scrollTo({ top: 0, behavior: "smooth" });
-  } else if (reportTab(block.id) === "player-export") {
+  } else if (isPlayerDeckTab(reportTab(block.id))) {
     requestAnimationFrame(() => {
       document.querySelector(".ba-pe-slide, .ba-pe--empty")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -2039,30 +2094,35 @@ function reportPdfName(blockId) {
   return `Block-${blockId}-${slug(block.title || "report")}.pdf`;
 }
 
+function playerSlidePngName(slide, index, reqOnly = false) {
+  const unit = ["def", "mid", "att"].find((id) => slide.classList.contains(`ba-pe-slide--${id}`)) || `slide-${index + 1}`;
+  const labels = { def: "defence", mid: "midfield", att: "attack" };
+  const suffix = reqOnly ? "-req" : "";
+  return `${String(index + 1).padStart(2, "0")}-${labels[unit] || unit}${suffix}.png`;
+}
+
 function playerPdfName(blockId) {
   const block = (state.payload?.blocks || []).find((row) => row.id === Number(blockId));
-  if (!block) return "port-vale-unit-targets.pdf";
+  const reqOnly = reportTab(blockId) === "wall-targets";
+  const suffix = reqOnly ? "-req-targets" : "-unit-targets";
+  if (!block) return `port-vale${suffix}.pdf`;
   const { single, fixture } = selectedStats(block);
   if (single && fixture?.opponentName) {
-    return `Port-Vale-${slug(shortOpponent(fixture.opponentName))}-unit-targets.pdf`;
+    return `Port-Vale-${slug(shortOpponent(fixture.opponentName))}${suffix}.pdf`;
   }
-  return `Block-${blockId}-unit-targets.pdf`;
+  return `Block-${blockId}${suffix}.pdf`;
 }
 
 function playerPngZipName(blockId) {
   const block = (state.payload?.blocks || []).find((row) => row.id === Number(blockId));
-  if (!block) return "port-vale-unit-targets.zip";
+  const reqOnly = reportTab(blockId) === "wall-targets";
+  const suffix = reqOnly ? "-req-targets" : "-unit-targets";
+  if (!block) return `port-vale${suffix}.zip`;
   const { single, fixture } = selectedStats(block);
   if (single && fixture?.opponentName) {
-    return `Port-Vale-${slug(shortOpponent(fixture.opponentName))}-unit-targets.zip`;
+    return `Port-Vale-${slug(shortOpponent(fixture.opponentName))}${suffix}.zip`;
   }
-  return `Block-${blockId}-unit-targets.zip`;
-}
-
-function playerSlidePngName(slide, index) {
-  const unit = ["def", "mid", "att"].find((id) => slide.classList.contains(`ba-pe-slide--${id}`)) || `slide-${index + 1}`;
-  const labels = { def: "defence", mid: "midfield", att: "attack" };
-  return `${String(index + 1).padStart(2, "0")}-${labels[unit] || unit}.png`;
+  return `Block-${blockId}${suffix}.zip`;
 }
 
 function stylePlayerExportClone(clone, layoutWidth, layoutHeight) {
@@ -2076,13 +2136,13 @@ function stylePlayerExportClone(clone, layoutWidth, layoutHeight) {
   clone.style.border = "0";
   clone.style.borderRadius = "0";
   clone.style.boxShadow = "none";
-  clone.style.overflow = "hidden";
+  clone.style.overflow = "visible";
 }
 
 async function capturePlayerSlides(blockId, options = {}) {
   const root = document.getElementById(`block-${blockId}`);
   const slides = [...(root?.querySelectorAll(".ba-pe-slide") || [])];
-  if (!slides.length) throw new Error("Pick one game, then open Player export");
+  if (!slides.length) throw new Error("Pick one game, then open Player export or Wall targets");
   await loadScript("https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js");
   if (typeof html2canvas !== "function") throw new Error("Export failed to load");
   if (document.fonts?.ready) await document.fonts.ready;
@@ -2098,6 +2158,7 @@ async function capturePlayerSlides(blockId, options = {}) {
 
   document.body.classList.add("is-pdf-capturing");
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  const reqOnly = reportTab(blockId) === "wall-targets";
   const pages = [];
   try {
     for (let index = 0; index < slides.length; index += 1) {
@@ -2130,7 +2191,7 @@ async function capturePlayerSlides(blockId, options = {}) {
         height: canvas.height,
       };
       if (options.includeFilenames) {
-        page.filename = playerSlidePngName(slide, index);
+        page.filename = playerSlidePngName(slide, index, reqOnly);
       }
       pages.push(page);
       if (options.onProgress) options.onProgress(index + 1, slides.length);
@@ -2143,6 +2204,7 @@ async function capturePlayerSlides(blockId, options = {}) {
 }
 
 async function exportPlayerPdf(blockId) {
+  const reqOnly = reportTab(blockId) === "wall-targets";
   const pages = await capturePlayerSlides(blockId);
   const filename = playerPdfName(blockId);
   const response = await fetch("/api/blocks-analysis/export-pdf", {
@@ -2151,7 +2213,7 @@ async function exportPlayerPdf(blockId) {
     body: JSON.stringify({
       pages,
       filename,
-      document_title: "Port Vale Unit Targets",
+      document_title: reqOnly ? "Port Vale Wall Targets" : "Port Vale Unit Targets",
     }),
   });
   if (!response.ok) {
@@ -2366,7 +2428,7 @@ els.blocksRoot.addEventListener("click", async (event) => {
   if (tabBtn) {
     const blockId = Number(tabBtn.dataset.block);
     state.reportTabs[blockId] = tabBtn.dataset.reportTab;
-    if (tabBtn.dataset.reportTab === "player-export") {
+    if (tabBtn.dataset.reportTab === "player-export" || tabBtn.dataset.reportTab === "wall-targets") {
       ensurePlayedGameFilter(blockId);
       state.scrollToTop = true;
     }

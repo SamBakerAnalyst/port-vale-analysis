@@ -848,13 +848,9 @@ function clearPendingDelete({ commit = false } = {}) {
   clearTimeout(pendingDelete.timer);
   const snapshot = pendingDelete;
   pendingDelete = null;
-  if (commit) {
-    deleteAssignmentOnServer(snapshot.fixtureId).catch((error) => {
-      state.rawPayload = snapshot.payloadSnapshot;
-      applyViewPayload();
-      els.statusBar.textContent = `Could not remove assignment: ${error.message}`;
-    });
-  }
+  // Deletes are committed immediately on Remove; nothing left to flush.
+  void commit;
+  void snapshot;
 }
 
 async function deleteAssignmentOnServer(fixtureId) {
@@ -888,15 +884,25 @@ function queueAssignmentRemoval(fixtureId) {
   if (!row?.fixture_id) return;
 
   if (pendingDelete) {
-    clearPendingDelete({ commit: true });
+    clearPendingDelete();
   }
 
   const payloadSnapshot = JSON.parse(JSON.stringify(state.rawPayload));
   const assignmentRecord = assignmentRecordFromRow(row);
   const label = fixtureLabel(row);
 
+  // Optimistic UI update
   state.rawPayload = payloadWithoutFixture(state.rawPayload, fixtureId);
   applyViewPayload();
+
+  // Persist immediately so a refresh cannot resurrect the assignment.
+  deleteAssignmentOnServer(fixtureId).catch((error) => {
+    state.rawPayload = payloadSnapshot;
+    applyViewPayload();
+    els.statusBar.textContent = `Could not remove assignment: ${error.message}`;
+    hideUndoToast();
+    pendingDelete = null;
+  });
 
   pendingDelete = {
     fixtureId,
@@ -904,28 +910,29 @@ function queueAssignmentRemoval(fixtureId) {
     assignmentRecord,
     label,
     timer: setTimeout(() => {
-      const current = pendingDelete;
       pendingDelete = null;
       hideUndoToast();
-      deleteAssignmentOnServer(current.fixtureId).catch((error) => {
-        state.rawPayload = current.payloadSnapshot;
-        applyViewPayload();
-        els.statusBar.textContent = `Could not remove assignment: ${error.message}`;
-      });
     }, UNDO_DELETE_MS),
   };
 
   showUndoToast(`Removed ${label}. Undo within ${UNDO_DELETE_MS / 1000}s?`);
 }
 
-function undoPendingDelete() {
+async function undoPendingDelete() {
   if (!pendingDelete) return;
   clearTimeout(pendingDelete.timer);
-  state.rawPayload = pendingDelete.payloadSnapshot;
+  const snapshot = pendingDelete;
   pendingDelete = null;
   hideUndoToast();
+  state.rawPayload = snapshot.payloadSnapshot;
   applyViewPayload();
-  els.statusBar.textContent = "Removal cancelled.";
+  els.statusBar.textContent = "Restoring assignment…";
+  try {
+    await restoreAssignmentOnServer(snapshot.assignmentRecord);
+    els.statusBar.textContent = "Removal cancelled.";
+  } catch (error) {
+    els.statusBar.textContent = `Could not restore assignment: ${error.message}`;
+  }
 }
 
 function syncUrlParams() {

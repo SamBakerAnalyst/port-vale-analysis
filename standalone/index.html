@@ -216,8 +216,8 @@
         <span class="header__title">Scouting Long Lists</span>
         <a class="header__hub-link" href="/">← All apps</a>
       </div>
-      <p class="header__subtitle" id="headerSubtitle">Ranked within their own league · every position a player meaningfully played</p>
-      <p class="header__coach-note">90 = top 10% in that league for that profile. An 85 in National League and an 85 in League One both mean “very good for where they play.”</p>
+      <p class="header__subtitle" id="headerSubtitle">Impect profile scores · every position a player meaningfully played</p>
+      <p class="header__coach-note">Scores are Impect’s exact profile ratings (0–100). Drag a profile weight above 0 to set a minimum and mix it into Overall — leave at 0 to ignore.</p>
     </header>
 
     <div id="status" class="status-banner status-banner--loading">Connecting to Impect…</div>
@@ -260,7 +260,7 @@
 
     <section class="weights-panel">
       <h2>Profile weights</h2>
-      <p>Min percentile to qualify + weight in overall · set to 0 to ignore a profile</p>
+      <p>Min score to qualify + weight in overall · leave at 0 to ignore a profile</p>
       <div class="weights-grid" id="weights"></div>
     </section>
 
@@ -294,13 +294,15 @@
   <script>
     const SCOUTING_SERVER = "http://127.0.0.1:8000";
 
+    // Always call the same host that served this page. Pointing a public/live
+    // origin at 127.0.0.1 is blocked by browsers (private-network access).
     if (window.location.protocol === "file:") {
       window.location.replace(`${SCOUTING_SERVER}/`);
     }
 
-    const API = window.location.origin.includes("127.0.0.1") || window.location.origin.includes("localhost")
-      ? window.location.origin
-      : SCOUTING_SERVER;
+    const API = window.location.protocol === "file:"
+      ? SCOUTING_SERVER
+      : window.location.origin;
 
     function isFileProtocol() {
       return window.location.protocol === "file:";
@@ -361,7 +363,7 @@
       els.status.className = `status-banner status-banner--${kind}`;
     }
 
-    const DEFAULT_WEIGHT = 50;
+    const DEFAULT_WEIGHT = 0;
 
     function defaultWeights() {
       state.weights = Object.fromEntries(
@@ -385,9 +387,6 @@
         }
       }
       state.weights = next;
-      if (activeWeightTotal() === 0) {
-        defaultWeights();
-      }
     }
 
     function weightFor(profileApiName) {
@@ -470,7 +469,7 @@
       if (reportMonth) {
         return `scouting:monthly:v1:${position}:${leagues.slice().sort().join("|")}:${minMinutes}:${reportMonth}`;
       }
-      return `scouting:v2:${position}:${leagues.slice().sort().join("|")}:${minMinutes}:${seasonMode}`;
+      return `scouting:v3:${position}:${leagues.slice().sort().join("|")}:${minMinutes}:${seasonMode}`;
     }
 
     function readSessionCache(key) {
@@ -951,7 +950,7 @@
             <span class="header__title">Scouting Long Lists</span>
           </div>
           <p class="header__subtitle">${positionLabel} · ${state.seasonModeLabel} · ${state.minMinutes}+ min</p>
-          <p class="header__coach-note">${state.scoringNote || "90 = top 10% in that league for that profile."}</p>
+          <p class="header__coach-note">${state.scoringNote || "Scores are Impect’s exact profile ratings (0–100)."}</p>
           <p class="export-meta">${leagues.join(", ")} · ${generatedAt} · ${pageLabel}${rankRange ? ` · ${rankRange}` : ""}</p>
         </header>`;
       }
@@ -1671,12 +1670,21 @@
     (async function init() {
       try {
         await loadMeta();
-        await loadLongList();
       } catch (err) {
+        const msg = String(err?.message || err || "Failed to load");
+        const serverDown = /failed to fetch|networkerror|load failed/i.test(msg);
         setStatus(
-          `${err.message} Start the server: ./start.sh`,
+          serverDown
+            ? `Cannot reach the local server at ${API}. Run ./start.sh (or ./restart.sh) in the hub folder, then hard-refresh this page.`
+            : msg,
           "error"
         );
+        return;
+      }
+      try {
+        await loadLongList();
+      } catch (err) {
+        setStatus(err?.message || "Failed to load list.", "error");
       }
     })();
   </script>

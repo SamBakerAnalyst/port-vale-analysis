@@ -31,7 +31,7 @@ from app.pre_match import (
     _position_label,
     _squads_map,
 )
-from app.pre_match_handout import _height_short
+from app.match_player_utils import _height_short
 from app.scouting import SCOUTING_DIR
 from app.set_piece_pre_match import _fetch_transfermarkt_squad_profiles
 from app.squad_photos import (

@@ -37,7 +37,7 @@ STANDOUTS_LEAGUES: tuple[str, ...] = (
     "Irish Prem",
 )
 STANDOUTS_PER_LEAGUE_LIMIT = 10
-STANDOUTS_CACHE_VERSION = 3
+STANDOUTS_CACHE_VERSION = 4
 STANDOUTS_VIEW_CACHE_TTL = 120.0
 STANDOUTS_CACHE_TTL = 6 * 3600.0
 
@@ -127,7 +127,15 @@ def build_activity_feed(*, limit: int = 40) -> dict[str, Any]:
     for fixture_id, row in assignments.items():
         if not isinstance(row, dict):
             continue
-        staff = str(row.get("staff") or "").strip()
+        staff = ", ".join(
+            part
+            for part in (
+                [str(row.get("staff") or "").strip()]
+                if not isinstance(row.get("staff"), list)
+                else [str(name or "").strip() for name in row.get("staff") or []]
+            )
+            if part
+        )
         watch = str(row.get("watch_type") or "").strip().upper()
         when = _parse_when(row.get("updated_at")) or _parse_when(row.get("date"))
         label = _fixture_label(row, str(fixture_id))
@@ -239,18 +247,65 @@ def build_activity_feed(*, limit: int = 40) -> dict[str, Any]:
     }
 
 
-def _build_player_scout_coverage() -> dict[int, dict[str, int]]:
-    """Live / video watches + report counts keyed by Impect player_id."""
-    coverage: dict[int, dict[str, int]] = {}
+def _person_name_key(name: str) -> str:
+    import re
+    import unicodedata
 
-    def bump(player_id: int, field: str) -> None:
-        if not player_id:
+    text = unicodedata.normalize("NFKD", str(name or ""))
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = text.casefold()
+    text = re.sub(r"[^a-z0-9\s]", " ", text)
+    return " ".join(text.split())
+
+
+def _empty_scout_counts() -> dict[str, int]:
+    return {"live_watches": 0, "video_watches": 0, "report_count": 0}
+
+
+def _merge_scout_counts(*rows: dict[str, int] | None) -> dict[str, int]:
+    merged = _empty_scout_counts()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        for key in merged:
+            merged[key] += int(row.get(key) or 0)
+    return merged
+
+
+def _build_player_scout_coverage() -> dict[int, dict[str, int]]:
+    """Live / video watches + report counts keyed by Impect player_id.
+
+    Manual fixtures use synthetic (negative) player IDs — those are indexed by
+    normalised player name instead and merged in `_attach_scout_coverage`.
+    """
+    by_id, _by_name = _build_player_scout_coverage_maps()
+    return by_id
+
+
+def _build_player_scout_coverage_maps() -> tuple[dict[int, dict[str, int]], dict[str, dict[str, int]]]:
+    by_id: dict[int, dict[str, int]] = {}
+    by_name: dict[str, dict[str, int]] = {}
+
+    def bump_id(player_id: int, field: str) -> None:
+        if player_id <= 0:
             return
-        entry = coverage.setdefault(
-            player_id,
-            {"live_watches": 0, "video_watches": 0, "report_count": 0},
-        )
+        entry = by_id.setdefault(player_id, _empty_scout_counts())
         entry[field] += 1
+
+    def bump_name(name: str, field: str) -> None:
+        key = _person_name_key(name)
+        if not key:
+            return
+        entry = by_name.setdefault(key, _empty_scout_counts())
+        entry[field] += 1
+
+    def bump_player(*, player_id: int, name: str, field: str) -> None:
+        # Real Impect IDs count by id; manual / synthetic IDs count by name so
+        # Who To Scout / home standouts can still match typed players.
+        if player_id > 0:
+            bump_id(player_id, field)
+        else:
+            bump_name(name, field)
 
     assignments = get_fixture_assignments().get("assignments") or {}
     for row in assignments.values():
@@ -266,37 +321,127 @@ def _build_player_scout_coverage() -> dict[int, dict[str, int]]:
             try:
                 player_id = int(player.get("player_id") or 0)
             except (TypeError, ValueError):
+                player_id = 0
+            name = str(player.get("player_name") or player.get("name") or "").strip()
+            bump_player(player_id=player_id, name=name, field=field)
+
+    # Manual fixtures also store watched players (covers cases where assignment
+    # sync is missing but the manual card still has the names).
+    try:
+        from app.fixture_planner import list_manual_fixtures
+
+        for fixture in list_manual_fixtures():
+            watch = str(fixture.get("watch_type") or "").strip().upper()
+            if watch not in {"LIVE", "VIDEO"}:
+                # Fall back to assignment watch type for the same fixture id.
+                assignment = assignments.get(str(fixture.get("fixture_id") or "")) or {}
+                watch = str(assignment.get("watch_type") or "").strip().upper()
+            if watch not in {"LIVE", "VIDEO"}:
                 continue
-            bump(player_id, field)
+            field = "live_watches" if watch == "LIVE" else "video_watches"
+            fixture_id = str(fixture.get("fixture_id") or "")
+            assignment_players = {
+                int(p.get("player_id") or 0)
+                for p in (assignments.get(fixture_id) or {}).get("watched_players") or []
+                if isinstance(p, dict)
+            }
+            assignment_names = {
+                _person_name_key(str(p.get("player_name") or p.get("name") or ""))
+                for p in (assignments.get(fixture_id) or {}).get("watched_players") or []
+                if isinstance(p, dict)
+            }
+            for player in fixture.get("watched_players") or []:
+                if not isinstance(player, dict):
+                    continue
+                try:
+                    player_id = int(player.get("player_id") or 0)
+                except (TypeError, ValueError):
+                    player_id = 0
+                name = str(player.get("player_name") or player.get("name") or "").strip()
+                # Skip if already counted via the assignment row for this fixture.
+                if player_id > 0 and player_id in assignment_players:
+                    continue
+                if player_id <= 0 and _person_name_key(name) in assignment_names:
+                    continue
+                bump_player(player_id=player_id, name=name, field=field)
+    except Exception:
+        logger.exception("Could not include manual fixtures in scout coverage")
 
     reports_store = get_scouting_reports().get("reports") or {}
-    for fixture_reports in reports_store.values():
+    for fixture_id, fixture_reports in reports_store.items():
         if not isinstance(fixture_reports, dict):
             continue
+        fixture_token = str(fixture_id or "")
+        assignment = assignments.get(fixture_token) or {}
+        watch = str(assignment.get("watch_type") or "").strip().upper()
+        if watch not in {"LIVE", "VIDEO"}:
+            try:
+                from app.fixture_planner import get_manual_fixture
+
+                manual = get_manual_fixture(fixture_token)
+            except Exception:
+                manual = None
+            if isinstance(manual, dict):
+                watch = str(manual.get("watch_type") or "").strip().upper()
+        watch_field = (
+            "live_watches" if watch == "LIVE" else "video_watches" if watch == "VIDEO" else None
+        )
+
+        already_ids: set[int] = set()
+        already_names: set[str] = set()
+        for player in assignment.get("watched_players") or []:
+            if not isinstance(player, dict):
+                continue
+            try:
+                pid = int(player.get("player_id") or 0)
+            except (TypeError, ValueError):
+                pid = 0
+            if pid > 0:
+                already_ids.add(pid)
+            name_key = _person_name_key(str(player.get("player_name") or player.get("name") or ""))
+            if name_key:
+                already_names.add(name_key)
+
         for player_key, row in fixture_reports.items():
             if not isinstance(row, dict):
                 continue
             try:
                 player_id = int(row.get("player_id") or player_key or 0)
             except (TypeError, ValueError):
-                continue
-            bump(player_id, "report_count")
+                player_id = 0
+            name = str(row.get("player_name") or "").strip()
+            bump_player(player_id=player_id, name=name, field="report_count")
 
-    return coverage
+            # Pitch / squad report marks also count as a LIVE or VIDEO watch for
+            # that fixture's coverage type (without double-counting assign picks).
+            if not watch_field:
+                continue
+            name_key = _person_name_key(name)
+            if player_id > 0 and player_id in already_ids:
+                continue
+            if player_id <= 0 and name_key and name_key in already_names:
+                continue
+            bump_player(player_id=player_id, name=name, field=watch_field)
+            if player_id > 0:
+                already_ids.add(player_id)
+            if name_key:
+                already_names.add(name_key)
+
+    return by_id, by_name
 
 
 def _attach_scout_coverage(players: list[dict[str, Any]]) -> None:
-    coverage = _build_player_scout_coverage()
+    by_id, by_name = _build_player_scout_coverage_maps()
     for player in players:
         try:
             player_id = int(player.get("playerId") or 0)
         except (TypeError, ValueError):
             player_id = 0
-        scout = coverage.get(player_id) or {
-            "live_watches": 0,
-            "video_watches": 0,
-            "report_count": 0,
-        }
+        name_key = _person_name_key(str(player.get("name") or ""))
+        scout = _merge_scout_counts(
+            by_id.get(player_id) if player_id > 0 else None,
+            by_name.get(name_key) if name_key else None,
+        )
         player["scout"] = scout
         player["scout_total"] = (
             int(scout["live_watches"])
@@ -1670,10 +1815,14 @@ def _standouts_view_cache_key(
     threshold: float,
     year: int | None = None,
     month: int | None = None,
+    profile: str | None = None,
+    max_age: float | None = None,
 ) -> str:
+    prof = f":{profile}" if profile else ""
+    age = f":u{int(max_age)}" if max_age is not None else ""
     if period == "month" and year is not None and month is not None:
-        return f"month:{year}:{month}:{position}:{threshold:.1f}"
-    return f"{period}:{position}:{threshold:.1f}"
+        return f"month:{year}:{month}:{position}:{threshold:.1f}{prof}{age}"
+    return f"{period}:{position}:{threshold:.1f}{prof}{age}"
 
 
 def _standouts_raw_cache_key(
@@ -1787,6 +1936,14 @@ def _standouts_cache_is_stale(payload: dict[str, Any]) -> bool:
         version = 1
     if version < STANDOUTS_CACHE_VERSION:
         return True
+    if str(payload.get("period") or "season") != "month":
+        from app.scouting import _scouting_season_titles
+
+        current, _previous = _scouting_season_titles()
+        label = str(payload.get("season_label") or "")
+        mode = str(payload.get("season_mode") or "")
+        if mode == "previous" or (current and current not in label):
+            return True
     if _standouts_gk_incomplete(payload):
         return True
     return bool(_standouts_missing_leagues(payload))
@@ -1976,14 +2133,9 @@ def _load_season_position_players(
 
 
 def _build_standouts_season_payload() -> dict[str, Any]:
-    from app.scouting import _scouting_season_mode_options
     from app import main as impect
 
     season_mode, season_label = _resolve_standouts_season_mode()
-    label_by_mode = {
-        str(row.get("value")): str(row.get("label") or row.get("value"))
-        for row in _scouting_season_mode_options()
-    }
     warnings: list[str] = []
     players: list[dict[str, Any]] = []
 
@@ -1996,22 +2148,6 @@ def _build_standouts_season_payload() -> dict[str, Any]:
             warnings.append(warning)
         if index + 1 < len(impect.ALLOWED_POSITIONS):
             time.sleep(2.0)
-
-    # If preferred season was empty (e.g. brand-new shell), fall back once.
-    if not players and season_mode == "current":
-        season_mode = "previous"
-        season_label = label_by_mode.get("previous", "previous")
-        warnings = []
-        for index, position in enumerate(impect.ALLOWED_POSITIONS):
-            rows, warning = _load_season_position_players(
-                position,
-                season_mode=season_mode,
-            )
-            players.extend(rows)
-            if warning:
-                warnings.append(warning)
-            if index + 1 < len(impect.ALLOWED_POSITIONS):
-                time.sleep(2.0)
 
     players.sort(key=lambda row: (-float(row["overall"]), str(row.get("name") or "")))
     highest = players[0]["overall"] if players else None
@@ -2189,6 +2325,7 @@ def _build_standouts_by_league(
     limit: int = STANDOUTS_PER_LEAGUE_LIMIT,
     loading_leagues: set[str] | None = None,
     always_top_n: bool = True,
+    rank_profile: str | None = None,
 ) -> list[dict[str, Any]]:
     """One stand-outs block per league — threshold is relative to that league's pool.
 
@@ -2204,14 +2341,29 @@ def _build_standouts_by_league(
         if league in players_by_league:
             players_by_league[league].append(row)
 
+    def _sort_key(row: dict[str, Any]) -> tuple[float, str]:
+        if rank_profile:
+            scores = row.get("profileScores") or {}
+            val = scores.get(rank_profile)
+            score = float(val) if val is not None else 0.0
+        else:
+            score = float(row.get("overall") or 0)
+        return (-score, str(row.get("name") or ""))
+
     for league_name in STANDOUTS_LEAGUES:
         league_players = players_by_league.get(league_name) or []
+        if rank_profile:
+            league_players = sorted(league_players, key=_sort_key)
         filtered, effective, mode, highest = _filter_standouts_by_threshold(
             league_players,
             threshold=threshold,
         )
+        if rank_profile:
+            filtered = sorted(league_players, key=_sort_key)[:limit]
+            mode = "profile_rank"
+            effective = 0.0
         shown = list(filtered[:limit])
-        if always_top_n and len(shown) < limit and league_players:
+        if not rank_profile and always_top_n and len(shown) < limit and league_players:
             ranked = sorted(
                 league_players,
                 key=lambda row: (-float(row.get("overall") or 0), str(row.get("name") or "")),
@@ -2242,7 +2394,11 @@ def _build_standouts_by_league(
                 ovr = float(row.get("overall") or 0)
             except (TypeError, ValueError):
                 ovr = 0.0
-            slim["above_threshold"] = ovr + 1e-9 >= float(effective)
+            slim["above_threshold"] = ovr + 1e-9 >= float(effective) if not rank_profile else True
+            if rank_profile:
+                scores = row.get("profileScores") or {}
+                val = scores.get(rank_profile)
+                slim["profile_score"] = round(float(val), 1) if val is not None else None
             slim_shown.append(slim)
         blocks.append(
             {
@@ -2268,6 +2424,8 @@ def build_recruitment_standouts(
     min_score: float = STANDOUTS_DEFAULT_MIN_SCORE,
     year: int | None = None,
     month: int | None = None,
+    profile: str | None = None,
+    max_age: float | None = None,
     force_refresh: bool = False,
     _from_background: bool = False,
 ) -> dict[str, Any]:
@@ -2291,12 +2449,15 @@ def build_recruitment_standouts(
         threshold = STANDOUTS_DEFAULT_MIN_SCORE
 
     now = time.time()
+    rank_profile = profile.strip() if profile else None
     view_key = _standouts_view_cache_key(
         period=period_key,
         position=position_key,
         threshold=threshold,
         year=month_year,
         month=month_num,
+        profile=rank_profile,
+        max_age=max_age,
     )
     view_cached = _standouts_view_cache.get(view_key)
     if not force_refresh and view_cached and now - view_cached[0] < STANDOUTS_VIEW_CACHE_TTL:
@@ -2345,6 +2506,11 @@ def build_recruitment_standouts(
     players = list(raw_payload.get("players") or [])
     if position_key != "ALL":
         players = [row for row in players if row.get("position") == position_key]
+    if max_age is not None:
+        players = [
+            row for row in players
+            if row.get("age") is not None and float(row["age"]) < max_age
+        ]
 
     missing_leagues = _standouts_missing_leagues(raw_payload)
     cache_stale = _standouts_cache_is_stale(raw_payload)
@@ -2355,6 +2521,7 @@ def build_recruitment_standouts(
         players,
         threshold=threshold,
         loading_leagues=set(missing_leagues),
+        rank_profile=rank_profile,
     )
     all_filtered = [row for block in by_league for row in block.get("players") or []]
     pool_highest = None
@@ -2364,6 +2531,26 @@ def build_recruitment_standouts(
             for row in players
             if row.get("overall") is not None
         )
+
+    # Include available profiles for the selected position
+    profiles_for_pos: list[dict[str, str]] = []
+    if position_key != "ALL":
+        from app.who_to_scout import _profiles_meta_for_position
+        profiles_for_pos = _profiles_meta_for_position(position_key)
+
+    rank_label = None
+    if rank_profile:
+        from app.label_utils import humanize_profile_name
+        rank_label = humanize_profile_name(rank_profile)
+
+    scoring_note = (
+        f"Ranked by {rank_label}. "
+        f"Top {STANDOUTS_PER_LEAGUE_LIMIT} per league."
+    ) if rank_profile else (
+        "Overall = equal-weighted Impect PV profile average (same as Player Search). "
+        f"Top {STANDOUTS_PER_LEAGUE_LIMIT} per league by overall "
+        f"(fills below ≥{int(threshold)}% of that league's pool when needed)."
+    )
 
     result = {
         **{k: v for k, v in raw_payload.items() if k not in {"players", "player_count", "highest_overall"}},
@@ -2381,14 +2568,12 @@ def build_recruitment_standouts(
         "pool_count": len(players),
         "highest_overall": pool_highest,
         "positions": raw_payload.get("positions") or _standouts_positions(),
+        "profiles": profiles_for_pos,
+        "profile": rank_profile,
         "per_league_limit": STANDOUTS_PER_LEAGUE_LIMIT,
         "scoring": {
             **(raw_payload.get("scoring") or {}),
-            "note": (
-                "Overall = equal-weighted Impect PV profile average (same as Player Search). "
-                f"Top {STANDOUTS_PER_LEAGUE_LIMIT} per league by overall "
-                f"(fills below ≥{int(threshold)}% of that league's pool when needed)."
-            ),
+            "note": scoring_note,
         },
     }
     if period_key == "month":
@@ -2440,6 +2625,8 @@ def register_home_dashboard_routes(app: FastAPI) -> None:
         min_score: float = Query(STANDOUTS_DEFAULT_MIN_SCORE),
         year: int | None = Query(None),
         month: int | None = Query(None, ge=1, le=12),
+        profile: str | None = Query(None),
+        max_age: float | None = Query(None),
         refresh: bool = Query(False),
     ) -> dict[str, Any]:
         try:
@@ -2455,6 +2642,8 @@ def register_home_dashboard_routes(app: FastAPI) -> None:
                         min_score=min_score,
                         year=year,
                         month=month,
+                        profile=profile,
+                        max_age=max_age,
                         force_refresh=False,
                     )
                 disk = _load_standouts_disk(cache_key)
@@ -2466,6 +2655,8 @@ def register_home_dashboard_routes(app: FastAPI) -> None:
                         min_score=min_score,
                         year=year,
                         month=month,
+                        profile=profile,
+                        max_age=max_age,
                         force_refresh=False,
                     )
                 month_extra: dict[str, Any] = {}
@@ -2489,6 +2680,8 @@ def register_home_dashboard_routes(app: FastAPI) -> None:
                 min_score=min_score,
                 year=year,
                 month=month,
+                profile=profile,
+                max_age=max_age,
                 force_refresh=False,
             )
         except Exception as exc:  # noqa: BLE001

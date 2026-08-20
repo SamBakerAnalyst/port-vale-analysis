@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/player-pipelines.css?v=5" />
+  <link rel="stylesheet" href="/static/player-pipelines.css?v=6" />
 </head>
 <body>
   <div class="pp">
@@ -83,6 +83,11 @@
       <div class="pp-drawer__block">
         <h3>Position</h3>
         <select id="ppDrawerPosition" class="pp-drawer__select"></select>
+      </div>
+      <div class="pp-drawer__block" id="ppDrawerStatsBlock" hidden>
+        <h3>Data profile</h3>
+        <div id="ppDrawerStats" class="pp-drawer__stats"></div>
+        <button type="button" class="btn btn--ghost" id="ppDrawerRefreshStats">Refresh data score</button>
       </div>
       <div class="pp-drawer__block">
         <h3>Tags</h3>
@@ -161,7 +166,7 @@
     </div>
   </aside>
 
-  <script defer src="/static/player-pipelines.js?v=5"></script>
+  <script defer src="/static/player-pipelines.js?v=6"></script>
   <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>

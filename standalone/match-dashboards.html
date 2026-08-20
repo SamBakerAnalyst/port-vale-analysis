@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Match Dashboards</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/xg-chance-analysis.css?v=8" />
+  <link rel="stylesheet" href="/static/match-dashboards.css?v=10" />
+</head>
+<body>
+  <div class="md-app">
+    <header class="md-toolbar">
+      <div>
+        <p class="md-eyebrow">Performance analysis · <a href="/">← All apps</a></p>
+        <h1 class="md-title">Match Dashboards</h1>
+        <p class="md-sub" id="pageSubtitle">For / against · combine games · export</p>
+      </div>
+      <div class="md-toolbar__actions">
+        <button type="button" class="md-btn md-btn--gold" id="exportBtn">Export PDF</button>
+        <button type="button" class="md-btn" id="refreshBtn">Refresh</button>
+      </div>
+    </header>
+
+    <nav class="md-views" id="viewTabs" role="tablist" aria-label="Dashboards"></nav>
+
+    <section class="md-controls">
+      <div class="md-controls__group">
+        <span class="md-label">Side</span>
+        <div class="md-toggle" role="group" aria-label="For or against">
+          <button type="button" class="md-toggle__btn is-active" data-side="for">For</button>
+          <button type="button" class="md-toggle__btn" data-side="against">Against</button>
+        </div>
+      </div>
+      <div class="md-controls__group md-controls__group--grow">
+        <span class="md-label">Games <span id="gameCountHint"></span></span>
+        <div class="md-games" id="gamePicker"></div>
+        <div class="md-game-actions">
+          <button type="button" class="md-link" id="selectLatest">Latest only</button>
+          <button type="button" class="md-link" id="selectAll">Combine all</button>
+        </div>
+      </div>
+    </section>
+
+    <p class="md-status hidden" id="statusBanner" role="status"></p>
+    <p class="md-context" id="contextLine"></p>
+    <main class="md-main" id="dashboardRoot"></main>
+  </div>
+  <script src="/static/match-dashboards.js?v=10"></script>
+  <script defer src="/static/hub-feedback.js?v=1"></script>
+</body>
+</html>

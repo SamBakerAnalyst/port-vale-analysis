@@ -124,10 +124,55 @@ def _cross_event_ids(events: list[dict[str, Any]], focus_squad_id: int) -> set[i
     }
 
 
+def _event_player_id(event: dict[str, Any]) -> int:
+    player = event.get("player") if isinstance(event.get("player"), dict) else {}
+    try:
+        return int(player.get("id") or event.get("playerId") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _kpi_player_by_event(
+    event_kpis: list[dict[str, Any]],
+    cross_event_ids: set[int],
+) -> dict[int, int]:
+    """Fallback player on KPI rows when the event payload has no player."""
+    out: dict[int, int] = {}
+    for row in event_kpis:
+        event_id = int(row.get("eventId") or 0)
+        if event_id not in cross_event_ids:
+            continue
+        if int(row.get("kpiId") or -1) != EVENT_KPI_ALTERED_THREAT:
+            continue
+        player_id = int(row.get("playerId") or 0)
+        if player_id:
+            out[event_id] = player_id
+    return out
+
+
+def _altered_threat_by_cross_taker(
+    focus_crosses: list[dict[str, Any]],
+    threat_by_event: dict[int, float],
+    kpi_player_by_event: dict[int, int],
+) -> dict[int, float]:
+    """Sum PXT per cross taker — matches Blocks Analysis crossPxt attribution."""
+    totals: dict[int, float] = defaultdict(float)
+    for event in focus_crosses:
+        event_id = int(event.get("id") or 0)
+        if not event_id:
+            continue
+        player_id = _event_player_id(event) or kpi_player_by_event.get(event_id, 0)
+        if not player_id:
+            continue
+        totals[player_id] += float(threat_by_event.get(event_id, 0.0) or 0.0)
+    return totals
+
+
 def _altered_threat_by_player(
     event_kpis: list[dict[str, Any]],
     cross_event_ids: set[int],
 ) -> dict[int, float]:
+    """Deprecated path — kept for tests; prefer _altered_threat_by_cross_taker."""
     totals: dict[int, float] = defaultdict(float)
     for row in event_kpis:
         event_id = int(row.get("eventId") or 0)
@@ -339,6 +384,7 @@ def build_crosses(
     ]
     cross_event_ids = _cross_event_ids(events, cross_squad_id)
     threat_by_event = _altered_threat_by_event(event_kpis, cross_event_ids)
+    kpi_player_by_event = _kpi_player_by_event(event_kpis, cross_event_ids)
 
     player_names: dict[int, str] = {}
     goalkeeper_ids: set[int] = set()
@@ -414,7 +460,11 @@ def build_crosses(
         if player_id:
             successful_by_player[player_id] += 1
 
-    altered_threat = _altered_threat_by_player(event_kpis, cross_event_ids)
+    altered_threat = _altered_threat_by_cross_taker(
+        focus_crosses,
+        threat_by_event,
+        kpi_player_by_event,
+    )
 
     players: list[dict[str, Any]] = []
     for player_id, crosses in cross_counts.items():
@@ -436,7 +486,10 @@ def build_crosses(
     for row in players:
         row["highlightThreat"] = row["alteredThreat"] in top_threat and row["alteredThreat"] > 0
 
-    match_altered_threat = round(sum(altered_threat.values()) * 100.0, 2)
+    match_altered_threat = round(
+        sum(float(threat_by_event.get(int(event["id"]), 0.0) or 0.0) for event in focus_crosses) * 100.0,
+        2,
+    )
     if iteration_id:
         if defensive:
             baseline = _crosses_baseline_against(
