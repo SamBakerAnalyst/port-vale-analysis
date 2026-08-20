@@ -150,7 +150,6 @@ for path in \
   "/schedule" \
   "/strategy-tracker" \
   "/players-strategy" \
-  "/pre-match-handout" \
   "/player-pipelines"
 do
   code="$(curl -s -o /dev/null -w "%{http_code}" -b "$COOKIE_JAR" --max-time 30 "$BASE_URL$path" || echo 000)"
@@ -160,6 +159,24 @@ do
     bad "page $path → $code — link in sidebar but tool broken"
   fi
 done
+
+# Suggest widget must be on the hub shell (every tool page also loads it).
+curl -s --max-time 15 "$BASE_URL/static/hub-feedback.js" -o /tmp/pv-smoke-feedback.js || true
+if grep -Fq "/api/feedback" /tmp/pv-smoke-feedback.js; then
+  pass "hub-feedback.js present"
+else
+  bad "hub-feedback.js missing — Suggest button will not work on tools"
+fi
+if echo "$html" | grep -Fq "hub-feedback.js"; then
+  pass "hub HTML loads Suggest widget"
+else
+  bad "hub HTML missing hub-feedback.js"
+fi
+if grep -Fq "Pre-Match Handout" "$apps_file"; then
+  bad "sidebar still lists Pre-Match Handout — retired tool returned"
+else
+  pass "Pre-Match Handout retired from /api/apps"
+fi
 
 if [[ "$fail" -ne 0 ]]; then
   echo ""
