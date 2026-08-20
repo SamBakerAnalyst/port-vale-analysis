@@ -177,12 +177,41 @@
     setText("homeOverviewSeason", seasonLabel || COMPETITION);
     const pace = strategySnapshot?.pace || {};
     const upcoming = (matches || []).find((m) => !m.outcome);
-    const seasonStarted = Number(pv?.played || 0) > 0 || Number(pace.played || 0) > 0;
+    const fotmobLeaguePlayed = (matches || []).filter((m) => {
+      const comp = String(m.competition || "").toLowerCase();
+      const isL2 = comp.includes("league two") || comp.includes("league 2");
+      return isL2 && (m.outcome || m.status === "completed");
+    });
+    const seasonStarted =
+      Number(pv?.played || 0) > 0 ||
+      Number(pace.played || 0) > 0 ||
+      fotmobLeaguePlayed.length > 0;
 
-    if (!pv || !seasonStarted) {
+    if (!seasonStarted) {
       setKpi("homeKpiOverviewPos", "TBC", "League Two 26/27 — table not live in Impect yet");
       setKpi("homeKpiOverviewPpg", "—", "Waiting for first league games");
       setKpi("homeKpiOverviewPace", "—", "Play-off line after matchday 1");
+    } else if (!pv) {
+      // Season has started in FotMob but Impect standings are still catching up.
+      const played = fotmobLeaguePlayed.length;
+      const pts = fotmobLeaguePlayed.reduce((sum, m) => {
+        const o = String(m.outcome || "").toLowerCase();
+        if (o === "win" || o === "w") return sum + 3;
+        if (o === "draw" || o === "d") return sum + 1;
+        return sum;
+      }, 0);
+      const ppg = played ? pts / played : null;
+      setKpi(
+        "homeKpiOverviewPos",
+        "Updating",
+        `${pts} pts · ${played} played · table refreshing`
+      );
+      setKpi(
+        "homeKpiOverviewPpg",
+        ppg == null ? "—" : fmt(ppg, 2),
+        "From results · Impect table catching up"
+      );
+      setKpi("homeKpiOverviewPace", "—", "Play-off line after standings load");
     } else {
       const pos = pv?.position ?? "—";
       const pts = pv?.points ?? "—";

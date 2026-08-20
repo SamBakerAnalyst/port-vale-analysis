@@ -83,13 +83,28 @@ def _is_focus_squad(name: str) -> bool:
 
 
 def _is_league_match(match: dict[str, Any], competition: str) -> bool:
+    """True for regular-season games in a League One / League Two iteration.
+
+    Impect matchDay names vary: sometimes ``League Two``, sometimes just
+    ``1`` / ``Matchday 1``. The iteration is already competition-scoped, so we
+    only need to exclude play-offs / cups / friendlies.
+    """
     match_day = match.get("matchDay")
     label = match_day.get("name") if isinstance(match_day, dict) else str(match_day or "")
-    text = str(label)
-    if competition not in text:
+    text = str(label).casefold()
+    if any(
+        token in text
+        for token in (
+            "play-off",
+            "playoff",
+            "relegation",
+            "cup",
+            "trophy",
+            "friendly",
+        )
+    ):
         return False
-    lowered = text.lower()
-    return "play-off" not in lowered and "playoff" not in lowered and "relegation" not in lowered
+    return True
 
 
 def _match_sort_key(match: dict[str, Any]) -> tuple[str, int, int]:
@@ -779,11 +794,18 @@ def build_club_strategy_report(
     force_refresh: bool = False,
 ) -> dict[str, Any]:
     memory_key = iteration_id if not include_first_goal else iteration_id + 100000
-    disk_name = "report-v2" if not include_first_goal else "report-full-v2"
+    disk_name = "report-v3" if not include_first_goal else "report-full-v3"
     if force_refresh:
         _report_cache.pop(memory_key, None)
         _first_goal_cache.pop(iteration_id, None)
-        for name in (disk_name, "report", "report-full", "first-goal"):
+        for name in (
+            disk_name,
+            "report-v2",
+            "report-full-v2",
+            "report",
+            "report-full",
+            "first-goal",
+        ):
             path = _disk_cache_path(name, iteration_id)
             if path.exists():
                 path.unlink()
@@ -836,8 +858,10 @@ def build_club_strategy_report(
         "first_goal": None,
     }
 
-    _write_disk_cache(disk_path, {"cached_at_epoch": time.time(), **payload})
     _report_cache[memory_key] = (time.time(), payload)
+    # Do not persist an empty table — early-season / filter misses must rebuild.
+    if standings:
+        _write_disk_cache(disk_path, {"cached_at_epoch": time.time(), **payload})
     return payload
 
 
