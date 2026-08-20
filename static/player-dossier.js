@@ -592,6 +592,7 @@
     if (stage === "video_scouted") return "Video scouted";
     if (stage === "live_scouted") return "Live scouted";
     if (stage === "gone_elsewhere") return "Gone / turned us down";
+    if (stage === "not_the_right_fit") return "Not the right fit";
     return "";
   }
 

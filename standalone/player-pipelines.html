@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/player-pipelines.css?v=2" />
+  <link rel="stylesheet" href="/static/player-pipelines.css?v=4" />
 </head>
 <body>
   <div class="pp">
@@ -15,13 +15,20 @@
       <div class="pp-brand">
         <p class="pp-eyebrow">Recruitment · <a href="/">← All apps</a></p>
         <h1>Player Pipelines</h1>
-        <p class="pp-sub">Shared board — add targets, drag stages, leave notes the whole team can see.</p>
+        <p class="pp-sub">Shared board — search Impect players or add someone manually. Switch Board / Table anytime.</p>
       </div>
-      <div class="pp-search">
-        <label for="ppPlayerSearch">Add to pipeline</label>
-        <div class="pp-search__wrap">
-          <input id="ppPlayerSearch" type="search" placeholder="Search a player — add from any result" autocomplete="off" />
-          <div id="ppSearchResults" class="pp-results hidden" role="listbox"></div>
+      <div class="pp-toolbar__right">
+        <div class="pp-view-toggle" role="group" aria-label="View mode">
+          <button type="button" class="pp-view-toggle__btn is-active" data-view="board" id="ppViewBoard">Board</button>
+          <button type="button" class="pp-view-toggle__btn" data-view="table" id="ppViewTable">Table</button>
+        </div>
+        <button type="button" class="btn btn--primary" id="ppManualBtn">Add manually</button>
+        <div class="pp-search">
+          <label for="ppPlayerSearch">Search Impect</label>
+          <div class="pp-search__wrap">
+            <input id="ppPlayerSearch" type="search" placeholder="Type a name — add from results" autocomplete="off" />
+            <div id="ppSearchResults" class="pp-results hidden" role="listbox"></div>
+          </div>
         </div>
       </div>
     </header>
@@ -54,6 +61,7 @@
 
     <p id="ppStatus" class="pp-status hidden" role="status"></p>
     <div id="ppBoard" class="pp-board" aria-label="Player pipeline stages"></div>
+    <div id="ppTable" class="pp-table-wrap hidden" aria-label="Player pipeline table"></div>
   </div>
 
   <aside class="pp-drawer" id="ppDrawer" hidden>
@@ -64,12 +72,17 @@
           <p class="pp-drawer__stage" id="ppDrawerStage"></p>
           <h2 id="ppDrawerName"></h2>
           <p class="pp-drawer__meta" id="ppDrawerMeta"></p>
+          <p class="pp-drawer__reason" id="ppDrawerReason" hidden></p>
         </div>
         <button type="button" class="pp-icon" data-close-drawer aria-label="Close">×</button>
       </header>
       <div class="pp-drawer__actions">
         <a class="btn btn--ghost" id="ppDrawerDossier" href="#">Open dossier</a>
         <button type="button" class="btn btn--danger" id="ppDrawerRemove">Remove</button>
+      </div>
+      <div class="pp-drawer__block">
+        <h3>Position</h3>
+        <select id="ppDrawerPosition" class="pp-drawer__select"></select>
       </div>
       <div class="pp-drawer__block">
         <h3>Tags</h3>
@@ -91,6 +104,63 @@
     </div>
   </aside>
 
-  <script defer src="/static/player-pipelines.js?v=2"></script>
+  <aside class="pp-drawer" id="ppManualModal" hidden>
+    <div class="pp-drawer__backdrop" data-close-manual></div>
+    <div class="pp-reason-panel pp-manual-panel" role="dialog" aria-modal="true" aria-labelledby="ppManualHeading">
+      <h2 id="ppManualHeading">Add player manually</h2>
+      <p class="pp-hint">For players not in Impect yet — name is enough to get them on the board.</p>
+      <form id="ppManualForm" class="pp-note-form">
+        <label class="pp-field">
+          <span>Name *</span>
+          <input id="ppManualName" type="text" required maxlength="80" placeholder="Full name" />
+        </label>
+        <div class="pp-field-row">
+          <label class="pp-field">
+            <span>Club</span>
+            <input id="ppManualClub" type="text" maxlength="80" placeholder="Current club" />
+          </label>
+          <label class="pp-field">
+            <span>Position</span>
+            <select id="ppManualPosition">
+              <option value="">—</option>
+            </select>
+          </label>
+        </div>
+        <div class="pp-field-row">
+          <label class="pp-field">
+            <span>Age</span>
+            <input id="ppManualAge" type="number" min="15" max="45" placeholder="e.g. 22" />
+          </label>
+          <label class="pp-field">
+            <span>League</span>
+            <input id="ppManualLeague" type="text" maxlength="80" placeholder="e.g. League Two" />
+          </label>
+        </div>
+        <p class="pp-status is-error" id="ppManualError" hidden></p>
+        <div class="pp-drawer__actions">
+          <button type="button" class="btn btn--ghost" data-close-manual>Cancel</button>
+          <button type="submit" class="btn btn--primary">Add to Data identified</button>
+        </div>
+      </form>
+    </div>
+  </aside>
+
+  <aside class="pp-drawer" id="ppReasonModal" hidden>
+    <div class="pp-drawer__backdrop" data-close-reason></div>
+    <div class="pp-reason-panel" role="dialog" aria-modal="true" aria-labelledby="ppReasonHeading">
+      <h2 id="ppReasonHeading">Why is this player not the right fit?</h2>
+      <p class="pp-hint">This is saved on the card for the whole team to see.</p>
+      <form id="ppReasonForm" class="pp-note-form">
+        <textarea id="ppReasonText" rows="4" required placeholder="e.g. Lacks the physicality we need at CB in League Two"></textarea>
+        <p class="pp-status is-error" id="ppReasonError" hidden>Write a short reason (at least a sentence).</p>
+        <div class="pp-drawer__actions">
+          <button type="button" class="btn btn--ghost" data-close-reason>Cancel</button>
+          <button type="submit" class="btn btn--primary">Save reason</button>
+        </div>
+      </form>
+    </div>
+  </aside>
+
+  <script defer src="/static/player-pipelines.js?v=4"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-"""Shared recruitment player pipelines (kanban)."""
+"""Shared recruitment player pipelines (kanban + table)."""
 
 from __future__ import annotations
 
@@ -7,12 +7,11 @@ import threading
 import uuid
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
-
-from urllib.parse import quote
 
 from app.auth import current_user_payload
 from app.opponent_photos import opponent_photo_api_url
@@ -21,29 +20,44 @@ from app.paths import DATA_ROOT, STANDALONE_DIR, ensure_data_dirs
 PIPELINES_PATH = DATA_ROOT / "player-pipelines.json"
 _lock = threading.Lock()
 
-STAGES: tuple[dict[str, str], ...] = (
+STAGES: tuple[dict[str, Any], ...] = (
     {
         "id": "data_identified",
         "title": "Data identified",
         "hint": "On the list from data — not videoed yet",
+        "color": "#3d8bfd",
     },
     {
         "id": "video_scouted",
         "title": "Video scouted",
         "hint": "Watched on video",
+        "color": "#a78bfa",
     },
     {
         "id": "live_scouted",
         "title": "Live scouted",
         "hint": "Seen in person",
+        "color": "#22c55e",
     },
     {
         "id": "gone_elsewhere",
         "title": "Gone / turned us down",
         "hint": "Went elsewhere or said no",
+        "color": "#f59e0b",
+    },
+    {
+        "id": "not_the_right_fit",
+        "title": "Not the right fit",
+        "hint": "We've decided not to pursue — a reason is required",
+        "color": "#ef4444",
+        "require_reason": True,
     },
 )
 STAGE_IDS = tuple(row["id"] for row in STAGES)
+STAGE_COLORS = {row["id"]: str(row["color"]) for row in STAGES}
+REASON_STAGES = frozenset(
+    row["id"] for row in STAGES if row.get("require_reason")
+)
 
 POSITIONS: tuple[tuple[str, str], ...] = (
     ("GOALKEEPER", "GK"),
@@ -73,7 +87,7 @@ DEFAULT_TAGS: tuple[str, ...] = (
 
 
 class AddTargetBody(BaseModel):
-    player_id: int
+    player_id: int | None = None
     name: str = ""
     club: str = ""
     league: str = ""
@@ -83,17 +97,23 @@ class AddTargetBody(BaseModel):
     photo_url: str = ""
     stage: str = "data_identified"
     tags: list[str] = Field(default_factory=list)
+    manual: bool = False
 
 
 class MoveTargetBody(BaseModel):
     stage: str
     before_id: str | None = None
+    reason: str = ""
 
 
 class PatchTargetBody(BaseModel):
     tags: list[str] | None = None
     position: str | None = None
     position_label: str | None = None
+    name: str | None = None
+    club: str | None = None
+    league: str | None = None
+    age: int | None = None
 
 
 class NoteBody(BaseModel):
@@ -172,9 +192,19 @@ def _public_target(row: dict[str, Any]) -> dict[str, Any]:
     name = row.get("name") or "Unknown"
     club = row.get("club") or ""
     league = row.get("league") or ""
+    stage = _clean_stage(row.get("stage"))
+    player_id = row.get("player_id")
+    try:
+        player_id_int = int(player_id) if player_id not in (None, "") else None
+    except (TypeError, ValueError):
+        player_id_int = None
+    if player_id_int == 0:
+        player_id_int = None
+    manual = bool(row.get("manual")) or player_id_int is None
     return {
         "id": row.get("id"),
-        "player_id": row.get("player_id"),
+        "player_id": player_id_int,
+        "manual": manual,
         "name": name,
         "club": club,
         "league": league,
@@ -183,12 +213,16 @@ def _public_target(row: dict[str, Any]) -> dict[str, Any]:
         or POSITION_LABELS.get(str(row.get("position") or ""), ""),
         "age": row.get("age"),
         "photo_url": _photo_url(name, club),
-        "stage": _clean_stage(row.get("stage")),
+        "stage": stage,
+        "stage_color": STAGE_COLORS.get(stage, "#3d8bfd"),
         "tags": _clean_tags(row.get("tags")),
         "added_by": row.get("added_by") or "",
         "added_at": row.get("added_at") or "",
         "moved_by": row.get("moved_by") or "",
         "moved_at": row.get("moved_at") or "",
+        "close_reason": row.get("close_reason") or "",
+        "close_reason_by": row.get("close_reason_by") or "",
+        "close_reason_at": row.get("close_reason_at") or "",
         "sort": int(row.get("sort") or 0),
         "notes": [
             {
@@ -200,7 +234,7 @@ def _public_target(row: dict[str, Any]) -> dict[str, Any]:
             for note in notes
             if isinstance(note, dict)
         ],
-        "dossier_href": f"/player/{row.get('player_id')}" if row.get("player_id") else "",
+        "dossier_href": f"/player/{player_id_int}" if player_id_int else "",
     }
 
 
@@ -222,8 +256,14 @@ def _next_sort(targets: list[dict[str, Any]], stage: str) -> int:
 
 
 def _find_by_player(targets: list[dict[str, Any]], player_id: int) -> dict[str, Any] | None:
+    if not player_id:
+        return None
     for row in targets:
-        if int(row.get("player_id") or 0) == player_id:
+        try:
+            existing = int(row.get("player_id") or 0)
+        except (TypeError, ValueError):
+            continue
+        if existing and existing == player_id:
             return row
     return None
 
@@ -275,21 +315,29 @@ def register_player_pipelines_routes(app: FastAPI) -> None:
     @app.post("/api/player-pipelines/targets")
     def player_pipelines_add(request: Request, body: AddTargetBody) -> dict[str, Any]:
         store = _load()
-        existing = _find_by_player(store["targets"], body.player_id)
-        if existing is not None:
-            return {"created": False, "target": _public_target(existing)}
+        is_manual = bool(body.manual) or body.player_id in (None, 0)
+        name = " ".join((body.name or "").split())
+        if is_manual and not name:
+            raise HTTPException(status_code=400, detail="Name is required for a manual player.")
+
+        if not is_manual and body.player_id:
+            existing = _find_by_player(store["targets"], int(body.player_id))
+            if existing is not None:
+                return {"created": False, "target": _public_target(existing)}
 
         staff = _staff(request)
         stage = _clean_stage(body.stage)
-        name = " ".join((body.name or "").split()) or f"Player {body.player_id}"
         position = str(body.position or "").strip()
         position_label = str(body.position_label or "").strip() or POSITION_LABELS.get(position, "")
         club = " ".join((body.club or "").split())
         league = " ".join((body.league or "").split())
+        if not name and body.player_id:
+            name = f"Player {body.player_id}"
         photo = _photo_url(name, club)
         row = {
             "id": str(uuid.uuid4()),
-            "player_id": int(body.player_id),
+            "player_id": None if is_manual else int(body.player_id or 0),
+            "manual": is_manual,
             "name": name,
             "club": club,
             "league": league,
@@ -320,6 +368,16 @@ def register_player_pipelines_routes(app: FastAPI) -> None:
             raise HTTPException(status_code=404, detail="Target not found.")
         if body.tags is not None:
             row["tags"] = _clean_tags(body.tags)
+        if body.name is not None:
+            cleaned = " ".join(body.name.split())
+            if cleaned:
+                row["name"] = cleaned
+        if body.club is not None:
+            row["club"] = " ".join(body.club.split())
+        if body.league is not None:
+            row["league"] = " ".join(body.league.split())
+        if body.age is not None:
+            row["age"] = body.age
         if body.position is not None:
             row["position"] = str(body.position).strip()
             row["position_label"] = (
@@ -340,6 +398,28 @@ def register_player_pipelines_routes(app: FastAPI) -> None:
         if row is None:
             raise HTTPException(status_code=404, detail="Target not found.")
         stage = _clean_stage(body.stage)
+        previous = _clean_stage(row.get("stage"))
+        if stage in REASON_STAGES and previous != stage:
+            reason = " ".join(str(body.reason or "").split())
+            if len(reason) < 8:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Add a reason (at least a short sentence) before moving them here.",
+                )
+            staff = _staff(request)
+            row["close_reason"] = reason
+            row["close_reason_by"] = staff
+            row["close_reason_at"] = _now()
+            notes = row.get("notes") if isinstance(row.get("notes"), list) else []
+            notes.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "text": f"Not the right fit — {reason}",
+                    "author": staff,
+                    "created_at": _now(),
+                }
+            )
+            row["notes"] = notes
         row["stage"] = stage
         row["moved_by"] = _staff(request)
         row["moved_at"] = _now()

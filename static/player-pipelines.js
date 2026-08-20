@@ -1,6 +1,9 @@
 (function initPlayerPipelines() {
+  const VIEW_KEY = "pv-pipelines-view";
+
   const els = {
     board: document.getElementById("ppBoard"),
+    table: document.getElementById("ppTable"),
     status: document.getElementById("ppStatus"),
     search: document.getElementById("ppPlayerSearch"),
     results: document.getElementById("ppSearchResults"),
@@ -15,12 +18,18 @@
     drawerMeta: document.getElementById("ppDrawerMeta"),
     drawerDossier: document.getElementById("ppDrawerDossier"),
     drawerRemove: document.getElementById("ppDrawerRemove"),
+    drawerPosition: document.getElementById("ppDrawerPosition"),
     drawerTags: document.getElementById("ppDrawerTags"),
     drawerNotes: document.getElementById("ppDrawerNotes"),
     customTagForm: document.getElementById("ppCustomTagForm"),
     customTag: document.getElementById("ppCustomTag"),
     noteForm: document.getElementById("ppNoteForm"),
     noteText: document.getElementById("ppNoteText"),
+    manualBtn: document.getElementById("ppManualBtn"),
+    manualModal: document.getElementById("ppManualModal"),
+    manualForm: document.getElementById("ppManualForm"),
+    viewBoard: document.getElementById("ppViewBoard"),
+    viewTable: document.getElementById("ppViewTable"),
   };
 
   const state = {
@@ -28,9 +37,9 @@
     positions: [],
     defaultTags: [],
     targets: [],
-    me: "",
     openId: null,
     dragId: null,
+    view: localStorage.getItem(VIEW_KEY) === "table" ? "table" : "board",
   };
 
   function esc(value) {
@@ -72,8 +81,16 @@
       .join("");
   }
 
+  function stageMeta(id) {
+    return state.stages.find((row) => row.id === id) || { id, title: id, color: "#3d8bfd" };
+  }
+
   function stageTitle(id) {
-    return state.stages.find((row) => row.id === id)?.title || id;
+    return stageMeta(id).title || id;
+  }
+
+  function stageColor(id) {
+    return stageMeta(id).color || "#3d8bfd";
   }
 
   function filteredTargets() {
@@ -95,21 +112,33 @@
 
   function fillFilters() {
     const posKeep = els.filterPosition.value;
-    els.filterPosition.innerHTML =
+    const posOptions =
       `<option value="">All positions</option>` +
-      state.positions
-        .map((row) => `<option value="${esc(row.id)}">${esc(row.label)}</option>`)
-        .join("");
+      state.positions.map((row) => `<option value="${esc(row.id)}">${esc(row.label)}</option>`).join("");
+    els.filterPosition.innerHTML = posOptions;
     els.filterPosition.value = posKeep;
 
+    if (els.drawerPosition) {
+      els.drawerPosition.innerHTML =
+        `<option value="">—</option>` +
+        state.positions.map((row) => `<option value="${esc(row.id)}">${esc(row.label)}</option>`).join("");
+    }
+
+    const manualPos = document.getElementById("ppManualPosition");
+    if (manualPos) {
+      manualPos.innerHTML =
+        `<option value="">—</option>` +
+        state.positions.map((row) => `<option value="${esc(row.id)}">${esc(row.label)}</option>`).join("");
+    }
+
     const tags = new Set(state.defaultTags);
-    state.targets.forEach((row) => (row.tags || []).forEach((tag) => tags.add(tag)));
+    state.targets.forEach((row) => (row.tags || []).forEach((t) => tags.add(t)));
     const tagKeep = els.filterTag.value;
     els.filterTag.innerHTML =
       `<option value="">All tags</option>` +
       [...tags]
         .sort((a, b) => a.localeCompare(b))
-        .map((tag) => `<option value="${esc(tag)}">${esc(tag)}</option>`)
+        .map((t) => `<option value="${esc(t)}">${esc(t)}</option>`)
         .join("");
     els.filterTag.value = tagKeep;
 
@@ -121,13 +150,85 @@
     els.filterStaff.value = staffKeep;
   }
 
-  function renderBoard() {
+  function setView(view) {
+    state.view = view === "table" ? "table" : "board";
+    localStorage.setItem(VIEW_KEY, state.view);
+    els.viewBoard.classList.toggle("is-active", state.view === "board");
+    els.viewTable.classList.toggle("is-active", state.view === "table");
+    els.board.classList.toggle("hidden", state.view !== "board");
+    els.table.classList.toggle("hidden", state.view !== "table");
+    render();
+  }
+
+  function render() {
     const rows = filteredTargets();
     els.count.textContent = `${rows.length} of ${state.targets.length} players`;
+    if (state.view === "table") renderTable(rows);
+    else renderBoard(rows);
+  }
+
+  function photoBlock(row) {
+    const url =
+      row.photo_url ||
+      `/api/pre-match/player-photo?name=${encodeURIComponent(row.name || "")}` +
+        (row.club ? `&club=${encodeURIComponent(row.club)}` : "");
+    return `<span class="pp-card__mug">
+      <img class="pp-card__photo" alt="" src="${esc(url)}" />
+      <span class="pp-card__fallback" hidden>${esc(initials(row.name))}</span>
+    </span>`;
+  }
+
+  function statusPill(row) {
+    const color = row.stage_color || stageColor(row.stage);
+    return `<span class="pp-status-pill" style="--stage:${esc(color)}">${esc(stageTitle(row.stage))}</span>`;
+  }
+
+  function cardHtml(row) {
+    const meta = [row.position_label, row.club, row.age != null ? `Age ${row.age}` : ""]
+      .filter(Boolean)
+      .join(" · ");
+    const tags = (row.tags || [])
+      .slice(0, 3)
+      .map((tag) => `<span class="pp-chip">${esc(tag)}</span>`)
+      .join("");
+    const noteCount = (row.notes || []).length;
+    const color = row.stage_color || stageColor(row.stage);
+    return `<article class="pp-card" draggable="true" data-id="${esc(row.id)}" style="--stage:${esc(color)}">
+      ${photoBlock(row)}
+      <div>
+        <p class="pp-card__name">${esc(row.name)}${row.manual ? ` <span class="pp-manual-badge">Manual</span>` : ""}</p>
+        <p class="pp-card__meta">${esc(meta)}</p>
+        <p class="pp-card__who">${esc(row.added_by ? `Added by ${row.added_by}` : "")}</p>
+        ${
+          row.stage === "not_the_right_fit" && row.close_reason
+            ? `<p class="pp-card__reason">${esc(row.close_reason)}</p>`
+            : ""
+        }
+        <div class="pp-card__tags">
+          ${tags}
+          ${noteCount ? `<span class="pp-chip pp-chip--note">${noteCount} note${noteCount === 1 ? "" : "s"}</span>` : ""}
+        </div>
+      </div>
+    </article>`;
+  }
+
+  function wireCardPhotos(root) {
+    root.querySelectorAll(".pp-card__photo").forEach((img) => {
+      const fallback = img.parentElement?.querySelector(".pp-card__fallback");
+      if (!fallback) return;
+      img.addEventListener("error", () => {
+        img.hidden = true;
+        fallback.hidden = false;
+      });
+    });
+  }
+
+  function renderBoard(rows) {
     els.board.innerHTML = state.stages
       .map((stage) => {
         const cards = rows.filter((row) => row.stage === stage.id);
-        return `<section class="pp-col${stage.id === "gone_elsewhere" ? " pp-col--gone" : ""}">
+        const color = stage.color || "#3d8bfd";
+        return `<section class="pp-col" style="--stage:${esc(color)}">
           <header class="pp-col__head">
             <h2 class="pp-col__title">${esc(stage.title)} <span class="pp-col__count">${cards.length}</span></h2>
             <p class="pp-col__hint">${esc(stage.hint)}</p>
@@ -139,15 +240,9 @@
       })
       .join("");
 
+    wireCardPhotos(els.board);
+
     els.board.querySelectorAll(".pp-card").forEach((card) => {
-      const img = card.querySelector(".pp-card__photo");
-      const fallback = card.querySelector(".pp-card__fallback");
-      if (img && fallback) {
-        img.addEventListener("error", () => {
-          img.hidden = true;
-          fallback.hidden = false;
-        });
-      }
       card.addEventListener("click", () => openDrawer(card.dataset.id));
       card.addEventListener("dragstart", (event) => {
         state.dragId = card.dataset.id;
@@ -178,38 +273,75 @@
     });
   }
 
-    function photoBlock(row) {
-      const url =
-        row.photo_url ||
-        `/api/pre-match/player-photo?name=${encodeURIComponent(row.name || "")}` +
-          (row.club ? `&club=${encodeURIComponent(row.club)}` : "");
-      return `<span class="pp-card__mug">
-        <img class="pp-card__photo" alt="" src="${esc(url)}" />
-        <span class="pp-card__fallback" hidden>${esc(initials(row.name))}</span>
-      </span>`;
+  function renderTable(rows) {
+    if (!rows.length) {
+      els.table.innerHTML = `<div class="pp-table-empty">No players match these filters.</div>`;
+      return;
     }
 
-    function cardHtml(row) {
-    const meta = [row.position_label, row.club, row.age != null ? `Age ${row.age}` : ""]
-      .filter(Boolean)
-      .join(" · ");
-    const tags = (row.tags || [])
-      .slice(0, 3)
-      .map((tag) => `<span class="pp-chip">${esc(tag)}</span>`)
+    const groups = state.stages
+      .map((stage) => ({
+        stage,
+        rows: rows.filter((row) => row.stage === stage.id),
+      }))
+      .filter((group) => group.rows.length);
+
+    els.table.innerHTML = groups
+      .map(({ stage, rows: groupRows }) => {
+        const color = stage.color || "#3d8bfd";
+        return `<section class="pp-table-group" style="--stage:${esc(color)}">
+          <header class="pp-table-group__head">
+            <span class="pp-table-group__dot"></span>
+            <h2>${esc(stage.title)}</h2>
+            <span class="pp-table-group__count">${groupRows.length}</span>
+          </header>
+          <div class="pp-table">
+            <div class="pp-table__head">
+              <span>Player</span>
+              <span>Position</span>
+              <span>Club</span>
+              <span>Age</span>
+              <span>Stage</span>
+              <span>Tags</span>
+              <span>Added by</span>
+            </div>
+            ${groupRows
+              .map((row) => {
+                const tags = (row.tags || [])
+                  .slice(0, 4)
+                  .map((tag) => `<span class="pp-chip">${esc(tag)}</span>`)
+                  .join("");
+                return `<button type="button" class="pp-table__row" data-id="${esc(row.id)}">
+                  <span class="pp-table__player">
+                    ${photoBlock(row)}
+                    <span>
+                      <strong>${esc(row.name)}</strong>
+                      ${row.manual ? `<span class="pp-manual-badge">Manual</span>` : ""}
+                      ${
+                        row.close_reason
+                          ? `<em class="pp-table__reason">${esc(row.close_reason)}</em>`
+                          : ""
+                      }
+                    </span>
+                  </span>
+                  <span>${esc(row.position_label || "—")}</span>
+                  <span>${esc(row.club || "—")}</span>
+                  <span>${row.age != null ? esc(row.age) : "—"}</span>
+                  <span>${statusPill(row)}</span>
+                  <span class="pp-table__tags">${tags || "—"}</span>
+                  <span>${esc(row.added_by || "—")}</span>
+                </button>`;
+              })
+              .join("")}
+          </div>
+        </section>`;
+      })
       .join("");
-    const noteCount = (row.notes || []).length;
-    return `<article class="pp-card" draggable="true" data-id="${esc(row.id)}">
-      ${photoBlock(row)}
-      <div>
-        <p class="pp-card__name">${esc(row.name)}</p>
-        <p class="pp-card__meta">${esc(meta)}</p>
-        <p class="pp-card__who">${esc(row.added_by ? `Added by ${row.added_by}` : "")}</p>
-        <div class="pp-card__tags">
-          ${tags}
-          ${noteCount ? `<span class="pp-chip pp-chip--note">${noteCount} note${noteCount === 1 ? "" : "s"}</span>` : ""}
-        </div>
-      </div>
-    </article>`;
+
+    wireCardPhotos(els.table);
+    els.table.querySelectorAll(".pp-table__row").forEach((row) => {
+      row.addEventListener("click", () => openDrawer(row.dataset.id));
+    });
   }
 
   function targetById(id) {
@@ -221,12 +353,38 @@
     if (!row) return;
     state.openId = id;
     els.drawer.hidden = false;
+    const color = row.stage_color || stageColor(row.stage);
     els.drawerStage.textContent = stageTitle(row.stage);
+    els.drawerStage.style.color = color;
     els.drawerName.textContent = row.name;
-    els.drawerMeta.textContent = [row.position_label, row.club, row.league, row.age != null ? `Age ${row.age}` : ""]
+    els.drawerMeta.textContent = [
+      row.position_label,
+      row.club,
+      row.league,
+      row.age != null ? `Age ${row.age}` : "",
+      row.manual ? "Manual entry" : "",
+    ]
       .filter(Boolean)
       .join(" · ");
-    els.drawerDossier.href = row.dossier_href || `/player/${row.player_id}`;
+    const reasonEl = document.getElementById("ppDrawerReason");
+    if (reasonEl) {
+      if (row.stage === "not_the_right_fit" && row.close_reason) {
+        reasonEl.hidden = false;
+        reasonEl.textContent = `Why: ${row.close_reason}${row.close_reason_by ? ` — ${row.close_reason_by}` : ""}`;
+      } else {
+        reasonEl.hidden = true;
+        reasonEl.textContent = "";
+      }
+    }
+    if (row.dossier_href) {
+      els.drawerDossier.hidden = false;
+      els.drawerDossier.href = row.dossier_href;
+    } else {
+      els.drawerDossier.hidden = true;
+    }
+    if (els.drawerPosition) {
+      els.drawerPosition.value = row.position || "";
+    }
     renderDrawerTags(row);
     renderDrawerNotes(row);
   }
@@ -276,7 +434,7 @@
       state.defaultTags = data.default_tags || [];
       state.targets = data.targets || [];
       fillFilters();
-      renderBoard();
+      setView(state.view);
       if (state.openId) openDrawer(state.openId);
       setStatus("");
     } catch (err) {
@@ -301,28 +459,78 @@
           age: player.age ?? null,
           photo_url: player.photo_url || "",
           stage: "data_identified",
+          manual: false,
         }),
       });
       els.search.value = "";
       els.results.classList.add("hidden");
       await loadBoard();
       if (data.target?.id) openDrawer(data.target.id);
-      setStatus(data.created ? `${player.name} added to Data identified.` : `${player.name} is already on the board.`);
+      setStatus(
+        data.created
+          ? `${player.name} added to Data identified.`
+          : `${player.name} is already on the board.`
+      );
     } catch (err) {
       setStatus(err.message || String(err), true);
     }
   }
 
   async function moveTarget(id, stage, beforeId) {
+    const current = targetById(id);
+    const needsReason =
+      Boolean(state.stages.find((row) => row.id === stage)?.require_reason) &&
+      current?.stage !== stage;
+    let reason = "";
+    if (needsReason) {
+      reason = await askCloseReason(current?.name || "this player");
+      if (!reason) return;
+    }
     try {
       await fetchJson(`/api/player-pipelines/targets/${id}/move`, {
         method: "POST",
-        body: JSON.stringify({ stage, before_id: beforeId }),
+        body: JSON.stringify({ stage, before_id: beforeId, reason }),
       });
       await loadBoard();
     } catch (err) {
       setStatus(err.message || String(err), true);
     }
+  }
+
+  function askCloseReason(playerName) {
+    const modal = document.getElementById("ppReasonModal");
+    const form = document.getElementById("ppReasonForm");
+    const input = document.getElementById("ppReasonText");
+    const error = document.getElementById("ppReasonError");
+    const heading = document.getElementById("ppReasonHeading");
+    if (!modal || !form || !input) {
+      const typed = window.prompt(`Why is ${playerName} not the right fit?`);
+      return Promise.resolve((typed || "").trim().length >= 8 ? typed.trim() : null);
+    }
+    heading.textContent = `Why is ${playerName} not the right fit?`;
+    input.value = "";
+    error.hidden = true;
+    modal.hidden = false;
+    setTimeout(() => input.focus(), 30);
+    return new Promise((resolve) => {
+      const close = (value) => {
+        modal.hidden = true;
+        form.onsubmit = null;
+        resolve(value);
+      };
+      form.onsubmit = (event) => {
+        event.preventDefault();
+        const text = input.value.trim();
+        if (text.length < 8) {
+          error.hidden = false;
+          return;
+        }
+        close(text);
+      };
+      modal.querySelectorAll("[data-close-reason]").forEach((el) => {
+        el.onclick = () => close(null);
+      });
+    });
   }
 
   async function toggleTag(id, tag) {
@@ -341,7 +549,7 @@
       const idx = state.targets.findIndex((item) => item.id === id);
       if (idx >= 0) state.targets[idx] = data.target;
       fillFilters();
-      renderBoard();
+      render();
       openDrawer(id);
     } catch (err) {
       setStatus(err.message || String(err), true);
@@ -361,7 +569,9 @@
       });
       const players = data.players || [];
       if (!players.length) {
-        els.results.innerHTML = `<p class="pp-result__meta" style="padding:0.7rem">${esc(data.message || "No players found.")}</p>`;
+        els.results.innerHTML = `<p class="pp-result__meta" style="padding:0.7rem">${esc(
+          data.message || "No Impect players found — use Add manually."
+        )}</p>`;
         els.results.classList.remove("hidden");
         return;
       }
@@ -390,6 +600,22 @@
     }
   }
 
+  function openManualModal() {
+    const error = document.getElementById("ppManualError");
+    if (error) error.hidden = true;
+    document.getElementById("ppManualName").value = "";
+    document.getElementById("ppManualClub").value = "";
+    document.getElementById("ppManualAge").value = "";
+    document.getElementById("ppManualLeague").value = "";
+    document.getElementById("ppManualPosition").value = "";
+    els.manualModal.hidden = false;
+    setTimeout(() => document.getElementById("ppManualName").focus(), 30);
+  }
+
+  function closeManualModal() {
+    els.manualModal.hidden = true;
+  }
+
   let searchTimer = null;
   els.search.addEventListener("input", () => {
     clearTimeout(searchTimer);
@@ -400,14 +626,78 @@
   });
 
   ["input", "change"].forEach((eventName) => {
-    els.filterName.addEventListener(eventName, renderBoard);
-    els.filterPosition.addEventListener(eventName, renderBoard);
-    els.filterTag.addEventListener(eventName, renderBoard);
-    els.filterStaff.addEventListener(eventName, renderBoard);
+    els.filterName.addEventListener(eventName, render);
+    els.filterPosition.addEventListener(eventName, render);
+    els.filterTag.addEventListener(eventName, render);
+    els.filterStaff.addEventListener(eventName, render);
+  });
+
+  els.viewBoard.addEventListener("click", () => setView("board"));
+  els.viewTable.addEventListener("click", () => setView("table"));
+  els.manualBtn.addEventListener("click", openManualModal);
+  document.querySelectorAll("[data-close-manual]").forEach((el) => {
+    el.addEventListener("click", closeManualModal);
+  });
+
+  els.manualForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const name = document.getElementById("ppManualName").value.trim();
+    const club = document.getElementById("ppManualClub").value.trim();
+    const position = document.getElementById("ppManualPosition").value;
+    const ageRaw = document.getElementById("ppManualAge").value;
+    const league = document.getElementById("ppManualLeague").value.trim();
+    const error = document.getElementById("ppManualError");
+    if (!name) {
+      error.hidden = false;
+      error.textContent = "Name is required.";
+      return;
+    }
+    const posLabel = state.positions.find((row) => row.id === position)?.label || "";
+    try {
+      const data = await fetchJson("/api/player-pipelines/targets", {
+        method: "POST",
+        body: JSON.stringify({
+          manual: true,
+          name,
+          club,
+          league,
+          position,
+          position_label: posLabel,
+          age: ageRaw ? Number(ageRaw) : null,
+          stage: "data_identified",
+        }),
+      });
+      closeManualModal();
+      await loadBoard();
+      if (data.target?.id) openDrawer(data.target.id);
+      setStatus(`${name} added manually to Data identified.`);
+    } catch (err) {
+      error.hidden = false;
+      error.textContent = err.message || String(err);
+    }
   });
 
   document.querySelectorAll("[data-close-drawer]").forEach((el) => {
     el.addEventListener("click", closeDrawer);
+  });
+
+  els.drawerPosition?.addEventListener("change", async () => {
+    if (!state.openId) return;
+    const position = els.drawerPosition.value;
+    const position_label = state.positions.find((row) => row.id === position)?.label || "";
+    try {
+      const data = await fetchJson(`/api/player-pipelines/targets/${state.openId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ position, position_label }),
+      });
+      const idx = state.targets.findIndex((item) => item.id === state.openId);
+      if (idx >= 0) state.targets[idx] = data.target;
+      fillFilters();
+      render();
+      openDrawer(state.openId);
+    } catch (err) {
+      setStatus(err.message || String(err), true);
+    }
   });
 
   els.customTagForm.addEventListener("submit", (event) => {
@@ -431,7 +721,7 @@
       els.noteText.value = "";
       const idx = state.targets.findIndex((item) => item.id === state.openId);
       if (idx >= 0) state.targets[idx] = data.target;
-      renderBoard();
+      render();
       openDrawer(state.openId);
     } catch (err) {
       setStatus(err.message || String(err), true);
