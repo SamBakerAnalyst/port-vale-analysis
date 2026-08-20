@@ -178,16 +178,49 @@
     }
 
     .rail__link.is-soon {
-      opacity: 0.45;
-      cursor: not-allowed;
+      opacity: 1;
+      cursor: default;
+      color: rgba(232, 238, 247, 0.42);
+      background: transparent;
+      border-color: transparent;
+      border-style: dashed;
+      pointer-events: none;
     }
 
-    .rail__link.is-soon .rail__link-title::after {
-      content: " · Soon";
-      font-size: 0.65em;
-      letter-spacing: 0.06em;
+    .rail__link.is-soon:hover {
+      color: rgba(232, 238, 247, 0.42);
+      background: transparent;
+      border-color: transparent;
+    }
+
+    .rail__link.is-soon .rail__icon {
+      opacity: 0.55;
+      filter: grayscale(0.85);
+    }
+
+    .rail__soon-badge {
+      flex-shrink: 0;
+      margin-left: auto;
+      padding: 0.12rem 0.4rem;
+      border-radius: 999px;
+      font-size: 0.58rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
-      opacity: 0.9;
+      color: #0c0f14;
+      background: rgba(245, 197, 24, 0.88);
+      line-height: 1.2;
+    }
+
+    .rail__soon-divider {
+      margin: 0.35rem 0.55rem 0.2rem;
+      padding: 0.15rem 0.15rem 0;
+      font-size: 0.58rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: rgba(232, 238, 247, 0.38);
+      border-top: 1px dashed rgba(255, 255, 255, 0.12);
     }
 
     .rail__icon {
@@ -2492,18 +2525,30 @@
       root.innerHTML = "";
 
       groups.forEach((group) => {
-        const sectionApps = apps.filter((app) => app.group === group.id);
+        const sectionApps = apps
+          .filter((app) => app.group === group.id)
+          .slice()
+          .sort((a, b) => Number(!!a.comingSoon) - Number(!!b.comingSoon));
         if (!sectionApps.length) return;
 
         const block = document.createElement("div");
         block.className = `rail__group rail__group--${group.id}`;
         block.innerHTML = `<p class="rail__group-label">${group.title}</p>`;
 
+        let soonDividerAdded = false;
         sectionApps.forEach((app) => {
           if (app.comingSoon) {
+            if (!soonDividerAdded) {
+              const divider = document.createElement("p");
+              divider.className = "rail__soon-divider";
+              divider.textContent = "Coming soon";
+              block.appendChild(divider);
+              soonDividerAdded = true;
+            }
             const soon = document.createElement("div");
             soon.className = "rail__link is-soon";
-            soon.innerHTML = `<span class="rail__icon">${app.icon || "◆"}</span><span class="rail__link-title">${app.title}</span>`;
+            soon.setAttribute("aria-disabled", "true");
+            soon.innerHTML = `<span class="rail__icon">${app.icon || "◆"}</span><span class="rail__link-title">${app.title}</span><span class="rail__soon-badge">Soon</span>`;
             soon.title = app.note || "Coming soon";
             block.appendChild(soon);
             return;
