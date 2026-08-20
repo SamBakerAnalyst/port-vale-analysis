@@ -26,7 +26,6 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
     from app.player_pipelines import register_player_pipelines_routes
     from app.post_match.routes import register_post_match_routes
     from app.pre_match import register_pre_match_routes
-    from app.pre_match_handout import register_pre_match_handout_routes
     from app.schedule import register_schedule_routes
     from app.scouting import register_scouting_routes
     from app.scouting_address import register_scouting_address_routes
@@ -41,7 +40,6 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
     return {
         "post_match": register_post_match_routes,
         "pre_match": register_pre_match_routes,
-        "pre_match_handout": register_pre_match_handout_routes,
         "set_piece_pre_match": register_set_piece_pre_match_routes,
         "player_cards": register_player_cards_routes,
         "xg_chance_analysis": register_xg_chance_analysis_routes,
@@ -64,12 +62,14 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
 
 
 def _load_always_register() -> tuple[Callable[[FastAPI], None], ...]:
+    from app.feedback import register_feedback_routes
     from app.home_dashboard import register_home_dashboard_routes
     from app.player_dossier import register_player_dossier_routes
 
     return (
         register_home_dashboard_routes,
         register_player_dossier_routes,
+        register_feedback_routes,
     )
 
 

@@ -12,7 +12,7 @@ APP_GROUPS: list[dict[str, Any]] = [
     {
         "id": "analysis",
         "title": "Analysis",
-        "subtitle": "Pre-match prep, handouts, and post-match review",
+        "subtitle": "Pre-match prep and post-match review",
         "icon": "📊",
         "accent": "#34d399",
     },
@@ -42,22 +42,6 @@ APP_GROUPS: list[dict[str, Any]] = [
 # roles: which login roles may open the tool. "admin" always sees everything.
 # api_prefixes: path prefixes the role may hit (page + /api/...).
 APPS: list[dict[str, Any]] = [
-    {
-        "id": "pre-match-handout",
-        "group": "analysis",
-        "title": "Pre-Match Handout",
-        "description": (
-            "A4 keynote handout for the dressing room — predicted XI, previous "
-            "lineups, form, rankings, and player profiles. PDF export."
-        ),
-        "href": "/pre-match-handout",
-        "icon": "📄",
-        "accent": "#f97316",
-        "tags": ["Opponent", "A4", "Export"],
-        "roles": ("analysis", "admin"),
-        "api_prefixes": ("/pre-match-handout", "/api/pre-match-handout"),
-        "router": "pre_match_handout",
-    },
     {
         "id": "pre-match",
         "group": "analysis",

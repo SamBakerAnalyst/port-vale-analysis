@@ -1898,61 +1898,6 @@
       }
     }
 
-    /* Feedback modal (unchanged behaviour) */
-    .feedback-modal {
-      position: fixed; inset: 0; z-index: 100;
-      display: flex; align-items: center; justify-content: center;
-      padding: 1.25rem; background: rgba(8, 10, 14, 0.72); backdrop-filter: blur(4px);
-    }
-    .feedback-modal[hidden] { display: none; }
-    .feedback-modal__panel {
-      width: 100%; max-width: 520px; background: var(--surface);
-      border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px);
-      padding: 1.5rem 1.5rem 1.25rem; box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
-    }
-    .feedback-modal__title { margin: 0 0 0.35rem; font-size: 1.125rem; font-weight: 600; }
-    .feedback-modal__hint { margin: 0 0 1rem; font-size: 0.875rem; color: var(--text-muted); }
-    .feedback-modal__textarea {
-      width: 100%; min-height: 8rem; padding: 0.75rem 0.9rem; font: inherit; font-size: 0.9375rem;
-      color: var(--text); background: var(--surface-2); border: 1px solid var(--border);
-      border-radius: var(--radius); resize: vertical; outline: none;
-    }
-    .feedback-modal__textarea:focus {
-      border-color: rgba(61, 139, 253, 0.6); box-shadow: 0 0 0 3px rgba(61, 139, 253, 0.15);
-    }
-    .feedback-modal__shots { margin-top: 0.85rem; }
-    .feedback-modal__shots-label { display: block; margin-bottom: 0.45rem; font-size: 0.8125rem; font-weight: 600; color: var(--text-muted); }
-    .feedback-modal__shots-hint { margin: 0 0 0.65rem; font-size: 0.8125rem; color: var(--text-muted); }
-    .feedback-modal__shot-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem; }
-    .feedback-modal__shot-btn {
-      padding: 0.45rem 0.75rem; font: inherit; font-size: 0.8125rem; font-weight: 600;
-      color: var(--text); background: var(--surface-2); border: 1px dashed var(--border);
-      border-radius: var(--radius); cursor: pointer;
-    }
-    .feedback-modal__shot-input { display: none; }
-    .feedback-modal__shot-grid { display: flex; flex-wrap: wrap; gap: 0.65rem; }
-    .feedback-modal__shot {
-      position: relative; width: 5.5rem; height: 5.5rem; border-radius: var(--radius);
-      overflow: hidden; border: 1px solid var(--border); background: var(--surface-2);
-    }
-    .feedback-modal__shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .feedback-modal__shot-remove {
-      position: absolute; top: 0.25rem; right: 0.25rem; width: 1.35rem; height: 1.35rem;
-      padding: 0; font-size: 0.9rem; line-height: 1; color: #fff; background: rgba(8, 10, 14, 0.72);
-      border: none; border-radius: 999px; cursor: pointer;
-    }
-    .feedback-modal__error, .feedback-modal__success { display: none; margin: 0.75rem 0 0; font-size: 0.875rem; }
-    .feedback-modal__error { color: var(--danger); }
-    .feedback-modal__success { color: var(--green); }
-    .feedback-modal__error--visible, .feedback-modal__success--visible { display: block; }
-    .feedback-modal__actions { display: flex; justify-content: flex-end; gap: 0.65rem; margin-top: 1rem; }
-    .feedback-modal__btn {
-      padding: 0.6rem 1rem; font: inherit; font-size: 0.875rem; font-weight: 600;
-      border-radius: var(--radius); cursor: pointer; border: 1px solid var(--border);
-      background: var(--surface-2); color: var(--text);
-    }
-    .feedback-modal__btn--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-    .feedback-modal__btn:disabled { opacity: 0.6; cursor: wait; }
   </style>
   <link rel="stylesheet" href="/standalone/hub-launcher.css?v=__HUB_BUILD__" />
 </head>
@@ -2150,7 +2095,7 @@
             <article class="home-card">
               <div class="home-card__head">
                 <h2 class="home-card__title">Recent form</h2>
-                <a class="home-card__link" href="/post-match">Post-match →</a>
+                <a class="home-card__link" href="/match-dashboards">Match dashboards →</a>
               </div>
               <div id="homeForm"><p class="home-empty">Loading form…</p></div>
               <div class="home-card__head" style="margin-top:1.1rem">
@@ -2164,9 +2109,11 @@
               </div>
               <div id="homeAvail"><p class="home-empty">Loading…</p></div>
               <div class="home-quick">
-                <a href="/pre-match-handout">Pre-Match Handout</a>
-                <a href="/xg-chance-analysis">xG Chance Analysis</a>
-                <a href="/post-match">Post-Match Report</a>
+                <a href="/match-dashboards?view=story">Match story</a>
+                <a href="/match-dashboards?view=progression">Ball progression</a>
+                <a href="/match-dashboards?view=crosses">Crosses</a>
+                <a href="/match-dashboards?view=shots">Shots &amp; xG</a>
+                <a href="/match-dashboards?view=duels">Duels &amp; pressing</a>
               </div>
             </article>
             <article class="home-card home-card--wide">
@@ -2398,29 +2345,6 @@
     </main>
   </div>
 
-  <div class="feedback-modal" id="feedbackModal" hidden role="dialog" aria-modal="true" aria-labelledby="feedbackModalTitle">
-    <div class="feedback-modal__panel">
-      <h2 class="feedback-modal__title" id="feedbackModalTitle">Suggestion or bug report</h2>
-      <p class="feedback-modal__hint">Describe what happened or what you’d like improved. This goes straight to the analysis team.</p>
-      <textarea class="feedback-modal__textarea" id="feedbackMessage" placeholder="What’s working, what’s broken, or what you’d change…"></textarea>
-      <div class="feedback-modal__shots">
-        <span class="feedback-modal__shots-label">Screenshots (optional)</span>
-        <p class="feedback-modal__shots-hint">Attach up to 3 images, or paste with Cmd+V / Ctrl+V.</p>
-        <div class="feedback-modal__shot-actions">
-          <button type="button" class="feedback-modal__shot-btn" id="feedbackAttachBtn">Add screenshot</button>
-          <input class="feedback-modal__shot-input" id="feedbackFileInput" type="file" accept="image/png,image/jpeg,image/webp" multiple />
-        </div>
-        <div class="feedback-modal__shot-grid" id="feedbackShotGrid"></div>
-      </div>
-      <p class="feedback-modal__error" id="feedbackError" role="alert"></p>
-      <p class="feedback-modal__success" id="feedbackSuccess" role="status">Thanks — we’ve logged that and will take a look.</p>
-      <div class="feedback-modal__actions">
-        <button type="button" class="feedback-modal__btn" id="feedbackCancelBtn">Cancel</button>
-        <button type="button" class="feedback-modal__btn feedback-modal__btn--primary" id="feedbackSubmitBtn">Send</button>
-      </div>
-    </div>
-  </div>
-
   <script src="/standalone/hub-launcher.js?v=__HUB_BUILD__"></script>
   <script src="/standalone/apps.js?v=__HUB_BUILD__"></script>
   <script src="/standalone/hub-player-search.js?v=__HUB_BUILD__"></script>
@@ -2453,10 +2377,12 @@
       return new Set(window.HubAuth.groups || []);
     }
 
+    const RETIRED_APP_IDS = new Set(["pre-match-handout"]);
+
     function visibleApps() {
       // /api/apps already filters by role; keep a group safety net.
       const groups = allowedGroups();
-      const apps = window.IMPECT_APPS || [];
+      const apps = (window.IMPECT_APPS || []).filter((app) => !RETIRED_APP_IDS.has(app.id));
       if (!groups.size || window.HubAuth.allow_all) return apps;
       return apps.filter((app) => groups.has(app.group));
     }
@@ -2695,111 +2621,7 @@
     }
     bootHub();
 
-    (function initFeedback() {
-      const modal = document.getElementById("feedbackModal");
-      const openBtn = document.getElementById("feedbackOpenBtn");
-      const cancelBtn = document.getElementById("feedbackCancelBtn");
-      const submitBtn = document.getElementById("feedbackSubmitBtn");
-      const messageEl = document.getElementById("feedbackMessage");
-      const errorEl = document.getElementById("feedbackError");
-      const successEl = document.getElementById("feedbackSuccess");
-      const attachBtn = document.getElementById("feedbackAttachBtn");
-      const fileInput = document.getElementById("feedbackFileInput");
-      const shotGrid = document.getElementById("feedbackShotGrid");
-      let screenshots = [];
-
-      function showError(msg) {
-        errorEl.textContent = msg;
-        errorEl.classList.add("feedback-modal__error--visible");
-        successEl.classList.remove("feedback-modal__success--visible");
-      }
-      function showSuccess() {
-        errorEl.classList.remove("feedback-modal__error--visible");
-        successEl.classList.add("feedback-modal__success--visible");
-      }
-      function renderShots() {
-        shotGrid.innerHTML = "";
-        screenshots.forEach((dataUrl, index) => {
-          const wrap = document.createElement("div");
-          wrap.className = "feedback-modal__shot";
-          wrap.innerHTML = `<img src="${dataUrl}" alt="" /><button type="button" class="feedback-modal__shot-remove" aria-label="Remove screenshot">×</button>`;
-          wrap.querySelector(".feedback-modal__shot-remove").addEventListener("click", () => {
-            screenshots.splice(index, 1);
-            renderShots();
-          });
-          shotGrid.appendChild(wrap);
-        });
-      }
-      function addScreenshotFiles(files) {
-        files.slice(0, 3 - screenshots.length).forEach((file) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            if (screenshots.length >= 3) return;
-            screenshots.push(reader.result);
-            renderShots();
-          };
-          reader.readAsDataURL(file);
-        });
-      }
-      function resetModal() {
-        messageEl.value = "";
-        screenshots = [];
-        renderShots();
-        errorEl.classList.remove("feedback-modal__error--visible");
-        successEl.classList.remove("feedback-modal__success--visible");
-        submitBtn.disabled = false;
-        submitBtn.textContent = "Send";
-      }
-
-      openBtn.addEventListener("click", () => { resetModal(); modal.hidden = false; messageEl.focus(); });
-      cancelBtn.addEventListener("click", () => { modal.hidden = true; });
-      attachBtn.addEventListener("click", () => fileInput.click());
-      fileInput.addEventListener("change", () => {
-        addScreenshotFiles(Array.from(fileInput.files || []));
-        fileInput.value = "";
-      });
-      modal.addEventListener("click", (event) => { if (event.target === modal) modal.hidden = true; });
-      document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape" && !modal.hidden) modal.hidden = true;
-      });
-      modal.addEventListener("paste", (event) => {
-        if (modal.hidden) return;
-        const items = Array.from(event.clipboardData?.items || []);
-        const imageItems = items.filter((item) => item.type.startsWith("image/"));
-        if (!imageItems.length) return;
-        event.preventDefault();
-        addScreenshotFiles(imageItems.map((item) => item.getAsFile()).filter(Boolean));
-      });
-      submitBtn.addEventListener("click", async () => {
-        const message = messageEl.value.trim();
-        if (message.length < 3) { showError("Please add a few words so we know what to look at."); return; }
-        submitBtn.disabled = true;
-        submitBtn.textContent = "Sending…";
-        try {
-          const res = await fetch(`${BASE}/api/feedback`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              message,
-              page: window.location.pathname + window.location.search,
-              screenshots,
-            }),
-          });
-          if (!res.ok) {
-            showError("Could not send — try again in a moment.");
-            submitBtn.disabled = false;
-            submitBtn.textContent = "Send";
-            return;
-          }
-          showSuccess();
-          setTimeout(() => { modal.hidden = true; }, 1400);
-        } catch (_) {
-          showError("Could not reach the server.");
-          submitBtn.disabled = false;
-          submitBtn.textContent = "Send";
-        }
-      });
-    })();
   </script>
+  <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>

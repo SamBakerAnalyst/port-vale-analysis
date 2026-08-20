@@ -2,15 +2,13 @@
  * Hub app registry FALLBACK (offline / API failure).
  *
  * Source of truth: app/apps_manifest.py via GET /api/apps.
- * Hub prefers /api/apps on boot; this file keeps the left rail alive if the API fails.
- * When adding a tool: update apps_manifest.py (+ register_apps.py), then regenerate
- * this file OR keep titles in sync manually — never only edit one side.
+ * Retired ids (never list here): pre-match-handout
  */
 window.IMPECT_APP_GROUPS = [
   {
     "id": "analysis",
     "title": "Analysis",
-    "subtitle": "Pre-match prep, handouts, and post-match review",
+    "subtitle": "Pre-match prep and post-match review",
     "icon": "📊",
     "accent": "#34d399"
   },
@@ -38,20 +36,6 @@ window.IMPECT_APP_GROUPS = [
 ];
 
 window.IMPECT_APPS = [
-  {
-    "id": "pre-match-handout",
-    "group": "analysis",
-    "title": "Pre-Match Handout",
-    "description": "A4 keynote handout for the dressing room — predicted XI, previous lineups, form, rankings, and player profiles. PDF export.",
-    "href": "/pre-match-handout",
-    "icon": "📄",
-    "accent": "#f97316",
-    "tags": [
-      "Opponent",
-      "A4",
-      "Export"
-    ]
-  },
   {
     "id": "pre-match",
     "group": "analysis",
@@ -123,7 +107,7 @@ window.IMPECT_APPS = [
     "id": "blocks-analysis",
     "group": "analysis",
     "title": "Blocks Analysis",
-    "description": "Nine blocks of five league games — result colours, editable Silver targets, live block KPIs, and PNG export.",
+    "description": "Nine blocks of five league games — result colours, editable Silver targets, live block KPIs, and a 2-page A4 match report PDF.",
     "href": "/blocks-analysis",
     "icon": "🧱",
     "accent": "#f5c518",
@@ -208,7 +192,11 @@ window.IMPECT_APPS = [
     "href": "/player-pipelines",
     "icon": "📌",
     "accent": "#a78bfa",
-    "tags": ["Scouting", "Targets", "Notes"]
+    "tags": [
+      "Scouting",
+      "Targets",
+      "Notes"
+    ]
   },
   {
     "id": "squad-planner",
@@ -373,10 +361,38 @@ window.IMPECT_APPS = [
     ]
   },
   {
+    "id": "players-strategy-staff",
+    "group": "strategy",
+    "title": "Staff Strategy Report",
+    "description": "Staff edition of Project Promotion — same benchmarks, fuller detail.",
+    "href": "/players-strategy-staff",
+    "icon": "📋",
+    "accent": "#f5c518",
+    "tags": [
+      "League Two",
+      "Staff",
+      "Presentation"
+    ]
+  },
+  {
+    "id": "players-strategy-values",
+    "group": "strategy",
+    "title": "Values Report",
+    "description": "Our values and non-negotiables — culture first, before the numbers.",
+    "href": "/players-strategy-values",
+    "icon": "🧭",
+    "accent": "#f5c518",
+    "tags": [
+      "League Two",
+      "Values",
+      "Presentation"
+    ]
+  },
+  {
     "id": "league-two-progress",
     "group": "strategy",
     "title": "Season Progress Report",
-    "description": "Live promotion pace for every key metric, goals by time, and season targets versus auto / play-off / champions.",
+    "description": "Live promotion pace, Impect style stats, and a Present / PDF board pack versus auto / play-off / champions.",
     "href": "/strategy-tracker",
     "icon": "📉",
     "accent": "#fbbf24",

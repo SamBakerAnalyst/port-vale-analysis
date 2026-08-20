@@ -203,16 +203,20 @@ def build_activity_feed(*, limit: int = 40) -> dict[str, Any]:
                 if not line.strip():
                     continue
                 row = json.loads(line)
-                when = _parse_when(row.get("created_at") or row.get("ts"))
+                when = _parse_when(row.get("created_at") or row.get("ts") or row.get("at"))
                 message = str(row.get("message") or "").strip()
                 if len(message) > 90:
                     message = message[:87] + "…"
+                who = str(row.get("display_name") or row.get("username") or "").strip()
+                title = "Suggestion / bug logged"
+                if who:
+                    title = f"Suggestion from {who}"
                 events.append(
                     {
                         "id": f"feedback:{row.get('id') or when}",
                         "kind": "feedback",
                         "icon": "💬",
-                        "title": "Suggestion / bug logged",
+                        "title": title,
                         "detail": message or "Feedback submitted",
                         "meta": str(row.get("page") or "Hub"),
                         "at": when.isoformat() if when else None,

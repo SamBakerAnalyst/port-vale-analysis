@@ -1,0 +1,32 @@
+# Staging hub — same droplet as live, separate project/port.
+# Staff stay on :80. You verify here: http://DROPLET_IP:8080/
+#
+# Deploy: bash ~/impect-football-dashboard/deploy-staging.sh
+# Do NOT use this compose file for live traffic.
+
+name: port-vale-staging
+
+services:
+  hub:
+    build: .
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8000
+      DATA_ROOT: /data
+      UVICORN_WORKERS: "1"
+      HUB_ENV: staging
+    volumes:
+      - pv-staging-data:/data
+    ports:
+      - "8080:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  pv-staging-data:

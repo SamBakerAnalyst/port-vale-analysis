@@ -13,6 +13,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
+from app.auth import current_user_payload, is_authenticated
 from app.paths import DATA_ROOT, ensure_data_dirs
 
 FEEDBACK_LOG = DATA_ROOT / "feedback.jsonl"
@@ -96,12 +97,16 @@ def register_feedback_routes(app: FastAPI) -> None:
         entry_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:8]
         screenshot_paths = _save_feedback_screenshots(body.screenshots, entry_id)
 
+        user = current_user_payload(request) if is_authenticated(request) else {}
         entry = {
             "id": entry_id,
             "at": datetime.now(timezone.utc).isoformat(),
             "message": message,
             "page": body.page.strip() or None,
             "screenshots": screenshot_paths or None,
+            "username": user.get("username") or None,
+            "display_name": user.get("display_name") or None,
+            "role": user.get("role") or None,
             "ip": request.client.host if request.client else None,
             "user_agent": (request.headers.get("user-agent") or "")[:300] or None,
         }
