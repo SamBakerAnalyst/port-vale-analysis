@@ -42,11 +42,12 @@ from app.scouting import (
     _scouting_iteration_rows,
     _scouting_position_label,
 )
+from app.season_defaults import CURRENT_SEASON
 
 _squad_sheet_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 _SQUAD_SHEET_TTL = 6 * 3600
 _SQUAD_SHEET_MIN_MINUTES = 300
-_SQUAD_SHEET_CACHE_VERSION = 3
+_SQUAD_SHEET_CACHE_VERSION = 4
 
 
 def _club_key(name: str) -> str:
@@ -149,7 +150,8 @@ def build_club_team_sheet(club_query: str) -> dict[str, Any]:
 
     chosen: dict[str, Any] | None = None
     score_rows: list[dict[str, Any]] = []
-    for offset in (1, 0):
+    # Current season first — never prefer last season just because it has more scores.
+    for offset in (0, 1):
         for competition in competitions:
             for iteration in _scouting_iteration_rows(
                 [competition], season_offset=offset, combine_seasons=False
@@ -169,19 +171,19 @@ def build_club_team_sheet(club_query: str) -> dict[str, Any]:
                     )
                 except HTTPException:
                     rows = []
-                if not rows:
-                    continue
                 chosen = {
                     "iteration": iteration,
                     "iteration_id": iteration_id,
                     "squad_id": squad_id,
                     "club_name": club_name,
                 }
-                score_rows = rows
+                score_rows = rows or []
+                # Stick with current season even if profile scores are still thin.
+                if score_rows or offset == 0:
+                    break
+            if chosen and (score_rows or offset == 0):
                 break
-            if chosen and score_rows:
-                break
-        if chosen and score_rows:
+        if chosen and (score_rows or offset == 0):
             break
 
     if not chosen:
@@ -254,7 +256,8 @@ def build_club_team_sheet(club_query: str) -> dict[str, Any]:
             )
             if sheet:
                 minutes = float(sheet.get("minutes") or 0)
-                if minutes < _SQUAD_SHEET_MIN_MINUTES:
+                min_minutes = 0.0 if season == CURRENT_SEASON else _SQUAD_SHEET_MIN_MINUTES
+                if minutes < min_minutes:
                     continue
                 players.append(sheet)
 

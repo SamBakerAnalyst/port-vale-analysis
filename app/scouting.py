@@ -728,25 +728,17 @@ def _load_iteration_bundles(
     for index, iteration in enumerate(iteration_rows):
         bundle = _load_iteration_bundle_with_retry(iteration, position, load_minutes)
         if season_offset == 0 and not (bundle.get("score_rows") or []):
+            # Do not silently swap to last season — staff must stay on 26/27.
+            # Empty current shells surface as empty results + optional UI warning.
             competition_name = str(iteration.get("competition_name", "")).strip()
-            previous_rows = _scouting_iteration_rows(
-                [competition_name],
-                season_offset=1,
-                combine_seasons=False,
+            league_label = SCOUTING_COMPETITION_TO_LEAGUE.get(
+                competition_name,
+                competition_name,
             )
-            if previous_rows:
-                previous = previous_rows[0]
-                if int(previous.get("id") or 0) != int(iteration.get("id") or 0):
-                    bundle = _load_iteration_bundle_with_retry(previous, position, load_minutes)
-                    league_label = SCOUTING_COMPETITION_TO_LEAGUE.get(
-                        competition_name,
-                        competition_name,
-                    )
-                    season_label = str(previous.get("season", "")).strip() or "previous season"
-                    fallback_warnings.append(
-                        f"{league_label}: using {season_label} data — current Impect "
-                        "season shell has no profile scores yet."
-                    )
+            season_label = str(iteration.get("season", "")).strip() or "current season"
+            fallback_warnings.append(
+                f"{league_label}: {season_label} has no profile scores in Impect yet."
+            )
         bundles.append(bundle)
         if index + 1 < len(iteration_rows):
             time.sleep(1.5)
