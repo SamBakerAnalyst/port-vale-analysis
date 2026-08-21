@@ -595,6 +595,7 @@ LIVE_ESSENTIAL_IDS = frozenset(
         "pre-match",
         "set-piece-pre-match",
         "player-cards",
+        "match-day-countdown",
         "xg-chance-analysis",
         "blocks-analysis",
         # Recruitment
