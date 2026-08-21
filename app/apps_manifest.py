@@ -47,7 +47,7 @@ APPS: list[dict[str, Any]] = [
         "group": "analysis",
         "title": "Pre-Match Report",
         "description": (
-            "Automated opponent prep — squad overview, form, team metrics, and more."
+            "Opponent prep — full slide deck plus editable Two pager handout."
         ),
         "href": "/pre-match",
         "icon": "📋",
@@ -104,6 +104,22 @@ APPS: list[dict[str, Any]] = [
         "roles": ("analysis", "admin"),
         "api_prefixes": ("/post-match", "/api/post-match"),
         "router": "post_match",
+    },
+    {
+        "id": "match-day-countdown",
+        "group": "analysis",
+        "title": "Match Day Countdown",
+        "description": (
+            "Dead-simple dressing-room clock — next opponent badges, countdown "
+            "to kick-off, and the next match-day timing (analysis, warm-up, etc.)."
+        ),
+        "href": "/match-day-countdown",
+        "icon": "⏰",
+        "accent": "#f5c518",
+        "tags": ["Match day", "Clock"],
+        "roles": ("analysis", "admin"),
+        "api_prefixes": ("/match-day-countdown", "/api/match-day-countdown"),
+        "router": "match_day_countdown",
     },
     {
         "id": "match-story",
@@ -308,22 +324,6 @@ APPS: list[dict[str, Any]] = [
         "router": "player_pipelines",
     },
     {
-        "id": "scoutable-teams",
-        "group": "recruitment",
-        "title": "Scoutable Teams",
-        "description": (
-            "Monday-style league boards — open any club, see player data scores, "
-            "and move prospects straight onto Player Pipelines."
-        ),
-        "href": "/scoutable-teams",
-        "icon": "🏟️",
-        "accent": "#34d399",
-        "tags": ["Scouting", "Clubs", "Pipelines"],
-        "roles": ("admin",),
-        "api_prefixes": ("/scoutable-teams", "/api/scoutable-teams"),
-        "router": "scoutable_teams",
-    },
-    {
         "id": "squad-planner",
         "group": "recruitment",
         "title": "Squad Planner",
@@ -434,6 +434,29 @@ APPS: list[dict[str, Any]] = [
         "roles": ("admin",),
         "api_prefixes": ("/scouts-calendar", "/api/fixture-planner"),
         "router": "fixture_planner",
+    },
+    {
+        "id": "meeting-front-pages",
+        "group": "scouts",
+        "title": "Meeting Front Pages",
+        "description": (
+            "Scout video title cards — identity page plus one PNG per PV "
+            "profile (Wide Creator, Goal Threat, etc.). Download a pack."
+        ),
+        "href": "/meeting-front-pages",
+        "icon": "🎬",
+        "accent": "#f97316",
+        "tags": ["Scouts", "Video", "PNG"],
+        "roles": ("admin",),
+        "api_prefixes": (
+            "/meeting-front-pages",
+            "/api/meeting-front-pages",
+            "/api/players",
+            "/api/player",
+            "/api/player-photo",
+            "/api/pre-match/player-photo",
+        ),
+        "router": "meeting_front_pages",
     },
     {
         "id": "squad-comparison",

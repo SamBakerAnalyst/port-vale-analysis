@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Match Day Countdown</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/match-day-countdown.css?v=10" />
+</head>
+<body>
+  <a class="mdc-hub" href="/">← Hub</a>
+  <div class="mdc-now" id="nowClock" aria-live="off">--:--:--</div>
+  <button type="button" class="mdc-fullscreen" id="fullscreenBtn" title="Fullscreen">Fullscreen</button>
+
+  <main class="mdc" id="app" aria-live="polite">
+    <aside class="mdc-schedule" id="scheduleBlock" hidden>
+      <p class="mdc-label">Full schedule</p>
+      <ol class="mdc-schedule-list" id="scheduleList"></ol>
+    </aside>
+
+    <div class="mdc-centre">
+      <p class="mdc-status" id="status">Loading next fixture…</p>
+
+      <header class="mdc-match" id="matchHeader" hidden>
+        <div class="mdc-badges">
+          <div class="mdc-badge">
+            <img id="homeBadge" alt="" />
+            <span id="homeName"></span>
+          </div>
+          <div class="mdc-vs">VS</div>
+          <div class="mdc-badge">
+            <img id="awayBadge" alt="" />
+            <span id="awayName"></span>
+          </div>
+        </div>
+        <p class="mdc-meta" id="matchMeta"></p>
+      </header>
+
+      <section class="mdc-next" id="nextBlock" hidden>
+        <p class="mdc-label mdc-label--next">Next</p>
+        <p class="mdc-next-name" id="nextName"></p>
+        <p class="mdc-clock mdc-clock--next" id="nextClock">--:--:--</p>
+      </section>
+
+      <section class="mdc-kickoff" id="kickoffBlock" hidden>
+        <p class="mdc-label" id="kickoffLabel">Kick off</p>
+        <p class="mdc-clock" id="kickoffClock">--:--:--</p>
+      </section>
+    </div>
+  </main>
+
+  <p class="mdc-motto" aria-label="Club words">
+    <span>Resilient</span>
+    <span class="mdc-motto__dot" aria-hidden="true">·</span>
+    <span>Relentless</span>
+    <span class="mdc-motto__dot" aria-hidden="true">·</span>
+    <span>Together</span>
+  </p>
+
+  <aside class="mdc-weather" id="weatherBox" hidden>
+    <p class="mdc-weather__place" id="weatherPlace"></p>
+    <p class="mdc-weather__temp" id="weatherTemp"></p>
+    <p class="mdc-weather__cond" id="weatherCond"></p>
+  </aside>
+
+  <script src="/static/match-day-countdown.js?v=9"></script>
+</body>
+</html>

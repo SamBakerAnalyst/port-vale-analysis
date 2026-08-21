@@ -23,6 +23,8 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
     from app.club_strategy import register_club_strategy_routes
     from app.fixture_planner import register_fixture_planner_routes
     from app.match_dashboards import register_match_dashboards_routes
+    from app.match_day_countdown import register_match_day_countdown_routes
+    from app.meeting_front_pages import register_meeting_front_pages_routes
     from app.player_cards import register_player_cards_routes
     from app.player_pipelines import register_player_pipelines_routes
     from app.post_match.routes import register_post_match_routes
@@ -30,6 +32,7 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
     from app.schedule import register_schedule_routes
     from app.scouting import register_scouting_routes
     from app.scouting_address import register_scouting_address_routes
+    from app.scoutable_teams import register_scoutable_teams_routes
     from app.set_piece_pre_match import register_set_piece_pre_match_routes
     from app.squad_balance import register_squad_balance_routes
     from app.squad_planner import register_squad_planner_routes
@@ -40,6 +43,7 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
 
     return {
         "match_dashboards": register_match_dashboards_routes,
+        "match_day_countdown": register_match_day_countdown_routes,
         "post_match": register_post_match_routes,
         "pre_match": register_pre_match_routes,
         "set_piece_pre_match": register_set_piece_pre_match_routes,
@@ -48,6 +52,7 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
         "blocks_analysis": register_blocks_analysis_routes,
         "schedule": register_schedule_routes,
         "scouting": register_scouting_routes,
+        "scoutable_teams": register_scoutable_teams_routes,
         "squad_review": register_squad_review_routes,
         "squad_planner": register_squad_planner_routes,
         "squad_balance": register_squad_balance_routes,
@@ -58,6 +63,7 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
         "who_to_scout": register_who_to_scout_routes,
         "player_pipelines": register_player_pipelines_routes,
         "strategy_tracker": register_strategy_tracker_routes,
+        "meeting_front_pages": register_meeting_front_pages_routes,
         # Covered by routes defined in main.py (studio) — no-op registrar.
         "main_studio": lambda _app: None,
     }
