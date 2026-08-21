@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Push current Mac tree to the droplet and rebuild STAGING only (:8080).
-# Does not restart live staff traffic on :80.
+# Push current Mac tree to the droplet and rebuild PORT VALE STAGING only.
+# Does not restart Port Vale Live staff traffic.
 #
 # Usage:
 #   bash ~/impect-football-dashboard/deploy-staging.sh
@@ -23,8 +23,8 @@ if [[ -n "$SSH_KEY" && -f "$SSH_KEY" ]]; then
 fi
 
 echo "=============================================="
-echo " Ship to STAGING → http://178.128.161.215:8080/"
-echo " (live on :80 is left alone)"
+echo " Ship to PORT VALE STAGING → http://178.128.161.215:8080/"
+echo " (Port Vale Live is left alone)"
 echo " Repo: $ROOT"
 echo "=============================================="
 
@@ -62,7 +62,7 @@ else
 fi
 
 echo ""
-echo "2/2 Rebuilding staging on server…"
+echo "2/2 Rebuilding Port Vale Staging on server…"
 REMOTE_CMD=$(cat <<'EOF'
 set -euo pipefail
 cd /opt/port-vale-analysis
@@ -74,12 +74,12 @@ docker compose --project-directory /opt/port-vale-analysis \
   -f deploy/docker-compose.staging.yml \
   -p port-vale-staging \
   up -d --build --remove-orphans
-echo "Waiting for staging health…"
+echo "Waiting for Port Vale Staging health…"
 for _ in $(seq 1 40); do
   if curl -sf http://127.0.0.1:8080/health >/dev/null 2>&1; then
     echo ""
-    echo "✓ Staging live at: http://178.128.161.215:8080/"
-    echo "  Staff live site unchanged: http://178.128.161.215/"
+    echo "✓ Port Vale Staging ready: http://178.128.161.215:8080/"
+    echo "  Port Vale Live unchanged: http://178.128.161.215/"
     exit 0
   fi
   sleep 2

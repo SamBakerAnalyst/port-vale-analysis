@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Post-deploy smoke check for the live hub.
+# Post-deploy smoke check for Port Vale Live.
 # Exits non-zero if the site would look broken to a staff visitor.
 set -euo pipefail
 
@@ -13,7 +13,7 @@ fail=0
 pass() { echo "  ✓ $1"; }
 bad()  { echo "  ✗ $1"; fail=1; }
 
-echo "Smoke check → $BASE_URL"
+echo "Smoke check → Port Vale Live ($BASE_URL)"
 
 code="$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$BASE_URL/health" || echo 000)"
 if [[ "$code" == "200" ]]; then pass "health 200"; else bad "health returned $code"; fi
@@ -187,11 +187,11 @@ fi
 
 if [[ "$fail" -ne 0 ]]; then
   echo ""
-  echo "SMOKE FAILED — do not tell staff the site is ready."
+  echo "SMOKE FAILED — do not tell staff Port Vale Live is ready."
   echo "Fix and re-run: bash deploy/smoke-live.sh"
   exit 1
 fi
 
 echo ""
-echo "SMOKE PASSED — safe for staff / owner login."
+echo "SMOKE PASSED — Port Vale Live safe for staff / owner login."
 exit 0

@@ -1,8 +1,8 @@
-# Staging hub — same droplet as live, separate project/port.
-# Staff stay on :80. You verify here: http://DROPLET_IP:8080/
+# Port Vale Staging — same droplet as Live, separate project.
+# Staff stay on Port Vale Live. You verify here: http://DROPLET_IP:8080/
 #
 # Deploy: bash ~/impect-football-dashboard/deploy-staging.sh
-# Do NOT use this compose file for live traffic.
+# Do NOT use this compose file for Port Vale Live traffic.
 
 name: port-vale-staging
 

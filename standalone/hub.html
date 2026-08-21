@@ -495,13 +495,19 @@
     .hub__build {
       font-family: var(--mono);
       font-size: 0.68rem;
-      font-weight: 600;
-      letter-spacing: 0.02em;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
       color: #0c0f14;
       background: var(--gold);
       border-radius: 999px;
       padding: 0.28rem 0.65rem;
       white-space: nowrap;
+    }
+
+    .hub__build.is-staging {
+      color: #041018;
+      background: #5ec8ff;
     }
 
     .hub__feedback-link {
@@ -1987,7 +1993,7 @@
             <span class="hub__status-dot"></span>
             <span id="serverStatusText">Checking…</span>
           </div>
-          <span class="hub__build" id="hubBuildStamp" title="This yellow stamp proves you are on the live server build">LIVE __HUB_BUILD__</span>
+          <span class="hub__build" id="hubBuildStamp" title="Product environment">Port Vale Live · __HUB_BUILD__</span>
           <button type="button" class="hub__restart-btn" id="restartServerBtn">Restart</button>
           <a class="hub__restart-btn" id="startServerLink" href="/standalone/restart.command" hidden>Start server</a>
           <div class="hub__clock" aria-live="polite">
@@ -2658,6 +2664,17 @@
           }
           if (Array.isArray(payload.apps) && payload.apps.length) {
             window.IMPECT_APPS = payload.apps;
+          }
+          const stamp = document.getElementById("hubBuildStamp");
+          if (stamp) {
+            const build = (stamp.textContent || "").split("·").pop()?.trim() || "__HUB_BUILD__";
+            const product = payload.product || (payload.staging ? "Port Vale Staging" : "Port Vale Live");
+            stamp.textContent = `${product} · ${build}`;
+            stamp.classList.toggle("is-staging", !!payload.staging);
+            stamp.title = payload.staging
+              ? "Port Vale Staging — safe break/fix sandbox (not staff)"
+              : "Port Vale Live — staff / boss product";
+            document.title = payload.staging ? "Port Vale Staging" : "Port Vale Live";
           }
         }
       } catch (_) {

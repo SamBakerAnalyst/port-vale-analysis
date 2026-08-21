@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# ONE deploy path for Port Vale Analysis Hub.
-# Live site: http://178.128.161.215/
+# ONE deploy path for Port Vale Live.
+# Product: Port Vale Live — http://178.128.161.215/
 #
 # What this does:
 #   1. Push current main to GitHub (source of truth)
 #   2. Rsync this Mac → droplet (immediate update)
-#   3. Rebuild/restart the hub container
+#   3. Rebuild/restart the Live hub container
 #
 # Usage (from anywhere):
 #   bash ~/impect-football-dashboard/deploy-live.sh
@@ -29,7 +29,7 @@ if [[ -n "$SSH_KEY" && -f "$SSH_KEY" ]]; then
 fi
 
 echo "=============================================="
-echo " Ship to live → http://178.128.161.215/"
+echo " Ship to PORT VALE LIVE → http://178.128.161.215/"
 echo " Repo: $ROOT"
 echo "=============================================="
 
@@ -109,7 +109,7 @@ else
 fi
 
 echo ""
-echo "3/3 Rebuilding hub on server…"
+echo "3/3 Rebuilding Port Vale Live on server…"
 if [[ ${#SSH_OPTS[@]} -gt 0 ]]; then
   ssh "${SSH_OPTS[@]}" "$SERVER" "cd $REMOTE && bash deploy/deploy-ip.sh"
 else
@@ -120,10 +120,10 @@ echo ""
 echo "4/4 Smoke check (would the owner see a broken hub?)…"
 if bash "$ROOT/deploy/smoke-live.sh" "http://178.128.161.215"; then
   echo ""
-  echo "✓ Live site updated and verified: http://178.128.161.215/"
+  echo "✓ Port Vale Live updated and verified: http://178.128.161.215/"
   echo "  Safe for staff / owner login."
 else
   echo ""
-  echo "✗ Deploy finished but SMOKE FAILED — fix before telling anyone to use it."
+  echo "✗ Deploy finished but SMOKE FAILED — fix before telling anyone to use Port Vale Live."
   exit 1
 fi

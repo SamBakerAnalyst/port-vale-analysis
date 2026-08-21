@@ -9,10 +9,14 @@ Order matters. Do not unlock new live tools, chase SaaS, or expand the surface a
 | Where | When |
 |--------|------|
 | **Local Mac** (`~/impect-football-dashboard` only) | Day-to-day code. Default. |
-| **Staging** `http://178.128.161.215:8080/` | Break / fix / polish safely. Staff stay off this. |
-| **Live** `http://178.128.161.215/` | Boss + team. Promote only when you explicitly ask. |
+| **Port Vale Staging** http://178.128.161.215:8080/ | Break / fix / polish safely. Staff stay off this. |
+| **Port Vale Live** http://178.128.161.215/ | Boss + team. Promote only when you explicitly ask. |
 
-Flow: build locally → verify on staging → promote to live only after `deploy/smoke-live.sh` PASS.
+Flow: build locally → verify on **Port Vale Staging** → promote to **Port Vale Live** only after `deploy/smoke-live.sh` PASS.
+
+**Iron rule:** nothing on Port Vale Live that is missing from Port Vale Staging. If that happens, Staging is stale — run `deploy-staging.sh` first. Never “fix forward” by shipping only to Live.
+
+Naming: [`docs/ENVIRONMENTS.md`](ENVIRONMENTS.md).
 
 ## Live product surface (sell this)
 

@@ -1,22 +1,26 @@
 # Port Vale Analysis Hub
 
-## Live website
+## Products
 
-**URL:** http://178.128.161.215/  
-**Staging (verify):** http://178.128.161.215:8080/  
-**Hosting:** Existing DigitalOcean droplet (no App Platform)
+| Product | URL | Purpose |
+|---|---|---|
+| **Port Vale Live** | http://178.128.161.215/ | Staff / boss. Promote only when asked. |
+| **Port Vale Staging** | http://178.128.161.215:8080/ | Safe break/fix. Does not touch Live. |
 
+Hosting: existing DigitalOcean droplet (no App Platform).
+
+Naming source of truth: [`docs/ENVIRONMENTS.md`](docs/ENVIRONMENTS.md).  
 Product roadmap: [`docs/PRODUCT-ROADMAP.md`](docs/PRODUCT-ROADMAP.md).
 
 ## Where to build
 
 - **Local Mac** (`~/impect-football-dashboard`) — write code here. Default.
-- **Staging** — `bash ~/impect-football-dashboard/deploy-staging.sh` then check `:8080`. Does not touch live staff traffic.
-- **Live** — only when the user explicitly asks: `bash ~/impect-football-dashboard/deploy-live.sh`
+- **Port Vale Staging** — `bash ~/impect-football-dashboard/deploy-staging.sh` then open the Staging URL. Does not touch Live.
+- **Port Vale Live** — only when the user explicitly asks: `bash ~/impect-football-dashboard/deploy-live.sh`
 
-Never mark complete after only local changes. Never debug by shipping half-fixes straight to live while staff are on it.
+Never mark complete after only local changes. Never debug by shipping half-fixes straight to Live while staff are on it.
 
-## ONE live deploy path
+## ONE Live deploy path
 
 ```bash
 bash ~/impect-football-dashboard/deploy-live.sh
@@ -24,7 +28,7 @@ bash ~/impect-football-dashboard/deploy-live.sh
 
 Or double-click **`Deploy to Website.command`**.
 
-That pushes GitHub **and** updates the droplet immediately. Details: `deploy/HOW-WE-DEPLOY.md`.
+That pushes GitHub **and** updates Port Vale Live immediately. Details: `deploy/HOW-WE-DEPLOY.md`.
 
 Staging:
 
@@ -35,7 +39,7 @@ bash ~/impect-football-dashboard/deploy-staging.sh
 ## Repo path (mandatory)
 
 - Edit and deploy **only** from `~/impect-football-dashboard`.
-- **Refuse** Desktop / Downloads copies (`~/Desktop/impect-football-dashboard`, etc.) — they drift from live and wipe tools after deploy.
+- **Refuse** Desktop / Downloads copies (`~/Desktop/impect-football-dashboard`, etc.) — they drift from Live and wipe tools after deploy.
 - Never rsync-only or silent partial copies from Desktop.
 
 ## App registry (source of truth)
@@ -56,7 +60,7 @@ Retired tools must be removed from the manifest (and kept in hub `RETIRED_APP_ID
 1. Add the app to `app/apps_manifest.py`
 2. Wire its registrar in `app/register_apps.py` (`_ROUTER_REGISTRARS`)
 3. Auth + sidebar + smoke pick it up automatically
-4. Verify on staging, then (when asked) commit + `deploy-live.sh` + smoke PASS
+4. Verify on **Port Vale Staging**, then (when asked) commit + `deploy-live.sh` + smoke PASS
 
 Startup **fails** if a manifest `router` is missing from the registry — fix before shipping.
 
@@ -64,14 +68,15 @@ Startup **fails** if a manifest `router` is missing from the registry — fix be
 
 Every tool page loads `/static/hub-feedback.js` (floating Suggest). Posts to `POST /api/feedback` with page URL + username. Hub home also has Suggestion / bug.
 
-## Definition of done (live)
+## Definition of done (Live)
 
 1. Edit in `~/impect-football-dashboard`
 2. **Commit** changes
-3. Prefer staging verify first
+3. Prefer **Port Vale Staging** verify first
 4. Run **`bash ~/impect-football-dashboard/deploy-live.sh`** only when asked to promote
 5. **`deploy/smoke-live.sh` must PASS**
-6. Verify at http://178.128.161.215/ (hard refresh)
+6. Verify at **Port Vale Live** (hard refresh)
 
-Never mark done if a sidebar title is missing from smoke / `/api/apps`.
-Never mark done after local-only changes.
+Never mark done if a sidebar title is missing from smoke / `/api/apps`.  
+Never mark done after local-only changes.  
+Never treat a Staging deploy as “done for staff.”

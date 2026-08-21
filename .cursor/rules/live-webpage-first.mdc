@@ -1,19 +1,16 @@
----
-description: MANDATORY — one deploy path to live droplet at 178.128.161.215
-alwaysApply: true
----
-
 # LIVE WEBSITE = ONE DEPLOY PATH
 
-**Staff use http://178.128.161.215/** — existing DigitalOcean droplet. No App Platform.
+**Staff use Port Vale Live** — http://178.128.161.215/ — existing DigitalOcean droplet. No App Platform.
 
-**Staging (safe verify):** http://178.128.161.215:8080/ via `bash ~/impect-football-dashboard/deploy-staging.sh` — does not replace live.
+**Port Vale Staging (safe verify):** http://178.128.161.215:8080/ via `bash ~/impect-football-dashboard/deploy-staging.sh` — does not replace Live.
+
+Naming: [`docs/ENVIRONMENTS.md`](../../docs/ENVIRONMENTS.md). Say **Port Vale Live** / **Port Vale Staging** — not “port 80 / 8080”.
 
 ## Where to build
 
 - **Local Mac** (`~/impect-football-dashboard`) — write code. Default.
-- **Staging** — real-server check before promote.
-- **Live** — only when the user explicitly asks to deploy / promote.
+- **Port Vale Staging** — real-server check before promote.
+- **Port Vale Live** — only when the user explicitly asks to deploy / promote.
 
 ## Repo path
 
@@ -30,24 +27,25 @@ alwaysApply: true
 - New tool = update manifest + register_apps; auth/smoke follow. Do not only edit HTML/JS.
 - Roadmap: `docs/PRODUCT-ROADMAP.md`.
 
-## Definition of done (live promote)
+## Definition of done (Live promote)
 
 1. Edit code in this repo (`~/impect-football-dashboard` only)
 2. **Commit** changes
-3. Prefer staging verify
+3. Prefer Port Vale Staging verify
 4. Run **`bash ~/impect-football-dashboard/deploy-live.sh`** only when asked (pushes GitHub + syncs droplet)
-   - Or user double-clicks **`Deploy to Website.command`**
+ - Or user double-clicks **`Deploy to Website.command`**
 5. **`deploy/smoke-live.sh` PASS** (sidebar titles from `/api/apps` + key pages)
-6. Verify at http://178.128.161.215/ (hard refresh)
+6. Verify at Port Vale Live (hard refresh)
 
-**Never** mark complete after only local changes.
-**Never** mark complete if smoke fails or a sidebar title is missing from `/api/apps`.
-**Never** treat staging deploy as “done for staff.”
+**Never** mark complete after only local changes.  
+**Never** mark complete if smoke fails or a sidebar title is missing from `/api/apps`.  
+**Never** treat a Staging deploy as “done for staff.”  
+**Never** put something on Live that is missing from Staging.
 
 ## Do not
 
 - Set up App Platform or new paid services
 - Use DigitalOcean Console `update-live.sh` unless Mac deploy is broken
-- Invent a second *live* deploy path (staging on :8080 is the verify path, not a second staff site)
+- Invent a second *Live* deploy path (Staging is the verify path, not a second staff site)
 
 See `deploy/HOW-WE-DEPLOY.md` and `AGENTS.md`.

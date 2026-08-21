@@ -308,6 +308,22 @@ APPS: list[dict[str, Any]] = [
         "router": "player_pipelines",
     },
     {
+        "id": "scoutable-teams",
+        "group": "recruitment",
+        "title": "Scoutable Teams",
+        "description": (
+            "Monday-style league boards — open any club, see player data scores, "
+            "and move prospects straight onto Player Pipelines."
+        ),
+        "href": "/scoutable-teams",
+        "icon": "🏟️",
+        "accent": "#34d399",
+        "tags": ["Scouting", "Clubs", "Pipelines"],
+        "roles": ("admin",),
+        "api_prefixes": ("/scoutable-teams", "/api/scoutable-teams"),
+        "router": "scoutable_teams",
+    },
+    {
         "id": "squad-planner",
         "group": "recruitment",
         "title": "Squad Planner",
@@ -645,10 +661,13 @@ def manifest_payload(*, role: str = "admin") -> dict[str, Any]:
     apps = [public_app_payload(app, reveal_all=reveal_all) for app in apps_for_role(role)]
     groups_used = {app["group"] for app in apps}
     groups = [g for g in APP_GROUPS if g["id"] in groups_used]
+    product = "Port Vale Staging" if reveal_all else "Port Vale Live"
     return {
         "groups": groups,
         "apps": apps,
         "titles": [app["title"] for app in apps if not app.get("comingSoon")],
         "all_titles": [app["title"] for app in apps],
         "staging": reveal_all,
+        "product": product,
+        "product_id": "staging" if reveal_all else "live",
     }
