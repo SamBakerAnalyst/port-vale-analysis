@@ -101,6 +101,7 @@ RSYNC_EXCLUDES=(
   --exclude 'static/player-photos/'
   --exclude 'static/handout-badges/'
   --exclude '*.bak*'
+  --exclude '.tmp-*'
 )
 if [[ ${#SSH_OPTS[@]} -gt 0 ]]; then
   rsync -avz "${RSYNC_EXCLUDES[@]}" -e "ssh ${SSH_OPTS[*]}" "$ROOT/" "$SERVER:$REMOTE/"

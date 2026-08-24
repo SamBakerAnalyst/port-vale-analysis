@@ -51,6 +51,7 @@ RSYNC_EXCLUDES=(
   --exclude 'static/player-photos/'
   --exclude 'static/handout-badges/'
   --exclude '*.bak*'
+  --exclude '.tmp-*'
 )
 
 echo ""
