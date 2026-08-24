@@ -21,3 +21,6 @@ strategy-reports/.cache_*
 
 deploy/Caddyfile.active
 .env.auth
+
+# Local scratch (export/design review harnesses)
+.tmp-*

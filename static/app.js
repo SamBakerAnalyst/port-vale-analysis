@@ -60,20 +60,48 @@ const statusBarEl = document.getElementById("statusBar");
 
 const seasonColors = ["#f5c518", "#a78bfa", "#34d399", "#60a5fa", "#fb7185", "#f97316"];
 
-const STUDIO_PLAYER_COLORS = [
-  { main: "#4a90d9", bg: "rgba(74, 144, 217, 0.18)" },
-  { main: "#e573a8", bg: "rgba(229, 115, 168, 0.18)" },
-  { main: "#4db6ac", bg: "rgba(77, 182, 172, 0.18)" },
-  { main: "#f5c518", bg: "rgba(245, 197, 24, 0.18)" },
-  { main: "#a78bfa", bg: "rgba(167, 139, 250, 0.18)" },
-];
-
 const chartFonts = {
   family: '"DM Sans", system-ui, sans-serif',
   color: "#f5f5f5",
 };
 
 const plotlyConfig = { responsive: true, displayModeBar: false };
+
+// Charts are often plotted while their page is still hidden, so Plotly falls
+// back to its 700px default and never picks up the real container width —
+// `responsive` only listens for window resizes. Watch the container instead.
+const plotResizeObservers = new WeakMap();
+
+function keepPlotFittedToContainer(elementId) {
+  if (typeof ResizeObserver !== "function") {
+    return;
+  }
+  const el = typeof elementId === "string" ? document.getElementById(elementId) : elementId;
+  if (!el || plotResizeObservers.has(el)) {
+    return;
+  }
+
+  let lastWidth = Math.round(el.clientWidth);
+  const observer = new ResizeObserver(() => {
+    const width = Math.round(el.clientWidth);
+    if (width < 1 || width === lastWidth) {
+      return;
+    }
+    lastWidth = width;
+    if (el.data) {
+      Plotly.Plots.resize(el);
+    }
+  });
+  observer.observe(el);
+  plotResizeObservers.set(el, observer);
+
+  // First paint: the element may already be wider than the plot Plotly chose.
+  requestAnimationFrame(() => {
+    if (el.data && Math.abs(el.clientWidth - (el._fullLayout?.width || 0)) > 1) {
+      Plotly.Plots.resize(el);
+    }
+  });
+}
 
 const PHRASE_REPLACEMENTS = [
   [/ratio\s*-\s*remove opponents(?:\s+defenders)?/i, "Opponents removed"],
@@ -185,6 +213,52 @@ function formatPercentileLabel(value) {
   return `${Math.round(value)}%`;
 }
 
+// One percentile scale for the whole tool. On-screen cards and exported slides
+// both read from here, so a colour means the same thing in every place a coach
+// sees it. Keys match the `--elite`/`--good`/… CSS band classes.
+function percentileBandKey(value) {
+  const numeric = Number(value);
+  if (value == null || !Number.isFinite(numeric)) {
+    return "na";
+  }
+  if (numeric >= 80) {
+    return "elite";
+  }
+  if (numeric >= 60) {
+    return "good";
+  }
+  if (numeric >= 40) {
+    return "fair";
+  }
+  if (numeric >= 25) {
+    return "poor";
+  }
+  return "weak";
+}
+
+const PERCENTILE_BAND_LABELS = {
+  elite: "Elite",
+  good: "Strong",
+  fair: "Average",
+  poor: "Below par",
+  weak: "Weak",
+  na: "No data",
+};
+
+function keynoteBandLabel(value) {
+  return PERCENTILE_BAND_LABELS[percentileBandKey(value)];
+}
+
+// Profile names arrive inconsistently cased ("PV DEEP CREATOR", "PV Defensive").
+// Everything user-facing goes through here so headings never mix the two.
+function profileDisplayTitle(label) {
+  const text = humanizeProfileName(label);
+  if (!text || text !== text.toUpperCase() || text.length <= 3) {
+    return text;
+  }
+  return text.charAt(0) + text.slice(1).toLowerCase();
+}
+
 function isRateStyleMetric(rawValue, percentile) {
   const raw = Number(rawValue);
   const pct = Number(percentile);
@@ -234,36 +308,6 @@ function formatBarInnerValue(percentile, rawValue) {
   return formatMetricValue(resolved.rawValue);
 }
 
-function barRowColors(displayPercentile, options = {}) {
-  if (options.compare && options.playerColor) {
-    return {
-      fill: options.playerColor,
-      badgeBg: "rgba(255, 255, 255, 0.92)",
-      badgeText: "#18181b",
-    };
-  }
-  return percentileBarColors(displayPercentile);
-}
-
-function percentileBarColors(value) {
-  if (value == null || Number.isNaN(value)) {
-    return { fill: "#94a3b8", badgeBg: "#f1f5f9", badgeText: "#64748b" };
-  }
-  if (value >= 80) {
-    return { fill: "#1e6b3a", badgeBg: "#dcfce7", badgeText: "#166534" };
-  }
-  if (value >= 60) {
-    return { fill: "#388e5c", badgeBg: "#ecfdf5", badgeText: "#15803d" };
-  }
-  if (value >= 40) {
-    return { fill: "#ca8a04", badgeBg: "#fef9c3", badgeText: "#a16207" };
-  }
-  if (value >= 25) {
-    return { fill: "#c2410c", badgeBg: "#ffedd5", badgeText: "#9a3412" };
-  }
-  return { fill: "#dc2626", badgeBg: "#fee2e2", badgeText: "#b91c1c" };
-}
-
 function formatPlayerMinutes(minutes) {
   const value = Number(minutes);
   if (!Number.isFinite(value) || value <= 0) {
@@ -285,10 +329,6 @@ function playerLegendLabel(player, { includePosition = false } = {}) {
     parts.push(minutesLabel);
   }
   return parts.join(" · ");
-}
-
-function playerFactorBarLabel(player) {
-  return playerLegendLabel(player);
 }
 
 function getComparedPlayersFromChartData(data) {
@@ -341,58 +381,8 @@ function appendSlideMinutesHeader(surface, players) {
   surface.insertBefore(buildSlideMinutesHeader(players), surface.firstChild);
 }
 
-function buildDrilldownCardLegend(players) {
-  const legend = buildRadarSlideLegend(players);
-  legend.className = "profile-drilldown-legend";
-  return legend;
-}
-
 function playerPhotoUrl(player) {
   return player?.photo_url || player?.photoUrl || null;
-}
-
-function buildPortraitPlaceholder(player) {
-  const placeholder = document.createElement("div");
-  placeholder.className = "profile-drilldown-portrait__placeholder";
-  placeholder.textContent = playerInitials(player?.player || "Player");
-  return placeholder;
-}
-
-function buildDrilldownPlayerPortrait(player, playerIndex) {
-  const color = seasonColors[playerIndex % seasonColors.length];
-  const wrap = document.createElement("div");
-  wrap.className = "profile-drilldown-portrait";
-
-  const frame = document.createElement("div");
-  frame.className = "profile-drilldown-portrait__frame";
-  frame.style.borderColor = color;
-  frame.style.boxShadow = "0 12px 28px rgba(0, 0, 0, 0.42)";
-
-  const photoUrl = playerPhotoUrl(player);
-  if (photoUrl) {
-    const image = document.createElement("img");
-    image.className = "profile-drilldown-portrait__image";
-      image.src = photoUrl;
-      image.alt = player?.player || "Player";
-      image.loading = "eager";
-      image.decoding = "sync";
-    image.addEventListener("error", () => {
-      image.replaceWith(buildPortraitPlaceholder(player));
-    });
-    frame.appendChild(image);
-  } else {
-    frame.appendChild(buildPortraitPlaceholder(player));
-  }
-
-  wrap.appendChild(frame);
-
-  const name = document.createElement("p");
-  name.className = "profile-drilldown-portrait__name";
-  name.style.color = color;
-  name.textContent = player?.player || "";
-  wrap.appendChild(name);
-
-  return wrap;
 }
 
 function enrichDrilldownPlayers(players, chartPlayers = []) {
@@ -423,113 +413,80 @@ function enrichDrilldownPlayers(players, chartPlayers = []) {
   }));
 }
 
-function buildPortraitColumn(players, indices) {
-  const column = document.createElement("div");
-  column.className = "profile-drilldown-portrait-col";
-  indices.forEach((playerIndex) => {
-    if (players[playerIndex]) {
-      column.appendChild(buildDrilldownPlayerPortrait(players[playerIndex], playerIndex));
-    }
-  });
-  return column;
-}
+const PERCENTILE_SCALE_STEPS = [
+  { key: "weak", label: "0–24 weak" },
+  { key: "poor", label: "25–39 below par" },
+  { key: "fair", label: "40–59 average" },
+  { key: "good", label: "60–79 strong" },
+  { key: "elite", label: "80–100 elite" },
+];
 
-function portraitColumnIndices(playerCount) {
-  if (playerCount <= 0) {
-    return { left: [], right: [] };
-  }
-  if (playerCount === 1) {
-    return { left: [0], right: [] };
-  }
-  if (playerCount === 2) {
-    return { left: [0], right: [1] };
-  }
-  if (playerCount === 3) {
-    return { left: [0, 2], right: [1] };
-  }
-  return { left: [0, 2], right: [1, 3] };
-}
-
-function buildDrilldownRadarStage(players, { chartNode = null, chartImage = null } = {}) {
-  const count = Math.min(players.length, 4);
-  const { left, right } = portraitColumnIndices(count);
-  const stage = document.createElement("div");
-  stage.className = `profile-drilldown-radar-stage profile-drilldown-radar-stage--count-${count}${
-    count === 1 ? " profile-drilldown-radar-stage--single" : ""
-  }`;
-
-  if (left.length) {
-    stage.appendChild(buildPortraitColumn(players, left));
-  }
-
-  const chartWrap = document.createElement("div");
-  chartWrap.className = "profile-drilldown-radar-chart";
-  if (chartNode) {
-    chartWrap.appendChild(chartNode);
-  } else if (chartImage) {
-    chartWrap.appendChild(chartImage);
-  }
-  stage.appendChild(chartWrap);
-
-  if (right.length) {
-    stage.appendChild(buildPortraitColumn(players, right));
-  }
-
-  return stage;
-}
-
-function buildRadarSlideLegend(players, { compact = false } = {}) {
-  const legend = document.createElement("div");
-  legend.className = compact
-    ? "export-radar-slide-legend export-radar-slide-legend-compact"
-    : "export-radar-slide-legend";
-  const mixedPositions =
-    new Set(players.map((entry) => entry.position_label || entry.position).filter(Boolean)).size > 1;
-
-  players.forEach((player, index) => {
-    const item = document.createElement("div");
-    item.className = "export-radar-slide-legend-item";
-
+function buildPercentileScaleKey() {
+  const key = document.createElement("div");
+  key.className = "pct-scale";
+  PERCENTILE_SCALE_STEPS.forEach((step) => {
+    const item = document.createElement("span");
+    item.className = `pct-scale__step pctband pctband--${step.key}`;
     const swatch = document.createElement("span");
-    swatch.className = "export-radar-slide-legend-swatch";
-    swatch.style.backgroundColor = seasonColors[index % seasonColors.length];
-
-    const text = document.createElement("span");
-    text.className = "export-radar-slide-legend-text";
-    const minutesLabel = formatPlayerMinutes(player.play_duration_minutes);
-    if (compact) {
-      text.textContent = player.player;
-      if (minutesLabel) {
-        text.appendChild(document.createTextNode(" · "));
-        const minutes = document.createElement("span");
-        minutes.className = "export-radar-slide-legend-minutes";
-        minutes.textContent = minutesLabel;
-        text.appendChild(minutes);
-      }
-    } else {
-      const nameParts = [player.player];
-      if (player.season_label) {
-        nameParts.push(player.season_label);
-      }
-      if (mixedPositions && player.position_label) {
-        nameParts.push(player.position_label);
-      }
-      text.textContent = nameParts.join(" · ");
-      if (minutesLabel) {
-        const minutes = document.createElement("span");
-        minutes.className = "export-radar-slide-legend-minutes";
-        minutes.textContent = minutesLabel;
-        text.appendChild(document.createTextNode(" · "));
-        text.appendChild(minutes);
-      }
-    }
-
+    swatch.className = "pct-scale__swatch";
     item.appendChild(swatch);
-    item.appendChild(text);
-    legend.appendChild(item);
+    item.appendChild(document.createTextNode(step.label));
+    key.appendChild(item);
+  });
+  return key;
+}
+
+// Photo + name + minutes for each player in a drilldown card, colour-matched to
+// the radar traces so the shapes are identifiable without a separate legend.
+function buildDrilldownPlayerStrip(players) {
+  const strip = document.createElement("div");
+  strip.className = "drilldown-players";
+  strip.dataset.count = String(Math.min(players.length, 4));
+
+  players.slice(0, 4).forEach((player, index) => {
+    const color = seasonColors[index % seasonColors.length];
+    const item = document.createElement("div");
+    item.className = "drilldown-player";
+    item.style.setProperty("--player-color", color);
+
+    const photo = document.createElement("div");
+    photo.className = "drilldown-player__photo";
+    const photoUrl = player.photo_url || player.photoUrl || null;
+    if (photoUrl) {
+      const image = document.createElement("img");
+      image.src = photoUrl;
+      image.alt = "";
+      photo.appendChild(image);
+    } else {
+      const placeholder = document.createElement("span");
+      placeholder.className = "drilldown-player__initials";
+      placeholder.textContent = playerInitials(player.player || "");
+      photo.appendChild(placeholder);
+    }
+    item.appendChild(photo);
+
+    const identity = document.createElement("div");
+    identity.className = "drilldown-player__identity";
+    const name = document.createElement("p");
+    name.className = "drilldown-player__name";
+    name.textContent = player.player || "";
+    identity.appendChild(name);
+
+    const metaParts = [player.season_label, formatPlayerMinutes(player.play_duration_minutes)]
+      .filter(Boolean)
+      .join(" · ");
+    if (metaParts) {
+      const meta = document.createElement("p");
+      meta.className = "drilldown-player__meta";
+      meta.textContent = metaParts;
+      identity.appendChild(meta);
+    }
+    item.appendChild(identity);
+
+    strip.appendChild(item);
   });
 
-  return legend;
+  return strip;
 }
 
 function averagePercentileForFactor(players, factorIndex, valueKey = "radar_values") {
@@ -543,108 +500,6 @@ function averagePercentileForFactor(players, factorIndex, valueKey = "radar_valu
     return 50;
   }
   return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function createFactorBarRow(label, percentile, rawValue, options = {}) {
-  const row = document.createElement("div");
-  row.className = `factor-bar-row${options.compare ? " factor-bar-row-compare" : ""}${
-    options.swatchOnly ? " factor-bar-row-swatch-only" : ""
-  }`;
-
-  const labelEl = document.createElement("div");
-  labelEl.className = "factor-bar-label";
-  if (options.playerColor) {
-    const swatch = document.createElement("span");
-    swatch.className = "factor-bar-player-swatch";
-    swatch.style.backgroundColor = options.playerColor;
-    if (options.playerInitials) {
-      swatch.classList.add("factor-bar-player-swatch--initials");
-      swatch.textContent = options.playerInitials;
-      swatch.setAttribute("aria-label", label);
-    }
-    labelEl.appendChild(swatch);
-  }
-  if (!options.swatchOnly) {
-    const labelText = document.createElement("span");
-    labelText.className = "factor-bar-label-text";
-    labelText.textContent = label;
-    labelEl.appendChild(labelText);
-  }
-  row.appendChild(labelEl);
-
-  const trackWrap = document.createElement("div");
-  trackWrap.className = "factor-bar-track-wrap";
-
-  const track = document.createElement("div");
-  track.className = "factor-bar-track";
-
-  if (options.averagePercentile != null && !Number.isNaN(options.averagePercentile)) {
-    const averageLine = document.createElement("div");
-    averageLine.className = "factor-bar-average-line";
-    averageLine.style.left = `${Math.min(Math.max(options.averagePercentile, 0), 100)}%`;
-    averageLine.title = `Average ${formatPercentileLabel(options.averagePercentile)}`;
-    track.appendChild(averageLine);
-  }
-
-  const resolved = resolveBarScores(percentile, rawValue);
-  const displayPercentile = barTrackPercentile(resolved.percentile, resolved.rawValue);
-
-  const fill = document.createElement("div");
-  fill.className = "factor-bar-fill";
-  const minWidth = options.compact ? 4 : 8;
-  const width = displayPercentile == null ? 0 : Math.max(displayPercentile, minWidth);
-  fill.style.width = `${width}%`;
-  const colors = barRowColors(displayPercentile, options);
-  fill.style.backgroundColor = colors.fill;
-
-  const valueEl = document.createElement("span");
-  valueEl.className = "factor-bar-value";
-  valueEl.style.color = options.compare && options.playerColor ? "#111827" : "";
-  valueEl.textContent = formatBarInnerValue(resolved.percentile, resolved.rawValue);
-  fill.appendChild(valueEl);
-
-  track.appendChild(fill);
-  trackWrap.appendChild(track);
-
-  const badge = document.createElement("div");
-  badge.className = "factor-bar-badge";
-  badge.style.backgroundColor = colors.badgeBg;
-  badge.style.color = colors.badgeText;
-  badge.textContent = formatPercentileLabel(displayPercentile);
-  trackWrap.appendChild(badge);
-
-  row.appendChild(trackWrap);
-  return row;
-}
-
-function buildSlideFactorBarRow(percentile, rawValue, playerColor = null, playerName = "") {
-  const resolved = resolveBarScores(percentile, rawValue);
-  const displayPercentile = barTrackPercentile(resolved.percentile, resolved.rawValue);
-  const colors = percentileBarColors(displayPercentile);
-  const width = displayPercentile == null ? 0 : Math.max(displayPercentile, 5);
-
-  const row = document.createElement("div");
-  row.className = "export-slide-bar-row";
-
-  if (playerColor && playerName) {
-    const initial = document.createElement("span");
-    initial.className = "export-slide-bar-initial";
-    initial.style.color = playerColor;
-    initial.textContent = playerInitials(playerName);
-    initial.title = playerName;
-    row.appendChild(initial);
-  }
-
-  const track = document.createElement("div");
-  track.className = "export-slide-bar-track";
-  const fill = document.createElement("div");
-  fill.className = "export-slide-bar-fill";
-  fill.style.width = `${width}%`;
-  fill.style.backgroundColor = colors.fill;
-  fill.textContent = formatPercentileLabel(displayPercentile);
-  track.appendChild(fill);
-  row.appendChild(track);
-  return row;
 }
 
 function drilldownExportPlayers(entry) {
@@ -661,54 +516,6 @@ function drilldownExportPlayers(entry) {
   ];
 }
 
-function buildSlideFactorBars(entry) {
-  const grid = document.createElement("div");
-  grid.className = "export-slide-bars-grid";
-
-  const barLabels = (entry.bar_labels || entry.labels || []).slice(0, MAX_BAR_FACTORS);
-  const barWeights = entry.bar_weights || [];
-  const comparedPlayers = drilldownExportPlayers(entry);
-  const multiPlayer = comparedPlayers.length > 1;
-
-  barLabels.forEach((label, factorIndex) => {
-    const hasMissingValue = comparedPlayers.some((player) => {
-      const percentile = player.bar_radar_values?.[factorIndex];
-      return percentile == null || Number.isNaN(percentile);
-    });
-    if (hasMissingValue) {
-      return;
-    }
-
-    const cell = document.createElement("div");
-    cell.className = "export-slide-bar-cell";
-
-    const heading = document.createElement("div");
-    heading.className = "export-slide-bar-title";
-    const weightLabel =
-      barWeights[factorIndex] != null ? ` · ${Math.round(barWeights[factorIndex])}%` : "";
-    heading.textContent = `${label}${weightLabel}`;
-    cell.appendChild(heading);
-
-    const rows = document.createElement("div");
-    rows.className = "export-slide-bar-rows";
-    comparedPlayers.forEach((player, playerIndex) => {
-      const playerColor = seasonColors[playerIndex % seasonColors.length];
-      rows.appendChild(
-        buildSlideFactorBarRow(
-          player.bar_radar_values?.[factorIndex],
-          player.bar_raw_values?.[factorIndex],
-          playerColor,
-          player.player || "",
-        ),
-      );
-    });
-    cell.appendChild(rows);
-    grid.appendChild(cell);
-  });
-
-  return grid;
-}
-
 function drilldownIndexFromExportIds({ chartId, barsId }) {
   const match = String(chartId || barsId || "").match(/(\d+)$/);
   return match ? Number(match[1]) : -1;
@@ -717,7 +524,7 @@ function drilldownIndexFromExportIds({ chartId, barsId }) {
 function formatAxisLabel(label) {
   const text =
     chartSourceEl?.value === "profiles"
-      ? humanizeProfileName(label)
+      ? profileDisplayTitle(label)
       : humanizeFootballLabel(label);
   return text.replace(/\bGk\b/gi, "GK");
 }
@@ -863,7 +670,9 @@ function drilldownThetaTickText(labels) {
         .replace(/\bpost shot xg\b/i, "post xG");
       return `${head}<br>(${qualifier})`;
     }
-    return wrapLabelText(text, 16, 2);
+    // Three lines rather than two: factor names like "Opponents bypassed left
+    // channel" were being truncated with an ellipsis, losing the meaning.
+    return wrapLabelText(text, 18, 3);
   });
 }
 
@@ -976,7 +785,7 @@ function slideWrappedAxisLabel(label, labelCount = 7) {
     .trim();
   // Deck slides title-case profile names so the radar axes match the slide copy.
   const formatted =
-    chartSourceEl?.value === "profiles" ? keynoteProfileTitle(text) : humanizeFootballLabel(text);
+    chartSourceEl?.value === "profiles" ? profileDisplayTitle(text) : humanizeFootballLabel(text);
   if (formatted.length <= 24) {
     return formatted;
   }
@@ -1120,7 +929,8 @@ function polarChartLayout(labelCount, options = {}) {
           : compact
             ? { x: [0.14, 0.86], y: [0.16, 0.78] }
             : { x: [0.1, 0.9], y: showLegend ? [0.08, 0.86] : [0.06, 0.94] },
-      bgcolor: "rgba(17, 24, 39, 0.6)",
+      // Barely-there plot area. A solid navy disc fought with the card behind it.
+      bgcolor: "rgba(255, 255, 255, 0.022)",
       radialaxis: {
         visible: true,
         showticklabels: false,
@@ -1134,7 +944,7 @@ function polarChartLayout(labelCount, options = {}) {
       angularaxis,
     },
     margin: drilldownStacked
-      ? { l: 48, r: 48, t: 16, b: 16 }
+      ? { l: 124, r: 124, t: 48, b: 48 }
       : drilldownPanel
         ? { l: 52, r: 52, t: 8, b: showLegend ? 52 : 24 }
         : compact
@@ -1498,7 +1308,7 @@ function showStudioView(view) {
   if (studioPageLedeEl) {
     studioPageLedeEl.textContent =
       view === "compare"
-        ? "Squad Balance–style profile bars up top, then radar and factor breakdown below."
+        ? "Profile scores up top, then the radar and a factor-by-factor breakdown of each profile."
         : "Search players, set position & season, pick profiles — then open the comparison view.";
   }
   if (view === "compare") {
@@ -2879,49 +2689,11 @@ function chartImageFileName(slug) {
   return `impect-${playerSlug}-${slug}-${date}.png`;
 }
 
-function prepareBarsExportClone(
-  source,
-  { slideGrid = true, slideDeck = false, matchUi = false, deckExport = false } = {},
-) {
+// "Save bars" ships the on-screen factor list as-is. The card is already sized
+// for reading, so the export only needs a fixed capture width.
+function prepareBarsExportClone(source) {
   const clone = source.cloneNode(true);
-  if (deckExport) {
-    clone.classList.add("export-factor-bars-deck", "factor-bar-list-slide-grid");
-    const groupCount = clone.querySelectorAll(".factor-bar-group").length;
-    if (groupCount > 4) {
-      clone.classList.add("factor-bar-list-slide-grid-3x2");
-    }
-    const players = getComparedPlayersFromChartData(state.lastChartData) || [];
-    if (players.length > 1) {
-      clone.querySelectorAll(".factor-bar-group").forEach((group) => {
-        group.querySelectorAll(".factor-bar-player-swatch").forEach((swatch, index) => {
-          const player = players[index];
-          if (!player) {
-            return;
-          }
-          swatch.classList.add("factor-bar-player-swatch--initials");
-          if (!swatch.textContent.trim()) {
-            swatch.textContent = playerInitials(player.player || player.name);
-          }
-        });
-      });
-    }
-    return clone;
-  }
-  if (slideGrid && !matchUi) {
-    clone.classList.add("export-factor-bars-compact", "factor-bar-list-slide-grid");
-    if (slideDeck) {
-      clone.classList.add("factor-bar-list-slide-grid-3x2");
-    }
-  }
-  if (!matchUi) {
-    clone.querySelectorAll(".factor-bar-factor-name, .factor-bar-label-text").forEach((el) => {
-      const wrapped = wrapLabelText(el.textContent, slideGrid ? 22 : 16, 2);
-      if (wrapped.includes("<br>")) {
-        el.innerHTML = wrapped;
-        el.classList.add("factor-bar-label-wrapped");
-      }
-    });
-  }
+  clone.classList.add("factor-list--export");
   return clone;
 }
 
@@ -3090,7 +2862,7 @@ async function captureDrilldownSlidePng({
   headText.appendChild(eyebrow);
   const heading = document.createElement("h2");
   heading.className = "keynote-drilldown__title";
-  heading.textContent = keynoteProfileTitle(title || entry.profile || "Profile");
+  heading.textContent = profileDisplayTitle(title || entry.profile || "Profile");
   headText.appendChild(heading);
 
   const barCount = (entry.bar_labels || entry.labels || []).length;
@@ -3203,23 +2975,7 @@ async function captureDrilldownSlidePng({
 
 // Percentile bands shared by every deck slide, matching percentileBarColors().
 function keynoteBandClass(value) {
-  const numeric = Number(value);
-  if (value == null || !Number.isFinite(numeric)) {
-    return "keynote-band--na";
-  }
-  if (numeric >= 80) {
-    return "keynote-band--elite";
-  }
-  if (numeric >= 60) {
-    return "keynote-band--good";
-  }
-  if (numeric >= 40) {
-    return "keynote-band--fair";
-  }
-  if (numeric >= 25) {
-    return "keynote-band--poor";
-  }
-  return "keynote-band--weak";
+  return `keynote-band--${percentileBandKey(value)}`;
 }
 
 function buildKeynoteFactorBars(entry, players) {
@@ -3230,6 +2986,8 @@ function buildKeynoteFactorBars(entry, players) {
   const weights = entry.bar_weights || [];
   const multiPlayer = players.length > 1;
   grid.dataset.factors = String(labels.length);
+  // Slide height is fixed, so the bars have to shrink as players are added.
+  grid.dataset.players = String(Math.min(players.length, 4));
 
   labels.forEach((label, factorIndex) => {
     const factor = document.createElement("div");
@@ -3248,6 +3006,10 @@ function buildKeynoteFactorBars(entry, players) {
       factorHead.appendChild(weight);
     }
     factor.appendChild(factorHead);
+
+    const averagePercentile = multiPlayer
+      ? averagePercentileForFactor(players, factorIndex, "bar_radar_values")
+      : null;
 
     const rows = document.createElement("div");
     rows.className = "keynote-factor__rows";
@@ -3276,6 +3038,13 @@ function buildKeynoteFactorBars(entry, players) {
         fill.style.width = `${Math.max(2, Math.min(100, Number(percentile)))}%`;
         track.appendChild(fill);
       }
+      // Same marker as the on-screen card: where these players average out.
+      if (averagePercentile != null && Number.isFinite(Number(averagePercentile))) {
+        const marker = document.createElement("span");
+        marker.className = "keynote-factor__avg";
+        marker.style.left = `${Math.min(Math.max(Number(averagePercentile), 0), 100)}%`;
+        track.appendChild(marker);
+      }
       row.appendChild(track);
 
       const value = document.createElement("span");
@@ -3295,35 +3064,7 @@ function buildKeynoteFactorBars(entry, players) {
   return grid;
 }
 
-function keynoteBandLabel(value) {
-  const numeric = Number(value);
-  if (value == null || !Number.isFinite(numeric)) {
-    return "No data";
-  }
-  if (numeric >= 80) {
-    return "Elite";
-  }
-  if (numeric >= 60) {
-    return "Strong";
-  }
-  if (numeric >= 40) {
-    return "Average";
-  }
-  if (numeric >= 25) {
-    return "Below par";
-  }
-  return "Weak";
-}
-
 // Impect sends profile names in mixed case ("PV DEEP CREATOR", "PV Defensive").
-function keynoteProfileTitle(label) {
-  const text = humanizeProfileName(label);
-  if (!text || text !== text.toUpperCase() || text.length <= 3) {
-    return text;
-  }
-  return text.charAt(0) + text.slice(1).toLowerCase();
-}
-
 function keynoteMinutesLabel(player) {
   const minutes = Math.round(
     Number(player?.minutes ?? player?.play_duration_minutes) || 0,
@@ -3425,7 +3166,7 @@ function buildKeynoteComparisonSlide(data) {
   const players = studioComparisonPlayersFromChart(data);
   const profiles = (data.labels || []).map((label) => ({
     apiName: label,
-    label: keynoteProfileTitle(label),
+    label: profileDisplayTitle(label),
   }));
   if (!players.length || profiles.length < 2) {
     throw new Error("Comparison front page is not ready yet.");
@@ -3502,9 +3243,11 @@ function buildKeynoteComparisonSlide(data) {
   const table = document.createElement("div");
   table.className = "keynote-comparison__table";
 
+  // The cell above the profile names used to be blank. The colour key reads
+  // better there than buried in the footer.
   const corner = document.createElement("div");
   corner.className = "keynote-comparison__corner";
-  corner.setAttribute("aria-hidden", "true");
+  corner.appendChild(buildKeynoteScaleKey());
   table.appendChild(corner);
 
   columns.forEach((column, index) => {
@@ -3540,12 +3283,12 @@ function buildKeynoteComparisonSlide(data) {
       cell.appendChild(minutes);
     }
 
-    if (column.tag) {
-      const tag = document.createElement("p");
-      tag.className = "keynote-comparison__tag";
-      tag.textContent = column.tag;
-      cell.appendChild(tag);
-    }
+    // Every column gets the tag slot, even when empty. Columns are bottom
+    // aligned, so an extra line on one of them lifted its photo out of line.
+    const tag = document.createElement("p");
+    tag.className = "keynote-comparison__tag";
+    tag.textContent = column.tag || "\u00a0";
+    cell.appendChild(tag);
 
     table.appendChild(cell);
   });
@@ -3585,26 +3328,31 @@ function buildKeynoteComparisonSlide(data) {
 
   const footer = document.createElement("footer");
   footer.className = "keynote-comparison__footer";
-
-  const scale = document.createElement("div");
-  scale.className = "keynote-scale";
-  [
-    ["keynote-band--weak", "0–24 weak"],
-    ["keynote-band--poor", "25–39 below par"],
-    ["keynote-band--fair", "40–59 average"],
-    ["keynote-band--good", "60–79 strong"],
-    ["keynote-band--elite", "80–100 elite"],
-  ].forEach(([bandClass, text]) => {
-    const item = document.createElement("span");
-    item.className = `keynote-scale__item ${bandClass}`;
-    item.innerHTML = `<span class="keynote-scale__swatch"></span>${text}`;
-    scale.appendChild(item);
-  });
-  footer.appendChild(scale);
   footer.appendChild(buildKeynoteFootnote(data, "★ = best on this slide"));
   slide.appendChild(footer);
 
   return slide;
+}
+
+function buildKeynoteScaleKey() {
+  const scale = document.createElement("div");
+  scale.className = "keynote-scale";
+
+  const heading = document.createElement("p");
+  heading.className = "keynote-scale__heading";
+  heading.textContent = "Percentile rank";
+  scale.appendChild(heading);
+
+  PERCENTILE_SCALE_STEPS.slice()
+    .reverse()
+    .forEach((step) => {
+      const item = document.createElement("span");
+      item.className = `keynote-scale__item keynote-band--${step.key}`;
+      item.innerHTML = `<span class="keynote-scale__swatch"></span>${step.label}`;
+      scale.appendChild(item);
+    });
+
+  return scale;
 }
 
 async function captureComparisonFrontSlidePng({ exportScale = 1 } = {}) {
@@ -3628,7 +3376,7 @@ async function captureComparisonFrontSlidePng({ exportScale = 1 } = {}) {
 function keynoteProfileExtremes(player, labels) {
   const scored = (labels || [])
     .map((label, index) => ({
-      label: keynoteProfileTitle(label),
+      label: profileDisplayTitle(label),
       value: Number(player?.radar_values?.[index]),
     }))
     .filter((entry) => Number.isFinite(entry.value));
@@ -3907,7 +3655,7 @@ function createExportToggleButton({ exportKey, cardElement }) {
   return button;
 }
 
-function mountStudioDeckExportToolbar(parentEl, { hint = "" } = {}) {
+function mountStudioDeckExportToolbar(parentEl, { hint = "", extraActions = [] } = {}) {
   const toolbar = document.createElement("div");
   toolbar.className = "studio-export-toolbar";
 
@@ -3920,6 +3668,7 @@ function mountStudioDeckExportToolbar(parentEl, { hint = "" } = {}) {
 
   const actions = document.createElement("div");
   actions.className = "studio-export-toolbar__actions";
+  extraActions.forEach((button) => actions.appendChild(button));
 
   const deckSlidesBtn = document.createElement("button");
   deckSlidesBtn.type = "button";
@@ -5041,7 +4790,7 @@ function   plotComparedRadar(elementId, comparedPlayers, fallbackLabels, benchma
       ...options.layout,
     }),
     plotlyConfig,
-  );
+  ).then(() => keepPlotFittedToContainer(elementId));
 }
 
 function limitChartFactorSeries(labels, ...series) {
@@ -5302,21 +5051,23 @@ function renderStudioComparisonFront(data) {
   corner.setAttribute("aria-hidden", "true");
   table.appendChild(corner);
 
+  // Player colours follow the radar traces (seasonColors) so a player is the
+  // same colour in the table, the radar and the exported deck.
   players.forEach((player, index) => {
-    const color = STUDIO_PLAYER_COLORS[index % STUDIO_PLAYER_COLORS.length];
+    const color = seasonColors[index % seasonColors.length];
     const photo = document.createElement("div");
     photo.className = "player-photo";
     photo.style.gridColumn = String(index + 2);
 
     const wrap = document.createElement("div");
     wrap.className = "player-photo__image-wrap";
-    wrap.style.borderColor = color.main;
+    wrap.style.borderColor = color;
     wrap.innerHTML = studioPlayerPhotoMarkup(player);
     photo.appendChild(wrap);
 
     const name = document.createElement("p");
     name.className = "player-photo__name";
-    name.style.color = color.main;
+    name.style.color = color;
     name.textContent = player.name;
     photo.appendChild(name);
 
@@ -5332,13 +5083,14 @@ function renderStudioComparisonFront(data) {
   refPhoto.className = "player-photo player-photo--average player-photo--reference";
   refPhoto.style.gridColumn = String(playerCount + 2);
   if (reference?.player) {
+    // Silver, not gold: gold is the first compared player's trace colour.
     refPhoto.innerHTML = `
-      <div class="player-photo__image-wrap" style="border-color:var(--gold)">
+      <div class="player-photo__image-wrap" style="border-color:#e2e8f0">
         ${reference.photo_url
           ? `<img class="player-photo__image" src="${reference.photo_url}" alt="${reference.player}" />`
           : `<div class="player-photo__placeholder">${playerInitials(reference.player)}</div>`}
       </div>
-      <p class="player-photo__name" style="color:var(--gold)">${reference.player}</p>
+      <p class="player-photo__name" style="color:#e2e8f0">${reference.player}</p>
       <p class="player-photo__minutes">${studioMinutesLabel(reference)}</p>
       <p class="player-photo__minutes player-photo__minutes--hint">PV most mins at ${positionShort}</p>
     `;
@@ -5367,14 +5119,15 @@ function renderStudioComparisonFront(data) {
     const leaderValue =
       numericValues.length > 0 ? Math.max(...numericValues.map((value) => Number(value))) : null;
 
-    players.forEach((player, index) => {
+    // Bars are banded by percentile, not by player, so a weak score never
+    // looks the same as a strong one. Player identity lives in the photo row.
+    players.forEach((player) => {
       const value = player.profileScores?.[profile.apiName];
-      const color = STUDIO_PLAYER_COLORS[index % STUDIO_PLAYER_COLORS.length];
       const cell = document.createElement("div");
       const isLeader = value != null && leaderValue != null && Number(value) === leaderValue;
-      cell.className = `comparison-cell comparison-cell--bar${isLeader ? " comparison-cell--leader" : ""}`;
-      cell.style.setProperty("--cell-color", color.main);
-      cell.style.setProperty("--bar-color", color.main);
+      cell.className = `comparison-cell comparison-cell--bar pctband pctband--${percentileBandKey(
+        value,
+      )}${isLeader ? " comparison-cell--leader" : ""}`;
       if (value != null) {
         cell.style.setProperty("--bar-width", `${Math.max(0, Math.min(100, Number(value)))}%`);
       }
@@ -5384,7 +5137,9 @@ function renderStudioComparisonFront(data) {
 
     const refValue = referenceScores[profile.apiName];
     const refCell = document.createElement("div");
-    refCell.className = `comparison-cell comparison-cell--bar comparison-cell--average comparison-cell--reference ${studioAverageClass(refValue)}`;
+    refCell.className = `comparison-cell comparison-cell--bar comparison-cell--average comparison-cell--reference pctband pctband--${percentileBandKey(
+      refValue,
+    )} ${studioAverageClass(refValue)}`;
     if (refValue != null) {
       refCell.style.setProperty("--bar-width", `${Math.max(0, Math.min(100, refValue))}%`);
     }
@@ -5396,49 +5151,9 @@ function renderStudioComparisonFront(data) {
 
   body.appendChild(table);
 
-  const legend = document.createElement("div");
-  legend.className = "comparison-legend";
-  legend.style.setProperty("--player-cols", String(playerCount));
-  legend.innerHTML =
-    players
-      .map((player, index) => {
-        const color = STUDIO_PLAYER_COLORS[index % STUDIO_PLAYER_COLORS.length];
-        const photo = player.photo_url
-          ? `<img class="legend-item__photo" src="${player.photo_url}" alt="" />`
-          : `<span class="legend-item__photo legend-item__photo--fallback">${playerInitials(player.name)}</span>`;
-        const metaParts = [player.position_label || positionLabel, [player.club, player.league].filter(Boolean).join(" · ")]
-          .filter(Boolean)
-          .join("<br>");
-        return `
-          <div class="legend-item">
-            ${photo}
-            <span class="legend-item__line" style="background:${color.main}"></span>
-            <p class="legend-item__name">${player.name}</p>
-            <p class="legend-item__meta">${metaParts || player.season_label}</p>
-          </div>
-        `;
-      })
-      .join("") +
-    (reference?.player
-      ? `
-      <div class="legend-item legend-item--average legend-item--reference">
-        ${reference.photo_url
-          ? `<img class="legend-item__photo" src="${reference.photo_url}" alt="" />`
-          : `<span class="legend-item__photo legend-item__photo--fallback">${playerInitials(reference.player)}</span>`}
-        <span class="legend-item__line" style="background:var(--gold)"></span>
-        <p class="legend-item__name">${reference.player}</p>
-        <p class="legend-item__meta">Port Vale · most minutes at ${positionShort}<br>${reference.season_label || ""}</p>
-      </div>
-    `
-      : `
-      <div class="legend-item legend-item--average">
-        <img class="legend-item__photo legend-item__photo--badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
-        <span class="legend-item__line" style="background:var(--gold)"></span>
-        <p class="legend-item__name">Port Vale</p>
-        <p class="legend-item__meta">No current-squad<br>reference for role</p>
-      </div>
-    `);
-  body.appendChild(legend);
+  // The photo row above already names every player and their club, so the old
+  // legend repeated it. A percentile key is what actually needed explaining.
+  body.appendChild(buildPercentileScaleKey());
 
   const note = document.createElement("p");
   note.className = "comparison-note";
@@ -5453,25 +5168,11 @@ function renderStudioComparisonFront(data) {
   const card = document.createElement("div");
   card.className = "card chart-card studio-comparison-export-card";
 
-  const cardHead = document.createElement("div");
-  cardHead.className = "chart-card-head";
-  const headText = document.createElement("div");
-  headText.innerHTML = `
-    <h2>Profile comparison</h2>
-    <p class="chart-caption">Squad Balance–style overview — first slide in Export PDF / slides.</p>
-  `;
-  cardHead.appendChild(headText);
-
-  const headActions = document.createElement("div");
-  headActions.className = "chart-card-actions";
-  headActions.appendChild(
-    createExportToggleButton({ exportKey: "comparison-front", cardElement: card }),
-  );
-  cardHead.appendChild(headActions);
-  card.appendChild(cardHead);
-
+  // The frame carries its own heading, so a second title block above it was
+  // just repetition. One toolbar row holds the export controls instead.
   mountStudioDeckExportToolbar(card, {
-    hint: "Use <strong>Remove from export</strong> on this page or any profile below to skip slides.",
+    hint: "Export the whole deck as a PDF or slides. <strong>Remove from export</strong> skips a panel.",
+    extraActions: [createExportToggleButton({ exportKey: "comparison-front", cardElement: card })],
   });
 
   card.appendChild(frame);
@@ -5486,8 +5187,13 @@ function renderRadar(data) {
     ? data.players
     : [{ player: data.player, labels: data.labels, radar_values: data.radar_values }];
   const multiPlayer = comparedPlayers.length > 1;
+  // Name the players rather than counting them — "2 players compared" told the
+  // reader nothing the legend did not already say.
   const title = multiPlayer
-    ? `${comparedPlayers.length} players compared`
+    ? comparedPlayers
+        .slice(0, 3)
+        .map((entry) => entry.player)
+        .join("  vs  ") + (comparedPlayers.length > 3 ? `  +${comparedPlayers.length - 3}` : "")
     : comparedPlayers[0]?.player || data.player;
 
   setChartMeta(
@@ -5507,16 +5213,19 @@ function renderRadar(data) {
   });
 }
 
+// Factor bars for the on-screen drilldown card. The track is coloured by
+// percentile band so strong and weak read instantly; the player's own colour
+// stays on the initial chip so you can still tell the rows apart.
 function renderDrilldownFactorList(entry, players, barsId = "") {
   const list = document.createElement("div");
-  list.className = "factor-bar-list factor-bar-list-slide-grid";
+  list.className = "factor-list";
   if (barsId) {
     list.id = barsId;
   }
   const multiPlayer = players.length > 1;
   const barLabels = entry.bar_labels || entry.labels || [];
   const barWeights = entry.bar_weights || [];
-  const barInverted = entry.bar_inverted || [];
+  list.dataset.factors = String(barLabels.length);
 
   barLabels.forEach((label, factorIndex) => {
     const hasMissingValue = players.some((player) => {
@@ -5528,45 +5237,84 @@ function renderDrilldownFactorList(entry, players, barsId = "") {
     }
 
     const group = document.createElement("div");
-    group.className = "factor-bar-group";
-    const averagePercentile = averagePercentileForFactor(
-      players,
-      factorIndex,
-      "bar_radar_values",
-    );
+    group.className = "factor";
 
-    const factorHeading = document.createElement("div");
-    factorHeading.className = "factor-bar-factor-name";
-    const weightLabel =
-      barWeights[factorIndex] != null ? ` · ${Math.round(barWeights[factorIndex])}%` : "";
-    const averageLabel =
-      averagePercentile == null
-        ? ""
-        : players.length > 1
-          ? ` · avg ${formatPercentileLabel(averagePercentile)}`
-          : "";
-    factorHeading.textContent = `${label}${weightLabel}${averageLabel}`;
-    group.appendChild(factorHeading);
+    const groupHead = document.createElement("div");
+    groupHead.className = "factor__head";
+    const name = document.createElement("p");
+    name.className = "factor__name";
+    name.textContent = humanizeFootballLabel(label);
+    groupHead.appendChild(name);
+    if (barWeights[factorIndex] != null) {
+      const weight = document.createElement("span");
+      weight.className = "factor__weight";
+      weight.textContent = `${Math.round(barWeights[factorIndex])}% of profile`;
+      groupHead.appendChild(weight);
+    }
+    group.appendChild(groupHead);
+
+    const averagePercentile = multiPlayer
+      ? averagePercentileForFactor(players, factorIndex, "bar_radar_values")
+      : null;
 
     players.forEach((player, playerIndex) => {
-      const percentile = player.bar_radar_values?.[factorIndex];
-      const rawValue = player.bar_raw_values?.[factorIndex];
-      const rowLabel = multiPlayer ? playerFactorBarLabel(player) : player.player || "Player";
-      const row = createFactorBarRow(rowLabel, percentile, rawValue, {
-        compare: multiPlayer,
-        compact: true,
-        swatchOnly: multiPlayer,
-        playerColor: multiPlayer ? seasonColors[playerIndex % seasonColors.length] : null,
-        playerInitials: multiPlayer ? playerInitials(player.player) : null,
-        averagePercentile,
-      });
-      group.appendChild(row);
+      group.appendChild(
+        buildFactorBarRow(player, factorIndex, {
+          color: seasonColors[playerIndex % seasonColors.length],
+          showInitials: multiPlayer,
+          averagePercentile,
+        }),
+      );
     });
 
     list.appendChild(group);
   });
 
   return list;
+}
+
+function buildFactorBarRow(player, factorIndex, { color, showInitials, averagePercentile }) {
+  const resolved = resolveBarScores(
+    player.bar_radar_values?.[factorIndex],
+    player.bar_raw_values?.[factorIndex],
+  );
+  const percentile = barTrackPercentile(resolved.percentile, resolved.rawValue);
+
+  const row = document.createElement("div");
+  row.className = `factor__row pctband pctband--${percentileBandKey(percentile)}`;
+
+  if (showInitials) {
+    const chip = document.createElement("span");
+    chip.className = "factor__who";
+    chip.style.background = color;
+    chip.textContent = playerInitials(player.player || "");
+    chip.title = player.player || "";
+    row.appendChild(chip);
+  }
+
+  const track = document.createElement("div");
+  track.className = "factor__track";
+
+  const fill = document.createElement("span");
+  fill.className = "factor__fill";
+  fill.style.width = `${Math.max(2, Math.min(100, Number(percentile) || 0))}%`;
+  track.appendChild(fill);
+
+  if (averagePercentile != null && Number.isFinite(Number(averagePercentile))) {
+    const marker = document.createElement("span");
+    marker.className = "factor__avg";
+    marker.style.left = `${Math.min(Math.max(Number(averagePercentile), 0), 100)}%`;
+    marker.title = `Average of these players: ${formatPercentileLabel(averagePercentile)}`;
+    track.appendChild(marker);
+  }
+  row.appendChild(track);
+
+  const value = document.createElement("span");
+  value.className = "factor__value";
+  value.textContent = formatBarInnerValue(resolved.percentile, resolved.rawValue);
+  row.appendChild(value);
+
+  return row;
 }
 
 function renderProfileDrilldowns(data) {
@@ -5611,7 +5359,7 @@ function renderProfileDrilldowns(data) {
     const headText = document.createElement("div");
 
     const title = document.createElement("h3");
-    title.textContent = profileTitle;
+    title.textContent = profileDisplayTitle(entry.profile);
     headText.appendChild(title);
 
     const players = enrichDrilldownPlayers(
@@ -5631,14 +5379,6 @@ function renderProfileDrilldowns(data) {
       data.players || [],
     );
 
-    const meta = document.createElement("p");
-    meta.className = "drilldown-card-meta";
-    const radarCount = entry.labels?.length || 0;
-    const barCount = entry.bar_labels?.length || radarCount;
-    meta.textContent = `Top ${barCount} weighted factors · ${radarCount} on radar${
-      players.length > 1 ? ` · ${players.length} players` : ""
-    } · bar fill = percentile when Impect score is a decimal rate · badge = benchmark percentile`;
-    headText.appendChild(meta);
     head.appendChild(headText);
 
     const actions = document.createElement("div");
@@ -5679,19 +5419,30 @@ function renderProfileDrilldowns(data) {
     head.appendChild(actions);
     card.appendChild(head);
 
+    // Caption sits on its own full-width row so the export buttons cannot
+    // squeeze it into a two-word column.
+    const meta = document.createElement("p");
+    meta.className = "drilldown-card-meta";
+    const radarCount = entry.labels?.length || 0;
+    const barCount = entry.bar_labels?.length || radarCount;
+    meta.textContent =
+      radarCount > barCount
+        ? `The ${barCount} factors that weigh heaviest in this profile — the radar shows all ${radarCount}`
+        : "Every factor that feeds this profile";
+    card.appendChild(meta);
+
     const body = document.createElement("div");
     body.className = "profile-drilldown-body";
-
-    if (players.length > 1) {
-      body.appendChild(buildDrilldownCardLegend(players));
-    }
 
     const radarPanel = document.createElement("div");
     radarPanel.className = "profile-drilldown-radar";
     const chart = document.createElement("div");
     chart.id = chartId;
     chart.className = "chart drilldown-chart";
-    radarPanel.appendChild(buildDrilldownRadarStage(players, { chartNode: chart }));
+    radarPanel.appendChild(chart);
+    // One player strip carries photo, name and colour. It replaces the old
+    // floating side portraits plus legend pill, which showed the same thing twice.
+    radarPanel.appendChild(buildDrilldownPlayerStrip(players));
     body.appendChild(radarPanel);
 
     const barsPanel = document.createElement("div");
@@ -5749,7 +5500,7 @@ function renderPizza(data) {
       radialaxis: { ticksuffix: "%", range: [0, 100] },
     }),
     plotlyConfig,
-  );
+  ).then(() => keepPlotFittedToContainer("pizzaChart"));
 }
 
 async function loadCharts() {

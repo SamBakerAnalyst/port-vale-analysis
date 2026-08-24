@@ -193,9 +193,92 @@
   margin-bottom: 1.25rem;
 }
 
+/* The frame is shared with Squad Balance, where it is a fixed 16:9 slide
+   preview. On this page it is a live panel, so it sizes to its content and the
+   bars read off the shared percentile scale. Overrides stay scoped here. */
 .studio-compare-front .comparison-frame--keynote {
   width: 100%;
   max-width: 100%;
+  aspect-ratio: auto;
+  overflow: visible;
+  padding: 1.4rem 1.6rem 1.2rem;
+}
+
+.studio-compare-front .comparison-table {
+  grid-template-columns:
+    minmax(120px, 0.8fr)
+    repeat(var(--player-cols, 1), minmax(0, 1fr))
+    minmax(80px, 1fr);
+  column-gap: 0.75rem;
+  row-gap: 0.6rem;
+}
+
+.studio-compare-front .comparison-cell {
+  min-height: 2.4rem;
+  justify-content: flex-end;
+  padding-right: 0.7rem;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Solid fill. At 38% opacity every band collapsed into the same murky brown. */
+.studio-compare-front .comparison-cell--bar::before,
+.studio-compare-front .comparison-cell--average::before,
+.studio-compare-front .comparison-cell--avg-low::before,
+.studio-compare-front .comparison-cell--avg-mid::before,
+.studio-compare-front .comparison-cell--avg-high::before {
+  background: var(--band);
+  opacity: 1;
+  border-radius: 7px;
+}
+
+.studio-compare-front .comparison-cell--leader {
+  border-color: rgba(245, 197, 24, 0.5);
+}
+
+.studio-compare-front .comparison-cell__value,
+.studio-compare-front .comparison-cell--avg-low .comparison-cell__value,
+.studio-compare-front .comparison-cell--avg-mid .comparison-cell__value,
+.studio-compare-front .comparison-cell--avg-high .comparison-cell__value {
+  color: #f8fafc;
+  font-size: 1rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+}
+
+.studio-compare-front .comparison-row__label-main {
+  font-size: 0.86rem;
+  color: #e8ecf2;
+}
+
+/* One shared key for the colour scale, replacing the legend that repeated the
+   player names already shown in the photo row. */
+.pct-scale {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1.1rem;
+  margin-top: 0.9rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.pct-scale__step {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.pct-scale__swatch {
+  width: 0.85rem;
+  height: 0.5rem;
+  border-radius: 2px;
+  background: var(--band);
 }
 
 .studio-comparison-export-card {
@@ -217,6 +300,14 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+/* .btn is full-width by default, which stacked these into a column. */
+.studio-export-toolbar__actions .btn {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.8rem;
 }
 
 .export-comparison-slide {

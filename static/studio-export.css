@@ -38,17 +38,27 @@
   line-height: 1.3;
 }
 
+/* Vertical key, sized to sit in the blank cell above the profile labels. */
 .keynote-scale {
   display: flex;
-  align-items: center;
-  gap: 26px;
-  flex-wrap: nowrap;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.keynote-scale__heading {
+  margin: 0 0 2px;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #6f7783;
 }
 
 .keynote-scale__item {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 11px;
   font-size: 19px;
   font-weight: 600;
   color: #b6bec9;
@@ -148,6 +158,9 @@
 .keynote-comparison__corner {
   grid-column: 1;
   grid-row: 1;
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 18px;
 }
 
 .keynote-comparison__player {
@@ -329,8 +342,7 @@
   width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 40px;
+  justify-content: flex-start;
 }
 
 /* ── Main radar slide ── */
@@ -844,6 +856,17 @@
   background: var(--band);
 }
 
+/* Where the compared players average out on this factor. html2canvas ignores
+   dashed borders, so this is a solid hairline. */
+.keynote-factor__avg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  margin-left: -1px;
+  background: rgba(248, 250, 252, 0.72);
+}
+
 .keynote-factor__value {
   font-family: var(--mono, monospace);
   font-size: 38px;
@@ -851,4 +874,80 @@
   line-height: 1;
   text-align: right;
   color: var(--band-text);
+}
+
+/* Three and four players mean 12–16 bars in the same fixed slide height.
+   Without these steps the rows overlapped the factor headings. */
+.keynote-factors[data-players="3"] {
+  gap: 16px;
+}
+
+.keynote-factors[data-players="3"] .keynote-factor {
+  gap: 7px;
+}
+
+.keynote-factors[data-players="3"] .keynote-factor__rows {
+  gap: 7px;
+}
+
+.keynote-factors[data-players="3"] .keynote-factor__name {
+  font-size: 23px;
+}
+
+.keynote-factors[data-players="3"] .keynote-factor__track {
+  height: 44px;
+}
+
+.keynote-factors[data-players="3"] .keynote-factor__initial {
+  width: 38px;
+  height: 38px;
+  font-size: 15px;
+}
+
+.keynote-factors[data-players="3"] .keynote-factor__row:has(.keynote-factor__initial) {
+  grid-template-columns: 44px minmax(0, 1fr) 74px;
+}
+
+.keynote-factors[data-players="3"] .keynote-factor__value {
+  font-size: 31px;
+}
+
+.keynote-factors[data-players="4"] {
+  gap: 22px;
+}
+
+.keynote-factors[data-players="4"] .keynote-factor {
+  gap: 8px;
+}
+
+.keynote-factors[data-players="4"] .keynote-factor__rows {
+  gap: 5px;
+}
+
+.keynote-factors[data-players="4"] .keynote-factor__name {
+  font-size: 21px;
+}
+
+.keynote-factors[data-players="4"] .keynote-factor__weight {
+  font-size: 16px;
+}
+
+.keynote-factors[data-players="4"] .keynote-factor__track {
+  height: 32px;
+  border-radius: 8px;
+}
+
+.keynote-factors[data-players="4"] .keynote-factor__initial {
+  width: 30px;
+  height: 30px;
+  font-size: 12px;
+}
+
+.keynote-factors[data-players="4"] .keynote-factor__row:has(.keynote-factor__initial) {
+  grid-template-columns: 36px minmax(0, 1fr) 62px;
+  gap: 14px;
+}
+
+.keynote-factors[data-players="4"] .keynote-factor__value {
+  font-size: 26px;
 }
