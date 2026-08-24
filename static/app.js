@@ -974,8 +974,9 @@ function slideWrappedAxisLabel(label, labelCount = 7) {
   const text = String(label || "")
     .replace(/<br\s*\/?>/gi, " ")
     .trim();
+  // Deck slides title-case profile names so the radar axes match the slide copy.
   const formatted =
-    chartSourceEl?.value === "profiles" ? humanizeProfileName(text) : humanizeFootballLabel(text);
+    chartSourceEl?.value === "profiles" ? keynoteProfileTitle(text) : humanizeFootballLabel(text);
   if (formatted.length <= 24) {
     return formatted;
   }
@@ -2238,13 +2239,15 @@ const DARK_EXPORT_POLAR_GRID = {
   },
 };
 
-function applyDarkExportPlotlyTheme(exportLayout) {
-  exportLayout.paper_bgcolor = APP_EXPORT_BG;
-  exportLayout.plot_bgcolor = APP_EXPORT_BG;
+function applyDarkExportPlotlyTheme(exportLayout, { transparent = false } = {}) {
+  exportLayout.paper_bgcolor = transparent ? "rgba(0,0,0,0)" : APP_EXPORT_BG;
+  exportLayout.plot_bgcolor = transparent ? "rgba(0,0,0,0)" : APP_EXPORT_BG;
   if (!exportLayout.polar) {
     return exportLayout;
   }
-  exportLayout.polar.bgcolor = APP_EXPORT_POLAR_BG;
+  exportLayout.polar.bgcolor = transparent
+    ? "rgba(255, 255, 255, 0.035)"
+    : APP_EXPORT_POLAR_BG;
   if (exportLayout.polar.angularaxis) {
     exportLayout.polar.angularaxis.gridcolor =
       DARK_EXPORT_POLAR_GRID.angularaxis.gridcolor;
@@ -2283,7 +2286,7 @@ const DECK_EXPORT = {
   captureConcurrency: 1,
   slideTimeoutMs: 90000,
   imageFormat: "jpeg",
-  jpegQuality: 0.9,
+  jpegQuality: 0.94,
 };
 
 let plotlyCaptureQueue = Promise.resolve();
@@ -2414,14 +2417,19 @@ function drilldownChartLabelFontSize(labelCount) {
   return 14;
 }
 
+// Slide radars are exported small and scaled up into the 1920px slide, so these
+// sizes are deliberately larger than the on-screen chart.
 function drilldownSlideChartLabelFontSize(labelCount) {
+  if (labelCount >= 9) {
+    return 26;
+  }
   if (labelCount >= 7) {
-    return 21;
+    return 30;
   }
   if (labelCount >= 5) {
-    return 23;
+    return 33;
   }
-  return 25;
+  return 36;
 }
 
 function boostExportRadarTraces(snapshot) {
@@ -2451,17 +2459,19 @@ function drilldownSlideChartMargins(labelCount, ticktext = [], panelWidth = 1240
     ? labelCount <= 3
       ? 118
       : 96
-    : labelCount >= 7
-      ? 136
-      : labelCount <= 3
-        ? 108
-        : 88;
+    : labelCount >= 9
+      ? 176
+      : labelCount >= 7
+        ? 194
+        : labelCount <= 3
+          ? 168
+          : 186;
   const side = baseSide + lineBoost * 2;
   return {
     l: side + 14,
     r: side + 10,
-    t: 40 + lineBoost * 2,
-    b: 40 + lineBoost * 2,
+    t: 62 + lineBoost,
+    b: 62 + lineBoost,
   };
 }
 
@@ -2567,7 +2577,7 @@ function buildMainRadarSlideChartLayout(layout, labelCount = 8) {
   const exportLayout = JSON.parse(JSON.stringify(layout));
   const axisFontSize = Math.max(drilldownSlideChartLabelFontSize(labelCount) - 2, 16);
 
-  applyDarkExportPlotlyTheme(exportLayout);
+  applyDarkExportPlotlyTheme(exportLayout, { transparent: true });
   exportLayout.autosize = false;
   exportLayout.showlegend = false;
 
@@ -2579,17 +2589,19 @@ function buildMainRadarSlideChartLayout(layout, labelCount = 8) {
     exportLayout.polar.angularaxis.tickfont.color = "#e2e8f0";
   }
   if (exportLayout.polar) {
-    exportLayout.polar.domain = { x: [0.06, 0.94], y: [0.04, 0.97] };
+    exportLayout.polar.domain = { x: [0.02, 0.98], y: [0.01, 0.99] };
   }
 
+  // Side margins carry the long axis labels; top/bottom only need room for the
+  // single label that sits on the vertical axis.
   const ticktext = exportLayout.polar?.angularaxis?.ticktext || [];
   const lineBoost = (maxWrappedLabelLines(ticktext) - 1) * 16;
-  const side = (labelCount >= 8 ? 80 : labelCount <= 4 ? 96 : 68) + lineBoost;
+  const side = (labelCount >= 8 ? 200 : labelCount <= 4 ? 240 : 220) + lineBoost;
   exportLayout.margin = {
     l: side,
     r: side,
-    t: 20 + Math.round(lineBoost * 0.35),
-    b: 20 + Math.round(lineBoost * 0.2),
+    t: 62 + lineBoost,
+    b: 62 + lineBoost,
   };
 
   return exportLayout;
@@ -2644,7 +2656,7 @@ function buildDrilldownSlideChartLayout(
   const axisFontSize = drilldownSlideChartLabelFontSize(labelCount);
   const narrow = panelWidth < 560;
 
-  applyDarkExportPlotlyTheme(exportLayout);
+  applyDarkExportPlotlyTheme(exportLayout, { transparent: true });
   exportLayout.width = panelWidth;
   exportLayout.height = panelHeight;
   exportLayout.autosize = false;
@@ -2664,7 +2676,7 @@ function buildDrilldownSlideChartLayout(
     exportLayout.polar.angularaxis.showticklabels = true;
   }
   if (exportLayout.polar) {
-    exportLayout.polar.domain = { x: [0.1, 0.9], y: [0.12, 0.88] };
+    exportLayout.polar.domain = { x: [0.02, 0.98], y: [0.02, 0.98] };
   }
   const ticktext = exportLayout.polar?.angularaxis?.ticktext || [];
   exportLayout.margin = drilldownSlideChartMargins(labelCount, ticktext, panelWidth);
@@ -2946,6 +2958,34 @@ function fitImageDimensions(naturalWidth, naturalHeight, maxWidth, maxHeight) {
   };
 }
 
+// html2canvas ignores object-fit and stretches images to their box, which
+// squashes every radar. Give marked images explicit letterboxed pixel sizes.
+function fitExportImagesToParents(surface) {
+  surface.querySelectorAll("img[data-fit-parent]").forEach((image) => {
+    const parent = image.parentElement;
+    if (!parent || !image.naturalWidth || !image.naturalHeight) {
+      return;
+    }
+    const style = window.getComputedStyle(parent);
+    const maxWidth =
+      parent.clientWidth -
+      (parseFloat(style.paddingLeft) || 0) -
+      (parseFloat(style.paddingRight) || 0);
+    const maxHeight =
+      parent.clientHeight -
+      (parseFloat(style.paddingTop) || 0) -
+      (parseFloat(style.paddingBottom) || 0);
+    if (maxWidth <= 0 || maxHeight <= 0) {
+      return;
+    }
+    const scale = Math.min(maxWidth / image.naturalWidth, maxHeight / image.naturalHeight);
+    image.style.width = `${Math.round(image.naturalWidth * scale)}px`;
+    image.style.height = `${Math.round(image.naturalHeight * scale)}px`;
+    image.style.maxWidth = "none";
+    image.style.maxHeight = "none";
+  });
+}
+
 function applyFittedImageSize(image, fitted) {
   image.width = fitted.width;
   image.height = fitted.height;
@@ -2979,6 +3019,8 @@ async function renderExportSurfaceToPng(
 
     // Off-screen flex layouts need an explicit layout pass before html2canvas measures them.
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    fitExportImagesToParents(surface);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
     const captureWidth = Math.round(surface.scrollWidth || surface.offsetWidth);
     const captureHeight = Math.round(surface.scrollHeight || surface.offsetHeight);
 
@@ -3008,11 +3050,8 @@ async function captureDrilldownSlidePng({
   title = "",
   exportScale = DRILLDOWN_CARD_EXPORT.imageScale,
 }) {
-  const barsSource = document.getElementById(barsId);
-  if (!barsSource) {
-    throw new Error("Factor bars are not ready yet.");
-  }
-
+  // Bars are drawn from the payload rather than cloned from the DOM, so only the
+  // chart element and the drilldown entry need to exist.
   const drilldownIndex = drilldownIndexFromExportIds({ chartId, barsId });
   const entry = state.lastChartData?.profile_drilldowns?.[drilldownIndex];
   if (!entry) {
@@ -3022,26 +3061,73 @@ async function captureDrilldownSlidePng({
   const chartPng = await capturePlotPng(chartId, {
     compact: true,
     drilldownSlide: true,
-    width: 1040,
-    height: 1040,
+    width: 1280,
+    height: 800,
     exportScale: 2,
   });
   if (!chartPng) {
     throw new Error("Chart is not ready yet.");
   }
 
-  const players = getComparedPlayersFromChartData(state.lastChartData);
-  const enrichedPlayers = enrichDrilldownPlayers(players, state.lastChartData?.players || []);
+  const data = state.lastChartData;
+  const players = enrichDrilldownPlayers(
+    entry.players?.length ? entry.players : drilldownExportPlayers(entry),
+    data?.players || [],
+  );
+  const profileIndex = (data?.labels || []).indexOf(entry.profile);
 
   const slide = document.createElement("div");
   slide.className = "keynote-slide keynote-drilldown";
 
   const head = document.createElement("header");
   head.className = "keynote-drilldown__head";
+
+  const headText = document.createElement("div");
+  headText.className = "keynote-drilldown__head-text";
+  const eyebrow = document.createElement("p");
+  eyebrow.className = "keynote-drilldown__eyebrow";
+  eyebrow.textContent = "Profile breakdown";
+  headText.appendChild(eyebrow);
   const heading = document.createElement("h2");
   heading.className = "keynote-drilldown__title";
-  heading.textContent = title || "Profile";
-  head.appendChild(heading);
+  heading.textContent = keynoteProfileTitle(title || entry.profile || "Profile");
+  headText.appendChild(heading);
+
+  const barCount = (entry.bar_labels || entry.labels || []).length;
+  const radarCount = (entry.labels || []).length;
+  const sub = document.createElement("p");
+  sub.className = "keynote-drilldown__sub";
+  sub.textContent =
+    radarCount > barCount
+      ? `The ${barCount} factors that weigh heaviest in this profile — the radar shows all ${radarCount}`
+      : "Every factor that feeds this profile";
+  headText.appendChild(sub);
+  head.appendChild(headText);
+
+  // Tie each drilldown back to the headline score on the front page.
+  if (profileIndex >= 0) {
+    const scores = document.createElement("div");
+    scores.className = "keynote-drilldown__scores";
+    players.slice(0, 4).forEach((player, index) => {
+      const chartPlayer = (data?.players || [])[index];
+      const value = Number(chartPlayer?.radar_values?.[profileIndex]);
+      if (!Number.isFinite(value)) {
+        return;
+      }
+      const chip = document.createElement("div");
+      chip.className = `keynote-drilldown__score ${keynoteBandClass(value)}`;
+      chip.innerHTML = `
+        <span class="keynote-drilldown__score-name">${player.player || ""}</span>
+        <span class="keynote-drilldown__score-value">${Math.round(value)}</span>
+        <span class="keynote-drilldown__score-band">${keynoteBandLabel(value)}</span>
+      `;
+      scores.appendChild(chip);
+    });
+    if (scores.childElementCount) {
+      head.appendChild(scores);
+    }
+  }
+  head.appendChild(buildKeynoteCrest());
   slide.appendChild(head);
 
   const body = document.createElement("div");
@@ -3050,65 +3136,60 @@ async function captureDrilldownSlidePng({
   const radarCol = document.createElement("div");
   radarCol.className = "keynote-drilldown__radar";
 
-  if (enrichedPlayers.length > 0) {
-    const playersRow = document.createElement("div");
-    playersRow.className = "keynote-drilldown__players";
-    enrichedPlayers.slice(0, 4).forEach((player, index) => {
-      const color = seasonColors[index % seasonColors.length];
-      const cell = document.createElement("div");
-      cell.className = "keynote-drilldown__player";
-
-      const photo = document.createElement("div");
-      photo.className = "keynote-drilldown__photo";
-      photo.style.borderColor = color;
-      const photoUrl = playerPhotoUrl(player);
-      if (photoUrl) {
-        const image = document.createElement("img");
-        image.src = photoUrl;
-        image.alt = player.player || "Player";
-        image.loading = "eager";
-        image.decoding = "sync";
-        photo.appendChild(image);
-      } else {
-        const placeholder = document.createElement("div");
-        placeholder.className = "keynote-drilldown__photo-placeholder";
-        placeholder.textContent = playerInitials(player.player || "");
-        photo.appendChild(placeholder);
-      }
-      cell.appendChild(photo);
-
-      const name = document.createElement("p");
-      name.className = "keynote-drilldown__player-name";
-      name.style.color = color;
-      name.textContent = player.player || "";
-      cell.appendChild(name);
-
-      playersRow.appendChild(cell);
-    });
-    radarCol.appendChild(playersRow);
-  }
-
   const chartWrap = document.createElement("div");
   chartWrap.className = "keynote-drilldown__chart-wrap";
   const chartImage = document.createElement("img");
   chartImage.className = "keynote-drilldown__chart-img";
+  chartImage.dataset.fitParent = "true";
   chartImage.src = chartPng;
   chartImage.alt = title || "Profile chart";
   chartWrap.appendChild(chartImage);
   radarCol.appendChild(chartWrap);
+
+  if (players.length > 0) {
+    const playersRow = document.createElement("div");
+    playersRow.className = "keynote-drilldown__players";
+    playersRow.dataset.count = String(Math.min(players.length, 4));
+    players.slice(0, 4).forEach((player, index) => {
+      const color = seasonColors[index % seasonColors.length];
+      const cell = document.createElement("div");
+      cell.className = "keynote-drilldown__player";
+      cell.style.setProperty("--player-color", color);
+      cell.appendChild(
+        buildKeynotePhoto(player, { color, className: "keynote-drilldown__photo" }),
+      );
+
+      const identity = document.createElement("div");
+      identity.className = "keynote-drilldown__player-identity";
+      const name = document.createElement("p");
+      name.className = "keynote-drilldown__player-name";
+      name.textContent = player.player || "";
+      identity.appendChild(name);
+      const minutes = keynoteMinutesLabel(player);
+      if (minutes) {
+        const minutesEl = document.createElement("p");
+        minutesEl.className = "keynote-drilldown__player-meta";
+        minutesEl.textContent = minutes;
+        identity.appendChild(minutesEl);
+      }
+      cell.appendChild(identity);
+      playersRow.appendChild(cell);
+    });
+    radarCol.appendChild(playersRow);
+  }
   body.appendChild(radarCol);
 
   const barsCol = document.createElement("div");
   barsCol.className = "keynote-drilldown__bars";
-  const barsClone = prepareBarsExportClone(barsSource, { deckExport: true });
-  const factorGroupCount = barsClone.querySelectorAll(".factor-bar-group").length;
-  if (factorGroupCount > 0) {
-    barsCol.style.setProperty("--factor-groups", String(factorGroupCount));
-  }
-  barsCol.appendChild(barsClone);
+  barsCol.appendChild(buildKeynoteFactorBars(entry, players));
   body.appendChild(barsCol);
 
   slide.appendChild(body);
+
+  const footer = document.createElement("footer");
+  footer.className = "keynote-drilldown__footer";
+  footer.appendChild(buildKeynoteFootnote(data));
+  slide.appendChild(footer);
 
   const surface = document.createElement("div");
   surface.className = "export-capture-surface export-capture-surface-app";
@@ -3120,24 +3201,231 @@ async function captureDrilldownSlidePng({
   });
 }
 
-function keynoteRefBarClass(value) {
-  if (value == null || Number.isNaN(value)) {
-    return "keynote-bar--low";
+// Percentile bands shared by every deck slide, matching percentileBarColors().
+function keynoteBandClass(value) {
+  const numeric = Number(value);
+  if (value == null || !Number.isFinite(numeric)) {
+    return "keynote-band--na";
   }
-  if (value >= 66) {
-    return "keynote-bar--high";
+  if (numeric >= 80) {
+    return "keynote-band--elite";
   }
-  if (value >= 33) {
-    return "keynote-bar--mid";
+  if (numeric >= 60) {
+    return "keynote-band--good";
   }
-  return "keynote-bar--low";
+  if (numeric >= 40) {
+    return "keynote-band--fair";
+  }
+  if (numeric >= 25) {
+    return "keynote-band--poor";
+  }
+  return "keynote-band--weak";
+}
+
+function buildKeynoteFactorBars(entry, players) {
+  const grid = document.createElement("div");
+  grid.className = "keynote-factors";
+
+  const labels = entry.bar_labels || entry.labels || [];
+  const weights = entry.bar_weights || [];
+  const multiPlayer = players.length > 1;
+  grid.dataset.factors = String(labels.length);
+
+  labels.forEach((label, factorIndex) => {
+    const factor = document.createElement("div");
+    factor.className = "keynote-factor";
+
+    const factorHead = document.createElement("div");
+    factorHead.className = "keynote-factor__head";
+    const name = document.createElement("p");
+    name.className = "keynote-factor__name";
+    name.textContent = humanizeFootballLabel(label);
+    factorHead.appendChild(name);
+    if (weights[factorIndex] != null) {
+      const weight = document.createElement("span");
+      weight.className = "keynote-factor__weight";
+      weight.textContent = `${Math.round(weights[factorIndex])}% of profile`;
+      factorHead.appendChild(weight);
+    }
+    factor.appendChild(factorHead);
+
+    const rows = document.createElement("div");
+    rows.className = "keynote-factor__rows";
+    players.forEach((player, playerIndex) => {
+      const resolved = resolveBarScores(
+        player.bar_radar_values?.[factorIndex],
+        player.bar_raw_values?.[factorIndex],
+      );
+      const percentile = barTrackPercentile(resolved.percentile, resolved.rawValue);
+      const row = document.createElement("div");
+      row.className = `keynote-factor__row ${keynoteBandClass(percentile)}`;
+
+      if (multiPlayer) {
+        const initial = document.createElement("span");
+        initial.className = "keynote-factor__initial";
+        initial.style.background = seasonColors[playerIndex % seasonColors.length];
+        initial.textContent = playerInitials(player.player || "");
+        row.appendChild(initial);
+      }
+
+      const track = document.createElement("div");
+      track.className = "keynote-factor__track";
+      if (percentile != null && Number.isFinite(Number(percentile))) {
+        const fill = document.createElement("span");
+        fill.className = "keynote-factor__fill";
+        fill.style.width = `${Math.max(2, Math.min(100, Number(percentile)))}%`;
+        track.appendChild(fill);
+      }
+      row.appendChild(track);
+
+      const value = document.createElement("span");
+      value.className = "keynote-factor__value";
+      value.textContent = formatBarInnerValue(resolved.percentile, resolved.rawValue).replace(
+        "%",
+        "",
+      );
+      row.appendChild(value);
+
+      rows.appendChild(row);
+    });
+    factor.appendChild(rows);
+    grid.appendChild(factor);
+  });
+
+  return grid;
+}
+
+function keynoteBandLabel(value) {
+  const numeric = Number(value);
+  if (value == null || !Number.isFinite(numeric)) {
+    return "No data";
+  }
+  if (numeric >= 80) {
+    return "Elite";
+  }
+  if (numeric >= 60) {
+    return "Strong";
+  }
+  if (numeric >= 40) {
+    return "Average";
+  }
+  if (numeric >= 25) {
+    return "Below par";
+  }
+  return "Weak";
+}
+
+// Impect sends profile names in mixed case ("PV DEEP CREATOR", "PV Defensive").
+function keynoteProfileTitle(label) {
+  const text = humanizeProfileName(label);
+  if (!text || text !== text.toUpperCase() || text.length <= 3) {
+    return text;
+  }
+  return text.charAt(0) + text.slice(1).toLowerCase();
+}
+
+function keynoteMinutesLabel(player) {
+  const minutes = Math.round(
+    Number(player?.minutes ?? player?.play_duration_minutes) || 0,
+  );
+  return minutes > 0 ? `${minutes.toLocaleString()} min` : "";
+}
+
+function buildKeynotePhoto(source, { color, round = false, className }) {
+  const photo = document.createElement("div");
+  photo.className = className;
+  if (round) {
+    photo.classList.add(`${className}--round`);
+  }
+  if (color) {
+    photo.style.borderColor = color;
+  }
+  const photoUrl = source?.photo_url || source?.photoUrl || null;
+  if (photoUrl) {
+    const image = document.createElement("img");
+    image.src = photoUrl;
+    image.alt = source?.name || source?.player || "Player";
+    image.loading = "eager";
+    image.decoding = "sync";
+    photo.appendChild(image);
+  } else {
+    const placeholder = document.createElement("div");
+    placeholder.className = `${className}-placeholder`;
+    placeholder.textContent = playerInitials(source?.name || source?.player || "");
+    photo.appendChild(placeholder);
+  }
+  return photo;
+}
+
+function buildKeynoteBar(value, { leader = false } = {}) {
+  const bar = document.createElement("div");
+  bar.className = `keynote-bar ${keynoteBandClass(value)}`;
+  if (leader) {
+    bar.classList.add("keynote-bar--leader");
+  }
+
+  if (value != null && Number.isFinite(Number(value))) {
+    const fill = document.createElement("span");
+    fill.className = "keynote-bar__fill";
+    fill.style.width = `${Math.max(2, Math.min(100, Number(value)))}%`;
+    bar.appendChild(fill);
+  }
+
+  const valueEl = document.createElement("span");
+  valueEl.className = "keynote-bar__value";
+  if (leader) {
+    const star = document.createElement("span");
+    star.className = "keynote-bar__star";
+    star.textContent = "★";
+    valueEl.appendChild(star);
+  }
+  const number = document.createElement("span");
+  number.className = "keynote-bar__number";
+  number.textContent =
+    value == null || !Number.isFinite(Number(value)) ? "—" : `${Math.round(Number(value))}`;
+  valueEl.appendChild(number);
+  bar.appendChild(valueEl);
+
+  return bar;
+}
+
+function buildKeynoteFootnote(data, extra = "") {
+  const benchmark = data?.benchmark;
+  const parts = [];
+  if (benchmark?.cohort_size) {
+    parts.push(`Percentile rank vs ${benchmark.cohort_size} players at this position`);
+    const competitions = (benchmark.competitions || []).join(", ");
+    if (competitions) {
+      parts.push(competitions);
+    }
+    parts.push(`${benchmark.min_minutes || 600}+ minutes`);
+  } else {
+    parts.push("Position-specific profiles · one selected season per player");
+  }
+  if (extra) {
+    parts.push(extra);
+  }
+  const note = document.createElement("p");
+  note.className = "keynote-footnote";
+  note.textContent = parts.join("  ·  ");
+  return note;
+}
+
+function buildKeynoteCrest() {
+  const crest = document.createElement("img");
+  crest.className = "keynote-crest";
+  crest.src = "/standalone/port-vale-badge.png?v=2";
+  crest.alt = "Port Vale";
+  crest.loading = "eager";
+  crest.decoding = "sync";
+  return crest;
 }
 
 function buildKeynoteComparisonSlide(data) {
   const players = studioComparisonPlayersFromChart(data);
   const profiles = (data.labels || []).map((label) => ({
     apiName: label,
-    label: humanizeProfileName(label),
+    label: keynoteProfileTitle(label),
   }));
   if (!players.length || profiles.length < 2) {
     throw new Error("Comparison front page is not ready yet.");
@@ -3155,23 +3443,60 @@ function buildKeynoteComparisonSlide(data) {
     profiles.map((item) => item.apiName),
   );
 
+  // Deck colours follow the radar traces (seasonColors) so a player keeps the
+  // same colour on every slide. The reference column stays silver to avoid
+  // clashing with the first player's gold.
+  const columns = players.map((player, index) => ({
+    kind: "player",
+    name: player.name,
+    photo_url: player.photo_url,
+    color: seasonColors[index % seasonColors.length],
+    // season_label already carries the league, so the club line must not repeat it.
+    meta: player.club || player.league || "",
+    season: player.season_label || player.league || "",
+    minutes: keynoteMinutesLabel(player),
+    tag: "",
+    scores: profiles.map((profile) => player.profileScores?.[profile.apiName] ?? null),
+  }));
+
+  if (reference?.player) {
+    columns.push({
+      kind: "reference",
+      name: reference.player,
+      photo_url: reference.photo_url,
+      color: "#e2e8f0",
+      meta: reference.club || "Port Vale FC",
+      season: reference.season_label || "",
+      minutes: keynoteMinutesLabel(reference),
+      tag: `Our most-used ${positionShort}`,
+      scores: profiles.map((profile) => referenceScores[profile.apiName] ?? null),
+    });
+  }
+
   const slide = document.createElement("div");
   slide.className = "keynote-slide keynote-comparison";
-  slide.style.setProperty("--player-cols", String(players.length));
-  slide.style.setProperty("--profile-cols", String(profiles.length));
-  slide.dataset.players = String(players.length);
+  slide.style.setProperty("--player-cols", String(columns.length));
+  slide.style.setProperty("--profile-rows", String(profiles.length));
+  slide.dataset.players = String(columns.length);
   slide.dataset.profiles = String(profiles.length);
 
   const head = document.createElement("header");
   head.className = "keynote-comparison__head";
   head.innerHTML = `
-    <div>
-      <p class="keynote-comparison__eyebrow">PLAYER COMPARISON</p>
-      <h1 class="keynote-comparison__title">${String(positionLabel).toUpperCase()} COMPARISON</h1>
-      <p class="keynote-comparison__sub">One selected season per player at role</p>
+    <div class="keynote-comparison__titles">
+      <p class="keynote-comparison__eyebrow">Port Vale recruitment · player comparison</p>
+      <h1 class="keynote-comparison__title">${String(positionLabel).toUpperCase()}</h1>
+      <p class="keynote-comparison__sub">Higher bar is better — every score is a percentile rank against the same benchmark</p>
     </div>
-    <span class="keynote-comparison__badge">${positionShort}</span>
   `;
+  const brand = document.createElement("div");
+  brand.className = "keynote-comparison__brand";
+  brand.appendChild(buildKeynoteCrest());
+  const badge = document.createElement("span");
+  badge.className = "keynote-comparison__badge";
+  badge.textContent = positionShort;
+  brand.appendChild(badge);
+  head.appendChild(brand);
   slide.appendChild(head);
 
   const table = document.createElement("div");
@@ -3182,149 +3507,76 @@ function buildKeynoteComparisonSlide(data) {
   corner.setAttribute("aria-hidden", "true");
   table.appendChild(corner);
 
-  players.forEach((player, index) => {
-    const color = STUDIO_PLAYER_COLORS[index % STUDIO_PLAYER_COLORS.length];
+  columns.forEach((column, index) => {
     const cell = document.createElement("div");
-    cell.className = "keynote-comparison__player";
+    cell.className = `keynote-comparison__player keynote-comparison__player--${column.kind}`;
     cell.style.gridColumn = String(index + 2);
+    cell.style.setProperty("--player-color", column.color);
 
-    const photo = document.createElement("div");
-    photo.className = "keynote-comparison__photo";
-    photo.style.borderColor = color.main;
-    if (player.photo_url) {
-      const image = document.createElement("img");
-      image.src = player.photo_url;
-      image.alt = player.name;
-      image.loading = "eager";
-      image.decoding = "sync";
-      photo.appendChild(image);
-    } else {
-      const placeholder = document.createElement("div");
-      placeholder.className = "keynote-comparison__photo-placeholder";
-      placeholder.textContent = playerInitials(player.name);
-      photo.appendChild(placeholder);
-    }
-    cell.appendChild(photo);
+    cell.appendChild(
+      buildKeynotePhoto(column, {
+        color: column.color,
+        className: "keynote-comparison__photo",
+      }),
+    );
 
     const name = document.createElement("p");
     name.className = "keynote-comparison__name";
-    name.style.color = color.main;
-    name.textContent = player.name;
+    name.textContent = column.name;
     cell.appendChild(name);
 
-    const minutes = document.createElement("p");
-    minutes.className = "keynote-comparison__minutes";
-    const minMatch = studioMinutesLabel(player).match(/(\d+)′/);
-    minutes.textContent = minMatch ? `(${minMatch[1]}′)` : "";
-    cell.appendChild(minutes);
+    if (column.meta) {
+      const meta = document.createElement("p");
+      meta.className = "keynote-comparison__meta";
+      meta.textContent = column.meta;
+      cell.appendChild(meta);
+    }
+
+    const seasonLine = [column.season, column.minutes].filter(Boolean).join("  ·  ");
+    if (seasonLine) {
+      const minutes = document.createElement("p");
+      minutes.className = "keynote-comparison__minutes";
+      minutes.textContent = seasonLine;
+      cell.appendChild(minutes);
+    }
+
+    if (column.tag) {
+      const tag = document.createElement("p");
+      tag.className = "keynote-comparison__tag";
+      tag.textContent = column.tag;
+      cell.appendChild(tag);
+    }
 
     table.appendChild(cell);
   });
 
-  const refCell = document.createElement("div");
-  refCell.className = "keynote-comparison__player";
-  refCell.style.gridColumn = String(players.length + 2);
-  if (reference?.player) {
-    const photo = document.createElement("div");
-    photo.className = "keynote-comparison__photo";
-    photo.style.borderColor = "var(--gold)";
-    if (reference.photo_url) {
-      const image = document.createElement("img");
-      image.src = reference.photo_url;
-      image.alt = reference.player;
-      image.loading = "eager";
-      image.decoding = "sync";
-      photo.appendChild(image);
-    } else {
-      const placeholder = document.createElement("div");
-      placeholder.className = "keynote-comparison__photo-placeholder";
-      placeholder.textContent = playerInitials(reference.player);
-      photo.appendChild(placeholder);
-    }
-    refCell.appendChild(photo);
-    const name = document.createElement("p");
-    name.className = "keynote-comparison__name";
-    name.style.color = "var(--gold)";
-    name.textContent = reference.player;
-    refCell.appendChild(name);
-    const minutes = document.createElement("p");
-    minutes.className = "keynote-comparison__minutes";
-    const refMin = studioMinutesLabel(reference).match(/(\d+)′/);
-    minutes.textContent = refMin ? `(${refMin[1]}′)` : "";
-    refCell.appendChild(minutes);
-    const hint = document.createElement("p");
-    hint.className = "keynote-comparison__ref-hint";
-    hint.textContent = `PV most mins · ${positionShort}`;
-    refCell.appendChild(hint);
-  } else {
-    const photo = document.createElement("div");
-    photo.className = "keynote-comparison__photo keynote-comparison__photo--round";
-    const badge = document.createElement("img");
-    badge.src = "/standalone/port-vale-badge.png?v=2";
-    badge.alt = "Port Vale";
-    photo.appendChild(badge);
-    refCell.appendChild(photo);
-    const name = document.createElement("p");
-    name.className = "keynote-comparison__name";
-    name.style.color = "var(--gold)";
-    name.textContent = "Port Vale";
-    refCell.appendChild(name);
-  }
-  table.appendChild(refCell);
-
-  profiles.forEach((profile) => {
+  profiles.forEach((profile, profileIndex) => {
     const row = document.createElement("div");
     row.className = "keynote-comparison__row";
 
+    const rowValues = columns.map((column) => column.scores[profileIndex]);
+    const numericValues = rowValues.filter(
+      (value) => value != null && Number.isFinite(Number(value)),
+    );
+    // Best of everyone on show, including our own player — that is the
+    // comparison a manager actually reads off this slide.
+    const leaderValue = numericValues.length > 1 ? Math.max(...numericValues.map(Number)) : null;
+
     const label = document.createElement("div");
     label.className = "keynote-comparison__label";
-    const parts = studioProfileLabelParts(profile.label);
-    label.innerHTML = parts.sub
-      ? `<p class="keynote-comparison__label-main">${parts.main}</p><p class="keynote-comparison__label-sub">${parts.sub}</p>`
-      : `<p class="keynote-comparison__label-main">${parts.main}</p>`;
+    const labelMain = document.createElement("p");
+    labelMain.className = "keynote-comparison__label-main";
+    labelMain.textContent = profile.label;
+    label.appendChild(labelMain);
     row.appendChild(label);
 
-    const rowValues = players.map((player) => player.profileScores?.[profile.apiName] ?? null);
-    const numericValues = rowValues.filter((value) => value != null);
-    const leaderValue =
-      numericValues.length > 0 ? Math.max(...numericValues.map((value) => Number(value))) : null;
-
-    players.forEach((player, index) => {
-      const value = player.profileScores?.[profile.apiName];
-      const color = STUDIO_PLAYER_COLORS[index % STUDIO_PLAYER_COLORS.length];
-      const bar = document.createElement("div");
-      bar.className = "keynote-bar";
-      bar.style.background = color.bg;
-      if (value != null) {
-        const fill = document.createElement("span");
-        fill.className = "keynote-bar__fill";
-        fill.style.width = `${Math.max(0, Math.min(100, Number(value)))}%`;
-        fill.style.background = color.main;
-        bar.appendChild(fill);
-      }
-      const valueEl = document.createElement("span");
-      valueEl.className = "keynote-bar__value";
-      valueEl.style.color = color.main;
-      valueEl.textContent = value == null ? "—" : `${Math.round(value)}%`;
-      bar.appendChild(valueEl);
-      row.appendChild(bar);
+    rowValues.forEach((value) => {
+      row.appendChild(
+        buildKeynoteBar(value, {
+          leader: leaderValue != null && Number(value) === leaderValue,
+        }),
+      );
     });
-
-    const refValue = referenceScores[profile.apiName];
-    const refBar = document.createElement("div");
-    refBar.className = `keynote-bar keynote-bar--ref ${keynoteRefBarClass(refValue)}`;
-    refBar.style.background = "rgba(245, 197, 24, 0.12)";
-    if (refValue != null) {
-      const fill = document.createElement("span");
-      fill.className = "keynote-bar__fill";
-      fill.style.width = `${Math.max(0, Math.min(100, refValue))}%`;
-      refBar.appendChild(fill);
-    }
-    const refValueEl = document.createElement("span");
-    refValueEl.className = "keynote-bar__value";
-    refValueEl.textContent = refValue == null ? "—" : `${Math.round(refValue)}%`;
-    refBar.appendChild(refValueEl);
-    row.appendChild(refBar);
 
     table.appendChild(row);
   });
@@ -3334,49 +3586,22 @@ function buildKeynoteComparisonSlide(data) {
   const footer = document.createElement("footer");
   footer.className = "keynote-comparison__footer";
 
-  const legendGrid = document.createElement("div");
-  legendGrid.className = "keynote-comparison__legend-grid";
-  legendGrid.style.setProperty("--player-cols", String(players.length));
-
-  const legendCorner = document.createElement("div");
-  legendCorner.className = "keynote-comparison__legend-corner";
-  legendGrid.appendChild(legendCorner);
-
-  players.forEach((player, index) => {
-    const color = STUDIO_PLAYER_COLORS[index % STUDIO_PLAYER_COLORS.length];
-    const cell = document.createElement("div");
-    cell.className = "keynote-comparison__legend-cell";
-    cell.style.gridColumn = String(index + 2);
-    const meta = [player.club, player.league].filter(Boolean).join(" · ") || player.season_label || "";
-    cell.innerHTML = `
-      <span class="keynote-comparison__legend-swatch" style="background:${color.main}"></span>
-      <span class="keynote-comparison__legend-name" style="color:${color.main}">${player.name}</span>
-      <span class="keynote-comparison__legend-meta">${meta || "—"}</span>
-    `;
-    legendGrid.appendChild(cell);
+  const scale = document.createElement("div");
+  scale.className = "keynote-scale";
+  [
+    ["keynote-band--weak", "0–24 weak"],
+    ["keynote-band--poor", "25–39 below par"],
+    ["keynote-band--fair", "40–59 average"],
+    ["keynote-band--good", "60–79 strong"],
+    ["keynote-band--elite", "80–100 elite"],
+  ].forEach(([bandClass, text]) => {
+    const item = document.createElement("span");
+    item.className = `keynote-scale__item ${bandClass}`;
+    item.innerHTML = `<span class="keynote-scale__swatch"></span>${text}`;
+    scale.appendChild(item);
   });
-
-  if (reference?.player) {
-    const cell = document.createElement("div");
-    cell.className = "keynote-comparison__legend-cell keynote-comparison__legend-cell--ref";
-    cell.style.gridColumn = String(players.length + 2);
-    cell.innerHTML = `
-      <span class="keynote-comparison__legend-swatch" style="background:var(--gold)"></span>
-      <span class="keynote-comparison__legend-name" style="color:var(--gold)">${reference.player}</span>
-      <span class="keynote-comparison__legend-meta">Port Vale · ${positionShort}</span>
-    `;
-    legendGrid.appendChild(cell);
-  }
-
-  footer.appendChild(legendGrid);
-
-  const note = document.createElement("p");
-  note.className = "keynote-comparison__note";
-  const benchmark = data.benchmark;
-  note.textContent = benchmark?.cohort_size
-    ? `Percentiles vs ${benchmark.cohort_size} players · ${(benchmark.competitions || []).join(", ")} · ${benchmark.min_minutes || 600}+ min`
-    : "Position-specific profiles · one selected season per player.";
-  footer.appendChild(note);
+  footer.appendChild(scale);
+  footer.appendChild(buildKeynoteFootnote(data, "★ = best on this slide"));
   slide.appendChild(footer);
 
   return slide;
@@ -3399,10 +3624,76 @@ async function captureComparisonFrontSlidePng({ exportScale = 1 } = {}) {
   });
 }
 
+// Best / worst profile for a radar player, used for the read-out cards.
+function keynoteProfileExtremes(player, labels) {
+  const scored = (labels || [])
+    .map((label, index) => ({
+      label: keynoteProfileTitle(label),
+      value: Number(player?.radar_values?.[index]),
+    }))
+    .filter((entry) => Number.isFinite(entry.value));
+  if (scored.length < 2) {
+    return null;
+  }
+  const sorted = [...scored].sort((a, b) => b.value - a.value);
+  return { best: sorted[0], worst: sorted[sorted.length - 1] };
+}
+
+function buildKeynoteRadarPlayerCard(player, index, labels) {
+  const color = seasonColors[index % seasonColors.length];
+  const card = document.createElement("div");
+  card.className = "keynote-radar__card";
+  card.style.setProperty("--player-color", color);
+
+  const top = document.createElement("div");
+  top.className = "keynote-radar__card-top";
+  top.appendChild(
+    buildKeynotePhoto(player, { color, className: "keynote-radar__card-photo" }),
+  );
+
+  const identity = document.createElement("div");
+  identity.className = "keynote-radar__card-identity";
+  const name = document.createElement("p");
+  name.className = "keynote-radar__card-name";
+  name.textContent = player.player || "Player";
+  identity.appendChild(name);
+  const meta = [player.season_label, keynoteMinutesLabel(player)].filter(Boolean).join("  ·  ");
+  if (meta) {
+    const metaEl = document.createElement("p");
+    metaEl.className = "keynote-radar__card-meta";
+    metaEl.textContent = meta;
+    identity.appendChild(metaEl);
+  }
+  top.appendChild(identity);
+  card.appendChild(top);
+
+  const extremes = keynoteProfileExtremes(player, labels);
+  if (extremes) {
+    const reads = document.createElement("div");
+    reads.className = "keynote-radar__reads";
+    [
+      ["Best", extremes.best],
+      ["Weakest", extremes.worst],
+    ].forEach(([caption, entry]) => {
+      const read = document.createElement("div");
+      read.className = `keynote-radar__read ${keynoteBandClass(entry.value)}`;
+      read.innerHTML = `
+        <span class="keynote-radar__read-caption">${caption}</span>
+        <span class="keynote-radar__read-label">${entry.label}</span>
+        <span class="keynote-radar__read-value">${Math.round(entry.value)}</span>
+      `;
+      reads.appendChild(read);
+    });
+    card.appendChild(reads);
+  }
+
+  return card;
+}
+
 async function captureMainRadarSlidePng({ exportScale = DRILLDOWN_CARD_EXPORT.imageScale } = {}) {
   const chartPng = await capturePlotPng("radarChart", {
-    width: 1720,
-    height: 860,
+    width: 1200,
+    height: 840,
     compact: true,
     mainRadarSlide: true,
     exportScale: 2,
@@ -3411,41 +3702,53 @@ async function captureMainRadarSlidePng({ exportScale = DRILLDOWN_CARD_EXPORT.im
     throw new Error("Main radar chart is not ready yet.");
   }
 
-  const players = getComparedPlayersFromChartData(state.lastChartData);
+  const data = state.lastChartData;
+  const players = getComparedPlayersFromChartData(data);
+  const labels = data?.labels || [];
 
   const slide = document.createElement("div");
   slide.className = "keynote-slide keynote-radar";
 
   const head = document.createElement("header");
   head.className = "keynote-radar__head";
-  const heading = document.createElement("h2");
-  heading.className = "keynote-radar__title";
-  heading.textContent = "Profile radar";
-  head.appendChild(heading);
-  if (players.length > 0) {
-    const legend = buildRadarSlideLegend(players, { compact: true });
-    legend.className = "keynote-radar__legend";
-    legend.querySelectorAll(".export-radar-slide-legend-item").forEach((item) => {
-      item.className = "keynote-radar__legend-item";
-    });
-    legend.querySelectorAll(".export-radar-slide-legend-swatch").forEach((item) => {
-      item.className = "keynote-radar__legend-swatch";
-    });
-    legend.querySelectorAll(".export-radar-slide-legend-minutes").forEach((item) => {
-      item.className = "keynote-radar__legend-mins";
-    });
-    head.appendChild(legend);
-  }
+  head.innerHTML = `
+    <div>
+      <p class="keynote-radar__eyebrow">Profile shape</p>
+      <h2 class="keynote-radar__title">${
+        players.length > 1 ? "Where each player is strongest" : "Profile shape at a glance"
+      }</h2>
+      <p class="keynote-radar__sub">The further the shape reaches, the higher the percentile on that profile</p>
+    </div>
+  `;
+  head.appendChild(buildKeynoteCrest());
   slide.appendChild(head);
+
+  const body = document.createElement("div");
+  body.className = "keynote-radar__body";
 
   const chartPanel = document.createElement("div");
   chartPanel.className = "keynote-radar__chart";
   const chartImage = document.createElement("img");
   chartImage.className = "export-main-radar-chart";
+  chartImage.dataset.fitParent = "true";
   chartImage.src = chartPng;
   chartImage.alt = "Profile radar";
   chartPanel.appendChild(chartImage);
-  slide.appendChild(chartPanel);
+  body.appendChild(chartPanel);
+
+  const side = document.createElement("div");
+  side.className = "keynote-radar__side";
+  side.dataset.cards = String(players.length);
+  players.slice(0, 4).forEach((player, index) => {
+    side.appendChild(buildKeynoteRadarPlayerCard(player, index, labels));
+  });
+  body.appendChild(side);
+  slide.appendChild(body);
+
+  const footer = document.createElement("footer");
+  footer.className = "keynote-radar__footer";
+  footer.appendChild(buildKeynoteFootnote(data));
+  slide.appendChild(footer);
 
   const surface = document.createElement("div");
   surface.className = "export-capture-surface export-capture-surface-app";

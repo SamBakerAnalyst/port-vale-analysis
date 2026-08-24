@@ -1,82 +1,148 @@
-/* Keynote / PDF deck — 1920×1080, balanced density */
+/* Keynote / PDF deck — 1920×1080 coaching slides */
 
 .keynote-slide {
   width: 1920px;
   height: 1080px;
   box-sizing: border-box;
-  background: #0d0d0d;
+  background: radial-gradient(120% 90% at 50% -20%, #1b1b1b 0%, #0b0b0b 62%, #070707 100%);
   color: #f8fafc;
   font-family: var(--font, system-ui, sans-serif);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 2px solid rgba(245, 197, 24, 0.48);
+  border-top: 8px solid var(--gold, #f5c518);
+}
+
+/* ── Percentile bands: one colour language across every slide ── */
+
+.keynote-band--elite { --band: #1f7f45; --band-soft: #22c55e; --band-text: #bbf7d0; }
+.keynote-band--good { --band: #2f8f5b; --band-soft: #4ade80; --band-text: #bbf7d0; }
+.keynote-band--fair { --band: #b07d0a; --band-soft: #facc15; --band-text: #fde68a; }
+.keynote-band--poor { --band: #bf4b0d; --band-soft: #fb923c; --band-text: #fed7aa; }
+.keynote-band--weak { --band: #b02020; --band-soft: #f87171; --band-text: #fecaca; }
+.keynote-band--na { --band: #3f4753; --band-soft: #94a3b8; --band-text: #94a3b8; }
+
+/* ── Shared furniture ── */
+
+.keynote-crest {
+  width: 86px;
+  height: 86px;
+  object-fit: contain;
+  display: block;
+}
+
+.keynote-footnote {
+  margin: 0;
+  font-size: 19px;
+  color: #8b949e;
+  line-height: 1.3;
+}
+
+.keynote-scale {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  flex-wrap: nowrap;
+}
+
+.keynote-scale__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 19px;
+  font-weight: 600;
+  color: #b6bec9;
+  white-space: nowrap;
+}
+
+.keynote-scale__swatch {
+  width: 22px;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--band);
+  flex-shrink: 0;
 }
 
 /* ── Comparison front slide ── */
 
 .keynote-comparison {
-  padding: 28px 28px 20px;
+  padding: 46px 64px 34px;
 }
 
 .keynote-comparison__head {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 20px;
-  margin-bottom: 14px;
+  gap: 40px;
   flex-shrink: 0;
+  padding-bottom: 26px;
+  border-bottom: 2px solid rgba(245, 197, 24, 0.22);
+}
+
+.keynote-comparison__titles {
+  min-width: 0;
 }
 
 .keynote-comparison__eyebrow {
   margin: 0;
-  font-size: 15px;
+  font-size: 21px;
   font-weight: 700;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
   color: var(--gold, #f5c518);
 }
 
 .keynote-comparison__title {
-  margin: 4px 0 0;
-  font-size: 40px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  line-height: 1.05;
+  margin: 10px 0 0;
+  font-size: 82px;
+  font-weight: 800;
+  letter-spacing: 0.005em;
+  line-height: 0.98;
   text-transform: uppercase;
 }
 
 .keynote-comparison__sub {
-  margin: 6px 0 0;
-  font-size: 15px;
-  color: #9ca3af;
+  margin: 14px 0 0;
+  font-size: 24px;
+  color: #a8b0bb;
+  line-height: 1.25;
+}
+
+.keynote-comparison__brand {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-shrink: 0;
 }
 
 .keynote-comparison__badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 54px;
-  height: 54px;
-  padding: 0 12px;
+  min-width: 84px;
+  height: 84px;
+  padding: 0 20px;
   border-radius: 999px;
-  border: 1px solid rgba(245, 197, 24, 0.45);
+  border: 3px solid rgba(245, 197, 24, 0.5);
+  background: rgba(245, 197, 24, 0.08);
   color: var(--gold, #f5c518);
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  flex-shrink: 0;
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
 }
 
 .keynote-comparison__table {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(148px, 178px) repeat(var(--player-cols, 4), minmax(0, 1fr)) minmax(0, 1fr);
-  grid-template-rows: auto repeat(var(--profile-cols, 4), 54px);
-  column-gap: 10px;
-  row-gap: 10px;
-  align-content: center;
+  grid-template-columns: 340px repeat(var(--player-cols, 2), minmax(0, 1fr));
+  /* Fixed portrait band keeps the bars tall no matter how many profiles there are. */
+  grid-template-rows: 376px repeat(var(--profile-rows, 3), minmax(0, 1fr));
+  column-gap: 26px;
+  row-gap: 18px;
+  align-content: stretch;
   width: 100%;
+  padding-top: 22px;
 }
 
 .keynote-comparison__corner {
@@ -89,41 +155,33 @@
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
-  gap: 5px;
+  gap: 8px;
   min-width: 0;
   grid-row: 1;
   align-self: end;
+  padding-bottom: 10px;
 }
 
 .keynote-comparison__photo {
   width: 100%;
-  max-width: 136px;
+  max-width: 186px;
   aspect-ratio: 3 / 4;
-  border-radius: 8px;
+  border-radius: 14px;
   overflow: hidden;
-  border: 3px solid rgba(245, 197, 24, 0.35);
-  background: #111827;
-  position: relative;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+  border: 4px solid var(--player-color, rgba(245, 197, 24, 0.4));
+  background: #14181f;
 }
 
+.keynote-comparison[data-players="4"] .keynote-comparison__photo,
 .keynote-comparison[data-players="5"] .keynote-comparison__photo {
-  max-width: 118px;
-}
-
-.keynote-comparison[data-players="4"] .keynote-comparison__photo {
-  max-width: 128px;
-}
-
-.keynote-comparison[data-players="3"] .keynote-comparison__photo {
-  max-width: 142px;
+  max-width: 178px;
 }
 
 .keynote-comparison__photo img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center 18%;
+  object-position: center 16%;
   display: block;
 }
 
@@ -133,50 +191,47 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 26px;
-  font-weight: 700;
-  color: #6b7280;
-  background: #111827;
-}
-
-.keynote-comparison__photo--round {
-  max-width: 88px;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px;
-  background: rgba(245, 197, 24, 0.08);
-}
-
-.keynote-comparison__photo--round img {
-  object-fit: contain;
+  font-size: 54px;
+  font-weight: 800;
+  color: #5c6675;
+  background: #14181f;
 }
 
 .keynote-comparison__name {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 700;
+  margin: 8px 0 0;
+  font-size: 36px;
+  font-weight: 800;
   text-align: center;
-  line-height: 1.15;
+  line-height: 1.06;
+  letter-spacing: -0.01em;
+  color: var(--player-color, #f8fafc);
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+.keynote-comparison__meta {
+  margin: 0;
+  font-size: 21px;
+  color: #a8b0bb;
+  text-align: center;
+  line-height: 1.2;
 }
 
 .keynote-comparison__minutes {
   margin: 0;
   font-family: var(--mono, monospace);
-  font-size: 11px;
-  color: #9ca3af;
+  font-size: 20px;
+  font-weight: 700;
+  color: #dfe4ea;
   text-align: center;
 }
 
-.keynote-comparison__ref-hint {
-  margin: 0;
-  font-size: 9px;
-  color: #6b7280;
+.keynote-comparison__tag {
+  margin: 4px 0 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold, #f5c518);
   text-align: center;
   line-height: 1.15;
 }
@@ -189,45 +244,41 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding-right: 6px;
-  align-self: center;
+  align-self: stretch;
+  padding-right: 12px;
 }
 
 .keynote-comparison__label-main {
   margin: 0;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  line-height: 1.12;
-  color: #e5e7eb;
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  line-height: 1.08;
+  color: #f4f6f8;
 }
 
 .keynote-comparison[data-profiles="5"] .keynote-comparison__label-main,
 .keynote-comparison[data-profiles="6"] .keynote-comparison__label-main {
-  font-size: 12px;
+  font-size: 28px;
 }
 
-.keynote-comparison__label-sub {
-  margin: 2px 0 0;
-  font-size: 11px;
-  color: #9ca3af;
-  line-height: 1.1;
-}
+/* ── Percentile bar ── */
 
+/* html2canvas ignores box-shadow, so every outline here is a real border. */
 .keynote-bar {
   position: relative;
   align-self: center;
-  height: 50px;
-  min-height: 50px;
-  max-height: 50px;
   width: 100%;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.04);
+  height: 100%;
+  max-height: 152px;
+  min-height: 0;
+  border-radius: 14px;
+  border: 3px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.03);
   overflow: hidden;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
 }
 
 .keynote-bar__fill {
@@ -235,251 +286,419 @@
   left: 0;
   top: 0;
   bottom: 0;
-  border-radius: 6px;
-  opacity: 0.5;
+  border-radius: 11px;
+  background: var(--band);
 }
-
-.keynote-bar--ref .keynote-bar__fill {
-  opacity: 0.55;
-}
-
-.keynote-bar--ref.keynote-bar--low .keynote-bar__fill { background: var(--red, #ef4444); }
-.keynote-bar--ref.keynote-bar--mid .keynote-bar__fill { background: var(--amber, #f59e0b); }
-.keynote-bar--ref.keynote-bar--high .keynote-bar__fill { background: var(--green, #22c55e); }
-
-.keynote-bar--ref.keynote-bar--low .keynote-bar__value { color: #fca5a5; }
-.keynote-bar--ref.keynote-bar--mid .keynote-bar__value { color: #fcd34d; }
-.keynote-bar--ref.keynote-bar--high .keynote-bar__value { color: #86efac; }
 
 .keynote-bar__value {
   position: relative;
   z-index: 1;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 0 26px;
   font-family: var(--mono, monospace);
-  font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1;
+  color: #ffffff;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.7);
+}
+
+.keynote-bar__number {
+  font-size: 46px;
+}
+
+.keynote-bar__star {
+  font-size: 28px;
+  color: var(--gold, #f5c518);
+}
+
+.keynote-bar--leader {
+  border-color: rgba(245, 197, 24, 0.9);
+}
+
+.keynote-bar.keynote-band--na .keynote-bar__value {
+  color: #94a3b8;
 }
 
 .keynote-comparison__footer {
   flex-shrink: 0;
-  margin-top: 10px;
-  padding-top: 10px;
+  margin-top: 26px;
+  padding-top: 20px;
   border-top: 1px solid rgba(148, 163, 184, 0.18);
   width: 100%;
-}
-
-.keynote-comparison__legend-grid {
-  display: grid;
-  grid-template-columns: minmax(148px, 178px) repeat(var(--player-cols, 4), minmax(0, 1fr)) minmax(0, 1fr);
-  column-gap: 10px;
-  row-gap: 4px;
-  margin-bottom: 8px;
-}
-
-.keynote-comparison__legend-corner {
-  grid-column: 1;
-}
-
-.keynote-comparison__legend-cell {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  text-align: center;
-  gap: 2px;
-  min-width: 0;
-  padding: 0 2px;
-}
-
-.keynote-comparison__legend-swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-
-.keynote-comparison__legend-name {
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.15;
-}
-
-.keynote-comparison__legend-meta {
-  font-size: 10px;
-  color: #9ca3af;
-  line-height: 1.2;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.keynote-comparison__note {
-  margin: 0;
-  text-align: center;
-  font-size: 11px;
-  color: #6b7280;
-  line-height: 1.3;
+  justify-content: space-between;
+  gap: 40px;
 }
 
 /* ── Main radar slide ── */
 
 .keynote-radar {
-  padding: 24px 32px 20px;
+  padding: 46px 64px 30px;
 }
 
 .keynote-radar__head {
   flex-shrink: 0;
-  margin-bottom: 12px;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 40px;
+  padding-bottom: 22px;
+  border-bottom: 2px solid rgba(245, 197, 24, 0.22);
+}
+
+.keynote-radar__eyebrow {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gold, #f5c518);
 }
 
 .keynote-radar__title {
-  margin: 0 0 14px;
-  font-size: 42px;
-  font-weight: 700;
-  color: var(--gold, #f5c518);
-  letter-spacing: 0.02em;
+  margin: 10px 0 0;
+  font-size: 62px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: #f8fafc;
 }
 
-.keynote-radar__legend {
-  display: grid;
-  grid-template-columns: repeat(2, auto);
-  justify-content: center;
-  justify-items: start;
-  gap: 10px 36px;
+.keynote-radar__sub {
+  margin: 12px 0 0;
+  font-size: 24px;
+  color: #a8b0bb;
 }
 
-.keynote-radar__legend-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 18px;
-  font-weight: 600;
-  color: #e2e8f0;
-}
-
-.keynote-radar__legend-swatch {
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
-  flex-shrink: 0;
-}
-
-.keynote-radar__legend-mins {
-  color: var(--gold, #f5c518);
-  font-weight: 700;
-  font-size: 18px;
-}
-
-.keynote-radar__chart {
+.keynote-radar__body {
   flex: 1;
   min-height: 0;
   display: flex;
   align-items: stretch;
   justify-content: center;
+  gap: 56px;
+  padding: 18px 0 0;
 }
 
+.keynote-radar__chart {
+  flex: 0 0 1000px;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Sized in JS by fitExportImagesToParents() — object-fit is unusable here. */
 .keynote-radar__chart img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.keynote-radar__side {
+  flex: 0 0 560px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 24px;
+}
+
+.keynote-radar__card {
+  border: 2px solid rgba(148, 163, 184, 0.2);
+  border-left: 8px solid var(--player-color, #f5c518);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 24px 26px;
+}
+
+.keynote-radar__side[data-cards="3"] .keynote-radar__card,
+.keynote-radar__side[data-cards="4"] .keynote-radar__card {
+  padding: 16px 20px;
+}
+
+.keynote-radar__card-top {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.keynote-radar__card-photo {
+  width: 108px;
+  flex-shrink: 0;
+  aspect-ratio: 3 / 4;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 3px solid var(--player-color, #f5c518);
+  background: #14181f;
+}
+
+.keynote-radar__side[data-cards="3"] .keynote-radar__card-photo,
+.keynote-radar__side[data-cards="4"] .keynote-radar__card-photo {
+  width: 78px;
+}
+
+.keynote-radar__card-photo img {
   width: 100%;
   height: 100%;
-  min-height: 0;
-  max-height: none;
-  object-fit: contain;
+  object-fit: cover;
+  object-position: center 16%;
+  display: block;
+}
+
+.keynote-radar__card-photo-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  font-weight: 800;
+  color: #5c6675;
+}
+
+.keynote-radar__card-identity {
+  min-width: 0;
+}
+
+.keynote-radar__card-name {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.05;
+  color: var(--player-color, #f8fafc);
+}
+
+.keynote-radar__card-meta {
+  margin: 8px 0 0;
+  font-size: 19px;
+  color: #a8b0bb;
+  line-height: 1.25;
+}
+
+.keynote-radar__reads {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.keynote-radar__read {
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border-left: 6px solid var(--band);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.keynote-radar__read-caption {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8b949e;
+}
+
+.keynote-radar__read-label {
+  font-size: 24px;
+  font-weight: 700;
+  color: #f4f6f8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.keynote-radar__read-value {
+  font-family: var(--mono, monospace);
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--band-text);
+}
+
+.keynote-radar__footer {
+  flex-shrink: 0;
+  padding-top: 18px;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
 }
 
 /* ── Profile drilldown slide ── */
 
 .keynote-drilldown {
-  padding: 26px 40px 22px;
+  padding: 44px 64px 30px;
 }
 
 .keynote-drilldown__head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 24px;
+  gap: 40px;
   flex-shrink: 0;
-  margin-bottom: 6px;
+  padding-bottom: 22px;
+  border-bottom: 2px solid rgba(245, 197, 24, 0.22);
+}
+
+.keynote-drilldown__head-text {
+  min-width: 0;
+}
+
+.keynote-drilldown__eyebrow {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gold, #f5c518);
 }
 
 .keynote-drilldown__title {
-  margin: 0;
-  font-size: 32px;
-  font-weight: 700;
-  color: var(--gold, #f5c518);
-  line-height: 1.1;
-  flex-shrink: 0;
+  margin: 8px 0 0;
+  font-size: 62px;
+  font-weight: 800;
+  color: #f8fafc;
+  line-height: 1;
+  letter-spacing: -0.01em;
 }
 
-.keynote-drilldown__legend {
-  display: grid;
-  grid-template-columns: repeat(2, auto);
-  justify-content: end;
-  gap: 5px 18px;
-  flex: 1;
-  font-size: 13px;
-  font-weight: 600;
-  color: #e2e8f0;
+.keynote-drilldown__sub {
+  margin: 12px 0 0;
+  font-size: 22px;
+  color: #a8b0bb;
+  line-height: 1.25;
+}
+
+.keynote-drilldown__scores {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.keynote-drilldown__score {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 250px;
+  padding: 16px 26px;
+  border-radius: 16px;
+  border: 2px solid rgba(148, 163, 184, 0.2);
+  border-left: 10px solid var(--band);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.keynote-drilldown__score-name {
+  font-size: 22px;
+  font-weight: 700;
+  color: #c3cad4;
+  white-space: nowrap;
+}
+
+.keynote-drilldown__score-value {
+  font-family: var(--mono, monospace);
+  font-size: 64px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--band-text);
+}
+
+.keynote-drilldown__score-band {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8b949e;
 }
 
 .keynote-drilldown__body {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 1.1fr 0.9fr;
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) 800px;
+  gap: 48px;
   align-items: stretch;
+  padding-top: 20px;
 }
 
 .keynote-drilldown__radar {
   min-height: 0;
-  height: 100%;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
-  gap: 4px;
+  gap: 12px;
+}
+
+.keynote-drilldown__chart-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Sized in JS by fitExportImagesToParents() — object-fit is unusable here. */
+.keynote-drilldown__chart-img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
 }
 
 .keynote-drilldown__players {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: stretch;
+  gap: 14px 20px;
   flex-shrink: 0;
-  width: 100%;
-  padding: 14px 20px 10px;
-  margin-top: 2px;
+}
+
+.keynote-drilldown__players[data-count="3"] .keynote-drilldown__photo,
+.keynote-drilldown__players[data-count="4"] .keynote-drilldown__photo {
+  width: 56px;
+}
+
+.keynote-drilldown__players[data-count="3"] .keynote-drilldown__player-name,
+.keynote-drilldown__players[data-count="4"] .keynote-drilldown__player-name {
+  font-size: 22px;
+}
+
+.keynote-drilldown__players[data-count="3"] .keynote-drilldown__player-meta,
+.keynote-drilldown__players[data-count="4"] .keynote-drilldown__player-meta {
+  font-size: 15px;
 }
 
 .keynote-drilldown__player {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 5px;
+  gap: 16px;
   min-width: 0;
-  flex: 1;
-  max-width: 120px;
+  padding: 12px 22px 12px 14px;
+  border-radius: 14px;
+  border: 2px solid rgba(148, 163, 184, 0.2);
+  border-left: 8px solid var(--player-color, #f5c518);
+  background: rgba(255, 255, 255, 0.035);
 }
 
 .keynote-drilldown__photo {
-  width: 100%;
-  max-width: 108px;
-  aspect-ratio: 3 / 4;
-  border-radius: 8px;
-  overflow: hidden;
-  border: 3px solid rgba(245, 197, 24, 0.35);
-  background: #111827;
+  width: 76px;
   flex-shrink: 0;
+  aspect-ratio: 3 / 4;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 3px solid var(--player-color, #f5c518);
+  background: #14181f;
 }
 
 .keynote-drilldown__photo img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center 18%;
+  object-position: center 16%;
   display: block;
 }
 
@@ -489,157 +708,147 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 26px;
-  font-weight: 700;
-  color: #6b7280;
+  font-size: 24px;
+  font-weight: 800;
+  color: #5c6675;
+}
+
+.keynote-drilldown__player-identity {
+  min-width: 0;
 }
 
 .keynote-drilldown__player-name {
   margin: 0;
-  font-size: 13px;
-  font-weight: 700;
-  text-align: center;
-  line-height: 1.15;
-  max-width: 110px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--player-color, #f8fafc);
   white-space: nowrap;
 }
 
-.keynote-drilldown__chart-wrap {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding-top: 4px;
-}
-
-.keynote-drilldown__chart-img {
-  width: 100%;
-  height: 100%;
-  max-width: 100%;
-  max-height: 100%;
-  min-height: 0;
-  object-fit: contain;
-  object-position: center bottom;
+.keynote-drilldown__player-meta {
+  margin: 4px 0 0;
+  font-family: var(--mono, monospace);
+  font-size: 18px;
+  color: #a8b0bb;
 }
 
 .keynote-drilldown__bars {
   min-height: 0;
-  height: 100%;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  overflow: hidden;
-  border-top: none;
-  border-left: 1px solid rgba(148, 163, 184, 0.14);
-  padding-top: 0;
-  padding-left: 18px;
+  padding-left: 48px;
+  border-left: 1px solid rgba(148, 163, 184, 0.16);
 }
 
-.keynote-drilldown__bars .export-factor-bars-deck.factor-bar-list-slide-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  grid-template-rows: repeat(var(--factor-groups, 4), minmax(0, 1fr));
-  row-gap: 8px;
-  column-gap: 0;
-  width: 100%;
-  height: 100%;
-  max-height: none;
-  align-content: stretch;
+.keynote-drilldown__footer {
+  flex-shrink: 0;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
 }
 
-.keynote-drilldown__bars .factor-bar-list-slide-grid-3x2 {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: repeat(3, minmax(0, 1fr));
-  column-gap: 18px;
-  row-gap: 10px;
-}
+/* ── Factor bars ── */
 
-.keynote-drilldown__bars .export-factor-bars-deck .factor-bar-group {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 0;
+.keynote-factors {
   flex: 1;
-  gap: 2px;
-}
-
-.keynote-drilldown__bars .export-factor-bars-deck .factor-bar-factor-name {
-  font-size: 14px;
-  font-weight: 700;
-  padding: 0 0 8px;
-  color: #e2e8f0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.keynote-drilldown__bars .export-factor-bars-deck .factor-bar-row,
-.keynote-drilldown__bars .export-factor-bars-deck .factor-bar-row-compare {
-  grid-template-columns: 34px minmax(0, 1fr);
-  gap: 10px;
-  padding: 5px 0;
-}
-
-.keynote-drilldown__bars .export-factor-bars-deck .factor-bar-label {
+  min-height: 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0;
-  gap: 0;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 20px;
 }
 
-.keynote-drilldown__bars .export-factor-bars-deck .factor-bar-player-swatch {
-  width: 30px;
-  height: 30px;
+.keynote-factor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.keynote-factor__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.keynote-factor__name {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: #f4f6f8;
+  line-height: 1.15;
+  min-width: 0;
+}
+
+.keynote-factors[data-factors="5"] .keynote-factor__name,
+.keynote-factors[data-factors="6"] .keynote-factor__name,
+.keynote-factors[data-factors="7"] .keynote-factor__name {
+  font-size: 24px;
+}
+
+.keynote-factor__weight {
+  font-size: 18px;
+  font-weight: 600;
+  color: #7f8895;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.keynote-factor__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.keynote-factor__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 86px;
+  align-items: center;
+  gap: 20px;
+}
+
+.keynote-factor__row:has(.keynote-factor__initial) {
+  grid-template-columns: 52px minmax(0, 1fr) 86px;
+}
+
+.keynote-factor__initial {
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.35);
-}
-
-.keynote-drilldown__bars .export-factor-bars-deck .factor-bar-player-swatch--initials {
-  font-size: 11px;
+  font-size: 17px;
   font-weight: 800;
-  color: #0f172a;
+  color: #0b1220;
+  letter-spacing: -0.02em;
+}
+
+.keynote-factor__track {
+  position: relative;
+  height: 54px;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+
+.keynote-factor__fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 10px;
+  background: var(--band);
+}
+
+.keynote-factor__value {
+  font-family: var(--mono, monospace);
+  font-size: 38px;
+  font-weight: 800;
   line-height: 1;
-  letter-spacing: -0.03em;
-}
-
-.keynote-drilldown__bars .export-factor-bars-deck .factor-bar-track {
-  height: 30px;
-  border-radius: 999px;
-}
-
-.keynote-drilldown__bars .export-factor-bars-deck .factor-bar-fill {
-  min-width: 16px;
-  border-radius: 999px;
-}
-
-.keynote-drilldown__bars .export-factor-bars-deck .factor-bar-value {
-  font-size: 11px;
-  padding: 0 6px;
-}
-
-.keynote-drilldown__bars .export-factor-bars-deck .factor-bar-badge {
-  min-height: 30px;
-  font-size: 13px;
-  font-weight: 700;
-  border-radius: 4px;
-  padding: 0 7px;
-}
-
-.keynote-drilldown__bars .export-factor-bars-deck .factor-bar-track-wrap {
-  grid-template-columns: minmax(0, 1fr) 50px;
-  gap: 9px;
-}
-
-.keynote-drilldown__bars .export-factor-bars-deck .factor-bar-average-line {
-  width: 1px;
-  top: -1px;
-  bottom: -1px;
+  text-align: right;
+  color: var(--band-text);
 }
