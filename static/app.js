@@ -2808,6 +2808,10 @@ async function renderExportSurfaceToPng(
 
   const host = document.createElement("div");
   host.className = "export-capture-host";
+  // html2canvas parses CSS itself and throws on color-mix(), so the slide drops
+  // to flat band colours for this capture only. The Chrome export and the live
+  // page keep the real gradients.
+  surface.classList.add("h2c-capture");
   host.appendChild(surface);
   document.body.appendChild(host);
 
@@ -4195,73 +4199,22 @@ async function buildWholeExportPayload(data, extension) {
     };
   }
 
-  const includedDrilldowns = drilldowns.filter(
-    (entry) => !isExcludedFromExport(exportSectionKeyForProfile(entry.profile)),
-  );
-  const includeFront =
-    hasFront && !isExcludedFromExport("comparison-front");
-  const includeRadar = !isExcludedFromExport("main-radar");
-  const slideTotal =
-    (includeFront ? 1 : 0) + (includeRadar ? 1 : 0) + includedDrilldowns.length;
-  if (slideTotal === 0) {
-    throw new Error(
-      "No slides selected — click Include in export on the comparison page, radar, or at least one profile.",
-    );
-  }
-
+  // Same slide list as the Chrome path, so the slides deck and the PDF never
+  // disagree about which slides the deck contains.
+  const captureJobs = collectDeckSlideJobs(data);
   const deckScale = DECK_EXPORT.imageScale;
-  const captureJobs = [];
-
-  if (includeFront) {
-    captureJobs.push({
-      title: "Profile comparison",
-      capture: () => captureComparisonFrontSlidePng({ exportScale: deckScale }),
-    });
-  }
-  if (includeRadar) {
-    captureJobs.push({
-      title: "Profile radar",
-      capture: () => captureMainRadarSlidePng({ exportScale: deckScale }),
-    });
-  }
-  for (let index = 0; index < drilldowns.length; index += 1) {
-    const entry = drilldowns[index];
-    const exportKey = exportSectionKeyForProfile(entry.profile);
-    if (isExcludedFromExport(exportKey)) {
-      continue;
-    }
-    const chartId = `profileDrilldown-${index}`;
-    const barsId = `profileDrilldownBars-${index}`;
-    const chartEl = document.getElementById(chartId);
-    const barsEl = document.getElementById(barsId);
-    if (!barsEl || !chartEl?.data) {
-      continue;
-    }
-    const profileTitle = humanizeProfileName(entry.profile);
-    captureJobs.push({
-      title: profileTitle,
-      capture: () =>
-        captureDrilldownSlidePng({
-          chartId,
-          barsId,
-          title: profileTitle,
-          exportScale: deckScale,
-        }),
-    });
-  }
-
-  if (captureJobs.length === 0) {
-    throw new Error(
-      "No exportable slides found — include the comparison page or radar, or regenerate charts.",
-    );
-  }
 
   const capturedSections = [];
   for (let index = 0; index < captureJobs.length; index += 1) {
     const job = captureJobs[index];
     setStatus(`Capturing slide ${index + 1} of ${captureJobs.length}: ${job.title}…`);
     const image_data = await withTimeout(
-      () => job.capture(),
+      async () =>
+        renderExportSurfaceToPng(await job.buildSurface(), {
+          scale: deckScale,
+          imageFormat: DECK_EXPORT.imageFormat,
+          jpegQuality: DECK_EXPORT.jpegQuality,
+        }),
       DECK_EXPORT.slideTimeoutMs,
       `Timed out capturing “${job.title}”. Try removing that slide from export, then export again.`,
       { onTimeout: resetPlotlyCaptureQueue },

@@ -13,6 +13,35 @@
   border-top: 8px solid var(--gold, #f5c518);
 }
 
+/* ── html2canvas capture fallback ──
+   The "Export slides" (PPTX) path and the in-browser PDF still rasterise the
+   DOM with html2canvas, which implements its own CSS parser and throws on
+   color-mix(). Flatten anything that uses it, capture-only. */
+
+.h2c-capture .keynote-bar__fill,
+.h2c-capture .keynote-factor__fill {
+  background: var(--band);
+  box-shadow: none;
+}
+
+.h2c-capture .keynote-comparison__overall,
+.h2c-capture .keynote-gap__dot {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--band);
+  box-shadow: none;
+}
+
+.h2c-capture .keynote-bar,
+.h2c-capture .keynote-factor__track,
+.h2c-capture .keynote-gap__track {
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: none;
+}
+
+.h2c-capture .keynote-gap__span {
+  background: rgba(245, 197, 24, 0.45);
+}
+
 /* ── Percentile bands: one colour language across every slide ── */
 
 .keynote-band--elite { --band: #1f7f45; --band-soft: #22c55e; --band-text: #bbf7d0; }
