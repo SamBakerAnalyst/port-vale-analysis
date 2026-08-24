@@ -38,27 +38,18 @@
   line-height: 1.3;
 }
 
-/* Vertical key, sized to sit in the blank cell above the profile labels. */
+/* Horizontal band key for slide footers. */
 .keynote-scale {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.keynote-scale__heading {
-  margin: 0 0 2px;
-  font-size: 17px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #6f7783;
+  align-items: center;
+  gap: 26px;
+  flex-wrap: nowrap;
 }
 
 .keynote-scale__item {
   display: inline-flex;
   align-items: center;
-  gap: 11px;
+  gap: 10px;
   font-size: 19px;
   font-weight: 600;
   color: #b6bec9;
@@ -147,7 +138,7 @@
   display: grid;
   grid-template-columns: 340px repeat(var(--player-cols, 2), minmax(0, 1fr));
   /* Fixed portrait band keeps the bars tall no matter how many profiles there are. */
-  grid-template-rows: 376px repeat(var(--profile-rows, 3), minmax(0, 1fr));
+  grid-template-rows: 404px repeat(var(--profile-rows, 3), minmax(0, 1fr));
   column-gap: 26px;
   row-gap: 18px;
   align-content: stretch;
@@ -158,9 +149,6 @@
 .keynote-comparison__corner {
   grid-column: 1;
   grid-row: 1;
-  display: flex;
-  align-items: flex-end;
-  padding-bottom: 18px;
 }
 
 .keynote-comparison__player {
@@ -177,7 +165,7 @@
 
 .keynote-comparison__photo {
   width: 100%;
-  max-width: 186px;
+  max-width: 152px;
   aspect-ratio: 3 / 4;
   border-radius: 14px;
   overflow: hidden;
@@ -187,7 +175,46 @@
 
 .keynote-comparison[data-players="4"] .keynote-comparison__photo,
 .keynote-comparison[data-players="5"] .keynote-comparison__photo {
-  max-width: 178px;
+  max-width: 144px;
+}
+
+/* Narrow columns wrap the identity lines, which pushed the portraits up into
+   the header. Step the type down instead so each line stays single. */
+.keynote-comparison[data-players="4"] .keynote-comparison__name,
+.keynote-comparison[data-players="5"] .keynote-comparison__name {
+  font-size: 30px;
+}
+
+.keynote-comparison[data-players="4"] .keynote-comparison__meta,
+.keynote-comparison[data-players="5"] .keynote-comparison__meta {
+  font-size: 19px;
+}
+
+.keynote-comparison[data-players="4"] .keynote-comparison__minutes,
+.keynote-comparison[data-players="5"] .keynote-comparison__minutes {
+  font-size: 17px;
+}
+
+.keynote-comparison[data-players="4"] .keynote-comparison__overall,
+.keynote-comparison[data-players="5"] .keynote-comparison__overall {
+  gap: 9px;
+  padding: 7px 14px;
+}
+
+.keynote-comparison[data-players="4"] .keynote-comparison__overall-value,
+.keynote-comparison[data-players="5"] .keynote-comparison__overall-value {
+  font-size: 34px;
+}
+
+.keynote-comparison[data-players="4"] .keynote-comparison__overall-label,
+.keynote-comparison[data-players="5"] .keynote-comparison__overall-label {
+  font-size: 13px;
+  letter-spacing: 0.12em;
+}
+
+.keynote-comparison[data-players="4"] .keynote-comparison__overall-band,
+.keynote-comparison[data-players="5"] .keynote-comparison__overall-band {
+  font-size: 16px;
 }
 
 .keynote-comparison__photo img {
@@ -249,6 +276,48 @@
   line-height: 1.15;
 }
 
+/* Headline mean of the profiles on this slide — the first number a manager
+   reads. Kept on one line so the portrait band stays short and the bars below
+   keep their height. */
+.keynote-comparison__overall {
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 20px;
+  border-radius: 12px;
+  border: 2px solid color-mix(in srgb, var(--band) 60%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--band) 24%, transparent) 0%,
+    color-mix(in srgb, var(--band) 10%, transparent) 100%
+  );
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.keynote-comparison__overall-label {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #9aa3af;
+}
+
+.keynote-comparison__overall-value {
+  font-family: var(--mono, monospace);
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1;
+  color: #ffffff;
+}
+
+.keynote-comparison__overall-band {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--band-text);
+  white-space: nowrap;
+}
+
 .keynote-comparison__row {
   display: contents;
 }
@@ -277,7 +346,6 @@
 
 /* ── Percentile bar ── */
 
-/* html2canvas ignores box-shadow, so every outline here is a real border. */
 .keynote-bar {
   position: relative;
   align-self: center;
@@ -286,8 +354,9 @@
   max-height: 152px;
   min-height: 0;
   border-radius: 14px;
-  border: 3px solid rgba(255, 255, 255, 0.07);
-  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4);
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -299,8 +368,14 @@
   left: 0;
   top: 0;
   bottom: 0;
-  border-radius: 11px;
-  background: var(--band);
+  border-radius: 12px 4px 4px 12px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--band) 82%, #ffffff) 0%,
+    var(--band) 46%,
+    color-mix(in srgb, var(--band) 86%, #000000) 100%
+  );
+  box-shadow: 0 4px 18px color-mix(in srgb, var(--band) 45%, transparent);
 }
 
 .keynote-bar__value {
@@ -328,6 +403,9 @@
 
 .keynote-bar--leader {
   border-color: rgba(245, 197, 24, 0.9);
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.4),
+    0 0 0 4px rgba(245, 197, 24, 0.12);
 }
 
 .keynote-bar.keynote-band--na .keynote-bar__value {
@@ -336,13 +414,262 @@
 
 .keynote-comparison__footer {
   flex-shrink: 0;
-  margin-top: 26px;
-  padding-top: 20px;
+  margin-top: 24px;
+  padding-top: 18px;
   border-top: 1px solid rgba(148, 163, 184, 0.18);
   width: 100%;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
+  gap: 32px;
+}
+
+.keynote-comparison__foot-note {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #7d8695;
+  white-space: nowrap;
+}
+
+/* ── Head-to-head gap slide (used instead of a radar with few profiles) ── */
+
+.keynote-gap {
+  padding: 46px 64px 30px;
+}
+
+.keynote-gap__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 40px;
+  flex-shrink: 0;
+  padding-bottom: 22px;
+  border-bottom: 2px solid rgba(245, 197, 24, 0.22);
+}
+
+.keynote-gap__eyebrow {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gold, #f5c518);
+}
+
+.keynote-gap__title {
+  margin: 8px 0 0;
+  font-size: 60px;
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+}
+
+.keynote-gap__sub {
+  margin: 12px 0 0;
+  font-size: 23px;
+  color: #a8b0bb;
+}
+
+.keynote-gap__legend {
+  flex-shrink: 0;
+  display: flex;
+  gap: 44px;
+  padding: 22px 0 4px;
+}
+
+.keynote-gap__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.keynote-gap__legend-photo {
+  width: 76px;
+  height: 96px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 3px solid var(--player-color, #f5c518);
+  background: #14181f;
+  flex-shrink: 0;
+}
+
+.keynote-gap__legend-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 16%;
+  display: block;
+}
+
+.keynote-gap__legend-photo-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  font-weight: 800;
+  color: #5c6675;
+}
+
+.keynote-gap__legend-name {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--player-color, #f8fafc);
+  line-height: 1.1;
+}
+
+.keynote-gap__legend-meta {
+  margin: 4px 0 0;
+  font-family: var(--mono, monospace);
+  font-size: 19px;
+  color: #a8b0bb;
+}
+
+.keynote-gap__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  padding: 6px 0;
+}
+
+.keynote-gap__row {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr) 150px;
+  align-items: center;
+  gap: 34px;
+}
+
+.keynote-gap__row-label {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.08;
+  color: #f4f6f8;
+}
+
+.keynote-gap[data-rows="4"] .keynote-gap__row-label {
+  font-size: 30px;
+}
+
+/* 0–100 percentile scale, shared by every row so positions are comparable. */
+.keynote-gap__track {
+  position: relative;
+  height: 112px;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* Inset so a pill centred on 0 or 100 still lands inside the track. */
+.keynote-gap__scale {
+  position: absolute;
+  left: 62px;
+  right: 62px;
+  top: 0;
+  bottom: 0;
+}
+
+.keynote-gap__tick {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.keynote-gap__span {
+  position: absolute;
+  top: 50%;
+  height: 8px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(148, 163, 184, 0.25),
+    rgba(245, 197, 24, 0.55)
+  );
+}
+
+.keynote-gap__dot {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 3px solid var(--player-color, #f5c518);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--band) 40%, #0d1117) 0%,
+    color-mix(in srgb, var(--band) 18%, #0d1117) 100%
+  );
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+}
+
+.keynote-gap__dot-who {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--player-color, #f5c518);
+  color: #0b0b0b;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.keynote-gap__dot-value {
+  font-family: var(--mono, monospace);
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--band-text);
+}
+
+.keynote-gap__delta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.keynote-gap__delta-value {
+  font-family: var(--mono, monospace);
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--gold, #f5c518);
+}
+
+.keynote-gap__delta-who {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8b949e;
+}
+
+.keynote-gap__delta-level {
+  font-size: 22px;
+  font-weight: 700;
+  color: #6f7783;
+}
+
+.keynote-gap__footer {
+  flex-shrink: 0;
+  padding-top: 16px;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
 }
 
 /* ── Main radar slide ── */
@@ -842,22 +1169,29 @@
   position: relative;
   height: 54px;
   border-radius: 12px;
-  border: 2px solid rgba(255, 255, 255, 0.07);
-  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.4);
   overflow: hidden;
 }
 
+/* Same fill treatment as the front-slide bars so a green bar looks identical
+   wherever it appears in the deck. */
 .keynote-factor__fill {
   position: absolute;
   left: 0;
   top: 0;
   bottom: 0;
-  border-radius: 10px;
-  background: var(--band);
+  border-radius: 10px 3px 3px 10px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--band) 82%, #ffffff) 0%,
+    var(--band) 46%,
+    color-mix(in srgb, var(--band) 86%, #000000) 100%
+  );
 }
 
-/* Where the compared players average out on this factor. html2canvas ignores
-   dashed borders, so this is a solid hairline. */
+/* Where the compared players average out on this factor. */
 .keynote-factor__avg {
   position: absolute;
   top: 0;

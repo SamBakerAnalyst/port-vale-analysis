@@ -221,15 +221,21 @@
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-/* Solid fill. At 38% opacity every band collapsed into the same murky brown. */
+/* Solid fill. At 38% opacity every band collapsed into the same murky brown.
+   Gradient matches the exported slide bars. */
 .studio-compare-front .comparison-cell--bar::before,
 .studio-compare-front .comparison-cell--average::before,
 .studio-compare-front .comparison-cell--avg-low::before,
 .studio-compare-front .comparison-cell--avg-mid::before,
 .studio-compare-front .comparison-cell--avg-high::before {
-  background: var(--band);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--band) 82%, #ffffff) 0%,
+    var(--band) 46%,
+    color-mix(in srgb, var(--band) 86%, #000000) 100%
+  );
   opacity: 1;
-  border-radius: 7px;
+  border-radius: 7px 2px 2px 7px;
 }
 
 .studio-compare-front .comparison-cell--leader {
@@ -248,8 +254,75 @@
 }
 
 .studio-compare-front .comparison-row__label-main {
-  font-size: 0.86rem;
-  color: #e8ecf2;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #f1f4f8;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Header hierarchy matched to the exported front slide: quiet gold eyebrow,
+   one loud position title, benchmark line underneath. */
+.studio-compare-front .comparison-frame__club {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+}
+
+.studio-compare-front .comparison-frame__title {
+  margin-top: 0.3rem;
+  font-size: 2.1rem;
+  font-weight: 800;
+  letter-spacing: 0.004em;
+  line-height: 1;
+}
+
+.studio-compare-front .comparison-frame__season {
+  margin-top: 0.45rem;
+  font-size: 0.875rem;
+}
+
+/* Mean of the profiles below, so the column has a headline number like the
+   deck slide does. */
+.overall-chip {
+  margin-top: 0.4rem;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--band) 60%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--band) 24%, transparent),
+    color-mix(in srgb, var(--band) 10%, transparent)
+  );
+}
+
+.overall-chip__label {
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #97a1ae;
+}
+
+.overall-chip__value {
+  font-family: var(--mono, monospace);
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1;
+  color: #ffffff;
+}
+
+.overall-chip__band {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--band-text);
+  white-space: nowrap;
+}
+
+.studio-compare-front .player-photo {
+  align-items: center;
 }
 
 /* One shared key for the colour scale, replacing the legend that repeated the

@@ -4636,10 +4636,39 @@ def analysis_hub() -> HTMLResponse:
     )
 
 
+_STUDIO_ASSET_RE = re.compile(r'(/static/[A-Za-z0-9._/-]+\.(?:css|js))\?v=[^"\']*')
+
+
+def _stamp_studio_assets(html: str) -> str:
+    """Replace hand-written ``?v=`` stamps with the asset's own mtime.
+
+    The studio shell used to pin versions by hand, so shipping a CSS/JS change
+    without also bumping the number left browsers on the previous build — the
+    page looked deployed but ran old code.
+    """
+
+    def stamp(match: re.Match[str]) -> str:
+        url = match.group(1)
+        asset = BASE_DIR / url.lstrip("/")
+        try:
+            version = int(asset.stat().st_mtime)
+        except OSError:
+            return match.group(0)
+        return f"{url}?v={version}"
+
+    return _STUDIO_ASSET_RE.sub(stamp, html)
+
+
 @app.get("/studio", response_class=HTMLResponse)
 def player_studio() -> HTMLResponse:
     html = (BASE_DIR / "templates" / "index.html").read_text(encoding="utf-8")
-    return HTMLResponse(html)
+    return HTMLResponse(
+        _stamp_studio_assets(html),
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+        },
+    )
 
 
 @app.get("/health")

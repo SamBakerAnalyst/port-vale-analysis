@@ -299,11 +299,14 @@ function barTrackPercentile(percentile, rawValue) {
   return pct;
 }
 
+// Bar chips show a percentile as a bare rank, not "60%". A percentile is a
+// position in the cohort, not a percentage, and dropping the sign keeps the
+// number readable at slide size. Raw metric values keep their own units.
 function formatBarInnerValue(percentile, rawValue) {
   const resolved = resolveBarScores(percentile, rawValue);
   const pct = resolved.percentile;
   if (pct != null && !Number.isNaN(pct)) {
-    return formatPercentileLabel(pct);
+    return String(Math.round(pct));
   }
   return formatMetricValue(resolved.rawValue);
 }
@@ -420,6 +423,19 @@ const PERCENTILE_SCALE_STEPS = [
   { key: "good", label: "60–79 strong" },
   { key: "elite", label: "80–100 elite" },
 ];
+
+// Mean of a player's profile percentiles, shown above their column on the
+// comparison page and on the exported front slide.
+function buildOverallChip(value) {
+  const chip = document.createElement("div");
+  chip.className = `overall-chip pctband pctband--${percentileBandKey(value)}`;
+  chip.innerHTML = `
+    <span class="overall-chip__label">Overall</span>
+    <span class="overall-chip__value">${value == null ? "—" : Math.round(value)}</span>
+    <span class="overall-chip__band">${keynoteBandLabel(value)}</span>
+  `;
+  return chip;
+}
 
 function buildPercentileScaleKey() {
   const key = document.createElement("div");
@@ -2769,6 +2785,15 @@ function applyFittedImageSize(image, fitted) {
   image.style.margin = "0 auto";
 }
 
+// Every deck slide sits on the same capture surface, whether it is going to be
+// rasterised by html2canvas or screenshotted in real Chrome.
+function wrapSlideInExportSurface(slide) {
+  const surface = document.createElement("div");
+  surface.className = "export-capture-surface export-capture-surface-app";
+  surface.appendChild(slide);
+  return surface;
+}
+
 async function renderExportSurfaceToPng(
   surface,
   {
@@ -2816,12 +2841,7 @@ async function renderExportSurfaceToPng(
   }
 }
 
-async function captureDrilldownSlidePng({
-  chartId,
-  barsId,
-  title = "",
-  exportScale = DRILLDOWN_CARD_EXPORT.imageScale,
-}) {
+async function buildDrilldownSlideSurface({ chartId, barsId, title = "" }) {
   // Bars are drawn from the payload rather than cloned from the DOM, so only the
   // chart element and the drilldown entry need to exist.
   const drilldownIndex = drilldownIndexFromExportIds({ chartId, barsId });
@@ -2963,9 +2983,16 @@ async function captureDrilldownSlidePng({
   footer.appendChild(buildKeynoteFootnote(data));
   slide.appendChild(footer);
 
-  const surface = document.createElement("div");
-  surface.className = "export-capture-surface export-capture-surface-app";
-  surface.appendChild(slide);
+  return wrapSlideInExportSurface(slide);
+}
+
+async function captureDrilldownSlidePng({
+  chartId,
+  barsId,
+  title = "",
+  exportScale = DRILLDOWN_CARD_EXPORT.imageScale,
+}) {
+  const surface = await buildDrilldownSlideSurface({ chartId, barsId, title });
   return renderExportSurfaceToPng(surface, {
     scale: exportScale,
     imageFormat: DECK_EXPORT.imageFormat,
@@ -3049,10 +3076,7 @@ function buildKeynoteFactorBars(entry, players) {
 
       const value = document.createElement("span");
       value.className = "keynote-factor__value";
-      value.textContent = formatBarInnerValue(resolved.percentile, resolved.rawValue).replace(
-        "%",
-        "",
-      );
+      value.textContent = formatBarInnerValue(resolved.percentile, resolved.rawValue);
       row.appendChild(value);
 
       rows.appendChild(row);
@@ -3225,9 +3249,9 @@ function buildKeynoteComparisonSlide(data) {
   head.className = "keynote-comparison__head";
   head.innerHTML = `
     <div class="keynote-comparison__titles">
-      <p class="keynote-comparison__eyebrow">Port Vale recruitment · player comparison</p>
+      <p class="keynote-comparison__eyebrow">Port Vale recruitment</p>
       <h1 class="keynote-comparison__title">${String(positionLabel).toUpperCase()}</h1>
-      <p class="keynote-comparison__sub">Higher bar is better — every score is a percentile rank against the same benchmark</p>
+      <p class="keynote-comparison__sub">${formatBenchmarkSubtitle(data.benchmark)}</p>
     </div>
   `;
   const brand = document.createElement("div");
@@ -3243,11 +3267,8 @@ function buildKeynoteComparisonSlide(data) {
   const table = document.createElement("div");
   table.className = "keynote-comparison__table";
 
-  // The cell above the profile names used to be blank. The colour key reads
-  // better there than buried in the footer.
   const corner = document.createElement("div");
   corner.className = "keynote-comparison__corner";
-  corner.appendChild(buildKeynoteScaleKey());
   table.appendChild(corner);
 
   columns.forEach((column, index) => {
@@ -3290,6 +3311,20 @@ function buildKeynoteComparisonSlide(data) {
     tag.textContent = column.tag || "\u00a0";
     cell.appendChild(tag);
 
+    // Mean of the profiles on this slide. A manager reads this first and uses
+    // the rows below to see where the average comes from.
+    const overall = meanPercentile(column.scores);
+    const overallEl = document.createElement("div");
+    overallEl.className = `keynote-comparison__overall ${keynoteBandClass(overall)}`;
+    overallEl.innerHTML = `
+      <span class="keynote-comparison__overall-label">Overall</span>
+      <span class="keynote-comparison__overall-value">${
+        overall == null ? "—" : Math.round(overall)
+      }</span>
+      <span class="keynote-comparison__overall-band">${keynoteBandLabel(overall)}</span>
+    `;
+    cell.appendChild(overallEl);
+
     table.appendChild(cell);
   });
 
@@ -3328,48 +3363,216 @@ function buildKeynoteComparisonSlide(data) {
 
   const footer = document.createElement("footer");
   footer.className = "keynote-comparison__footer";
-  footer.appendChild(buildKeynoteFootnote(data, "★ = best on this slide"));
+  footer.appendChild(buildKeynoteScaleKey());
+  const footNote = document.createElement("p");
+  footNote.className = "keynote-comparison__foot-note";
+  footNote.textContent = "Percentile rank · ★ = best on this slide";
+  footer.appendChild(footNote);
   slide.appendChild(footer);
 
   return slide;
 }
 
+// Mean of the percentiles a player actually has. Blank profiles are skipped
+// rather than counted as zero, which would punish missing data.
+function meanPercentile(values) {
+  const numbers = (values || [])
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value));
+  if (!numbers.length) {
+    return null;
+  }
+  return numbers.reduce((total, value) => total + value, 0) / numbers.length;
+}
+
+// Horizontal band key for slide footers.
 function buildKeynoteScaleKey() {
   const scale = document.createElement("div");
   scale.className = "keynote-scale";
-
-  const heading = document.createElement("p");
-  heading.className = "keynote-scale__heading";
-  heading.textContent = "Percentile rank";
-  scale.appendChild(heading);
-
-  PERCENTILE_SCALE_STEPS.slice()
-    .reverse()
-    .forEach((step) => {
-      const item = document.createElement("span");
-      item.className = `keynote-scale__item keynote-band--${step.key}`;
-      item.innerHTML = `<span class="keynote-scale__swatch"></span>${step.label}`;
-      scale.appendChild(item);
-    });
-
+  PERCENTILE_SCALE_STEPS.forEach((step) => {
+    const item = document.createElement("span");
+    item.className = `keynote-scale__item keynote-band--${step.key}`;
+    item.innerHTML = `<span class="keynote-scale__swatch"></span>${step.label}`;
+    scale.appendChild(item);
+  });
   return scale;
 }
 
-async function captureComparisonFrontSlidePng({ exportScale = 1 } = {}) {
+function buildComparisonFrontSlideSurface() {
   const data = state.lastChartData;
   if (!data) {
     throw new Error("Comparison front page is not ready yet.");
   }
+  return wrapSlideInExportSurface(buildKeynoteComparisonSlide(data));
+}
 
-  const slide = buildKeynoteComparisonSlide(data);
-  const surface = document.createElement("div");
-  surface.className = "export-capture-surface export-capture-surface-app";
-  surface.appendChild(slide);
+async function captureComparisonFrontSlidePng({ exportScale = 1 } = {}) {
+  const surface = buildComparisonFrontSlideSurface();
   return renderExportSurfaceToPng(surface, {
     scale: exportScale,
     imageFormat: DECK_EXPORT.imageFormat,
     jpegQuality: DECK_EXPORT.jpegQuality,
   });
+}
+
+// A radar needs enough axes for its shape to mean anything. With three or four
+// profiles the outline is driven by which axes happen to sit next to each other,
+// so a player with one huge score reads as a thin wedge and looks worse than a
+// flat, mediocre player. Below this many profiles we show gaps on a shared scale
+// instead, which answers "who is better, and by how much" directly.
+const KEYNOTE_MIN_RADAR_AXES = 5;
+
+function keynoteGapRows(data) {
+  const players = getComparedPlayersFromChartData(data);
+  const labels = data?.labels || [];
+  return labels
+    .map((label, index) => {
+      const points = players
+        .map((player, playerIndex) => ({
+          name: player.player || "Player",
+          initials: playerInitials(player.player || ""),
+          color: seasonColors[playerIndex % seasonColors.length],
+          value: Number(player?.radar_values?.[index]),
+        }))
+        .filter((point) => Number.isFinite(point.value))
+        .sort((a, b) => b.value - a.value);
+      if (!points.length) {
+        return null;
+      }
+      return {
+        label: profileDisplayTitle(label),
+        points,
+        gap: points[0].value - points[points.length - 1].value,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.gap - a.gap);
+}
+
+function buildKeynoteGapSlide(data) {
+  const rows = keynoteGapRows(data);
+  if (!rows.length) {
+    throw new Error("Profile scores are not ready yet.");
+  }
+  const players = getComparedPlayersFromChartData(data);
+
+  const slide = document.createElement("div");
+  slide.className = "keynote-slide keynote-gap";
+  slide.dataset.rows = String(rows.length);
+
+  const head = document.createElement("header");
+  head.className = "keynote-gap__head";
+  head.innerHTML = `
+    <div>
+      <p class="keynote-gap__eyebrow">Head to head</p>
+      <h2 class="keynote-gap__title">${
+        players.length > 1 ? "Where the gap is biggest" : "Profile by profile"
+      }</h2>
+      <p class="keynote-gap__sub">Every profile on the same 0–100 percentile scale, biggest gap first</p>
+    </div>
+  `;
+  head.appendChild(buildKeynoteCrest());
+  slide.appendChild(head);
+
+  const legend = document.createElement("div");
+  legend.className = "keynote-gap__legend";
+  players.slice(0, 4).forEach((player, index) => {
+    const color = seasonColors[index % seasonColors.length];
+    const item = document.createElement("div");
+    item.className = "keynote-gap__legend-item";
+    item.style.setProperty("--player-color", color);
+    item.appendChild(buildKeynotePhoto(player, { color, className: "keynote-gap__legend-photo" }));
+    const text = document.createElement("div");
+    text.className = "keynote-gap__legend-text";
+    text.innerHTML = `
+      <p class="keynote-gap__legend-name">${player.player || "Player"}</p>
+      <p class="keynote-gap__legend-meta">${[player.season_label, keynoteMinutesLabel(player)]
+        .filter(Boolean)
+        .join("  ·  ")}</p>
+    `;
+    item.appendChild(text);
+    legend.appendChild(item);
+  });
+  slide.appendChild(legend);
+
+  const body = document.createElement("div");
+  body.className = "keynote-gap__body";
+  rows.forEach((row) => body.appendChild(buildKeynoteGapRow(row, players.length)));
+  slide.appendChild(body);
+
+  const footer = document.createElement("footer");
+  footer.className = "keynote-gap__footer";
+  footer.appendChild(buildKeynoteFootnote(data));
+  slide.appendChild(footer);
+
+  return slide;
+}
+
+function buildKeynoteGapRow(row, playerCount) {
+  const wrap = document.createElement("div");
+  wrap.className = "keynote-gap__row";
+
+  const label = document.createElement("p");
+  label.className = "keynote-gap__row-label";
+  label.textContent = row.label;
+  wrap.appendChild(label);
+
+  const track = document.createElement("div");
+  track.className = "keynote-gap__track";
+
+  // Dots live in an inset scale so a pill at 0 or 100 still sits inside the
+  // track. The scale stays linear — only its endpoints are pulled in.
+  const scale = document.createElement("div");
+  scale.className = "keynote-gap__scale";
+
+  [0, 25, 50, 75, 100].forEach((tick) => {
+    const line = document.createElement("span");
+    line.className = "keynote-gap__tick";
+    line.style.left = `${tick}%`;
+    scale.appendChild(line);
+  });
+
+  const leader = row.points[0];
+  const trailer = row.points[row.points.length - 1];
+  if (row.points.length > 1) {
+    const span = document.createElement("span");
+    span.className = "keynote-gap__span";
+    span.style.left = `${clampPercent(trailer.value)}%`;
+    span.style.width = `${Math.max(0, clampPercent(leader.value) - clampPercent(trailer.value))}%`;
+    scale.appendChild(span);
+  }
+
+  row.points.forEach((point) => {
+    const dot = document.createElement("span");
+    dot.className = `keynote-gap__dot ${keynoteBandClass(point.value)}`;
+    dot.style.left = `${clampPercent(point.value)}%`;
+    dot.style.setProperty("--player-color", point.color);
+    dot.innerHTML = `
+      ${playerCount > 1 ? `<span class="keynote-gap__dot-who">${point.initials}</span>` : ""}
+      <span class="keynote-gap__dot-value">${Math.round(point.value)}</span>
+    `;
+    scale.appendChild(dot);
+  });
+  track.appendChild(scale);
+  wrap.appendChild(track);
+
+  const gap = document.createElement("div");
+  gap.className = "keynote-gap__delta";
+  if (row.points.length > 1 && row.gap >= 1) {
+    gap.innerHTML = `
+      <span class="keynote-gap__delta-value">+${Math.round(row.gap)}</span>
+      <span class="keynote-gap__delta-who">${leader.initials}</span>
+    `;
+  } else {
+    gap.innerHTML = `<span class="keynote-gap__delta-level">Level</span>`;
+  }
+  wrap.appendChild(gap);
+
+  return wrap;
+}
+
+function clampPercent(value) {
+  return Math.min(100, Math.max(0, Number(value) || 0));
 }
 
 // Best / worst profile for a radar player, used for the read-out cards.
@@ -3438,7 +3641,7 @@ function buildKeynoteRadarPlayerCard(player, index, labels) {
   return card;
 }
 
-async function captureMainRadarSlidePng({ exportScale = DRILLDOWN_CARD_EXPORT.imageScale } = {}) {
+async function buildMainRadarSlideSurface() {
   const chartPng = await capturePlotPng("radarChart", {
     width: 1200,
     height: 840,
@@ -3498,9 +3701,11 @@ async function captureMainRadarSlidePng({ exportScale = DRILLDOWN_CARD_EXPORT.im
   footer.appendChild(buildKeynoteFootnote(data));
   slide.appendChild(footer);
 
-  const surface = document.createElement("div");
-  surface.className = "export-capture-surface export-capture-surface-app";
-  surface.appendChild(slide);
+  return wrapSlideInExportSurface(slide);
+}
+
+async function captureMainRadarSlidePng({ exportScale = DRILLDOWN_CARD_EXPORT.imageScale } = {}) {
+  const surface = await buildMainRadarSlideSurface();
   return renderExportSurfaceToPng(surface, {
     scale: exportScale,
     imageFormat: DECK_EXPORT.imageFormat,
@@ -3897,6 +4102,72 @@ async function buildExportPayload(data, extension) {
   };
 }
 
+// Slide selection for the deck, shared by both export engines so the WYSIWYG
+// PDF and the PPTX can never disagree about which slides are in the deck.
+function collectDeckSlideJobs(data) {
+  const drilldowns = data.profile_drilldowns || [];
+  const hasFront = Boolean(studioComparisonFrontEl?.querySelector(".comparison-frame--keynote"));
+  const hasRadar = Boolean(document.getElementById("radarChart")?.data);
+  if (chartSourceEl.value !== "profiles" || (!hasFront && drilldowns.length === 0 && !hasRadar)) {
+    throw new Error("Generate profile charts first, then export the deck.");
+  }
+
+  const includedDrilldowns = drilldowns.filter(
+    (entry) => !isExcludedFromExport(exportSectionKeyForProfile(entry.profile)),
+  );
+  const includeFront = hasFront && !isExcludedFromExport("comparison-front");
+  const includeRadar = hasRadar && !isExcludedFromExport("main-radar");
+  if (!includeFront && !includeRadar && includedDrilldowns.length === 0) {
+    throw new Error(
+      "No slides selected — click Include in export on the comparison page, radar, or at least one profile.",
+    );
+  }
+
+  const jobs = [];
+  if (includeFront) {
+    jobs.push({
+      title: "Profile comparison",
+      buildSurface: () => buildComparisonFrontSlideSurface(),
+    });
+  }
+  if (includeRadar) {
+    const axes = (data.labels || []).length;
+    const playerCount = getComparedPlayersFromChartData(data).length;
+    if (axes >= KEYNOTE_MIN_RADAR_AXES) {
+      jobs.push({ title: "Profile radar", buildSurface: () => buildMainRadarSlideSurface() });
+    } else if (playerCount > 1) {
+      // Too few axes for a radar to be honest, but a real comparison to make.
+      jobs.push({
+        title: "Head to head",
+        buildSurface: () => wrapSlideInExportSurface(buildKeynoteGapSlide(data)),
+      });
+    }
+    // One player and few profiles: slide 1 already says everything a radar could.
+  }
+  drilldowns.forEach((entry, index) => {
+    if (isExcludedFromExport(exportSectionKeyForProfile(entry.profile))) {
+      return;
+    }
+    const chartId = `profileDrilldown-${index}`;
+    const barsId = `profileDrilldownBars-${index}`;
+    if (!document.getElementById(barsId) || !document.getElementById(chartId)?.data) {
+      return;
+    }
+    const title = humanizeProfileName(entry.profile);
+    jobs.push({
+      title,
+      buildSurface: () => buildDrilldownSlideSurface({ chartId, barsId, title }),
+    });
+  });
+
+  if (!jobs.length) {
+    throw new Error(
+      "No exportable slides found — include the comparison page or radar, or regenerate charts.",
+    );
+  }
+  return jobs;
+}
+
 async function buildWholeExportPayload(data, extension) {
   const drilldowns = data.profile_drilldowns || [];
   const hasFront = Boolean(studioComparisonFrontEl?.querySelector(".comparison-frame--keynote"));
@@ -4041,6 +4312,107 @@ async function buildWholeExportPayload(data, extension) {
   return payload;
 }
 
+// The deck PDF goes through real Chrome on the server rather than html2canvas.
+// html2canvas re-implements a subset of CSS, so it silently drops shadows,
+// gradients and object-fit and forces the slide design down to what it can
+// draw. Screenshotting the same DOM in Chrome removes that ceiling.
+async function buildWysiwygDeckPages(data) {
+  const jobs = collectDeckSlideJobs(data);
+  const wysiwyg = window.PortValeWysiwygExport;
+  if (!wysiwyg) {
+    throw new Error("Export helper failed to load — hard refresh the page and try again.");
+  }
+
+  const cssText = await wysiwyg.collectCssText();
+  const host = document.createElement("div");
+  host.className = "export-capture-host";
+  document.body.appendChild(host);
+
+  const htmlPages = [];
+  const htmlFilenames = [];
+  try {
+    for (let index = 0; index < jobs.length; index += 1) {
+      const job = jobs[index];
+      setStatus(`Building slide ${index + 1} of ${jobs.length}: ${job.title}…`);
+
+      const surface = await job.buildSurface();
+      const slide = surface.firstElementChild || surface;
+      host.replaceChildren(surface);
+      await wysiwyg.waitForImages(surface);
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+      const clone = slide.cloneNode(true);
+      await wysiwyg.inlineImages(clone);
+      htmlPages.push(
+        wysiwyg.buildDocument({
+          slideHtml: clone.outerHTML,
+          frameWidth: 1920,
+          frameHeight: 1080,
+          liveWidth: 1920,
+          liveHeight: 1080,
+          cssText,
+          bodyClass: "is-exporting studio-export-capture",
+          background: "#070707",
+        }),
+      );
+      htmlFilenames.push(wysiwyg.slugify(job.title, `slide-${index + 1}`));
+    }
+  } finally {
+    host.remove();
+  }
+
+  return { htmlPages, htmlFilenames };
+}
+
+async function exportDeckWysiwygPdf() {
+  if (loadChartsInFlight) {
+    showAlert("Charts are still loading — wait for comparison to finish, then export.");
+    return;
+  }
+  if (!canExportWholeDeck()) {
+    showAlert("Generate profile charts first, then export the deck.");
+    return;
+  }
+
+  const data = state.lastChartData;
+  resetPlotlyCaptureQueue();
+  wholeDeckExportButtons.forEach((button) => {
+    button.disabled = true;
+  });
+  setStatus("Building deck…");
+
+  try {
+    const { htmlPages, htmlFilenames } = await buildWysiwygDeckPages(data);
+    setStatus(`Rendering ${htmlPages.length} slides in Chrome — this takes a few seconds…`);
+    const result = await window.PortValeWysiwygExport.downloadPdf({
+      htmlPages,
+      htmlFilenames,
+      width: 1920,
+      height: 1080,
+      scale: 2,
+      filename: exportDeckPdfFileName(data),
+      documentTitle: "Player comparison",
+    });
+    setStatus(
+      `PDF ready — ${result.pageCount} slide${result.pageCount === 1 ? "" : "s"}, ${result.sizeMb} MB`,
+    );
+  } catch (error) {
+    // Chrome-on-the-server is the good path but not the only one. Rather than
+    // leave staff with no PDF, drop back to the in-browser deck.
+    console.warn("WYSIWYG export failed, falling back to in-browser deck", error);
+    setStatus("Chrome export unavailable — building the PDF in the browser instead…");
+    wholeDeckExportButtons.forEach((button) => {
+      button.disabled = false;
+    });
+    return exportWholeDeck("/api/export-pdf", "pdf", "Building PDF…", "PDF");
+  } finally {
+    wholeDeckExportButtons.forEach((button) => {
+      button.disabled = false;
+    });
+    updateExportButtonState();
+  }
+}
+
 async function exportWholeDeck(endpoint, extension, busyLabel, successLabel) {
   if (loadChartsInFlight) {
     showAlert("Charts are still loading — wait for comparison to finish, then export.");
@@ -4123,7 +4495,12 @@ function exportWholeDeckToPptx() {
   return exportWholeDeck("/api/export-pptx", "pptx", "Building slides…", "Slides");
 }
 
-function exportWholeDeckToPdf() {
+async function exportWholeDeckToPdf() {
+  // Real Chrome when it is available; the html2canvas deck stays as a fallback
+  // so a Playwright problem on the server cannot leave staff with no export.
+  if (window.PortValeWysiwygExport) {
+    return exportDeckWysiwygPdf();
+  }
   return exportWholeDeck("/api/export-pdf", "pdf", "Building PDF…", "PDF");
 }
 
@@ -4871,18 +5248,21 @@ function limitChartPayload(data) {
   return limited;
 }
 
+// Labels arrive already normalised by profileDisplayTitle, so the case here is
+// deliberate — shouting the row labels made the page harder to scan and did not
+// match the exported deck.
 function studioProfileLabelParts(label) {
   const text = String(label || "").trim();
   const parts = text.split(" - ").map((part) => part.trim()).filter(Boolean);
   if (parts.length > 1) {
-    const main = parts[0].toUpperCase();
+    const main = parts[0];
     const sub = parts.slice(1).join(" - ");
-    if (sub.toUpperCase() === main) {
+    if (sub.toUpperCase() === main.toUpperCase()) {
       return { main, sub: null };
     }
     return { main, sub };
   }
-  return { main: text.toUpperCase(), sub: null };
+  return { main: text, sub: null };
 }
 
 function studioProfileLabelMarkup(label) {
@@ -4942,16 +5322,14 @@ function studioComparisonPlayersFromChart(data) {
   });
 }
 
+// Same wording as the exported deck: season first, then minutes spelled out.
+// The old "(1889′ · League One — 25/26)" made the reader decode a prime mark
+// inside brackets before they got to the league.
 function studioMinutesLabel(player) {
   const minutes = Math.round(Number(player.minutes) || 0);
   const season = String(player.season_label || "").trim();
-  if (minutes > 0 && season) {
-    return `(${minutes}′ · ${season})`;
-  }
-  if (minutes > 0) {
-    return `(${minutes}′)`;
-  }
-  return season;
+  const minutesText = minutes > 0 ? `${minutes.toLocaleString()} min` : "";
+  return [season, minutesText].filter(Boolean).join("  ·  ");
 }
 
 function studioReferenceProfileScores(reference, profileApiNames) {
@@ -4995,9 +5373,11 @@ function renderStudioComparisonFront(data) {
   }
 
   const players = studioComparisonPlayersFromChart(data);
+  // Sentence case, matching the exported deck — the API mixes "PV DEEP CREATOR"
+  // and "PV Defensive", and headings should not mix the two.
   const profiles = (data.labels || []).map((label) => ({
     apiName: label,
-    label: humanizeProfileName(label),
+    label: profileDisplayTitle(label),
   }));
   if (!players.length || profiles.length < 2) {
     studioComparisonFrontEl.innerHTML = "";
@@ -5010,7 +5390,6 @@ function renderStudioComparisonFront(data) {
     ) || {};
   const positionLabel = positionEntry.label || players[0]?.position_label || "Player";
   const positionShort = positionEntry.shortLabel || positionAbbrev(state.comparedPlayers[0]?.position) || "POS";
-  const seasonNote = "One selected season per player at role";
   const reference = data.port_vale_reference || null;
   const referenceScores = studioReferenceProfileScores(
     reference,
@@ -5030,9 +5409,9 @@ function renderStudioComparisonFront(data) {
   frameHead.className = "comparison-frame__head";
   frameHead.innerHTML = `
     <div class="comparison-frame__titles">
-      <p class="comparison-frame__club">PLAYER COMPARISON</p>
-      <h2 class="comparison-frame__title">${String(positionLabel).toUpperCase()} COMPARISON</h2>
-      <p class="comparison-frame__season">${seasonNote}</p>
+      <p class="comparison-frame__club">Port Vale recruitment</p>
+      <h2 class="comparison-frame__title">${String(positionLabel).toUpperCase()}</h2>
+      <p class="comparison-frame__season">${formatBenchmarkSubtitle(data.benchmark)}</p>
     </div>
     <span class="comparison-frame__badge">${positionShort}</span>
   `;
@@ -5076,6 +5455,19 @@ function renderStudioComparisonFront(data) {
     minutes.textContent = studioMinutesLabel(player);
     photo.appendChild(minutes);
 
+    // The reference column carries an extra "our most-used" line, so every
+    // column reserves the slot to keep the Overall chips on one baseline.
+    const hint = document.createElement("p");
+    hint.className = "player-photo__minutes player-photo__minutes--hint";
+    hint.innerHTML = "&nbsp;";
+    photo.appendChild(hint);
+
+    photo.appendChild(
+      buildOverallChip(
+        meanPercentile(profiles.map((profile) => player.profileScores?.[profile.apiName] ?? null)),
+      ),
+    );
+
     table.appendChild(photo);
   });
 
@@ -5092,8 +5484,13 @@ function renderStudioComparisonFront(data) {
       </div>
       <p class="player-photo__name" style="color:#e2e8f0">${reference.player}</p>
       <p class="player-photo__minutes">${studioMinutesLabel(reference)}</p>
-      <p class="player-photo__minutes player-photo__minutes--hint">PV most mins at ${positionShort}</p>
+      <p class="player-photo__minutes player-photo__minutes--hint">Our most-used ${positionShort}</p>
     `;
+    refPhoto.appendChild(
+      buildOverallChip(
+        meanPercentile(profiles.map((profile) => referenceScores[profile.apiName] ?? null)),
+      ),
+    );
   } else {
     refPhoto.innerHTML = `
       <div class="player-photo__image-wrap player-photo__image-wrap--average">
@@ -5131,7 +5528,7 @@ function renderStudioComparisonFront(data) {
       if (value != null) {
         cell.style.setProperty("--bar-width", `${Math.max(0, Math.min(100, Number(value)))}%`);
       }
-      cell.innerHTML = `<span class="comparison-cell__value">${value == null ? "—" : `${Math.round(value)}%`}</span>`;
+      cell.innerHTML = `<span class="comparison-cell__value">${value == null ? "—" : Math.round(value)}</span>`;
       row.appendChild(cell);
     });
 
@@ -5143,7 +5540,7 @@ function renderStudioComparisonFront(data) {
     if (refValue != null) {
       refCell.style.setProperty("--bar-width", `${Math.max(0, Math.min(100, refValue))}%`);
     }
-    refCell.innerHTML = `<span class="comparison-cell__value">${refValue == null ? "—" : `${Math.round(refValue)}%`}</span>`;
+    refCell.innerHTML = `<span class="comparison-cell__value">${refValue == null ? "—" : Math.round(refValue)}</span>`;
     row.appendChild(refCell);
 
     table.appendChild(row);
@@ -5153,15 +5550,9 @@ function renderStudioComparisonFront(data) {
 
   // The photo row above already names every player and their club, so the old
   // legend repeated it. A percentile key is what actually needed explaining.
+  // The benchmark now sits under the title, so repeating it below the table
+  // was noise. The key is the only thing left that needs explaining.
   body.appendChild(buildPercentileScaleKey());
-
-  const note = document.createElement("p");
-  note.className = "comparison-note";
-  const benchmark = data.benchmark;
-  note.textContent = benchmark?.cohort_size
-    ? `Percentiles vs ${benchmark.cohort_size} players · ${(benchmark.competitions || []).join(", ")} · ${benchmark.min_minutes || 600}+ min`
-    : "Position-specific profiles · one selected season per player.";
-  body.appendChild(note);
 
   frame.appendChild(body);
 
