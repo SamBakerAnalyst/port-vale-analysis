@@ -29,6 +29,7 @@ const state = {
   loading: false,
   slideIndex: 0,
   slides: [],
+  deckMode: "two_pager",
 };
 
 const els = {
@@ -46,15 +47,25 @@ const els = {
   refreshBtn: document.getElementById("refreshBtn"),
   exportPngsBtn: document.getElementById("exportPngsBtn"),
   exportWhatsappPdfBtn: document.getElementById("exportWhatsappPdfBtn"),
+  pdfViewBtn: document.getElementById("pdfViewBtn"),
+  pdfBackBtn: document.getElementById("pdfBackBtn"),
+  presentBtn: document.getElementById("presentBtn"),
+  exportStatus: document.getElementById("exportStatus"),
+  exportOverlay: document.getElementById("exportOverlay"),
+  presentCount: document.getElementById("presentCount"),
+  presentPrev: document.getElementById("presentPrev"),
+  presentNext: document.getElementById("presentNext"),
   prevSlideBtn: document.getElementById("prevSlideBtn"),
   nextSlideBtn: document.getElementById("nextSlideBtn"),
   slideCounter: document.getElementById("slideCounter"),
+  deckModeFullBtn: document.getElementById("deckModeFullBtn"),
+  deckModeTwoBtn: document.getElementById("deckModeTwoBtn"),
 };
 
 const SLIDE_EXPORT_WIDTH = 1920;
 const SLIDE_EXPORT_HEIGHT = 1080;
 const SLIDE_EXPORT_SCALE = 2;
-/* Full Keynote frame in the WhatsApp PDF — no soft 720p downscale. */
+/* Full Keynote frame — higher scale so WhatsApp text stays sharp and large. */
 const WHATSAPP_EXPORT_WIDTH = 1920;
 const WHATSAPP_EXPORT_HEIGHT = 1080;
 const WHATSAPP_JPEG_QUALITY = 0.93;
@@ -85,11 +96,43 @@ function waitForExportImages(root, timeoutMs = 6000) {
 
 function prepareExportClone(slide, width, height) {
   const clone = slide.cloneNode(true);
-  clone.classList.add("pm-slide--export-capture", "pm-slide--active");
-  clone.classList.remove("pm-slide--exporting");
-  clone.style.setProperty("--pm-export-w", `${width}px`);
-  clone.style.setProperty("--pm-export-h", `${height}px`);
-  clone.style.setProperty("--slide-width", `${width}px`);
+  clone.classList.add("pm-slide--active");
+  clone.classList.remove("pm-slide--export-capture", "pm-slide--exporting");
+  clone.querySelectorAll(".xi-circle--editable").forEach((marker) => {
+    marker.classList.remove("xi-circle--dragging", "xi-circle--editing");
+    marker.querySelectorAll("[contenteditable]").forEach((field) => {
+      field.removeAttribute("contenteditable");
+    });
+  });
+  // Freeze notes as static bullets for PDF (textarea → list).
+  clone.querySelectorAll("textarea.tp-note__input").forEach((ta) => {
+    const lines = String(ta.value || "")
+      .replace(/\r/g, "")
+      .split("\n")
+      .map((line) => line.replace(/^[\s•\-\u2022*]+/, "").trim())
+      .filter(Boolean);
+    const body = ta.closest(".tp-note__body") || ta.parentElement;
+    if (!body) return;
+    const list = document.createElement("ul");
+    list.className = "tp-note__list";
+    (lines.length ? lines : [""]).forEach((line) => {
+      const li = document.createElement("li");
+      li.className = "tp-note__item";
+      li.textContent = line;
+      list.appendChild(li);
+    });
+    body.classList.remove("tp-note__body--empty");
+    body.innerHTML = "";
+    body.appendChild(list);
+  });
+  clone.querySelectorAll(".tp-note__item[contenteditable], .tp-note__body[contenteditable], [contenteditable]").forEach((field) => {
+    const text = (field.innerText || "").replace(/\u00a0/g, " ");
+    field.removeAttribute("contenteditable");
+    field.classList.remove("tp-note__body--empty");
+    if (field.matches("li, .tp-note__item")) {
+      field.textContent = text.trim() ? text.replace(/\n+/g, " ").trim() : "";
+    }
+  });
   clone.style.setProperty("width", `${width}px`, "important");
   clone.style.setProperty("max-width", `${width}px`, "important");
   clone.style.setProperty("height", `${height}px`, "important");
@@ -102,7 +145,173 @@ function prepareExportClone(slide, width, height) {
   clone.style.overflow = "hidden";
   clone.style.margin = "0";
   clone.style.transform = "none";
+  clone.style.removeProperty("--pm-export-w");
+  clone.style.removeProperty("--pm-export-h");
   return clone;
+}
+
+async function imageToDataUrl(img) {
+  const src = img.currentSrc || img.src;
+  if (!src || src.startsWith("data:")) return src || "";
+  try {
+    const response = await fetch(src, { credentials: "same-origin" });
+    if (!response.ok) return src;
+    const blob = await response.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || src));
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return src;
+  }
+}
+
+async function inlineCloneImages(clone) {
+  const images = [...clone.querySelectorAll("img")];
+  await Promise.all(
+    images.map(async (img) => {
+      const dataUrl = await imageToDataUrl(img);
+      if (dataUrl) {
+        img.setAttribute("src", dataUrl);
+        img.removeAttribute("srcset");
+      }
+    }),
+  );
+}
+
+let cachedExportCssText = null;
+
+async function loadExportCssText() {
+  if (cachedExportCssText) return cachedExportCssText;
+  const link =
+    document.querySelector('link[href*="pre-match"][rel="stylesheet"]') ||
+    document.querySelector('link[href*="app.css"][rel="stylesheet"]');
+  const href = link?.href || "/static/pre-match.css";
+  const response = await fetch(href, { credentials: "same-origin" });
+  if (!response.ok) throw new Error("Could not load slide CSS for export.");
+  cachedExportCssText = await response.text();
+  return cachedExportCssText;
+}
+
+function kitVarsStyleFromReport() {
+  const slide = els.deck?.querySelector(".pm-slide");
+  return slide?.getAttribute("style") || "";
+}
+
+function exportBodyClasses() {
+  const classes = ["is-exporting"];
+  if (document.body.classList.contains("is-two-pager")) classes.push("is-two-pager");
+  if (document.body.classList.contains("is-pdf-view")) classes.push("is-pdf-view");
+  return classes.join(" ");
+}
+
+async function buildWysiwygHtmlDocument(slideHtml, frameWidth, frameHeight, liveSize) {
+  const cssText = await loadExportCssText();
+  const origin = window.location.origin;
+  const kitStyle = kitVarsStyleFromReport().replace(/"/g, "&quot;");
+  const liveW = Math.max(1, Math.round(liveSize?.width || frameWidth));
+  const liveH = Math.max(1, Math.round(liveSize?.height || frameHeight));
+  const scale = Math.min(frameWidth / liveW, frameHeight / liveH);
+  const wrappedSlide = `<div class="pm-export-frame" style="width:${frameWidth}px;height:${frameHeight}px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#0b1220;">
+  <div class="pm-export-scale" style="width:${liveW}px;height:${liveH}px;transform:scale(${scale});transform-origin:center center;">
+    ${slideHtml}
+  </div>
+</div>`;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <base href="${origin}/" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <style>
+${cssText}
+html, body {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: ${frameWidth}px !important;
+  height: ${frameHeight}px !important;
+  overflow: hidden !important;
+  background: #0b1220 !important;
+}
+body { display: block !important; }
+.pm-export-frame { box-sizing: border-box; }
+.pm-export-scale { box-sizing: border-box; }
+.pm-export-scale > .pm-slide { margin: 0 !important; }
+  </style>
+</head>
+<body class="${exportBodyClasses()}" style="${kitStyle}">
+${wrappedSlide}
+</body>
+</html>`;
+}
+
+async function capturePreMatchSlidesWysiwyg(options = {}) {
+  const frameWidth = options.layoutWidth ?? options.width ?? SLIDE_EXPORT_WIDTH;
+  const frameHeight = options.layoutHeight ?? options.height ?? SLIDE_EXPORT_HEIGHT;
+
+  const wasPresent = document.body.classList.contains("is-present");
+  if (wasPresent) setPresent(false);
+
+  const slides = [...els.deck.querySelectorAll(".pm-slide")];
+  if (!slides.length) throw new Error("Load a report before exporting.");
+
+  if (document.fonts?.ready) {
+    try {
+      await document.fonts.ready;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  els.app?.classList.add("pm-app--exporting");
+  document.body.classList.add("is-exporting");
+  const htmlPages = [];
+  const htmlFilenames = [];
+  const previousIndex = state.slideIndex;
+
+  try {
+    for (let index = 0; index < slides.length; index += 1) {
+      const slide = slides[index];
+      highlightSlide(index);
+      slide.scrollIntoView({ behavior: "instant", block: "center" });
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      warmDeckPhotos(slide);
+      await waitForExportImages(slide, slide.classList.contains("pm-slide--rankings") ? 10000 : 6000);
+      await new Promise((resolve) => window.setTimeout(resolve, 60));
+
+      const rect = slide.getBoundingClientRect();
+      const liveW = Math.max(1, Math.round(rect.width));
+      const liveH = Math.max(1, Math.round(rect.height));
+      const clone = prepareExportClone(slide, liveW, liveH);
+      await inlineCloneImages(clone);
+      const doc = await buildWysiwygHtmlDocument(clone.outerHTML, frameWidth, frameHeight, {
+        width: liveW,
+        height: liveH,
+      });
+      htmlPages.push(doc);
+      htmlFilenames.push(slugifyExportPart(slide.dataset.slideTitle || `slide-${index + 1}`));
+      const label = options.progressLabel || "Preparing";
+      setExportStatus(`${label}… ${index + 1}/${slides.length}`, "loading");
+      setStatus(`${label}… ${index + 1}/${slides.length}`, "loading");
+    }
+  } finally {
+    document.body.classList.remove("is-exporting");
+    els.app?.classList.remove("pm-app--exporting");
+    highlightSlide(previousIndex);
+    if (wasPresent) setPresent(true);
+  }
+
+  return {
+    htmlPages,
+    htmlFilenames,
+    width: frameWidth,
+    height: frameHeight,
+    scale: options.scale ?? SLIDE_EXPORT_SCALE,
+  };
 }
 
 function downscaleCanvas(source, width, height, fillStyle = "#ffffff") {
@@ -127,11 +336,17 @@ async function capturePreMatchSlides(options = {}) {
   const scale = options.scale ?? SLIDE_EXPORT_SCALE;
   const mimeType = options.mimeType ?? "image/png";
   const quality = options.quality ?? 0.92;
-  const slides = [...els.deck.querySelectorAll(".pm-slide")];
-  if (!slides.length) throw new Error("Load a report before exporting.");
   if (typeof html2canvas !== "function") {
     throw new Error("Export unavailable — reload the page.");
   }
+
+  const wasPdfView = document.body.classList.contains("is-pdf-view");
+  const wasPresent = document.body.classList.contains("is-present");
+  if (wasPresent) setPresent(false);
+  if (!wasPdfView) setPdfView(true);
+
+  const slides = [...els.deck.querySelectorAll(".pm-slide")];
+  if (!slides.length) throw new Error("Load a report before exporting.");
 
   if (document.fonts?.ready) {
     try {
@@ -142,49 +357,77 @@ async function capturePreMatchSlides(options = {}) {
   }
 
   els.app?.classList.add("pm-app--exporting");
+  document.body.classList.add("is-exporting");
   const pages = [];
   const previousIndex = state.slideIndex;
-
-  const host = document.createElement("div");
-  host.className = "pm-export-host";
-  host.style.width = `${layoutWidth}px`;
-  host.style.height = `${layoutHeight}px`;
-  document.body.appendChild(host);
 
   try {
     for (let index = 0; index < slides.length; index += 1) {
       const slide = slides[index];
       highlightSlide(index);
-      // Let the live slide settle (pitch markers, photos) before cloning.
-      slide.scrollIntoView({ behavior: "instant", block: "nearest" });
+      slide.scrollIntoView({ behavior: "instant", block: "center" });
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      warmDeckPhotos(slide);
+      await waitForExportImages(slide, slide.classList.contains("pm-slide--rankings") ? 10000 : 6000);
+      await new Promise((resolve) => window.setTimeout(resolve, 80));
 
       const isDarkSlide = slide.classList.contains("pm-slide--team-style");
       const backgroundColor = isDarkSlide ? "#0f1115" : "#ffffff";
+      const saved = {
+        width: slide.style.width,
+        height: slide.style.height,
+        margin: slide.style.margin,
+        maxWidth: slide.style.maxWidth,
+        aspectRatio: slide.style.aspectRatio,
+        boxShadow: slide.style.boxShadow,
+        borderRadius: slide.style.borderRadius,
+        overflow: slide.style.overflow,
+        transform: slide.style.transform,
+      };
 
-      host.replaceChildren();
-      const clone = prepareExportClone(slide, layoutWidth, layoutHeight);
-      host.appendChild(clone);
-      warmDeckPhotos(clone);
-      await waitForExportImages(clone, slide.classList.contains("pm-slide--rankings") ? 10000 : 6000);
-      // Force layout at the export frame size before measuring.
-      void clone.offsetWidth;
+      slide.style.width = `${layoutWidth}px`;
+      slide.style.height = `${layoutHeight}px`;
+      slide.style.margin = "0 auto";
+      slide.style.maxWidth = "none";
+      slide.style.aspectRatio = "auto";
+      slide.style.boxShadow = "none";
+      slide.style.borderRadius = "0";
+      slide.style.overflow = "hidden";
+      slide.style.transform = "none";
+
+      const scrollX = window.scrollX;
+      const scrollY = window.scrollY;
+      void slide.offsetWidth;
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      // Extra beat so late paint (fonts, badges, pitch markers) settles.
-      await new Promise((resolve) => window.setTimeout(resolve, 60));
 
-      const canvas = await html2canvas(clone, {
-        backgroundColor,
-        scale,
-        useCORS: true,
-        allowTaint: false,
-        logging: false,
-        foreignObjectRendering: false,
-        width: layoutWidth,
-        height: layoutHeight,
-        windowWidth: layoutWidth,
-        windowHeight: layoutHeight,
-      });
+      let canvas;
+      try {
+        canvas = await html2canvas(slide, {
+          backgroundColor,
+          scale,
+          useCORS: true,
+          allowTaint: false,
+          logging: false,
+          foreignObjectRendering: false,
+          width: layoutWidth,
+          height: layoutHeight,
+          windowWidth: layoutWidth,
+          windowHeight: layoutHeight,
+          scrollX: -window.scrollX,
+          scrollY: -window.scrollY,
+        });
+      } finally {
+        slide.style.width = saved.width;
+        slide.style.height = saved.height;
+        slide.style.margin = saved.margin;
+        slide.style.maxWidth = saved.maxWidth;
+        slide.style.aspectRatio = saved.aspectRatio;
+        slide.style.boxShadow = saved.boxShadow;
+        slide.style.borderRadius = saved.borderRadius;
+        slide.style.overflow = saved.overflow;
+        slide.style.transform = saved.transform;
+        window.scrollTo(scrollX, scrollY);
+      }
 
       const framed = downscaleCanvas(canvas, outputWidth, outputHeight, backgroundColor);
       const title = slugifyExportPart(slide.dataset.slideTitle || `slide-${index + 1}`);
@@ -195,15 +438,105 @@ async function capturePreMatchSlides(options = {}) {
         height: framed.height,
       });
       const label = options.progressLabel || "Exporting";
+      setExportStatus(`${label}… ${index + 1}/${slides.length}`, "loading");
       setStatus(`${label}… ${index + 1}/${slides.length}`, "loading");
     }
   } finally {
-    host.remove();
+    document.body.classList.remove("is-exporting");
     els.app?.classList.remove("pm-app--exporting");
     highlightSlide(previousIndex);
+    if (!wasPdfView) {
+      /* Stay in PDF view after export — same as Project Promotion. */
+    }
   }
 
   return pages;
+}
+
+function setExportStatus(message, kind = "") {
+  if (!els.exportStatus) return;
+  els.exportStatus.textContent = message || "";
+  els.exportStatus.className = `pm-toolbar__export-status${kind ? ` pm-toolbar__export-status--${kind}` : ""}`;
+}
+
+function setExportOverlay(message) {
+  if (!els.exportOverlay) return;
+  if (message) {
+    els.exportOverlay.textContent = message;
+    els.exportOverlay.classList.add("is-active");
+  } else {
+    els.exportOverlay.textContent = "";
+    els.exportOverlay.classList.remove("is-active");
+  }
+}
+
+function updatePdfScale() {
+  if (!document.body.classList.contains("is-pdf-view")) return;
+  const displayW = Math.min(window.innerWidth * 0.96, 1760);
+  document.body.style.setProperty("--pm-pdf-scale", String(displayW / SLIDE_EXPORT_WIDTH));
+}
+
+function applyPdfViewToSlides() {
+  if (!document.body.classList.contains("is-pdf-view")) return;
+  els.deck?.querySelectorAll(".pm-slide").forEach((slide) => {
+    slide.classList.add("pm-slide--export-capture", "pm-slide--active");
+    slide.style.setProperty("--pm-export-w", `${SLIDE_EXPORT_WIDTH}px`);
+    slide.style.setProperty("--pm-export-h", `${SLIDE_EXPORT_HEIGHT}px`);
+  });
+  updatePdfScale();
+}
+
+function setPdfView(on) {
+  if (on && document.body.classList.contains("is-present")) setPresent(false);
+  document.body.classList.toggle("is-pdf-view", on);
+  if (on) {
+    applyPdfViewToSlides();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    setExportStatus("PDF version — optional full-size preview. WhatsApp PDF captures your current deck view.", "success");
+    els.statusBar.textContent = "PDF version — WhatsApp export uses what you see on screen";
+  } else {
+    els.deck?.querySelectorAll(".pm-slide").forEach((slide, index) => {
+      slide.classList.remove("pm-slide--export-capture");
+      slide.classList.toggle("pm-slide--active", index === state.slideIndex);
+      slide.style.removeProperty("--pm-export-w");
+      slide.style.removeProperty("--pm-export-h");
+    });
+    setExportStatus("");
+    highlightSlide(state.slideIndex);
+    els.statusBar.textContent = `${state.report?.opponent?.name || ""} · deck view`;
+  }
+}
+
+function updatePresentChrome() {
+  const total = state.slides.length;
+  const index = total ? state.slideIndex + 1 : 0;
+  if (els.presentCount) {
+    els.presentCount.textContent = total ? `${index} / ${total}` : "";
+  }
+}
+
+function setPresent(on) {
+  if (on && document.body.classList.contains("is-pdf-view")) setPdfView(false);
+  document.body.classList.toggle("is-present", on);
+  if (els.presentBtn) els.presentBtn.textContent = on ? "Exit present" : "Present";
+  if (on) {
+    try {
+      document.documentElement.requestFullscreen();
+    } catch {
+      /* ignore */
+    }
+    highlightSlide(state.slideIndex);
+    updatePresentChrome();
+  } else {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    highlightSlide(state.slideIndex);
+  }
+}
+
+function setModeButtonsEnabled(enabled) {
+  setExportButtonsEnabled(enabled);
+  if (els.pdfViewBtn) els.pdfViewBtn.disabled = !enabled;
+  if (els.presentBtn) els.presentBtn.disabled = !enabled;
 }
 
 function setStatus(message, kind = "") {
@@ -335,7 +668,7 @@ async function switchSeason(iterationId) {
     const sameName = previousName
       ? state.fixtures.find((row) => row.opponent.name === previousName)
       : null;
-    selectFixture(sameName || state.fixtures[0]);
+    selectFixture(sameName || pickDefaultFixture());
     renderMatchBar();
     await loadReport();
   } catch (error) {
@@ -353,22 +686,27 @@ function selectFixture(fixture) {
   els.opponentId.value = String(fixture.opponent.id);
 }
 
+const FIXTURE_KICKOFF_GRACE_MS = 3 * 60 * 60 * 1000;
+
+function fixtureKickoffMs(fixture) {
+  const raw = fixture?.scheduled_date;
+  if (!raw) return null;
+  const ms = Date.parse(String(raw));
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function isNextFixture(fixture) {
+  const kickoffMs = fixtureKickoffMs(fixture);
+  if (kickoffMs == null) return true;
+  return kickoffMs >= Date.now() - FIXTURE_KICKOFF_GRACE_MS;
+}
+
 function pickDefaultFixture() {
-  const preferred = state.meta?.default_fixture;
-  if (preferred?.opponent_id || preferred?.match_id) {
-    const fromMeta = state.fixtures.find(
-      (row) =>
-        (preferred.match_id && Number(row.match_id) === Number(preferred.match_id)) ||
-        Number(row.opponent.id) === Number(preferred.opponent_id),
-    );
-    if (fromMeta) return fromMeta;
-  }
-  for (const name of state.meta?.default_opponent_names || []) {
-    const hit = state.fixtures.find((row) => row.opponent.name === name);
-    if (hit) return hit;
-  }
   const withMatchId = state.fixtures.filter((row) => row.match_id);
-  return withMatchId[withMatchId.length - 1] || state.fixtures[0];
+  const pool = withMatchId.length ? withMatchId : state.fixtures;
+  const nextUp = pool.find(isNextFixture);
+  if (nextUp) return nextUp;
+  return pool[pool.length - 1] || pool[0];
 }
 
 function renderMatchBar() {
@@ -417,7 +755,6 @@ function renderIntroSlide(report) {
   const fixture = report.fixture || {};
   const portVale = fixture.port_vale || { name: "Port Vale" };
   const opponent = fixture.opponent || report.opponent || { name: "Opponent" };
-  const fixtureLine = fixture.fixture_line || `${portVale.name} vs ${opponent.name}`;
   const dateParts = [fixture.date_label, fixture.time_label].filter(Boolean);
   const dateLine = dateParts.join(" · ");
   const venueLine = [fixture.competition_line, fixture.venue].filter(Boolean).join(" · ");
@@ -433,7 +770,6 @@ function renderIntroSlide(report) {
         </div>
         <div class="pm-intro__centre">
           <p class="pm-intro__vs">vs</p>
-          <p class="pm-intro__fixture">${fixtureLine}</p>
         </div>
         <div class="pm-intro__team">
           ${crestHtmlLarge(opponent)}
@@ -578,6 +914,10 @@ function availabilityIconHtml(status) {
   return "";
 }
 
+function slotShapeKey(index) {
+  return `slot:${index}`;
+}
+
 function loadPitchShape(report = state.report) {
   try {
     const raw = localStorage.getItem(pitchShapeStorageKey(report));
@@ -587,6 +927,52 @@ function loadPitchShape(report = state.report) {
   } catch {
     return {};
   }
+}
+
+function saveMarkerShape(marker, x, y, shape = loadPitchShape()) {
+  const slotIndex = marker?.dataset?.slotIndex;
+  const key = marker?.dataset?.markerKey;
+  const pos = { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
+  if (slotIndex != null && slotIndex !== "") shape[slotShapeKey(slotIndex)] = pos;
+  if (key) shape[key] = pos;
+  savePitchShape(shape);
+  return shape;
+}
+
+function findDropTargetMarker(layer, x, y, exclude) {
+  const threshold = 11;
+  let best = null;
+  let bestDist = threshold * threshold;
+  layer.querySelectorAll(".squad-marker").forEach((marker) => {
+    if (marker === exclude) return;
+    const mx = Number.parseFloat(marker.style.left);
+    const my = Number.parseFloat(marker.style.top);
+    if (!Number.isFinite(mx) || !Number.isFinite(my)) return;
+    const dist = (mx - x) ** 2 + (my - y) ** 2;
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = marker;
+    }
+  });
+  return best;
+}
+
+function swapMarkerPositions(markerA, markerB, toolbar) {
+  const xA = Number.parseFloat(markerA.style.left);
+  const yA = Number.parseFloat(markerA.style.top);
+  const xB = Number.parseFloat(markerB.style.left);
+  const yB = Number.parseFloat(markerB.style.top);
+  if (![xA, yA, xB, yB].every(Number.isFinite)) return;
+
+  markerA.style.left = `${xB}%`;
+  markerA.style.top = `${yB}%`;
+  markerB.style.left = `${xA}%`;
+  markerB.style.top = `${yA}%`;
+
+  const shape = loadPitchShape();
+  saveMarkerShape(markerA, xB, yB, shape);
+  saveMarkerShape(markerB, xA, yA, shape);
+  ensurePitchResetButton(toolbar);
 }
 
 function savePitchShape(shape, report = state.report) {
@@ -632,43 +1018,69 @@ function clearPitchXi(report = state.report) {
   }
 }
 
-function opponentPhotoUrl(name, report = state.report) {
+function opponentPhotoUrl(name, report = state.report, shirtNumber = null) {
   if (!name) return null;
   const params = new URLSearchParams({ name });
   if (report?.opponent?.name) params.set("club", report.opponent.name);
   if (report?.season) params.set("season", String(report.season));
+  if (shirtNumber != null && String(shirtNumber).trim() !== "") {
+    params.set("shirt", String(shirtNumber));
+  }
   return `/api/pre-match/player-photo?${params.toString()}`;
 }
 
 function playerPhotoUrl(player, report = state.report) {
-  return player?.photo_url || opponentPhotoUrl(player?.name, report);
+  if (player?.photo_url) return player.photo_url;
+  const name = player?.name || player?.short_name || "";
+  return opponentPhotoUrl(name, report, player?.shirt_number);
 }
 
 function warmDeckPhotos(root = els.deck) {
   if (!root) return;
-  root.querySelectorAll(".squad-marker__photo, .pm-rank-row__photo").forEach((node) => {
+  root.querySelectorAll(".squad-marker__photo, .pm-rank-row__photo, .tp-leaders__photo, .tp-marker__photo img").forEach((node) => {
     if (!(node instanceof HTMLImageElement)) return;
     node.loading = "eager";
+    node.decoding = "async";
     const src = node.getAttribute("src");
     if (!src) return;
     // Lazy load inside overflow:hidden slides often never fires — retry once if blank.
     if (node.complete && node.naturalWidth === 0) {
+      const retry = src.includes("?") ? `${src}&_r=1` : `${src}?_r=1`;
       node.removeAttribute("src");
-      node.src = src;
+      node.classList.remove("pm-rank-row__photo--empty");
+      node.src = retry;
     }
   });
 }
 
 function findSquadPlayer(playerId, report = state.report) {
   const id = Number(playerId);
-  return (report?.squad || []).find((row) => Number(row.id) === id) || null;
+  const fromSquad = (report?.squad || []).find((row) => Number(row.id) === id);
+  if (fromSquad) return fromSquad;
+  for (const group of report?.squad_list?.squad_groups || []) {
+    const hit = (group.players || []).find((row) => Number(row.id) === id);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function findPitchMarker(layer, playerId) {
+  if (!layer || playerId == null || playerId === "") return null;
+  return layer.querySelector(`.squad-marker[data-player-id="${CSS.escape(String(playerId))}"]`);
+}
+
+function pitchInteractionsEnabled() {
+  return (
+    !document.body.classList.contains("is-exporting") &&
+    !document.body.classList.contains("is-present")
+  );
 }
 
 function applyPitchShapeOverrides(players, report = state.report) {
   const shape = loadPitchShape(report);
-  return (players || []).map((player) => {
-    const key = String(player.player_id ?? player.name ?? "");
-    const override = shape[key];
+  return (players || []).map((player, index) => {
+    const playerKey = String(player.player_id ?? player.name ?? "");
+    const override = shape[slotShapeKey(index)] || shape[playerKey];
     if (!override) return player;
     const x = Number(override.x);
     const y = Number(override.y);
@@ -830,145 +1242,61 @@ function ensurePitchResetButton(toolbar) {
 }
 
 function bindPitchInteractions(root = document) {
-  const slide = root.querySelector(".pm-slide--squad-list");
-  if (!slide || slide.dataset.pitchUi === "1") return;
-  slide.dataset.pitchUi = "1";
+  root.querySelectorAll(".pm-slide--squad-list").forEach((slide) => {
+    slide._pitchAbort?.abort();
+    const ac = new AbortController();
+    slide._pitchAbort = ac;
+    const { signal } = ac;
 
-  const layer = slide.querySelector(".squad-pitch__players");
-  const roster = slide.querySelector(".squad-roster");
-  const toolbar = slide.querySelector(".squad-pitch__toolbar");
-  if (!layer) return;
+    const layer = slide.querySelector(".squad-pitch__players");
+    const roster = slide.querySelector(".squad-roster");
+    const toolbar = slide.querySelector(".squad-pitch__toolbar");
+    if (!layer) return;
 
-  const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
-  let selectedMarker = null;
+    const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+    let selectedMarker = null;
+    let dropTarget = null;
+    let activeDrag = null;
 
-  const setSelected = (marker) => {
-    layer.querySelectorAll(".squad-marker--selected").forEach((node) => {
-      node.classList.remove("squad-marker--selected");
-    });
-    selectedMarker = marker;
-    if (marker) marker.classList.add("squad-marker--selected");
-    slide.classList.toggle("squad-list--picking", Boolean(marker));
-  };
+    const setDropTarget = (marker) => {
+      if (dropTarget === marker) return;
+      dropTarget?.classList.remove("squad-marker--drop-target");
+      dropTarget = marker;
+      dropTarget?.classList.add("squad-marker--drop-target");
+    };
 
-  layer.querySelectorAll(".squad-marker").forEach((marker) => {
-    marker.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0) return;
-      event.preventDefault();
-      event.stopPropagation();
+    const clearDropTarget = () => setDropTarget(null);
 
-      const pointerId = event.pointerId;
-      const startX = event.clientX;
-      const startY = event.clientY;
-      let dragging = false;
-      const rect = layer.getBoundingClientRect();
-
-      const onMove = (moveEvent) => {
-        if (moveEvent.pointerId !== pointerId) return;
-        const dx = moveEvent.clientX - startX;
-        const dy = moveEvent.clientY - startY;
-        if (!dragging && dx * dx + dy * dy < 25) return;
-        if (!dragging) {
-          dragging = true;
-          marker.classList.add("squad-marker--dragging");
-          try {
-            marker.setPointerCapture(pointerId);
-          } catch {
-            /* ignore */
-          }
-        }
-        const width = rect.width || 1;
-        const height = rect.height || 1;
-        const x = clamp(((moveEvent.clientX - rect.left) / width) * 100, 4, 96);
-        const y = clamp(((moveEvent.clientY - rect.top) / height) * 100, 4, 96);
-        marker.style.left = `${x}%`;
-        marker.style.top = `${y}%`;
-        marker.dataset.xPct = String(x);
-        marker.dataset.yPct = String(y);
-      };
-
-      const onUp = (upEvent) => {
-        if (upEvent.pointerId !== pointerId) return;
-        document.removeEventListener("pointermove", onMove, true);
-        document.removeEventListener("pointerup", onUp, true);
-        document.removeEventListener("pointercancel", onUp, true);
-        marker.classList.remove("squad-marker--dragging");
-        try {
-          marker.releasePointerCapture(pointerId);
-        } catch {
-          /* ignore */
-        }
-
-        if (dragging) {
-          const key = marker.dataset.markerKey;
-          const x = Number(marker.dataset.xPct);
-          const y = Number(marker.dataset.yPct);
-          if (key && Number.isFinite(x) && Number.isFinite(y)) {
-            const shape = loadPitchShape();
-            shape[key] = { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
-            savePitchShape(shape);
-            ensurePitchResetButton(toolbar);
-          }
-          return;
-        }
-
-        setSelected(selectedMarker === marker ? null : marker);
-      };
-
-      document.addEventListener("pointermove", onMove, true);
-      document.addEventListener("pointerup", onUp, true);
-      document.addEventListener("pointercancel", onUp, true);
-    });
-  });
-
-  roster?.querySelectorAll(".squad-roster__player").forEach((row) => {
-    row.addEventListener("click", (event) => {
-      event.preventDefault();
-      const playerId = row.dataset.playerId;
-      const squadPlayer = findSquadPlayer(playerId);
-      if (!squadPlayer) return;
-
-      // No pitch headshot selected → cycle availability (inj / sus / int).
-      if (!selectedMarker) {
-        const map = loadAvailability();
-        const key = String(playerId);
-        const next = nextAvailability(playerAvailability(playerId));
-        if (next === "available") delete map[key];
-        else map[key] = next;
-        saveAvailability(map);
-        if (state.report) {
-          const keepIndex = state.slideIndex;
-          rebuildSlides();
-          paintDeck();
-          highlightSlide(keepIndex);
-        }
-        const label = AVAILABILITY_META[next]?.label || "Available";
-        setStatus(`${squadPlayer.name}: ${label}. Click again to cycle.`, next === "available" ? "" : "loading");
-        return;
+    const setSelected = (marker) => {
+      layer.querySelectorAll(".squad-marker--selected").forEach((node) => {
+        node.classList.remove("squad-marker--selected");
+      });
+      selectedMarker = marker;
+      if (marker) {
+        marker.classList.add("squad-marker--selected");
+        setStatus("Selected — click a squad name to swap, or drag headshots to reposition.");
+      } else {
+        setStatus("");
       }
+      slide.classList.toggle("squad-list--picking", Boolean(marker));
+    };
 
-      const slotIndex = selectedMarker.dataset.slotIndex;
+    const swapPitchPlayer = (slotIndex, incomingId, selected = selectedMarker) => {
       const xi = loadPitchXi();
-      const incomingId = Number(playerId);
-      // If already on the pitch, swap the two XI slots so the map stays unique.
       const existingSlot = Object.entries(xi).find(
         ([key, id]) => key !== String(slotIndex) && Number(id) === incomingId,
       );
       if (existingSlot) {
-        const outgoingId = Number(selectedMarker.dataset.playerId);
-        if (Number.isFinite(outgoingId)) {
-          xi[existingSlot[0]] = outgoingId;
-        } else {
-          delete xi[existingSlot[0]];
-        }
-      } else {
-        const markers = [...(layer.querySelectorAll(".squad-marker") || [])];
+        const outgoingId = Number(selected?.dataset?.playerId);
+        if (Number.isFinite(outgoingId)) xi[existingSlot[0]] = outgoingId;
+        else delete xi[existingSlot[0]];
+      } else if (selected) {
+        const markers = [...layer.querySelectorAll(".squad-marker")];
         const duplicateMarker = markers.find(
-          (marker) =>
-            marker !== selectedMarker && Number(marker.dataset.playerId) === incomingId,
+          (marker) => marker !== selected && Number(marker.dataset.playerId) === incomingId,
         );
         if (duplicateMarker) {
-          const outgoingId = Number(selectedMarker.dataset.playerId);
+          const outgoingId = Number(selected.dataset.playerId);
           const otherSlot = duplicateMarker.dataset.slotIndex;
           if (otherSlot != null && Number.isFinite(outgoingId)) {
             xi[String(otherSlot)] = outgoingId;
@@ -977,43 +1305,220 @@ function bindPitchInteractions(root = document) {
       }
       xi[String(slotIndex)] = incomingId;
       savePitchXi(xi);
-
-      const oldKey = selectedMarker.dataset.markerKey;
-      const shape = loadPitchShape();
-      if (oldKey && shape[oldKey]) {
-        const nextKey = String(playerId);
-        shape[nextKey] = shape[oldKey];
-        if (nextKey !== oldKey) delete shape[oldKey];
-        savePitchShape(shape);
-      }
-
       ensurePitchResetButton(toolbar);
-      setStatus("");
+      setSelected(null);
       if (state.report) {
         const keepIndex = state.slideIndex;
         rebuildSlides();
         paintDeck();
         highlightSlide(keepIndex);
       }
-    });
-  });
+    };
 
-  slide.querySelectorAll("[data-pitch-reset]").forEach((btn) => {
-    btn.addEventListener("click", (event) => {
-      event.preventDefault();
-      clearPitchShape();
-      clearPitchXi();
-      if (state.report) {
-        rebuildSlides();
-        paintDeck();
-        highlightSlide(state.slideIndex);
+    const finishDrag = () => {
+      if (!activeDrag) return;
+      const { kind, marker, row, pointerId, onMove, onUp } = activeDrag;
+      document.removeEventListener("pointermove", onMove, true);
+      document.removeEventListener("pointerup", onUp, true);
+      document.removeEventListener("pointercancel", onUp, true);
+      marker?.classList.remove("squad-marker--dragging");
+      row?.classList.remove("squad-roster__player--dragging");
+      clearDropTarget();
+      if (marker) {
+        try {
+          marker.releasePointerCapture(pointerId);
+        } catch {
+          /* ignore */
+        }
       }
-    });
-  });
+      if (row) {
+        try {
+          row.releasePointerCapture(pointerId);
+        } catch {
+          /* ignore */
+        }
+      }
+      activeDrag = null;
+      slide.classList.remove("squad-list--dragging");
+    };
 
-  slide.addEventListener("click", (event) => {
-    if (event.target.closest(".squad-marker") || event.target.closest(".squad-roster__player")) return;
-    setSelected(null);
+    layer.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (!pitchInteractionsEnabled()) return;
+        const marker = event.target.closest(".squad-marker");
+        if (!marker || !layer.contains(marker)) return;
+        if (event.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+
+        const pointerId = event.pointerId;
+        const startX = event.clientX;
+        const startY = event.clientY;
+        let dragging = false;
+        const rect = layer.getBoundingClientRect();
+
+        const onMove = (moveEvent) => {
+          if (moveEvent.pointerId !== pointerId) return;
+          const dx = moveEvent.clientX - startX;
+          const dy = moveEvent.clientY - startY;
+          if (!dragging && dx * dx + dy * dy < 9) return;
+          moveEvent.preventDefault();
+          if (!dragging) {
+            dragging = true;
+            slide.classList.add("squad-list--dragging");
+            marker.classList.add("squad-marker--dragging");
+            try {
+              marker.setPointerCapture(pointerId);
+            } catch {
+              /* ignore */
+            }
+          }
+          const width = rect.width || 1;
+          const height = rect.height || 1;
+          const x = clamp(((moveEvent.clientX - rect.left) / width) * 100, 4, 96);
+          const y = clamp(((moveEvent.clientY - rect.top) / height) * 100, 4, 96);
+          marker.style.left = `${x}%`;
+          marker.style.top = `${y}%`;
+          marker.dataset.xPct = String(x);
+          marker.dataset.yPct = String(y);
+          setDropTarget(findDropTargetMarker(layer, x, y, marker));
+        };
+
+        const onUp = (upEvent) => {
+          if (upEvent.pointerId !== pointerId) return;
+          const target = dropTarget;
+          finishDrag();
+          if (dragging) {
+            const x = Number(marker.dataset.xPct);
+            const y = Number(marker.dataset.yPct);
+            if (target) {
+              swapMarkerPositions(marker, target, toolbar);
+            } else if (Number.isFinite(x) && Number.isFinite(y)) {
+              saveMarkerShape(marker, x, y);
+              ensurePitchResetButton(toolbar);
+            }
+            setStatus("Position saved — drag another headshot or Reset to undo.");
+            return;
+          }
+          setSelected(selectedMarker === marker ? null : marker);
+        };
+
+        activeDrag = { kind: "marker", marker, row: null, pointerId, onMove, onUp, dragging: () => dragging };
+        document.addEventListener("pointermove", onMove, true);
+        document.addEventListener("pointerup", onUp, true);
+        document.addEventListener("pointercancel", onUp, true);
+      },
+      { signal, capture: true },
+    );
+
+    roster?.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (!pitchInteractionsEnabled()) return;
+        const row = event.target.closest(".squad-roster__player");
+        if (!row || !roster.contains(row)) return;
+        if (event.button !== 0) return;
+
+        const playerId = row.dataset.playerId;
+        const squadPlayer = findSquadPlayer(playerId);
+        if (!squadPlayer) return;
+
+        const pointerId = event.pointerId;
+        const startX = event.clientX;
+        const startY = event.clientY;
+        let dragging = false;
+        let rosterDrag = false;
+
+        const onMove = (moveEvent) => {
+          if (moveEvent.pointerId !== pointerId) return;
+          const dx = moveEvent.clientX - startX;
+          const dy = moveEvent.clientY - startY;
+          if (!dragging && dx * dx + dy * dy < 9) return;
+          moveEvent.preventDefault();
+          if (!dragging) {
+            dragging = true;
+            rosterDrag = true;
+            slide.classList.add("squad-list--dragging");
+            row.classList.add("squad-roster__player--dragging");
+            try {
+              row.setPointerCapture(pointerId);
+            } catch {
+              /* ignore */
+            }
+          }
+          const rect = layer.getBoundingClientRect();
+          const x = clamp(((moveEvent.clientX - rect.left) / rect.width) * 100, 4, 96);
+          const y = clamp(((moveEvent.clientY - rect.top) / rect.height) * 100, 4, 96);
+          setDropTarget(findDropTargetMarker(layer, x, y, null));
+        };
+
+        const onUp = (upEvent) => {
+          if (upEvent.pointerId !== pointerId) return;
+          const wasRosterDrag = rosterDrag;
+          const target = dropTarget;
+          finishDrag();
+
+          if (wasRosterDrag && target) {
+            swapPitchPlayer(target.dataset.slotIndex, Number(playerId), target);
+            return;
+          }
+          if (dragging) return;
+
+          if (selectedMarker) {
+            swapPitchPlayer(selectedMarker.dataset.slotIndex, Number(playerId), selectedMarker);
+            return;
+          }
+
+          const marker = findPitchMarker(layer, playerId);
+          if (marker) {
+            setSelected(marker);
+            return;
+          }
+
+          const map = loadAvailability();
+          const key = String(playerId);
+          const next = nextAvailability(playerAvailability(playerId));
+          if (next === "available") delete map[key];
+          else map[key] = next;
+          saveAvailability(map);
+          if (state.report) {
+            const keepIndex = state.slideIndex;
+            rebuildSlides();
+            paintDeck();
+            highlightSlide(keepIndex);
+          }
+          const label = AVAILABILITY_META[next]?.label || "Available";
+          setStatus(`${squadPlayer.name}: ${label}. Click again to cycle availability.`, next === "available" ? "" : "loading");
+        };
+
+        activeDrag = { kind: "roster", marker: null, row, pointerId, onMove, onUp, dragging: () => dragging };
+        document.addEventListener("pointermove", onMove, true);
+        document.addEventListener("pointerup", onUp, true);
+        document.addEventListener("pointercancel", onUp, true);
+      },
+      { signal, capture: true },
+    );
+
+    slide.addEventListener(
+      "click",
+      (event) => {
+        if (event.target.closest("[data-pitch-reset]")) {
+          event.preventDefault();
+          clearPitchShape();
+          clearPitchXi();
+          if (state.report) {
+            rebuildSlides();
+            paintDeck();
+            highlightSlide(state.slideIndex);
+          }
+          return;
+        }
+        if (event.target.closest(".squad-marker") || event.target.closest(".squad-roster__player")) return;
+        setSelected(null);
+      },
+      { signal },
+    );
   });
 }
 
@@ -1070,11 +1575,11 @@ function squadGroupsHtml(groups, pitchNames) {
               ? `<span class="squad-roster__number">${player.shirt_number}</span>`
               : `<span class="squad-roster__number squad-roster__number--empty">–</span>`;
           const statusLabel = AVAILABILITY_META[status]?.label || "Available";
-          return `<button type="button" class="${classes}" data-player-id="${player.id ?? ""}" data-player-name="${player.name}" data-availability="${status}" title="${escapeHtml(player.name)} · ${statusLabel}. Click to cycle availability.">
+          return `<div role="button" tabindex="0" class="${classes}" data-player-id="${player.id ?? ""}" data-player-name="${escapeHtml(player.name)}" data-availability="${status}" title="${escapeHtml(player.name)} · drag onto pitch to swap · click XI name to select · bench click marks availability">
             ${number}
             <span class="squad-roster__name">${escapeHtml(player.name)}</span>
             ${availabilityIconHtml(status)}
-          </button>`;
+          </div>`;
         })
         .join("");
       return `<div class="squad-roster__group">
@@ -1690,7 +2195,7 @@ function renderSquadListSlide(report) {
         <div class="squad-pitch__markings"></div>
         <div class="squad-pitch__players">${pitchMarkersHtml(pitchPlayers)}</div>
         <div class="squad-pitch__toolbar" data-export-hide>
-          <span>Drag to move · click headshot then list to swap · click list to mark unavailable</span>
+          <span>Drag headshots on pitch · drop on player to swap · drag from list onto pitch · click XI name then bench to swap</span>
           ${hasCustom ? `<button type="button" class="squad-pitch__reset" data-pitch-reset>Reset</button>` : ""}
         </div>
       </div>
@@ -1822,15 +2327,14 @@ function renderSquadDataSlide(report) {
       if (highlights.minutes.has(id)) tags.push("min");
       if (highlights.goals.has(id)) tags.push("goals");
       if (highlights.assists.has(id)) tags.push("assists");
-      const gold = tags.length > 0;
       const titleBits = [];
       if (tags.includes("min")) titleBits.push("Most minutes");
       if (tags.includes("goals")) titleBits.push("Most goals");
       if (tags.includes("assists")) titleBits.push("Most assists");
-      const rowClass = gold ? "pm-data-table__row--gold" : "";
       const title = titleBits.length ? ` title="${escapeHtml(titleBits.join(" · "))}"` : "";
       const displayName = String(player.name || "—").toUpperCase();
-      return `<tr class="${rowClass}"${title}>
+      const xg = player.xg != null ? Number(player.xg).toFixed(1) : "—";
+      return `<tr${title}>
         <td class="pm-data-table__num">${player.shirt_number ?? "—"}</td>
         <td class="pm-data-table__name">${escapeHtml(displayName)}</td>
         <td class="pm-data-table__pos">${escapeHtml(shortPosition(player.position))}</td>
@@ -1841,6 +2345,8 @@ function renderSquadDataSlide(report) {
         <td class="${tags.includes("min") ? "pm-data-table__stat--gold" : ""}">${player.minutes ?? "—"}</td>
         <td class="${tags.includes("goals") ? "pm-data-table__stat--gold" : ""}">${player.goals ?? "—"}</td>
         <td class="${tags.includes("assists") ? "pm-data-table__stat--gold" : ""}">${player.assists ?? "—"}</td>
+        <td>${xg}</td>
+        <td>${player.shots ?? "—"}</td>
       </tr>`;
     })
     .join("");
@@ -1862,10 +2368,10 @@ function renderSquadDataSlide(report) {
           <thead>
             <tr>
               <th>#</th><th>Name</th><th>Pos</th><th>Age</th><th>Ft</th>
-              <th>MP</th><th>Starts</th><th>Min</th><th>Goals</th><th>Assists</th>
+              <th>MP</th><th>Starts</th><th>Min</th><th>Goals</th><th>Assists</th><th>xG</th><th>Shots</th>
             </tr>
           </thead>
-          <tbody>${rows || `<tr><td colspan="10">No squad data.</td></tr>`}</tbody>
+          <tbody>${rows || `<tr><td colspan="12">No squad data.</td></tr>`}</tbody>
         </table>
       </div>
     </div>
@@ -2778,7 +3284,7 @@ function pitchMarkingsHtml(extraClass = "") {
   </div>`;
 }
 
-function numberedXiMarkersHtml(players) {
+function numberedXiMarkersHtml(players, { editable = false } = {}) {
   return (players || [])
     .map((player, index) => {
       const left = Number(player.x_pct ?? 50);
@@ -2787,21 +3293,225 @@ function numberedXiMarkersHtml(players) {
       const surname = player.short_name || playerSurname(player.name);
       const highlight = String(player.highlight || "").toLowerCase();
       const isRed = highlight === "red" || Boolean(player.ghost);
-      const label = surname.length <= 11 ? surname : `${surname.slice(0, 10)}…`;
+      const label = editable
+        ? surname
+        : surname.length <= 9
+          ? surname
+          : `${surname.slice(0, 8)}…`;
       const isGk = String(player.position || player.band || "").toUpperCase().includes("GOAL")
         || String(player.band || "") === "gk";
       const classes = ["xi-circle"];
+      if (editable) classes.push("xi-circle--editable");
       if (highlight === "sub" || highlight === "red" || highlight === "moved") {
         classes.push(`xi-circle--${highlight}`);
       }
       if (player.ghost || isRed) classes.push("xi-circle--ghost");
       const z = isRed ? 40 + index : index + 1;
-      return `<div class="${classes.join(" ")}" style="left:${left}%;top:${top}%;z-index:${z}" title="${escapeHtml(player.name || label)}">
-        <span class="xi-circle__dot${isGk && !isRed ? " xi-circle__dot--gk" : ""}">${number || "·"}</span>
-        <span class="xi-circle__name">${escapeHtml(label)}</span>
+      const title = editable
+        ? `${player.name || label} · drag to move · double-click to edit`
+        : (player.name || label);
+      return `<div class="${classes.join(" ")}" data-player-index="${index}" data-x-pct="${left}" data-y-pct="${top}" style="left:${left}%;top:${top}%;z-index:${z}" title="${escapeHtml(title)}">
+        <span class="xi-circle__dot${isGk && !isRed ? " xi-circle__dot--gk" : ""}" data-xi-field="number">${number || "·"}</span>
+        <span class="xi-circle__name" data-xi-field="name">${escapeHtml(label)}</span>
       </div>`;
     })
     .join("");
+}
+
+function resolveXiPitchPlayer(layer, marker) {
+  if (!state.report || !layer || !marker) return null;
+  const playerIndex = Number(marker.dataset.playerIndex);
+  if (!Number.isFinite(playerIndex)) return null;
+  if (layer.dataset.lineupIndex != null) {
+    const lineup = state.report.previous_xis?.[Number(layer.dataset.lineupIndex)];
+    return lineup?.pitch_players?.[playerIndex] || null;
+  }
+  if (layer.dataset.phaseIndex != null) {
+    const phase = state.report.last_game?.phases?.[Number(layer.dataset.phaseIndex)];
+    return phase?.pitch_players?.[playerIndex] || null;
+  }
+  if (layer.dataset.tpXi === "1") {
+    return state.report.two_match?.last_xi?.[playerIndex]
+      || state.report.two_match?.matches?.at?.(-1)?.pitch_players?.[playerIndex]
+      || null;
+  }
+  if (layer.dataset.twoMatchIndex != null) {
+    const match = state.report.two_match?.matches?.[Number(layer.dataset.twoMatchIndex)];
+    return state.report.two_match?.last_xi?.[playerIndex]
+      || match?.pitch_players?.[playerIndex]
+      || null;
+  }
+  if (layer.dataset.avgShape === "1") {
+    const avg = state.report.two_match?.avg_positions;
+    if (Array.isArray(avg) && avg.length) {
+      return avg[playerIndex] || null;
+    }
+    return state.report.squad_list?.pitch_players?.[playerIndex] || null;
+  }
+  return null;
+}
+
+function bindXiPitchInteractions(root = document) {
+  root.querySelectorAll(".pm-slide--previous-xi, .pm-slide--last-game, .pm-slide--two-pager").forEach((slide) => {
+    if (slide.dataset.xiUi === "1") return;
+    slide.dataset.xiUi = "1";
+
+    const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+    slide.querySelectorAll(".previous-xi-mini-pitch__players, .last-game-pitch__players, .tp-pitch__players").forEach((layer) => {
+      layer.querySelectorAll(".xi-circle--editable").forEach((marker) => {
+        marker.addEventListener("pointerdown", (event) => {
+          if (event.button !== 0) return;
+          if (marker.classList.contains("xi-circle--editing")) return;
+          if (event.target?.closest?.("[contenteditable='true']")) return;
+          event.preventDefault();
+          event.stopPropagation();
+
+          const pointerId = event.pointerId;
+          const startX = event.clientX;
+          const startY = event.clientY;
+          let dragging = false;
+          const rect = layer.getBoundingClientRect();
+          const baseZ = Number(marker.style.zIndex) || 1;
+
+          const onMove = (moveEvent) => {
+            if (moveEvent.pointerId !== pointerId) return;
+            const dx = moveEvent.clientX - startX;
+            const dy = moveEvent.clientY - startY;
+            if (!dragging && dx * dx + dy * dy < 25) return;
+            if (!dragging) {
+              dragging = true;
+              marker.classList.add("xi-circle--dragging");
+              marker.style.zIndex = String(80 + baseZ);
+              try {
+                marker.setPointerCapture(pointerId);
+              } catch {
+                /* ignore */
+              }
+            }
+            const width = rect.width || 1;
+            const height = rect.height || 1;
+            const x = clamp(((moveEvent.clientX - rect.left) / width) * 100, 6, 94);
+            const y = clamp(((moveEvent.clientY - rect.top) / height) * 100, 6, 94);
+            marker.style.left = `${x}%`;
+            marker.style.top = `${y}%`;
+            marker.dataset.xPct = String(x);
+            marker.dataset.yPct = String(y);
+          };
+
+          const onUp = (upEvent) => {
+            if (upEvent.pointerId !== pointerId) return;
+            document.removeEventListener("pointermove", onMove, true);
+            document.removeEventListener("pointerup", onUp, true);
+            document.removeEventListener("pointercancel", onUp, true);
+            marker.classList.remove("xi-circle--dragging");
+            try {
+              marker.releasePointerCapture(pointerId);
+            } catch {
+              /* ignore */
+            }
+            if (!dragging) return;
+            marker.style.zIndex = String(baseZ);
+            const x = Math.round(Number(marker.dataset.xPct) * 10) / 10;
+            const y = Math.round(Number(marker.dataset.yPct) * 10) / 10;
+            const player = resolveXiPitchPlayer(layer, marker);
+            if (player && Number.isFinite(x) && Number.isFinite(y)) {
+              player.x_pct = x;
+              player.y_pct = y;
+              player.position_locked = true;
+              persistTwoPagerPlayerPosition(layer, marker, player);
+              setStatus?.("Shape saved — stays on refresh.");
+            }
+          };
+
+          document.addEventListener("pointermove", onMove, true);
+          document.addEventListener("pointerup", onUp, true);
+          document.addEventListener("pointercancel", onUp, true);
+        });
+
+        marker.querySelectorAll("[data-xi-field]").forEach((field) => {
+          field.addEventListener("dblclick", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (marker.classList.contains("xi-circle--editing")) return;
+
+            const kind = field.dataset.xiField;
+            const player = resolveXiPitchPlayer(layer, marker);
+            if (!player) return;
+
+            marker.classList.add("xi-circle--editing");
+            field.contentEditable = "true";
+            field.spellcheck = false;
+            if (kind === "number" && (field.textContent || "").trim() === "·") {
+              field.textContent = "";
+            }
+            field.focus();
+            try {
+              const range = document.createRange();
+              range.selectNodeContents(field);
+              const selection = window.getSelection();
+              selection?.removeAllRanges();
+              selection?.addRange(range);
+            } catch {
+              /* ignore */
+            }
+
+            const finish = (commit) => {
+              field.removeEventListener("blur", onBlur);
+              field.removeEventListener("keydown", onKey);
+              field.contentEditable = "false";
+              marker.classList.remove("xi-circle--editing");
+              if (!commit) {
+                if (kind === "name") {
+                  field.textContent = player.short_name || playerSurname(player.name) || "—";
+                } else {
+                  field.textContent =
+                    player.shirt_number != null && player.shirt_number !== ""
+                      ? String(player.shirt_number)
+                      : "·";
+                }
+                return;
+              }
+              const raw = (field.textContent || "").replace(/\s+/g, " ").trim();
+              if (kind === "name") {
+                const next = raw || player.short_name || playerSurname(player.name) || "—";
+                player.short_name = next;
+                field.textContent = next;
+                marker.title = `${player.name || next} · drag to move · double-click to edit`;
+              } else {
+                if (!raw || raw === "·") {
+                  player.shirt_number = null;
+                  field.textContent = "·";
+                } else {
+                  const digits = raw.replace(/[^\d]/g, "").slice(0, 3);
+                  if (digits) {
+                    player.shirt_number = Number(digits);
+                    field.textContent = digits;
+                  } else {
+                    field.textContent =
+                      player.shirt_number != null ? String(player.shirt_number) : "·";
+                  }
+                }
+              }
+            };
+
+            const onBlur = () => finish(true);
+            const onKey = (keyEvent) => {
+              if (keyEvent.key === "Enter") {
+                keyEvent.preventDefault();
+                field.blur();
+              } else if (keyEvent.key === "Escape") {
+                keyEvent.preventDefault();
+                finish(false);
+              }
+            };
+            field.addEventListener("blur", onBlur);
+            field.addEventListener("keydown", onKey);
+          });
+        });
+      });
+    });
+  });
 }
 
 function lastGamePhaseLabelHtml(phase) {
@@ -2831,6 +3541,24 @@ function lastGamePhaseLabelHtml(phase) {
   return body;
 }
 
+function kitCssVars(report = state.report) {
+  const kit = report?.kit || report?.opponent?.kit || {};
+  const primary = kit.primary || "#C62828";
+  const text = kit.text || "#FFFFFF";
+  const border = kit.border || "#FFFFFF";
+  const gk = kit.gk || "#111111";
+  const gkText = kit.gk_text || "#FFFFFF";
+  const gkBorder = kit.gk_border || "#FFFFFF";
+  return [
+    `--pm-kit:${escapeHtml(primary)}`,
+    `--pm-kit-text:${escapeHtml(text)}`,
+    `--pm-kit-border:${escapeHtml(border)}`,
+    `--pm-kit-gk:${escapeHtml(gk)}`,
+    `--pm-kit-gk-text:${escapeHtml(gkText)}`,
+    `--pm-kit-gk-border:${escapeHtml(gkBorder)}`,
+  ].join(";");
+}
+
 function renderPreviousXisSlide(report) {
   const clubName = report.opponent?.name || "Opposition";
   const lineups = (report.previous_xis || []).slice(0, 3);
@@ -2840,7 +3568,7 @@ function renderPreviousXisSlide(report) {
       ? `${clubName} · last ${lineups.length || 0} before ${fixtureDate}`
       : `${clubName} · last ${lineups.length || 0} matches`;
   const cards = lineups
-    .map((lineup) => {
+    .map((lineup, lineupIndex) => {
       const players = (lineup?.pitch_players || []).slice(0, 11);
       const result = lineup?.result || "";
       const resultClass = result ? `pm-xi-result--${result}` : "";
@@ -2857,15 +3585,16 @@ function renderPreviousXisSlide(report) {
         </header>
           <div class="previous-xi-mini-pitch" aria-label="Starting XI vs ${lineup.opponent || "Opponent"}">
           ${pitchMarkingsHtml("previous-xi-mini-pitch__markings")}
-          <div class="previous-xi-mini-pitch__players">${numberedXiMarkersHtml(players)}</div>
+          <div class="previous-xi-mini-pitch__players" data-lineup-index="${lineupIndex}">${numberedXiMarkersHtml(players, { editable: true })}</div>
         </div>
       </article>`;
     })
     .join("");
 
-  return `<section class="pm-slide pm-slide--previous-xi" data-slide-title="Previous XIs">
+  return `<section class="pm-slide pm-slide--previous-xi" data-slide-title="Previous XIs" style="${kitCssVars(report)}">
     <div class="pm-slide__header-bar">PREVIOUS XIs</div>
-    <div class="pm-slide__subheader">${sub}</div>
+    <div class="pm-slide__subheader">${escapeHtml(sub)}</div>
+    <p class="pm-xi-edit-hint" data-export-hide>Drag markers to move · double-click name or number to edit</p>
     <div class="previous-xis-row">
       ${cards || `<p class="previous-xis-empty">No recent starting XIs available.</p>`}
     </div>
@@ -2883,7 +3612,7 @@ function renderLastGameSlide(report) {
     : `Held ${lastGame.starting_formation || "—"}`;
   const phases = lastGame.phases || [];
   const panels = phases
-    .map((phase) => {
+    .map((phase, phaseIndex) => {
       const players = phase.pitch_players || [];
       return `<article class="last-game-panel">
         <header class="last-game-panel__head">
@@ -2892,7 +3621,7 @@ function renderLastGameSlide(report) {
         </header>
         <div class="last-game-pitch" aria-label="${escapeHtml(phase.label || "Lineup")}">
           ${pitchMarkingsHtml("last-game-pitch__markings")}
-          <div class="last-game-pitch__players">${numberedXiMarkersHtml(players)}</div>
+          <div class="last-game-pitch__players" data-phase-index="${phaseIndex}">${numberedXiMarkersHtml(players, { editable: true })}</div>
         </div>
       </article>`;
     })
@@ -2905,9 +3634,10 @@ function renderLastGameSlide(report) {
     <span class="last-game-legend__item"><i class="last-game-legend__swatch last-game-legend__swatch--red"></i>Sent off</span>
   </div>`;
 
-  return `<section class="pm-slide pm-slide--last-game" data-slide-title="Last Game">
+  return `<section class="pm-slide pm-slide--last-game" data-slide-title="Last Game" style="${kitCssVars(report)}">
     <div class="pm-slide__header-bar">LAST GAME · TEAM &amp; SUBS</div>
     <div class="pm-slide__subheader">${escapeHtml(clubName)} vs ${escapeHtml(lastGame.opponent || "Opponent")}</div>
+    <p class="pm-xi-edit-hint" data-export-hide>Drag markers to move · double-click name or number to edit</p>
     <div class="last-game-meta">
       <div class="last-game-meta__left">
         <p class="last-game-meta__when">${formatMatchDate(lastGame.date)} · ${escapeHtml(lastGame.venue || "—")}</p>
@@ -2923,6 +3653,1042 @@ function renderLastGameSlide(report) {
       ${panels || `<p class="previous-xis-empty">No lineup detail available for the last match.</p>`}
     </div>
   </section>`;
+}
+
+function twoPagerNotesKey(report = state.report) {
+  const iterationId = report?.iteration_id ?? Number(els.iterationId?.value || 0);
+  const squadId = report?.opponent?.id ?? Number(els.opponentId?.value || 0);
+  return `pm-two-pager-notes:${iterationId}:${squadId}`;
+}
+
+function twoPagerXiShapeKey(report = state.report) {
+  const iterationId = report?.iteration_id ?? Number(els.iterationId?.value || 0);
+  const squadId = report?.opponent?.id ?? Number(els.opponentId?.value || 0);
+  return `pm-two-pager-xi-shape:${iterationId}:${squadId}`;
+}
+
+function twoPagerAvgShapeKey(report = state.report) {
+  const iterationId = report?.iteration_id ?? Number(els.iterationId?.value || 0);
+  const squadId = report?.opponent?.id ?? Number(els.opponentId?.value || 0);
+  return `pm-two-pager-avg-shape:${iterationId}:${squadId}`;
+}
+
+function loadTwoPagerShapeMap(storageKey) {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveTwoPagerShapeMap(storageKey, shape) {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(shape || {}));
+  } catch {
+    /* ignore */
+  }
+}
+
+function twoPagerPlayerShapeKey(player) {
+  if (!player) return "";
+  if (player.player_id != null && player.player_id !== "") return `id:${player.player_id}`;
+  if (player.name) return `name:${String(player.name).toLowerCase()}`;
+  if (player.short_name) return `short:${String(player.short_name).toLowerCase()}`;
+  return "";
+}
+
+function applyTwoPagerShapeOverrides(players, storageKey) {
+  const shape = loadTwoPagerShapeMap(storageKey);
+  return (players || []).map((player, index) => {
+    const key = twoPagerPlayerShapeKey(player);
+    const override = (key && shape[key]) || shape[`idx:${index}`];
+    if (!override) return { ...player };
+    const x = Number(override.x);
+    const y = Number(override.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return { ...player };
+    return {
+      ...player,
+      x_pct: x,
+      y_pct: y,
+      position_locked: true,
+      shape_override: true,
+    };
+  });
+}
+
+function persistTwoPagerPlayerPosition(layer, marker, player) {
+  if (!layer || !marker || !player || !state.report) return;
+  const x = Math.round(Number(marker.dataset.xPct ?? player.x_pct) * 10) / 10;
+  const y = Math.round(Number(marker.dataset.yPct ?? player.y_pct) * 10) / 10;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+
+  player.x_pct = x;
+  player.y_pct = y;
+  player.position_locked = true;
+
+  let storageKey = "";
+  if (layer.dataset.tpXi === "1" || layer.dataset.twoMatchIndex != null) {
+    storageKey = twoPagerXiShapeKey();
+  } else if (layer.dataset.avgShape === "1") {
+    storageKey = twoPagerAvgShapeKey();
+  } else {
+    return;
+  }
+
+  const shape = loadTwoPagerShapeMap(storageKey);
+  const key = twoPagerPlayerShapeKey(player);
+  const index = Number(marker.dataset.playerIndex);
+  const pos = { x, y };
+  if (key) shape[key] = pos;
+  if (Number.isFinite(index)) shape[`idx:${index}`] = pos;
+  saveTwoPagerShapeMap(storageKey, shape);
+
+  // Keep last_xi + match XI copies in sync so re-renders don't wipe the drag.
+  const two = state.report.two_match;
+  if (two && (layer.dataset.tpXi === "1" || layer.dataset.twoMatchIndex != null)) {
+    const syncList = (list) => {
+      if (!Array.isArray(list)) return;
+      const row = list.find((item, i) =>
+        (key && twoPagerPlayerShapeKey(item) === key) || i === index,
+      );
+      if (row) {
+        row.x_pct = x;
+        row.y_pct = y;
+        row.position_locked = true;
+      }
+    };
+    syncList(two.last_xi);
+    const match = two.matches?.[Number(layer.dataset.twoMatchIndex)];
+    syncList(match?.pitch_players);
+  }
+}
+
+function loadTwoPagerNotes(report = state.report) {
+  try {
+    const raw = localStorage.getItem(twoPagerNotesKey(report));
+    if (!raw) {
+      return { hurt_us: "", hurt_them: "", player_comments: "" };
+    }
+    const parsed = JSON.parse(raw);
+    return {
+      hurt_us: String(parsed?.hurt_us || parsed?.strengths || ""),
+      hurt_them: String(parsed?.hurt_them || parsed?.weaknesses || ""),
+      player_comments: String(parsed?.player_comments || parsed?.player_notes || ""),
+    };
+  } catch {
+    return { hurt_us: "", hurt_them: "", player_comments: "" };
+  }
+}
+
+function saveTwoPagerNotes(notes, report = state.report) {
+  try {
+    localStorage.setItem(twoPagerNotesKey(report), JSON.stringify(notes));
+  } catch {
+    /* ignore */
+  }
+}
+
+
+function splitTwoPagerNoteLines(value) {
+  return String(value || "")
+    .replace(/\r/g, "")
+    .split(/\n+|·|;|\u2022/g)
+    .map((line) => line.replace(/^[\s•\-\u2022*]+/, "").trim())
+    .filter(Boolean);
+}
+
+function twoPagerNoteItemHtml(line = "") {
+  const text = escapeHtml(String(line || ""));
+  return `<li class="tp-note__item">${text || ""}</li>`;
+}
+
+function twoPagerNoteBoxHtml(field, label, value, placeholder) {
+  const lines = splitTwoPagerNoteLines(value);
+  const textValue = lines.join("\n");
+  const hint = splitTwoPagerNoteLines(placeholder).join("\n") || "Type here — one point per line";
+  return `<section class="tp-note" data-note-field="${escapeHtml(field)}">
+    <header class="tp-note__head"><span>${escapeHtml(label)}</span><em data-export-hide>One line = one point · Enter for next</em></header>
+    <div class="tp-note__body">
+      <textarea class="tp-note__input" spellcheck="true" rows="4" placeholder="${escapeHtml(hint)}">${escapeHtml(textValue)}</textarea>
+    </div>
+  </section>`;
+}
+
+function twoPagerPitchMarkersHtml(players, { editable = false, mode = "photo" } = {}) {
+  const numbersOnly = mode === "number";
+  return (players || [])
+    .map((player, index) => {
+      const left = Number(player.x_pct ?? 50);
+      const top = Number(player.y_pct ?? 50);
+      const number = player.shirt_number ?? "";
+      const surname = player.short_name || playerSurname(player.name);
+      const highlight = String(player.highlight || "").toLowerCase();
+      const isRed = highlight === "red" || Boolean(player.ghost);
+      const label = editable
+        ? surname
+        : surname.length <= 9
+          ? surname
+          : `${surname.slice(0, 8)}…`;
+      const isGk = String(player.position || player.band || "").toUpperCase().includes("GOAL")
+        || String(player.band || "") === "gk";
+      const classes = ["xi-circle", "tp-marker"];
+      if (editable) classes.push("xi-circle--editable");
+      if (highlight === "sub" || highlight === "red" || highlight === "moved") {
+        classes.push(`xi-circle--${highlight}`);
+      }
+      if (player.ghost || isRed) classes.push("xi-circle--ghost");
+      if (isGk) classes.push("tp-marker--gk");
+      if (numbersOnly) classes.push("tp-marker--number");
+      const z = isRed ? 40 + index : index + 1;
+      const title = editable
+        ? `${player.name || label} · drag to move · double-click to edit`
+        : (player.name || label);
+      let head;
+      if (numbersOnly) {
+        head = `<span class="tp-marker__disc" data-xi-field="number">${escapeHtml(number || "·")}</span>`;
+      } else {
+        const photoUrl = playerPhotoUrl(player);
+        const fallback = `<span class="tp-marker__fallback${photoUrl ? " tp-marker__fallback--behind" : ""}" data-xi-field="number" aria-hidden="true">${escapeHtml(number || "·")}</span>`;
+        head = photoUrl
+          ? `<span class="tp-marker__photo">
+            <img src="${escapeHtml(photoUrl)}" alt="" loading="eager" decoding="async" draggable="false"
+              onerror="this.closest('.tp-marker__photo')?.classList.add('is-empty');this.removeAttribute('src')" />
+            ${fallback}
+          </span>`
+          : `<span class="tp-marker__photo is-empty">${fallback}</span>`;
+      }
+      return `<div class="${classes.join(" ")}" data-player-index="${index}" data-x-pct="${left}" data-y-pct="${top}" style="left:${left}%;top:${top}%;z-index:${z}" title="${escapeHtml(title)}">
+        ${head}
+        <span class="xi-circle__name tp-marker__name" data-xi-field="name">${escapeHtml(label)}</span>
+      </div>`;
+    })
+    .join("");
+}
+
+function twoPagerPitchHtml(players, { title, meta, layerAttrs = "", crest = null, markerMode = "photo" } = {}) {
+  const crestSrc = crestUrl(crest);
+  const watermark = crestSrc
+    ? `<img class="tp-pitch__watermark" src="${escapeHtml(crestSrc)}" alt="" aria-hidden="true" draggable="false" />`
+    : "";
+  const pitchClass = markerMode === "number" ? "tp-pitch tp-pitch--numbers" : "tp-pitch";
+  return `<article class="${pitchClass}">
+    <header class="tp-pitch__head">
+      <div>
+        <p class="tp-pitch__title">${escapeHtml(title)}</p>
+        ${meta ? `<p class="tp-pitch__meta">${escapeHtml(meta)}</p>` : ""}
+      </div>
+    </header>
+    <div class="tp-pitch__field" aria-label="${escapeHtml(title)}">
+      ${watermark}
+      <div class="tp-pitch__attack" aria-hidden="true"></div>
+      ${pitchMarkingsHtml("tp-pitch__markings")}
+      <div class="tp-pitch__players" ${layerAttrs}>${twoPagerPitchMarkersHtml(players || [], { editable: true, mode: markerMode })}</div>
+    </div>
+  </article>`;
+}
+
+function orientAvgPositionsGkBottom(players, report = state.report) {
+  const rows = (players || []).map((player) => ({ ...player }));
+  if (rows.length < 2) return rows;
+
+  const yOf = (row) => Number(row.y_pct ?? 50);
+  const xOf = (row) => Number(row.x_pct ?? 50);
+  const avgX = (row) => Number(row.avg_x);
+  const withAvg = rows.filter((player) => player.avg_x != null && Number.isFinite(Number(player.avg_x)));
+
+  const lastXi = report?.two_match?.last_xi || report?.two_match?.matches?.at?.(-1)?.pitch_players || [];
+  const lastGk = (lastXi || []).find((player) => String(player.band || "").toLowerCase() === "gk")
+    || (lastXi || []).find((player) => /goal/i.test(String(player.position || "")));
+  const gkAnchor = lastGk
+    ? rows.find((row) => Number(row.player_id) === Number(lastGk.player_id))
+      || rows.find((row) => String(row.shirt_number) === String(lastGk.shirt_number))
+      || rows.find((row) => String(row.short_name || "").toLowerCase() === String(lastGk.short_name || "").toLowerCase())
+    : null;
+
+  let needFlip = false;
+  if (gkAnchor && yOf(gkAnchor) < 58) {
+    needFlip = true;
+  } else if (withAvg.length) {
+    const deepest = withAvg.reduce((best, row) => (avgX(row) < avgX(best) ? row : best));
+    const topmost = rows.reduce((best, row) => (yOf(row) < yOf(best) ? row : best));
+    const bottommost = rows.reduce((best, row) => (yOf(row) > yOf(best) ? row : best));
+    if (yOf(deepest) < 58) needFlip = true;
+    if (
+      topmost.avg_x != null
+      && bottommost.avg_x != null
+      && avgX(topmost) < avgX(bottommost) - 1
+    ) {
+      needFlip = true;
+    }
+  }
+
+  // Attack axis only — never mirror left/right here.
+  if (needFlip) {
+    rows.forEach((row) => {
+      row.y_pct = Math.max(6, Math.min(94, Math.round((100 - yOf(row)) * 10) / 10));
+    });
+  }
+
+  // If last XI and avg positions disagree on left/right for shared players, mirror x.
+  const paired = [];
+  for (const avg of rows) {
+    const xi = (lastXi || []).find((player) => Number(player.player_id) === Number(avg.player_id));
+    if (!xi) continue;
+    paired.push([xOf(xi), xOf(avg)]);
+  }
+  if (paired.length >= 4) {
+    const xiMean = paired.reduce((sum, pair) => sum + pair[0], 0) / paired.length;
+    const avgMean = paired.reduce((sum, pair) => sum + pair[1], 0) / paired.length;
+    let num = 0;
+    let denXi = 0;
+    let denAvg = 0;
+    paired.forEach(([xiX, avgXPct]) => {
+      const a = xiX - xiMean;
+      const b = avgXPct - avgMean;
+      num += a * b;
+      denXi += a * a;
+      denAvg += b * b;
+    });
+    const denom = Math.sqrt(denXi * denAvg) || 1;
+    const corr = num / denom;
+    if (corr < -0.15) {
+      rows.forEach((row) => {
+        row.x_pct = Math.max(6, Math.min(94, Math.round((100 - xOf(row)) * 10) / 10));
+      });
+    }
+  }
+
+  separateOverlappingPitchMarkers(rows, { minX: 16, minY: 14 });
+
+  rows.forEach((row) => {
+    row.band = "mid";
+  });
+  let gk = gkAnchor
+    ? rows.find((row) => Number(row.player_id) === Number(gkAnchor.player_id)) || gkAnchor
+    : rows.reduce((best, row) => (yOf(row) > yOf(best) ? row : best));
+  if (!gkAnchor && withAvg.length) {
+    const deepest = withAvg.reduce((best, row) => (avgX(row) < avgX(best) ? row : best));
+    const deepestNow = rows.find((row) => row.player_id === deepest.player_id) || deepest;
+    if (Math.abs(yOf(deepestNow) - yOf(gk)) <= 10) gk = deepestNow;
+  }
+  if (gk) {
+    gk.band = "gk";
+    if (yOf(gk) < 50) {
+      rows.forEach((row) => {
+        row.y_pct = Math.max(6, Math.min(94, Math.round((100 - yOf(row)) * 10) / 10));
+      });
+    }
+  }
+  return rows;
+}
+
+function separateOverlappingPitchMarkers(players, { minX = 10, minY = 8 } = {}) {
+  const rows = players || [];
+  for (let pass = 0; pass < 8; pass += 1) {
+    for (let i = 0; i < rows.length; i += 1) {
+      for (let j = i + 1; j < rows.length; j += 1) {
+        const a = rows[i];
+        const b = rows[j];
+        const ax = Number(a.x_pct ?? 50);
+        const ay = Number(a.y_pct ?? 50);
+        const bx = Number(b.x_pct ?? 50);
+        const by = Number(b.y_pct ?? 50);
+        const dx = bx - ax;
+        const dy = by - ay;
+        if (Math.abs(dx) >= minX || Math.abs(dy) >= minY) continue;
+        const pushX = (minX - Math.abs(dx || 0.01)) / 2;
+        const pushY = (minY - Math.abs(dy || 0.01)) / 2;
+        const sx = dx === 0 ? (i % 2 === 0 ? 1 : -1) : Math.sign(dx);
+        const sy = dy === 0 ? (j % 2 === 0 ? 1 : -1) : Math.sign(dy);
+        a.x_pct = Math.max(6, Math.min(94, Math.round((ax - sx * pushX) * 10) / 10));
+        b.x_pct = Math.max(6, Math.min(94, Math.round((bx + sx * pushX) * 10) / 10));
+        a.y_pct = Math.max(6, Math.min(94, Math.round((ay - sy * pushY * 0.7) * 10) / 10));
+        b.y_pct = Math.max(6, Math.min(94, Math.round((by + sy * pushY * 0.7) * 10) / 10));
+      }
+    }
+  }
+  return rows;
+}
+
+function scoreCardExtraMeta(match) {
+  const bits = [];
+  const xgFor = Number(match?.xg_for);
+  const xgAgainst = Number(match?.xg_against);
+  if (Number.isFinite(xgFor) && Number.isFinite(xgAgainst)) {
+    bits.push(`xG ${xgFor.toFixed(1)}–${xgAgainst.toFixed(1)}`);
+  }
+  const poss = Number(match?.possession_pct);
+  if (Number.isFinite(poss)) bits.push(`${Math.round(poss)}% poss`);
+  return bits.length ? ` · ${bits.join(" · ")}` : "";
+}
+
+function twoPagerScoreCardHtml(match, index, total) {
+  if (!match) {
+    return `<div class="tp-score tp-score--empty"><span>No match ${index + 1}</span></div>`;
+  }
+  const result = match.result || "";
+  const resultClass = result ? ` tp-score--${result}` : "";
+  const label = total === 2 ? (index === 0 ? "Game 1" : "Game 2") : "Last game";
+  const opp = match.opponent || "Opponent";
+  return `<div class="tp-score${resultClass}">
+    <div class="tp-score__top">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(result || "—")} ${escapeHtml(match.score || "")}</strong>
+    </div>
+    <p class="tp-score__vs">${escapeHtml(opp)}</p>
+    <p class="tp-score__meta">${formatMatchDate(match.date)} · ${escapeHtml(match.venue || "—")} · ${escapeHtml(match.formation || "—")}${scoreCardExtraMeta(match)}</p>
+  </div>`;
+}
+
+function twoPagerMastheadStatsHtml(report) {
+  const form = formMatchesChronological(report.form || []).slice(-5);
+  const pos = Number(report.opponent?.league_position);
+  const tableSize =
+    Number(report.overview?.league_table_size) ||
+    (report.league_table || []).length ||
+    24;
+  let gf = 0;
+  let ga = 0;
+  form.forEach((match) => {
+    gf += Number(match.goals_for) || 0;
+    ga += Number(match.goals_against) || 0;
+  });
+
+  const lastMatch = (report.two_match?.matches || []).slice(-1)[0] || null;
+  const oppShort = lastMatch?.opponent
+    ? String(lastMatch.opponent).replace(/\b(FC|AFC|Town|United|Rovers|Athletic|City)\b/gi, "").replace(/\s+/g, " ").trim().split(" ")[0]
+    : "";
+  const oppLine = oppShort ? `vs ${oppShort}` : "Last match";
+
+  const cells = [];
+  if (Number.isFinite(pos) && pos > 0) {
+    cells.push(`<article class="tp-snap__cell tp-snap__cell--league">
+      <span class="tp-snap__label">League</span>
+      <strong class="tp-snap__value">${escapeHtml(formatLeaguePosition(pos))}</strong>
+      <em class="tp-snap__hint">of ${tableSize}</em>
+    </article>`);
+  }
+  if (form.length) {
+    cells.push(`<article class="tp-snap__cell tp-snap__cell--form">
+      <span class="tp-snap__label">Form</span>
+      <div class="tp-snap__form">${formDotsHtml(form, { large: true })}</div>
+      <em class="tp-snap__hint">${gf}:${ga}</em>
+    </article>`);
+  }
+
+  const xgFor = Number(lastMatch?.xg_for);
+  const xgAgainst = Number(lastMatch?.xg_against);
+  if (Number.isFinite(xgFor) || Number.isFinite(xgAgainst)) {
+    const forTxt = Number.isFinite(xgFor) ? xgFor.toFixed(1) : "—";
+    const agTxt = Number.isFinite(xgAgainst) ? xgAgainst.toFixed(1) : "—";
+    cells.push(`<article class="tp-snap__cell tp-snap__cell--xg">
+      <span class="tp-snap__label">Open-play xG</span>
+      <div class="tp-snap__xg">
+        <div class="tp-snap__xg-side">
+          <strong>${forTxt}</strong>
+          <em>For</em>
+        </div>
+        <span class="tp-snap__xg-sep" aria-hidden="true"></span>
+        <div class="tp-snap__xg-side">
+          <strong>${agTxt}</strong>
+          <em>Against</em>
+        </div>
+      </div>
+      <em class="tp-snap__hint">${escapeHtml(oppLine)} · no pens / DFK</em>
+    </article>`);
+  }
+
+  const poss = Number(lastMatch?.possession_pct);
+  if (Number.isFinite(poss)) {
+    const bar = Math.max(4, Math.min(100, Math.round(poss)));
+    cells.push(`<article class="tp-snap__cell tp-snap__cell--poss">
+      <span class="tp-snap__label">Possession</span>
+      <strong class="tp-snap__value">${Math.round(poss)}%</strong>
+      <div class="tp-snap__meter" aria-hidden="true"><i style="width:${bar}%"></i></div>
+      <em class="tp-snap__hint">${escapeHtml(oppLine)}</em>
+    </article>`);
+  }
+
+  if (!cells.length) {
+    return `<div class="tp-masthead__stats tp-masthead__stats--empty" aria-hidden="true"></div>`;
+  }
+  return `<div class="tp-masthead__stats" aria-label="Match snapshot">
+    <div class="tp-snap">${cells.join("")}</div>
+  </div>`;
+}
+
+function twoPagerGoalPhaseParts(phases, total) {
+  const map = Object.create(null);
+  (phases || []).forEach((row) => {
+    map[row.key] = Number(row.goals) || 0;
+  });
+  const poss = map.possession || 0;
+  const trans = map.transition || 0;
+  const setPlay = map.set_play || 0;
+  const known = poss + trans + setPlay;
+  const other = Math.max(0, (Number(total) || 0) - known);
+  return [
+    { key: "possession", label: "Poss", value: poss },
+    { key: "transition", label: "Trans", value: trans },
+    { key: "set_play", label: "Set", value: setPlay },
+    { key: "other", label: "Other", value: other },
+  ];
+}
+
+function twoPagerGoalPhasesHeaderHtml(goalsSnapshot) {
+  if (!goalsSnapshot) {
+    return `<div class="tp-masthead__stats tp-masthead__stats--empty" aria-hidden="true"></div>`;
+  }
+  const rows = [
+    { key: "for", title: "Scored", side: goalsSnapshot.for || {} },
+    { key: "against", title: "Conceded", side: goalsSnapshot.against || {} },
+  ];
+  const body = rows
+    .map(({ key, title, side }) => {
+      const total = Number(side.total) || 0;
+      const parts = twoPagerGoalPhaseParts(side.phases, total);
+      const chips = parts
+        .map(
+          (part) =>
+            `<span class="tp-goal-chip tp-goal-chip--${escapeHtml(part.key)}"><em>${escapeHtml(part.label)}</em><strong>${part.value}</strong></span>`,
+        )
+        .join("");
+      return `<div class="tp-goal-row tp-goal-row--${key}">
+        <span class="tp-goal-row__label">${escapeHtml(title)}</span>
+        <strong class="tp-goal-row__total">${total}</strong>
+        <div class="tp-goal-row__chips">${chips}</div>
+      </div>`;
+    })
+    .join("");
+  return `<div class="tp-masthead__goals" aria-label="Goals by phase">
+    <span class="tp-masthead__goals-title">Season · goals by phase</span>
+    ${body}
+  </div>`;
+}
+
+function twoPagerStyleTableHtml(report) {
+  const rows = report.two_match?.style_table || report.team_style?.radar || [];
+  const sorted = [...rows].sort(
+    (a, b) => Number(b.value || 0) - Number(a.value || 0) || String(a.label || "").localeCompare(String(b.label || "")),
+  );
+  if (!sorted.length) {
+    return `<p class="tp-empty">No Impect style scores yet.</p>`;
+  }
+  const leagueSize = sorted[0]?.league_size || report.team_style?.league_size || "—";
+  return `<div class="tp-style">
+    <header class="tp-style__head">
+      <strong>Playing style</strong>
+      <span>vs ${escapeHtml(String(leagueSize))} clubs</span>
+    </header>
+    <div class="tp-style__stack" role="list">
+      ${sorted
+        .map((row, index) => {
+          const value = Number(row.value);
+          const bar = Number.isFinite(value) ? Math.max(3, Math.min(100, value)) : 0;
+          const score = Number.isFinite(value) ? Math.round(value) : "—";
+          const rank = row.rank_label || (row.rank != null ? String(row.rank) : "—");
+          const tone = !Number.isFinite(value)
+            ? ""
+            : value >= 65
+              ? " tp-style__row--high"
+              : value <= 35
+                ? " tp-style__row--low"
+                : "";
+          return `<article class="tp-style__row${index === 0 ? " tp-style__row--lead" : ""}${tone}" role="listitem">
+            <div class="tp-style__row-main">
+              <span class="tp-style__trait">${escapeHtml(row.label || row.key || "—")}</span>
+              <span class="tp-style__rank">${escapeHtml(rank)}</span>
+            </div>
+            <div class="tp-style__row-score">
+              <b>${score}</b>
+              <div class="tp-style__meter" aria-hidden="true"><i style="width:${bar}%"></i></div>
+            </div>
+          </article>`;
+        })
+        .join("")}
+    </div>
+  </div>`;
+}
+
+function twoPagerStatLeadersHtml(report) {
+  const boards = report.two_match?.stat_leaders || [];
+  if (!boards.length) {
+    return `<p class="tp-empty">No player leaders yet for recent matches.</p>`;
+  }
+  return `<div class="tp-leaders">
+    ${boards
+      .map((board) => {
+        const players = board.players || [];
+        const rows = [0, 1, 2]
+          .map((index) => {
+            const player = players[index];
+            if (!player) {
+              return `<li class="tp-leaders__player tp-leaders__player--empty">
+                <span class="tp-leaders__rank">${index + 1}</span>
+                <span class="tp-leaders__face tp-leaders__face--empty" aria-hidden="true"></span>
+                <span class="tp-leaders__who"><span>—</span></span>
+                <strong>—</strong>
+              </li>`;
+            }
+            const shirt = player.shirt_number != null ? `${player.shirt_number}` : "";
+            const name = player.short_name || player.name || "—";
+            const photoName = player.name || player.short_name || "";
+            const photoUrl =
+              player.photo_url ||
+              opponentPhotoUrl(photoName, report, player.shirt_number);
+            const face = photoUrl
+              ? `<span class="tp-leaders__face">
+                  <img class="tp-leaders__photo" src="${escapeHtml(photoUrl)}" alt="${escapeHtml(name)}" loading="eager" decoding="async"
+                    onerror="this.classList.add('tp-leaders__photo--empty');this.removeAttribute('src');var f=this.nextElementSibling;if(f){f.hidden=false;f.classList.add('is-shown')}" />
+                  <span class="tp-leaders__fallback" hidden>${escapeHtml(shirt || String(index + 1))}</span>
+                </span>`
+              : `<span class="tp-leaders__face tp-leaders__face--empty">
+                  <span class="tp-leaders__fallback is-shown">${escapeHtml(shirt || String(index + 1))}</span>
+                </span>`;
+            const value = `${escapeHtml(player.value_label || String(player.value ?? "—"))}${board.per90 ? "<small>/90</small>" : ""}`;
+            return `<li class="tp-leaders__player${index === 0 ? " tp-leaders__player--lead" : ""}">
+              <span class="tp-leaders__rank">${index + 1}</span>
+              ${face}
+              <span class="tp-leaders__who">
+                ${shirt ? `<em>${escapeHtml(shirt)}</em>` : ""}
+                <span>${escapeHtml(name)}</span>
+              </span>
+              <strong>${value}</strong>
+            </li>`;
+          })
+          .join("");
+        return `<article class="tp-leaders__board">
+          <header>${escapeHtml(board.label || board.key || "Stat")}${board.scope_label ? `<span>${escapeHtml(board.scope_label)}</span>` : ""}</header>
+          <ol>${rows}</ol>
+        </article>`;
+      })
+      .join("")}
+  </div>`;
+}
+
+function renderTwoPagerPage1(report) {
+  const clubName = report.opponent?.name || "Opposition";
+  const two = report.two_match || {};
+  const matches = two.matches || [];
+  const lastMatch = matches[matches.length - 1] || null;
+  let lastXi = two.last_xi?.length ? two.last_xi : lastMatch?.pitch_players || [];
+  lastXi = applyTwoPagerShapeOverrides(lastXi, twoPagerXiShapeKey(report));
+  // Keep report copies pointing at the same objects so drags persist in-memory + localStorage.
+  if (state.report?.two_match) {
+    state.report.two_match.last_xi = lastXi;
+    if (lastMatch) lastMatch.pitch_players = lastXi;
+  }
+  const formation = two.last_formation || lastMatch?.formation || report.squad_list?.formation || "—";
+  const fixtureDate = formatMatchDate(report.fixture?.scheduled_date);
+  const kickoff = [report.fixture?.date_label, report.fixture?.time_label].filter(Boolean).join(" · ");
+  const venue = report.fixture?.is_home ? "Home" : report.fixture?.is_home === false ? "Away" : "";
+  const valeLine = [
+    report.fixture?.is_home ? "Port Vale (H)" : report.fixture?.is_home === false ? "Port Vale (A)" : "Port Vale",
+    kickoff || fixtureDate,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const competition = report.competition || "League Two";
+  const season = report.season || "";
+  const pageEyebrow = `Page 1 of 3 · ${competition}${season ? ` ${season}` : ""}`;
+
+  return `<section class="pm-slide pm-slide--two-pager pm-slide--two-pager-1" data-slide-title="Two pager · Team" style="${kitCssVars(report)}">
+    <header class="tp-masthead">
+      <div class="tp-masthead__brand">
+        ${crestHtml(report.opponent, "tp-masthead__crest")}
+        <div class="tp-masthead__copy">
+          <p class="tp-masthead__eyebrow">${escapeHtml(pageEyebrow)}</p>
+          <h2 class="tp-masthead__title">${escapeHtml(clubName)}</h2>
+          <p class="tp-masthead__sub">${escapeHtml([valeLine, venue].filter(Boolean).join(" · "))}</p>
+        </div>
+      </div>
+      ${twoPagerMastheadStatsHtml(report)}
+      <div class="tp-masthead__scores">
+        ${matches.length
+          ? matches.map((match, index) => twoPagerScoreCardHtml(match, index, matches.length)).join("")
+          : twoPagerScoreCardHtml(null, 0, 1)}
+      </div>
+    </header>
+    <div class="tp-page1-v2">
+      <aside class="tp-page1-v2__style">
+        ${twoPagerStyleTableHtml(report)}
+      </aside>
+      <div class="tp-page1-v2__pitch">
+        ${twoPagerPitchHtml(lastXi, {
+          title: "Last starting XI",
+          meta: lastMatch
+            ? `vs ${lastMatch.opponent || "—"} · shape ${formation} · ${lastMatch.result || ""} ${lastMatch.score || ""}`.trim()
+            : `Shape ${formation} — tell me if you want a different shape`,
+          layerAttrs: `data-tp-xi="1" data-two-match-index="${Math.max(0, matches.length - 1)}"`,
+          crest: report.opponent,
+        })}
+      </div>
+      <aside class="tp-page1-v2__right">
+        <header class="tp-leaders__title">Player leaders</header>
+        ${twoPagerStatLeadersHtml(report)}
+      </aside>
+    </div>
+    <footer class="tp-footer"><span>Port Vale Analysis</span><span>Two-pager · opposition brief</span></footer>
+  </section>`;
+}
+
+function renderTwoPagerPage2(report) {
+  const clubName = report.opponent?.name || "Opposition";
+  const two = report.two_match || {};
+  const matches = two.matches || [];
+  const notes = loadTwoPagerNotes(report);
+  let avgPlayers = two.avg_positions || [];
+  if (!avgPlayers.length) {
+    // Fallback only if events failed — still prefer not to force formation slots.
+    avgPlayers = typicalPitchPlayers(report.squad_list || {}, report);
+    avgPlayers = applyPitchXiOverrides(avgPlayers, report);
+    avgPlayers = ensureElevenPitchPlayers(avgPlayers, report);
+  }
+  avgPlayers = orientAvgPositionsGkBottom(avgPlayers, report);
+  avgPlayers = applyTwoPagerShapeOverrides(avgPlayers, twoPagerAvgShapeKey(report));
+  if (state.report?.two_match) {
+    state.report.two_match.avg_positions = avgPlayers;
+  }
+  const sampleCount = avgPlayers.reduce((sum, player) => sum + Number(player.samples || 0), 0);
+  const fromEvents = avgPlayers.some((player) => player.from_events);
+  const competition = report.competition || "League Two";
+  const season = report.season || "";
+  const pageEyebrow = `Page 2 of 3 · ${competition}${season ? ` ${season}` : ""}`;
+  const banner = matches.length
+    ? matches
+        .map((match) => {
+          const result = match.result || "—";
+          return `<div class="tp-match-pill tp-match-pill--${escapeHtml(result)}">
+            <strong>${escapeHtml(result)} ${escapeHtml(match.score || "")}</strong>
+            <span>vs ${escapeHtml(match.opponent || "—")}</span>
+            <em>${formatMatchDate(match.date)}</em>
+          </div>`;
+        })
+        .join("")
+    : `<div class="tp-match-pill tp-match-pill--empty">No completed matches yet</div>`;
+
+  return `<section class="pm-slide pm-slide--two-pager pm-slide--two-pager-2" data-slide-title="Two pager · Shape & notes" style="${kitCssVars(report)}">
+    <header class="tp-masthead tp-masthead--compact">
+      <div class="tp-masthead__brand">
+        ${crestHtml(report.opponent, "tp-masthead__crest")}
+        <div class="tp-masthead__copy">
+          <p class="tp-masthead__eyebrow">${escapeHtml(pageEyebrow)}</p>
+          <h2 class="tp-masthead__title">${escapeHtml(clubName)}</h2>
+          <p class="tp-masthead__sub">${fromEvents ? `Average positions from event x/y · ${sampleCount} samples` : "Average positions (fallback)"}</p>
+        </div>
+      </div>
+      ${twoPagerGoalPhasesHeaderHtml(two.goals_snapshot)}
+      <div class="tp-masthead__scores tp-masthead__scores--pills">${banner}</div>
+    </header>
+    <div class="tp-page2-v2">
+      ${twoPagerPitchHtml(avgPlayers, {
+        title: "Average positions",
+        meta: fromEvents
+          ? "Mean event start coordinates — not formation slots"
+          : "Event averages unavailable — showing typical XI fallback",
+        layerAttrs: `data-avg-shape="1"`,
+        crest: report.opponent,
+        markerMode: "number",
+      })}
+      <aside class="tp-page2-v2__notes">
+        ${twoPagerNoteBoxHtml(
+          "hurt_us",
+          "How they can hurt us",
+          notes.hurt_us,
+          "Patterns that hurt teams\nSet-play threats\nRunners in behind\nSwitches of play",
+        )}
+        ${twoPagerNoteBoxHtml(
+          "hurt_them",
+          "How we can hurt them",
+          notes.hurt_them,
+          "Spaces to attack\nPlayers to isolate\nTransitions\nSet-play chances",
+        )}
+        ${twoPagerNoteBoxHtml(
+          "player_comments",
+          "Player comments",
+          notes.player_comments,
+          "Who to watch\nSet-piece takers\nInjury / suspension\n1v1 matchups",
+        )}
+      </aside>
+    </div>
+    <footer class="tp-footer"><span>Port Vale Analysis</span><span>Two-pager · average shape & notes</span></footer>
+  </section>`;
+}
+
+/** Coach glossary for Playing Style axes (fallback if API omits coach_* fields). */
+const TWO_PAGER_STYLE_GLOSSARY = {
+  direct: {
+    label: "Direct play",
+    meaning: "Do they attack quickly and go forward, or build slowly?",
+    stats: "Looks at how vertical their play is — fewer backwards passes, more packing through lines.",
+    blurb:
+      "This bar tells you the tempo of their attacks. A high score means they look for the next forward pass early and will skip midfield if the lane is on. A low score means more sideways and reverse passing — they want to keep the ball and wait for a better picture. Use it to decide whether Vale’s back line needs to drop early or can stay higher and invite them to play.",
+    tip: "High = defend the space in behind early. Low = stay compact and make them play through you.",
+    high: "Go forward fast — skip midfield, attack space.",
+    low: "Patient / sideways — build slowly.",
+  },
+  transition: {
+    label: "Transition",
+    meaning: "How dangerous are they the second they win the ball?",
+    stats: "Counter-press intensity plus packing wins after regain.",
+    blurb:
+      "Transition is the five seconds after they regain. High means they attack the moment they win it — first pass forward, runners beyond the ball, little reset. Low means they secure possession first and rebuild. For Vale: if they score high here, the nearest players must delay and foul the first pass; if they score low, you have a window to reorganise before the next wave.",
+    tip: "High = protect the first pass after you lose it. Low = you have time to reset the shape.",
+    high: "Win it and go — quick counters.",
+    low: "Reset after winning it — less threat on the break.",
+  },
+  aerial: {
+    label: "Aerial",
+    meaning: "How much of their game is in the air?",
+    stats: "Share of aerial duels vs the rest of the league.",
+    blurb:
+      "Aerial shows how often the game becomes a fight for the first header. High teams live on long diagonals, set delivery and second balls around the box. Low teams prefer the floor and will only go aerial when forced. Match this to Vale’s centre-backs and midfield screen — win the first contact, then own the bounce.",
+    tip: "High = win the first contact and own the second ball. Low = keep it on the floor and force them into it.",
+    high: "Long balls, crosses, second balls — win headers.",
+    low: "Keep it on the floor — fewer aerial battles.",
+  },
+  progression: {
+    label: "Progression",
+    meaning: "How well do they play the ball through the opposition?",
+    stats: "Packing / bypassing opponents and positive packing threat.",
+    blurb:
+      "Progression measures how cleanly they play through the middle and remove defenders with the pass. High teams break lines and arrive in the final third with numbers. Low teams struggle to play through a compact block and often recycle or go long instead. Decide whether Vale sits in a mid-block to clog the centre, or presses higher knowing they can force a hopeful ball.",
+    tip: "High = deny the middle and force wide. Low = expect more long / recycled attacks.",
+    high: "Play through lines into dangerous areas.",
+    low: "Struggle to play through — recycle or go long.",
+  },
+  possession: {
+    label: "Possession",
+    meaning: "Do they keep the ball, or give it away and defend?",
+    stats: "Ball retention vs the rest of the league.",
+    blurb:
+      "Possession is simply how much of the ball they keep relative to the league. High sides circulate, rest with the ball and ask you to chase. Low sides are happier without it — they defend territory and look to break. That changes Vale’s energy plan: against a high side, stay patient out of possession; against a low side, expect more transitions and space to attack.",
+    tip: "High = prepare for long spells without the ball. Low = expect territory and more transitions.",
+    high: "Circulate and control games.",
+    low: "Happy without the ball — defend and break.",
+  },
+  pressing: {
+    label: "Pressing",
+    meaning: "How hard and how high do they press after losing it?",
+    stats: "Opening-ball pressure, PPDA, and average press height.",
+    blurb:
+      "Pressing is how aggressively they hunt the ball after they lose it — height of the press plus how few passes they allow. High means Vale’s first receivers will be closed quickly; play out under heat or go long early. Low means they drop into a block — Vale can build, but must watch the counter once the block is broken or they spring from deep.",
+    tip: "High = play out under pressure or go long early. Low = you can build — watch the block and counters.",
+    high: "Chase the ball high — aggressive.",
+    low: "Drop into a block — protect the box first.",
+  },
+};
+
+const TWO_PAGER_STYLE_GLOSSARY_ORDER = [
+  "direct",
+  "transition",
+  "aerial",
+  "progression",
+  "possession",
+  "pressing",
+];
+
+function twoPagerStyleGlossaryRows(report) {
+  const live = [...(report.two_match?.style_table || report.team_style?.radar || [])];
+  const byKey = Object.fromEntries(live.map((row) => [row.key, row]));
+  const clubName = report.opponent?.name || "They";
+  return TWO_PAGER_STYLE_GLOSSARY_ORDER.map((key) => {
+    const fallback = TWO_PAGER_STYLE_GLOSSARY[key];
+    const row = byKey[key] || {};
+    const value = Number(row.value);
+    const score = Number.isFinite(value) ? Math.round(value) : null;
+    const rank = row.rank_label || (row.rank != null ? String(row.rank) : "");
+    let reading = "";
+    if (score != null) {
+      if (score >= 65) reading = `${clubName} sit high on this bar`;
+      else if (score <= 35) reading = `${clubName} sit low on this bar`;
+      else reading = `${clubName} are mid-table on this bar`;
+      if (rank) reading += ` (${score} · ${rank})`;
+      reading += ". ";
+    }
+    return {
+      key,
+      label: row.label || fallback.label,
+      meaning: row.coach_meaning || fallback.meaning,
+      stats: row.coach_stats || fallback.stats,
+      blurb: `${reading}${fallback.blurb || fallback.tip || ""}`.trim(),
+      tip: fallback.tip || "",
+      high: row.coach_high || fallback.high,
+      low: row.coach_low || fallback.low,
+      rank_label: rank || null,
+      value: row.value,
+      league_size: row.league_size,
+    };
+  });
+}
+
+function twoPagerStyleGlossaryHtml(report) {
+  const rows = twoPagerStyleGlossaryRows(report);
+  const clubName = report.opponent?.name || "Opposition";
+  return `<div class="tp-glossary">
+    <header class="tp-glossary__banner">
+      <strong>What each style bar means</strong>
+      <span>Same six traits as page 1 · plain English for the meeting</span>
+    </header>
+    <div class="tp-glossary__stack" role="list">
+      ${rows
+        .map((row) => {
+          const score = Number.isFinite(Number(row.value)) ? Math.round(Number(row.value)) : null;
+          const rank = row.rank_label ? String(row.rank_label) : "";
+          const tone =
+            score == null
+              ? ""
+              : score >= 65
+                ? " tp-glossary__score--high"
+                : score <= 35
+                  ? " tp-glossary__score--low"
+                  : "";
+          const scoreHtml =
+            score == null
+              ? ""
+              : `<div class="tp-glossary__score${tone}" aria-label="${escapeHtml(clubName)} ${escapeHtml(row.label)} score">
+                  <strong>${score}</strong>
+                  ${rank ? `<em>${escapeHtml(rank)}</em>` : ""}
+                </div>`;
+          return `<article class="tp-glossary__row" role="listitem" data-style-key="${escapeHtml(row.key)}">
+            <div class="tp-glossary__top">
+              <h3>${escapeHtml(row.label)}</h3>
+              ${scoreHtml}
+            </div>
+            <p class="tp-glossary__meaning">${escapeHtml(row.meaning)}</p>
+            <p class="tp-glossary__stats">${escapeHtml(row.stats)}</p>
+            <p class="tp-glossary__blurb">${escapeHtml(row.blurb)}</p>
+            ${row.tip ? `<p class="tp-glossary__tip"><span>Vs Vale</span>${escapeHtml(row.tip)}</p>` : ""}
+            <div class="tp-glossary__hl">
+              <p class="tp-glossary__hl--high"><span>High</span>${escapeHtml(row.high)}</p>
+              <p class="tp-glossary__hl--low"><span>Low</span>${escapeHtml(row.low)}</p>
+            </div>
+          </article>`;
+        })
+        .join("")}
+    </div>
+  </div>`;
+}
+
+function renderTwoPagerPage3(report) {
+  const clubName = report.opponent?.name || "Opposition";
+  const competition = report.competition || "League Two";
+  const season = report.season || "";
+  const pageEyebrow = `Page 3 of 3 · ${competition}${season ? ` ${season}` : ""}`;
+
+  return `<section class="pm-slide pm-slide--two-pager pm-slide--two-pager-3" data-slide-title="Two pager · Style key" style="${kitCssVars(report)}">
+    <header class="tp-masthead tp-masthead--compact">
+      <div class="tp-masthead__brand">
+        ${crestHtml(report.opponent, "tp-masthead__crest")}
+        <div class="tp-masthead__copy">
+          <p class="tp-masthead__eyebrow">${escapeHtml(pageEyebrow)}</p>
+          <h2 class="tp-masthead__title">Playing style key</h2>
+          <p class="tp-masthead__sub">${escapeHtml(clubName)} · quick guide for coaches</p>
+        </div>
+      </div>
+    </header>
+    <div class="tp-page3">
+      ${twoPagerStyleGlossaryHtml(report)}
+    </div>
+    <footer class="tp-footer"><span>Port Vale Analysis</span><span>Two-pager · playing style key</span></footer>
+  </section>`;
+}
+
+function readTwoPagerNoteBody(body) {
+  if (!body) return "";
+  const ta = body.querySelector("textarea.tp-note__input");
+  if (ta) {
+    return String(ta.value || "")
+      .replace(/\r/g, "")
+      .split("\n")
+      .map((line) => line.replace(/^[\s•\-\u2022*]+/, "").trim())
+      .filter(Boolean)
+      .join("\n");
+  }
+  const items = [...body.querySelectorAll("li")].map((li) =>
+    li.innerText.replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim(),
+  );
+  return items.filter(Boolean).join("\n");
+}
+
+function bindTwoPagerNotes(root = els.deck) {
+  root.querySelectorAll(".pm-slide--two-pager [data-note-field]").forEach((box) => {
+    const body = box.querySelector(".tp-note__body");
+    const field = box.dataset.noteField;
+    const input = body?.querySelector("textarea.tp-note__input");
+    if (!body || !field || !input || input.dataset.bound === "1") return;
+    input.dataset.bound = "1";
+
+    let saveTimer = 0;
+    const persist = () => {
+      const notes = loadTwoPagerNotes();
+      notes[field] = readTwoPagerNoteBody(body);
+      saveTwoPagerNotes(notes);
+    };
+
+    // Whole card (header + padding) focuses the field — no hunting for a tiny caret.
+    box.addEventListener("mousedown", (event) => {
+      if (event.target === input) return;
+      event.preventDefault();
+      input.focus();
+      if (!input.value) {
+        input.setSelectionRange(0, 0);
+      } else {
+        const end = input.value.length;
+        input.setSelectionRange(end, end);
+      }
+    });
+
+    input.addEventListener("input", () => {
+      window.clearTimeout(saveTimer);
+      saveTimer = window.setTimeout(() => {
+        persist();
+        setStatus("Two-pager notes saved on this device.");
+      }, 350);
+    });
+
+    input.addEventListener("blur", () => {
+      window.clearTimeout(saveTimer);
+      persist();
+    });
+
+    // Keep paste plain — no rich HTML junk in notes.
+    input.addEventListener("paste", (event) => {
+      event.preventDefault();
+      const pasted = (event.clipboardData?.getData("text/plain") || "").replace(/\r/g, "");
+      const start = input.selectionStart ?? input.value.length;
+      const end = input.selectionEnd ?? input.value.length;
+      const next = `${input.value.slice(0, start)}${pasted}${input.value.slice(end)}`;
+      input.value = next;
+      const caret = start + pasted.length;
+      input.setSelectionRange(caret, caret);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  });
+}
+
+function setDeckMode(mode) {
+  const next = mode === "two_pager" ? "two_pager" : "full";
+  state.deckMode = next;
+  document.body.classList.toggle("is-two-pager", next === "two_pager");
+  els.deckModeFullBtn?.classList.toggle("pm-deck-mode__btn--active", next === "full");
+  els.deckModeTwoBtn?.classList.toggle("pm-deck-mode__btn--active", next === "two_pager");
+  try {
+    localStorage.setItem("pm-deck-mode", next);
+  } catch {
+    /* ignore */
+  }
+  if (state.report) {
+    if (document.body.classList.contains("is-pdf-view")) setPdfView(false);
+    rebuildSlides();
+    paintDeck();
+    highlightSlide(0);
+    showSlide(0, { scroll: true });
+  }
 }
 
 function formatRankSplitValue(value) {
@@ -3070,6 +4836,13 @@ function renderPlayerRankingsSlides(report) {
 }
 
 function buildSlides(report) {
+  if (state.deckMode === "two_pager") {
+    return [
+      renderTwoPagerPage1(report),
+      renderTwoPagerPage2(report),
+      renderTwoPagerPage3(report),
+    ].filter(Boolean);
+  }
   const previousSlide = (report.previous_xis || []).length
     ? [renderPreviousXisSlide(report)]
     : [];
@@ -3101,13 +4874,27 @@ function highlightSlide(index) {
   const slides = [...els.deck.querySelectorAll(".pm-slide")];
   if (!slides.length) return;
   state.slideIndex = Math.max(0, Math.min(index, slides.length - 1));
+  const inPresent = document.body.classList.contains("is-present");
+  const inPdfView = document.body.classList.contains("is-pdf-view");
   slides.forEach((slide, slideIndex) => {
-    slide.classList.toggle("pm-slide--active", slideIndex === state.slideIndex);
+    if (inPdfView) {
+      slide.classList.add("pm-slide--active");
+    } else {
+      slide.classList.toggle("pm-slide--active", slideIndex === state.slideIndex);
+    }
+    if (inPresent) {
+      slide.style.zIndex = slideIndex === state.slideIndex ? "2" : "1";
+    } else {
+      slide.style.removeProperty("z-index");
+    }
   });
   const active = slides[state.slideIndex];
   const title = active?.dataset.slideTitle || "Pre-match report";
-  els.statusBar.textContent = `${title} · ${state.report?.opponent?.name || ""} · scroll or ← →`;
+  if (!inPdfView && !inPresent) {
+    els.statusBar.textContent = `${title} · ${state.report?.opponent?.name || ""} · scroll or ← →`;
+  }
   updateSlideNav();
+  updatePresentChrome();
 }
 
 function paintDeck() {
@@ -3119,9 +4906,12 @@ function paintDeck() {
   try {
     bindPitchInteractions(els.deck);
     bindSquadDataInteractions(els.deck);
+    bindXiPitchInteractions(els.deck);
+    bindTwoPagerNotes(els.deck);
   } catch (error) {
     console.error("Pitch UI bind failed", error);
   }
+  applyPdfViewToSlides();
 }
 
 function showSlide(index, { scroll = true, repaint = false } = {}) {
@@ -3147,14 +4937,15 @@ function rebuildSlides() {
 }
 
 function renderDeck(report) {
+  if (document.body.classList.contains("is-present")) setPresent(false);
+  if (document.body.classList.contains("is-pdf-view")) setPdfView(false);
   state.report = report;
   rebuildSlides();
   state.slideIndex = 0;
   paintDeck();
   highlightSlide(0);
   els.refreshBtn.disabled = false;
-  if (els.exportPngsBtn) els.exportPngsBtn.disabled = false;
-  if (els.exportWhatsappPdfBtn) els.exportWhatsappPdfBtn.disabled = false;
+  setModeButtonsEnabled(true);
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -3194,18 +4985,26 @@ function setExportButtonsEnabled(enabled) {
 
 async function exportPreMatchPngs() {
   if (!state.report || !els.exportPngsBtn) return;
-  els.exportPngsBtn.disabled = true;
-  if (els.exportWhatsappPdfBtn) els.exportWhatsappPdfBtn.disabled = true;
+  setModeButtonsEnabled(false);
   els.refreshBtn.disabled = true;
-  setStatus("Capturing slides as PNGs for WhatsApp…", "loading");
+  setExportOverlay("Capturing slides (Chrome)…");
+  setStatus("Capturing slides as PNGs (real browser paint)…", "loading");
   try {
-    const pages = await capturePreMatchSlides({ progressLabel: "Exporting PNGs" });
+    const pack = await capturePreMatchSlidesWysiwyg({
+      progressLabel: "Preparing slides",
+      scale: SLIDE_EXPORT_SCALE,
+    });
+    setExportOverlay("Rendering PNGs in Chrome…");
     const filename = `${exportPngBaseName()}.zip`;
     const response = await fetch("/api/pre-match/export-pngs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        pages,
+        html_pages: pack.htmlPages,
+        html_filenames: pack.htmlFilenames,
+        width: pack.width,
+        height: pack.height,
+        scale: pack.scale,
         filename,
         document_title: `Pre-match · ${state.report?.opponent?.name || "Opponent"}`,
         opponent_name: state.report?.opponent?.name || "opponent",
@@ -3219,46 +5018,51 @@ async function exportPreMatchPngs() {
     downloadBlob(blob, filename);
     const folder = response.headers.get("X-Saved-Desktop-Folder");
     const zipPath = response.headers.get("X-Saved-Desktop-Path");
+    const n = pack.htmlPages.length;
     if (folder) {
-      setStatus(`PNG pack ready · folder on Desktop for WhatsApp · ${pages.length} slides`, "");
+      setStatus(`PNG pack ready · folder on Desktop for WhatsApp · ${n} slides`, "");
     } else if (zipPath) {
-      setStatus(`PNG zip saved to Desktop · ${pages.length} slides`, "");
+      setStatus(`PNG zip saved to Desktop · ${n} slides`, "");
     } else {
-      setStatus(`PNG zip downloaded · ${pages.length} slides`, "");
+      setStatus(`PNG zip downloaded · ${n} slides`, "");
     }
     els.statusBar.textContent = folder
       ? `WhatsApp pack: ${folder}`
-      : `Exported ${pages.length} PNG slides`;
+      : `Exported ${n} PNG slides`;
   } catch (error) {
     setStatus(error.message || "PNG export failed", "error");
+    setExportStatus(error.message || "PNG export failed", "error");
   } finally {
-    setExportButtonsEnabled(Boolean(state.report));
+    setExportOverlay("");
+    setModeButtonsEnabled(Boolean(state.report));
     els.refreshBtn.disabled = false;
   }
 }
 
 async function exportWhatsappPdf() {
   if (!state.report || !els.exportWhatsappPdfBtn) return;
-  setExportButtonsEnabled(false);
+  setModeButtonsEnabled(false);
   els.refreshBtn.disabled = true;
-  setStatus("Building full-quality WhatsApp PDF (1920×1080)…", "loading");
+  setExportOverlay("Building WhatsApp PDF (Chrome)…");
+  setStatus("Building WhatsApp PDF via real Chrome screenshots…", "loading");
   try {
-    const pages = await capturePreMatchSlides({
+    const pack = await capturePreMatchSlidesWysiwyg({
       layoutWidth: SLIDE_EXPORT_WIDTH,
       layoutHeight: SLIDE_EXPORT_HEIGHT,
-      width: WHATSAPP_EXPORT_WIDTH,
-      height: WHATSAPP_EXPORT_HEIGHT,
       scale: WHATSAPP_CAPTURE_SCALE,
-      mimeType: "image/jpeg",
-      quality: WHATSAPP_JPEG_QUALITY,
-      progressLabel: "Capturing slides",
+      progressLabel: "Preparing slides",
     });
+    setExportOverlay("Rendering PDF in Chrome…");
     const filename = `${exportWhatsappPdfBaseName()}.pdf`;
     const response = await fetch("/api/pre-match/export-whatsapp-pdf", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        pages,
+        html_pages: pack.htmlPages,
+        html_filenames: pack.htmlFilenames,
+        width: pack.width,
+        height: pack.height,
+        scale: pack.scale,
         filename,
         document_title: `Pre-match · ${state.report?.opponent?.name || "Opponent"}`,
         opponent_name: state.report?.opponent?.name || "opponent",
@@ -3272,30 +5076,36 @@ async function exportWhatsappPdf() {
     downloadBlob(blob, filename);
     const savedPath = response.headers.get("X-Saved-Desktop-Path");
     const sizeMb = (blob.size / (1024 * 1024)).toFixed(1);
+    const n = pack.htmlPages.length;
     if (savedPath) {
-      setStatus(`WhatsApp PDF ready · ${pages.length} slides · ${sizeMb} MB · Desktop`, "");
+      setStatus(`WhatsApp PDF ready · ${n} slides · ${sizeMb} MB · Desktop`, "");
+      setExportStatus(`PDF downloaded · ${n} slides · still in PDF version`, "success");
       els.statusBar.textContent = `Share from Desktop: ${savedPath.split("/").pop()}`;
     } else {
-      setStatus(`WhatsApp PDF downloaded · ${pages.length} slides · ${sizeMb} MB`, "");
+      setStatus(`WhatsApp PDF downloaded · ${n} slides · ${sizeMb} MB`, "");
+      setExportStatus(`PDF downloaded · ${n} slides`, "success");
       els.statusBar.textContent = `PDF ready — attach in WhatsApp`;
     }
   } catch (error) {
     setStatus(error.message || "WhatsApp PDF export failed", "error");
+    setExportStatus(error.message || "WhatsApp PDF export failed", "error");
   } finally {
-    setExportButtonsEnabled(Boolean(state.report));
+    setExportOverlay("");
+    setModeButtonsEnabled(Boolean(state.report));
     els.refreshBtn.disabled = false;
   }
 }
 
 function renderEmptyDeck(message) {
+  if (document.body.classList.contains("is-present")) setPresent(false);
+  if (document.body.classList.contains("is-pdf-view")) setPdfView(false);
   state.report = null;
   state.slides = [];
   state.slideIndex = 0;
   els.deck.innerHTML = `<div class="pm-slide pm-slide--active" style="display:flex !important;align-items:center;justify-content:center;background:#111;border:1px solid #2a2a2a;padding:3rem;text-align:center;color:#9ca3af;border-radius:12px;">${message}</div>`;
   els.statusBar.textContent = message;
   els.refreshBtn.disabled = true;
-  if (els.exportPngsBtn) els.exportPngsBtn.disabled = true;
-  if (els.exportWhatsappPdfBtn) els.exportWhatsappPdfBtn.disabled = true;
+  setModeButtonsEnabled(false);
   updateSlideNav();
 }
 
@@ -3307,11 +5117,7 @@ async function loadFixtures() {
     renderEmptyDeck("No opponents found for this season.");
     return false;
   }
-  const currentMatchId = Number(els.matchId.value || 0);
-  const stillValid = state.fixtures.some((row) => Number(row.match_id) === currentMatchId);
-  if (!stillValid) {
-    selectFixture(pickDefaultFixture());
-  }
+  selectFixture(pickDefaultFixture());
   renderMatchBar();
   return true;
 }
@@ -3356,10 +5162,6 @@ async function init() {
   try {
     state.meta = await fetchJson("/api/pre-match/meta");
     els.iterationId.value = String(state.meta.default_iteration_id);
-    if (state.meta.default_fixture) {
-      els.matchId.value = String(state.meta.default_fixture.match_id || "");
-      els.opponentId.value = String(state.meta.default_fixture.opponent_id || "");
-    }
     renderSeasonToggle();
     const hasFixtures = await loadFixtures();
     if (hasFixtures) {
@@ -3374,11 +5176,102 @@ async function init() {
 els.refreshBtn.addEventListener("click", loadReport);
 if (els.exportPngsBtn) els.exportPngsBtn.addEventListener("click", exportPreMatchPngs);
 if (els.exportWhatsappPdfBtn) els.exportWhatsappPdfBtn.addEventListener("click", exportWhatsappPdf);
+if (els.pdfViewBtn) els.pdfViewBtn.addEventListener("click", () => setPdfView(true));
+if (els.pdfBackBtn) els.pdfBackBtn.addEventListener("click", () => setPdfView(false));
+if (els.presentBtn) {
+  els.presentBtn.addEventListener("click", () => {
+    setPresent(!document.body.classList.contains("is-present"));
+  });
+}
+if (els.presentPrev) {
+  els.presentPrev.addEventListener("click", (event) => {
+    event.stopPropagation();
+    showSlide(state.slideIndex - 1, { scroll: false });
+  });
+}
+if (els.presentNext) {
+  els.presentNext.addEventListener("click", (event) => {
+    event.stopPropagation();
+    showSlide(state.slideIndex + 1, { scroll: false });
+  });
+}
 els.prevSlideBtn.addEventListener("click", () => showSlide(state.slideIndex - 1));
 els.nextSlideBtn.addEventListener("click", () => showSlide(state.slideIndex + 1));
+els.deckModeFullBtn?.addEventListener("click", () => setDeckMode("full"));
+els.deckModeTwoBtn?.addEventListener("click", () => setDeckMode("two_pager"));
+try {
+  const savedMode = localStorage.getItem("pm-deck-mode");
+  // Default into Two pager for the polish pass; only honour an explicit Full deck choice.
+  const mode = savedMode === "full" ? "full" : "two_pager";
+  state.deckMode = mode;
+  document.body.classList.toggle("is-two-pager", mode === "two_pager");
+  els.deckModeFullBtn?.classList.toggle("pm-deck-mode__btn--active", mode === "full");
+  els.deckModeTwoBtn?.classList.toggle("pm-deck-mode__btn--active", mode === "two_pager");
+} catch {
+  document.body.classList.add("is-two-pager");
+  els.deckModeTwoBtn?.classList.add("pm-deck-mode__btn--active");
+  els.deckModeFullBtn?.classList.remove("pm-deck-mode__btn--active");
+}
+
+document.addEventListener("fullscreenchange", () => {
+  if (!document.fullscreenElement && document.body.classList.contains("is-present")) {
+    setPresent(false);
+  }
+});
+
+window.addEventListener("resize", () => {
+  updatePdfScale();
+});
 
 document.addEventListener("keydown", (event) => {
+  const target = event.target;
+  if (
+    target &&
+    (/input|textarea|select/i.test(target.tagName) ||
+      target.isContentEditable ||
+      target.closest?.("[contenteditable='true'], [contenteditable=''], .tp-note__body"))
+  ) {
+    return;
+  }
   if (!state.slides.length) return;
+
+  if (event.key === "p" || event.key === "P") {
+    if (!document.body.classList.contains("is-pdf-view")) {
+      setPresent(!document.body.classList.contains("is-present"));
+    }
+    return;
+  }
+
+  if (event.key === "Escape") {
+    if (document.body.classList.contains("is-present")) {
+      event.preventDefault();
+      setPresent(false);
+      return;
+    }
+    if (document.body.classList.contains("is-pdf-view")) {
+      event.preventDefault();
+      setPdfView(false);
+      return;
+    }
+  }
+
+  if (document.body.classList.contains("is-present") || document.body.classList.contains("is-pdf-view")) {
+    if (event.key === "ArrowRight" || event.key === " " || event.key === "PageDown") {
+      event.preventDefault();
+      showSlide(state.slideIndex + 1, { scroll: !document.body.classList.contains("is-present") });
+    } else if (event.key === "ArrowLeft" || event.key === "PageUp" || event.key === "Backspace") {
+      event.preventDefault();
+      showSlide(state.slideIndex - 1, { scroll: !document.body.classList.contains("is-present") });
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      showSlide(0, { scroll: !document.body.classList.contains("is-present") });
+    } else if (event.key === "End") {
+      event.preventDefault();
+      showSlide(state.slides.length - 1, { scroll: !document.body.classList.contains("is-present") });
+    }
+    return;
+  }
+
   if (event.key === "ArrowRight" || event.key === "PageDown") {
     event.preventDefault();
     showSlide(state.slideIndex + 1);
@@ -3393,6 +5286,7 @@ window.addEventListener(
   "scroll",
   () => {
     if (!state.slides.length) return;
+    if (document.body.classList.contains("is-present")) return;
     window.clearTimeout(scrollTick);
     scrollTick = window.setTimeout(() => {
       const slides = [...els.deck.querySelectorAll(".pm-slide")];

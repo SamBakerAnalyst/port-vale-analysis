@@ -288,17 +288,24 @@ def _parse_chains(
         deliverer_name = _player_name(restart, player_names)
         # Impect +y = left wing from attacking team's perspective.
         side: str | None = None
-        if restart_action == CORNER_ACTION and start_coords is not None:
-            if start_coords[1] > 0:
+        if start_coords is not None:
+            try:
+                wing_y = float(start_coords[1])
+            except (TypeError, ValueError):
+                wing_y = 0.0
+            if wing_y > 0:
                 side = "left"
-            elif start_coords[1] < 0:
+            elif wing_y < 0:
                 side = "right"
 
         shots = [
             {
                 "eventId": int(event.get("id") or 0),
+                "playerId": _player_id(event),
+                "playerName": _player_name(event, player_names),
                 "xg": round(xg_by_event.get(int(event.get("id") or 0), 0.0), 3),
                 "isGoal": str(event.get("result") or "").upper() == "SUCCESS",
+                "coords": _event_coords(event) or _event_coords(event, prefer_end=True),
             }
             for event in chain_events
             if str(event.get("actionType") or "").upper() == "SHOT"

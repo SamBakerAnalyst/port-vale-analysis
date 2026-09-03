@@ -29,6 +29,10 @@ const OSRM_BATCH_SIZE = 40;
 const ARRIVE_BEFORE_KICKOFF_MIN = 15;
 const HALFTIME_MINUTE = 45;
 const FULLTIME_MINUTE = 90;
+// Day-plan second leg: show in red if only slightly over max drive settings.
+const STRETCH_MILES = 6;
+const STRETCH_MINUTES = 12;
+const STRETCH_RATIO = 1.15;
 const roadDriveCache = new Map();
 
 const state = {
@@ -316,6 +320,30 @@ function effectiveRadiusKm(maxMinutes, maxMiles) {
   return milesCap / 0.621371;
 }
 
+function legWithinLimits(drive, maxMinutes, maxMiles) {
+  return drive.minutes <= maxMinutes && drive.miles <= maxMiles;
+}
+
+function legWithinStretch(drive, maxMinutes, maxMiles) {
+  if (legWithinLimits(drive, maxMinutes, maxMiles)) return true;
+  const maxStretchMiles = Math.max(maxMiles + STRETCH_MILES, maxMiles * STRETCH_RATIO);
+  const maxStretchMinutes = Math.max(maxMinutes + STRETCH_MINUTES, maxMinutes * STRETCH_RATIO);
+  return drive.miles <= maxStretchMiles && drive.minutes <= maxStretchMinutes;
+}
+
+function classifyBetweenLeg(drive, maxMinutes, maxMiles) {
+  if (legWithinLimits(drive, maxMinutes, maxMiles)) return "feasible";
+  if (legWithinStretch(drive, maxMinutes, maxMiles)) return "stretch";
+  return "unrealistic";
+}
+
+function stretchLegSummary(drive, maxMinutes, maxMiles) {
+  const parts = [];
+  if (drive.miles > maxMiles) parts.push(`${drive.miles} mi leg (${maxMiles} mi max)`);
+  if (drive.minutes > maxMinutes) parts.push(`${drive.minutes} min leg (${maxMinutes} min max)`);
+  return parts.join(" · ");
+}
+
 function formatClock(when) {
   return when.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
@@ -393,7 +421,7 @@ function enrichFixture(fixture) {
   };
 }
 
-async function computeDayPlans() {
+async function computeDayPlans(maxMinutes, maxMiles) {
   if (!state.origin || !state.allFixturesForPlanning.length) return [];
 
   const byDate = {};
@@ -413,7 +441,6 @@ async function computeDayPlans() {
 
       let homeToFirst;
       try {
-        // Prefer cached home→stadium road time from the reachable search.
         const cached = state.reachable.find((row) => row.club === first.stadium.club);
         homeToFirst = cached
           ? { minutes: cached.drive_minutes, miles: cached.drive_miles, source: cached.drive_source }
@@ -447,6 +474,9 @@ async function computeDayPlans() {
           continue;
         }
 
+        const legStatus = classifyBetweenLeg(between, maxMinutes, maxMiles);
+        if (legStatus === "unrealistic") continue;
+
         const mustArriveSecond = new Date(
           second.kickoff_at.getTime() - ARRIVE_BEFORE_KICKOFF_MIN * 60000
         );
@@ -473,12 +503,18 @@ async function computeDayPlans() {
           leaveInfo,
           arriveSecond,
           cushionAfterHalf,
+          legStatus,
+          stretchReason:
+            legStatus === "stretch" ? stretchLegSummary(between, maxMinutes, maxMiles) : "",
         });
       }
     }
   }
 
   return plans.sort((a, b) => {
+    const tier = { feasible: 0, stretch: 1 };
+    const tierCmp = tier[a.legStatus] - tier[b.legStatus];
+    if (tierCmp) return tierCmp;
     const dateCmp = a.date_key.localeCompare(b.date_key);
     if (dateCmp) return dateCmp;
     return a.first.kickoff_at - b.first.kickoff_at;
@@ -505,9 +541,11 @@ function renderDayPlans() {
     .map((plan) => {
       const firstColor = leagueColor(plan.first.league);
       const secondColor = leagueColor(plan.second.league);
+      const stretch = plan.legStatus === "stretch";
       return `
-        <article class="sa-day-plan">
+        <article class="sa-day-plan${stretch ? " sa-day-plan--stretch" : ""}">
           <div class="sa-day-plan__date">${plan.date_label}</div>
+          ${stretch ? `<p class="sa-day-plan__badge">Stretch — ${plan.stretchReason}</p>` : ""}
           <div class="sa-day-plan__leg">
             <div class="sa-day-plan__time">${formatClock(plan.first.kickoff_at)}</div>
             <div>
@@ -824,13 +862,6 @@ async function loadFixturesForReachable() {
 
     setStatus("Routing day-plan legs over roads…", "info");
     const { maxMinutes, maxMiles } = filterLimits();
-    const planningPool = await computeReachable(
-      state.origin,
-      state.allStadiums,
-      Math.max(maxMinutes * 2, 120),
-      Math.max(maxMiles * 2, 60)
-    );
-    const planningClubs = new Set(planningPool.map((row) => row.club));
 
     state.allFixturesForPlanning = fixtures
       .filter((fixture) => {
@@ -839,12 +870,7 @@ async function loadFixturesForReachable() {
         return Number.isNaN(when) || when >= now - 86400000;
       })
       .map(enrichFixture)
-      .filter(
-        (fixture) =>
-          fixture.stadium &&
-          fixture.kickoff_at &&
-          planningClubs.has(fixture.stadium.club)
-      );
+      .filter((fixture) => fixture.stadium && fixture.kickoff_at);
 
     state.fixtures = state.allFixturesForPlanning
       .filter((fixture) => isReachableFromHome(fixture.stadium))
@@ -852,9 +878,13 @@ async function loadFixturesForReachable() {
         (a, b) =>
           String(a.date_key).localeCompare(String(b.date_key)) || a.kickoff_at - b.kickoff_at
       );
-    state.dayPlans = await computeDayPlans();
+    state.dayPlans = await computeDayPlans(maxMinutes, maxMiles);
+    const feasiblePlans = state.dayPlans.filter((row) => row.legStatus === "feasible").length;
+    const stretchPlans = state.dayPlans.filter((row) => row.legStatus === "stretch").length;
     setStatus(
-      `${state.reachable.length} stadiums · ${state.fixtures.length} fixtures · ${state.dayPlans.length} day plans (road routing)`,
+      `${state.reachable.length} stadiums · ${state.fixtures.length} fixtures · ${feasiblePlans} day plans` +
+        (stretchPlans ? ` (+ ${stretchPlans} stretch in red)` : "") +
+        " · road routing",
       "ok"
     );
   } catch (error) {

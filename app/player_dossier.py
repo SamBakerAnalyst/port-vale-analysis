@@ -253,46 +253,77 @@ def _profile_rows(
     squad_id: int,
     player_id: int,
     primary_position: str | None,
-) -> tuple[list[dict[str, Any]], float | None]:
+) -> tuple[list[dict[str, Any]], float | None, str | None]:
+    """Return (profiles, minutes, position_code_used)."""
     impect = _impect()
-    position = primary_position or "CENTRAL_MIDFIELD"
-    try:
-        score_rows, _ = impect._fetch_profile_scores(iteration_id, squad_id, [position], 0)
-    except Exception:
-        return [], None
+    candidates: list[str] = []
+    if primary_position:
+        candidates.append(str(primary_position))
+    for fallback in (
+        "LEFT_WINGER",
+        "RIGHT_WINGER",
+        "LEFT_MIDFIELD",
+        "RIGHT_MIDFIELD",
+        "ATTACKING_MIDFIELD",
+        "CENTER_FORWARD",
+        "CENTRAL_MIDFIELD",
+        "LEFT_WINGBACK_DEFENDER",
+        "RIGHT_WINGBACK_DEFENDER",
+        "DEFENSE_MIDFIELD",
+        "CENTRAL_DEFENDER",
+    ):
+        if fallback not in candidates:
+            candidates.append(fallback)
 
-    row = next((r for r in score_rows if int(r.get("playerId") or 0) == player_id), None)
-    if row is None:
-        return [], None
+    best_profiles: list[dict[str, Any]] = []
+    best_minutes: float | None = None
+    best_position: str | None = None
 
-    minutes = impect._play_duration_minutes(row)
-    profiles: list[dict[str, Any]] = []
-    for score in row.get("profileScores") or []:
-        if not isinstance(score, dict):
-            continue
-        name = str(score.get("profileName") or "").strip()
-        if not name or not impect._is_pv_profile(name):
-            continue
-        value = score.get("value")
-        if value is None:
-            continue
+    for position in candidates:
         try:
-            numeric = float(value)
-        except (TypeError, ValueError):
+            score_rows, _ = impect._fetch_profile_scores(iteration_id, squad_id, [position], 0)
+        except Exception:
             continue
-        label = strip_pv_prefix(name)
-        label = re.sub(r"\s*[\-\(].*$", "", label).replace("_", " ").strip()
-        label = label or humanize_profile_name(name)
-        profiles.append(
-            {
-                "name": name,
-                "label": label,
-                "score": round(numeric, 3),
-                "pct": round(numeric * 100),
-            }
-        )
-    profiles.sort(key=lambda item: item["pct"], reverse=True)
-    return profiles, minutes
+
+        row = next((r for r in score_rows if int(r.get("playerId") or 0) == player_id), None)
+        if row is None:
+            continue
+
+        minutes = impect._play_duration_minutes(row)
+        profiles: list[dict[str, Any]] = []
+        for score in row.get("profileScores") or []:
+            if not isinstance(score, dict):
+                continue
+            name = str(score.get("profileName") or "").strip()
+            if not name or not impect._is_pv_profile(name):
+                continue
+            value = score.get("value")
+            if value is None:
+                continue
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError):
+                continue
+            label = strip_pv_prefix(name)
+            label = re.sub(r"\s*[\-\(].*$", "", label).replace("_", " ").strip()
+            label = label or humanize_profile_name(name)
+            profiles.append(
+                {
+                    "name": name,
+                    "label": label,
+                    "score": round(numeric, 3),
+                    "pct": round(numeric * 100),
+                }
+            )
+        profiles.sort(key=lambda item: item["pct"], reverse=True)
+        if profiles:
+            return profiles, minutes, position
+        if best_minutes is None and minutes is not None:
+            best_minutes = minutes
+            best_profiles = profiles
+            best_position = position
+
+    return best_profiles, best_minutes, best_position
 
 
 def _load_player_notes_store() -> dict[str, Any]:
@@ -1348,7 +1379,23 @@ def build_player_dossier(
     profiles: list[dict[str, Any]] = []
     minutes: float | None = None
     if squad_id is not None:
-        profiles, minutes = _profile_rows(iter_id, squad_id, player_id, primary_position)
+        profiles, minutes, scored_position = _profile_rows(
+            iter_id, squad_id, player_id, primary_position
+        )
+        # If Impect shares missed the role but profile scores found a position, use it.
+        if scored_position and not primary_position:
+            from app.scouting import _scouting_position_label
+
+            primary_position = scored_position
+            if not any(str(row.get("code") or "").upper() == scored_position for row in positions):
+                positions = [
+                    {
+                        "code": scored_position,
+                        "label": _scouting_position_label(scored_position),
+                        "minutes": round(float(minutes), 0) if minutes is not None else None,
+                        "match_share": 100.0,
+                    }
+                ] + list(positions)
 
     # Games are slow (many Impect match calls) and used to empty-out under 429s when
     # bundled into the main dossier. Load via /api/player/{id}/games instead.
@@ -1372,7 +1419,16 @@ def build_player_dossier(
 
     from app.player_web_enrichment import enrich_player_web
 
-    web = enrich_player_web(name, club_name=club)
+    # Strip U21/Academy so Transfermarkt search hits the main player page.
+    club_lookup = club or ""
+    club_lookup = re.sub(
+        r"\s*(U\d{2}|Under[-\s]?\d{2}|Youth|Academy|Reserves?|II|B)\s*$",
+        "",
+        club_lookup,
+        flags=re.I,
+    ).strip(" -–—") or club
+
+    web = enrich_player_web(name, club_name=club_lookup)
     tm = web.get("transfermarkt") if isinstance(web, dict) else None
     fbref = web.get("fbref") if isinstance(web, dict) else None
 
@@ -1385,6 +1441,18 @@ def build_player_dossier(
         from app.scouting import _format_height
 
         height = _format_height(raw)
+    # Never ship placeholder heights into packs / UI.
+    if height:
+        text = str(height).strip()
+        if text in {"—", "-", "0'0", "0'0\"", "0'0\" (0cm)"} or text.startswith("0'0"):
+            height = None
+        elif tm and tm.get("height_cm"):
+            # Prefer re-label from validated cm when available.
+            from app.set_piece_pre_match import _height_label_from_cm
+
+            labeled = _height_label_from_cm(tm.get("height_cm"))
+            if labeled != "—":
+                height = labeled
 
     foot = (tm or {}).get("foot") or _foot_label(raw)
 
@@ -1508,14 +1576,15 @@ def register_player_dossier_routes(app: FastAPI) -> None:
             raise HTTPException(status_code=404, detail="No squad for this player season.")
         squad_id = int(squad_raw)
         position_code = str(position or "").strip().upper()
-        profiles, minutes = _profile_rows(iter_id, squad_id, player_id, position_code)
+        profiles, minutes, scored_position = _profile_rows(iter_id, squad_id, player_id, position_code)
         return {
             "player_id": player_id,
             "iteration_id": iter_id,
             "squad_id": squad_id,
-            "position": position_code,
+            "position": scored_position or position_code,
             "position_label": _impect().POSITION_LABELS.get(
-                position_code, position_code.replace("_", " ").title()
+                scored_position or position_code,
+                (scored_position or position_code).replace("_", " ").title(),
             ),
             "minutes": round(float(minutes), 0) if minutes is not None else None,
             "profiles": profiles,

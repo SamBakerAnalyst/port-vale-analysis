@@ -134,7 +134,10 @@ METRIC_META: dict[str, dict[str, Any]] = {
 }
 
 _cache: dict[int, tuple[float, dict[str, Any]]] = {}
-CACHE_TTL_SECONDS = 900
+# Serve tracker cache for the full daily refresh window.
+# We prebuild these caches in `app/hub_snapshots.py` so click-path
+# loads should not trigger recomputation.
+CACHE_TTL_SECONDS = 36 * 3600
 TRACKER_CACHE_DIR = CACHE_ROOT / "strategy-tracker"
 TRACKER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 TRACKER_CACHE_VERSION = 3

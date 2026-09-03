@@ -7,7 +7,7 @@
   <title>Pre-Match Report</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/pre-match.css?v=dev" />
 </head>
 <body>
@@ -18,14 +18,22 @@
         <h1 class="pm-toolbar__title">Pre-match report <span class="pm-build-badge" id="buildBadge">vdev</span></h1>
       </div>
       <div class="pm-toolbar__right">
-        <div class="pm-slide-nav">
+        <p class="pm-toolbar__export-status" id="exportStatus" role="status" aria-live="polite"></p>
+        <div class="pm-deck-mode" role="group" aria-label="Report mode">
+          <button type="button" class="pm-deck-mode__btn pm-deck-mode__btn--active" id="deckModeFullBtn" data-deck-mode="full">Full deck</button>
+          <button type="button" class="pm-deck-mode__btn" id="deckModeTwoBtn" data-deck-mode="two_pager">Two pager</button>
+        </div>
+        <div class="pm-slide-nav pm-btn--deck-mode">
           <button type="button" class="pm-btn pm-btn--ghost" id="prevSlideBtn" aria-label="Previous slide">←</button>
           <span class="pm-slide-nav__count" id="slideCounter">—</span>
           <button type="button" class="pm-btn pm-btn--ghost" id="nextSlideBtn" aria-label="Next slide">→</button>
         </div>
-        <button type="button" class="pm-btn pm-btn--ghost" id="refreshBtn" disabled title="Reload report data from Impect (not page code)">Refresh data</button>
+        <button type="button" class="pm-btn pm-btn--ghost pm-btn--deck-mode" id="refreshBtn" disabled title="Reload report data from Impect (not page code)">Refresh data</button>
+        <button type="button" class="pm-btn pm-btn--export pm-btn--deck-mode" id="pdfViewBtn" disabled title="Big slides tuned for PDF — same layout as WhatsApp export">PDF version</button>
+        <button type="button" class="pm-btn pm-btn--gold pm-btn--deck-mode" id="presentBtn" disabled title="Fullscreen presentation (P)">Present</button>
+        <button type="button" class="pm-btn pm-btn--ghost pm-btn--pdf-mode" id="pdfBackBtn">Back to deck</button>
         <button type="button" class="pm-btn pm-btn--whatsapp" id="exportWhatsappPdfBtn" disabled title="Best for WhatsApp — full 1080p PDF of every slide">WhatsApp PDF</button>
-        <button type="button" class="pm-btn pm-btn--export" id="exportPngsBtn" disabled title="PNG zip (Keynote / archive) — prefer WhatsApp PDF for sharing">Export PNGs</button>
+        <button type="button" class="pm-btn pm-btn--export" id="exportPngsBtn" disabled title="PNG zip (Keynote / archive)">Export PNGs</button>
       </div>
     </header>
 
@@ -48,10 +56,17 @@
     <footer id="statusBar" class="pm-footer">Select a fixture to load the report.</footer>
   </div>
 
+  <div id="exportOverlay" class="pm-export-overlay" aria-live="polite" aria-busy="true"></div>
+  <div class="pm-present-ui pm-present-count" id="presentCount"></div>
+  <button type="button" class="pm-present-ui pm-present-nav pm-present-nav--prev" id="presentPrev" aria-label="Previous slide">‹</button>
+  <button type="button" class="pm-present-ui pm-present-nav pm-present-nav--next" id="presentNext" aria-label="Next slide">›</button>
+  <div class="pm-present-ui pm-present-hint" id="presentHint">← Back · → Forward · Esc exit · P toggle</div>
+
   <input type="hidden" id="iterationId" value="" />
   <input type="hidden" id="opponentId" value="" />
   <input type="hidden" id="matchId" value="" />
 
+  <script defer src="/static/wysiwyg-export.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script defer src="/static/pre-match.js?v=dev"></script>
   <script defer src="/static/hub-feedback.js?v=1"></script>

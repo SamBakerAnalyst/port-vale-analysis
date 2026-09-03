@@ -8,7 +8,7 @@
   --accent: #34d399;
   --gold: #fbbf24;
   --radius: 12px;
-  --font: "DM Sans", system-ui, sans-serif;
+  --font: "Manrope", system-ui, sans-serif;
   --display: "Barlow Condensed", sans-serif;
   --mono: "JetBrains Mono", monospace;
   --fp-text-xs: .85rem;
@@ -272,6 +272,10 @@ a:hover { text-decoration: underline; }
 
 .fp-assignment--open {
   padding-top: .1rem;
+}
+
+.fp-assignment__panel--hidden {
+  display: none;
 }
 
 .fp-season-btn,

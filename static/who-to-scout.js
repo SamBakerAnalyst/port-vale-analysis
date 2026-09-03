@@ -15,6 +15,71 @@
     CENTER_FORWARD: "ST",
   };
 
+  const WATCH_STAGE = "watch_list";
+  const WATCH_TAG = "Watching";
+  /** Already on the pipeline board — unticking removes them from Pipelines. */
+  const PIPELINE_STAGES = new Set([
+    "watched",
+    "data_identified",
+    "scout_identified",
+    "video_scouted",
+    "live_scouted",
+    "gone_elsewhere",
+    "not_the_right_fit",
+  ]);
+  const STAGE_CHIP = {
+    watch_list: {
+      kind: "watch",
+      label: "Watch",
+      title: "On the Watch list — click to remove",
+    },
+    watched: {
+      kind: "pipe",
+      label: "Watched",
+      title: "On Pipelines · Watched — click to remove",
+    },
+    data_identified: {
+      kind: "pipe",
+      label: "Data",
+      title: "On Pipelines · Data identified — click to remove",
+    },
+    scout_identified: {
+      kind: "pipe",
+      label: "Scout",
+      title: "On Pipelines · Scout identified — click to remove",
+    },
+    video_scouted: {
+      kind: "pipe",
+      label: "Video",
+      title: "On Pipelines · Video scouted — click to remove",
+    },
+    live_scouted: {
+      kind: "pipe",
+      label: "Live",
+      title: "On Pipelines · Live scouted — click to remove",
+    },
+    gone_elsewhere: {
+      kind: "closed",
+      label: "Gone",
+      title: "On Pipelines · Gone / turned us down — click to remove",
+    },
+    not_the_right_fit: {
+      kind: "closed",
+      label: "Out",
+      title: "On Pipelines · Not the right fit — click to remove",
+    },
+  };
+
+  function stageChipMeta(stage) {
+    return (
+      STAGE_CHIP[stage] || {
+        kind: "pipe",
+        label: "Pipe",
+        title: `On Pipelines · ${String(stage || "").replaceAll("_", " ")} — click to remove`,
+      }
+    );
+  }
+
   const state = {
     loading: false,
     building: false,
@@ -35,6 +100,16 @@
     seasonLabel: "",
     squadByClub: {},
     loansByClub: {},
+    ageBand: "all",
+    loanFilter: "all",
+    loanLoading: false,
+    /** @type {Map<number, {id: string, stage: string, name: string}>} */
+    watchByPlayerId: new Map(),
+    watchBusy: new Set(),
+    /** @type {{pid: number, wantOn: boolean, playerName: string} | null} */
+    watchPrompt: null,
+    // Pipelines is held back until every scout has a personal login.
+    pipelinesLive: false,
   };
 
   let lastGrouped = { blocks: [] };
@@ -55,6 +130,8 @@
     minMinutes: document.getElementById("minMinutes"),
     minAge: document.getElementById("minAge"),
     maxAge: document.getElementById("maxAge"),
+    ageBandGroup: document.getElementById("ageBandGroup"),
+    loanFilterGroup: document.getElementById("loanFilterGroup"),
     minHeight: document.getElementById("minHeight"),
     clubFilter: document.getElementById("clubFilter"),
     clearClub: document.getElementById("clearClub"),
@@ -69,6 +146,8 @@
     refreshBtn: document.getElementById("refreshBtn"),
     exportPdfBtn: document.getElementById("exportPdfBtn"),
     exportRoot: document.getElementById("exportRoot"),
+    watchLink: document.getElementById("watchListLink"),
+    watchCount: document.getElementById("watchListCount"),
   };
 
   function fmt(value, digits = 1) {
@@ -206,6 +285,91 @@
     return unique.length === 1 ? unique[0] : null;
   }
 
+  async function loadLoansForClubs(clubNames, { statusMessage = "", silent = false } = {}) {
+    const clubs = [...new Set((clubNames || []).map((name) => String(name || "").trim()).filter(Boolean))];
+    const missing = clubs.filter((name) => !state.loansByClub[name]);
+    if (!missing.length) return;
+
+    if (!silent && statusMessage) setStatus(statusMessage, "loading");
+    state.loanLoading = true;
+    const chunkSize = 8;
+    try {
+      for (let i = 0; i < missing.length; i += chunkSize) {
+        const chunk = missing.slice(i, i + chunkSize);
+        const params = new URLSearchParams();
+        chunk.forEach((name) => params.append("club", name));
+        if (state.seasonLabel) params.set("season", state.seasonLabel);
+        try {
+          const data = await fetchJson(`/api/who-to-scout/loans?${params}`);
+          for (const [club, rows] of Object.entries(data.clubs || {})) {
+            const byName = {};
+            const byLast = {};
+            for (const row of rows || []) {
+              const info = { from: row.from, name: row.name };
+              byName[nameKey(row.name)] = info;
+              const last = lastNameKey(row.name);
+              if (last) (byLast[last] ||= []).push(info);
+            }
+            state.loansByClub[club] = { byName, byLast };
+          }
+        } catch {
+          chunk.forEach((name) => {
+            if (!state.loansByClub[name]) state.loansByClub[name] = { byName: {}, byLast: {} };
+          });
+        }
+      }
+    } finally {
+      state.loanLoading = false;
+      if (!silent && statusMessage) setStatus("");
+    }
+  }
+
+  async function tagLoansOnScreen() {
+    if (isTeamSheetMode() || state.loanLoading) return;
+    const clubs = new Set();
+    for (const block of lastGrouped?.blocks || []) {
+      for (const player of block.players || []) {
+        const club = String(player?.club || "").trim();
+        if (club) clubs.add(club);
+      }
+    }
+    const missing = [...clubs].filter((name) => !state.loansByClub[name]);
+    if (!missing.length) return;
+
+    await loadLoansForClubs(missing, { silent: true });
+    let foundLoan = false;
+    for (const block of lastGrouped?.blocks || []) {
+      for (const player of block.players || []) {
+        if (loanInfoForPlayer(player)) {
+          foundLoan = true;
+          break;
+        }
+      }
+      if (foundLoan) break;
+    }
+    if (foundLoan) renderGrid({ skipLoanTag: true });
+  }
+
+  function clubsForLoanFilter() {
+    // Only clubs on the current screen / filtered pool — not every club in the season dump.
+    const pool = rankedPool();
+    const clubs = new Set();
+    for (const player of pool.slice(0, 120)) {
+      const club = String(player.club || "").trim();
+      if (club) clubs.add(club);
+    }
+    return [...clubs];
+  }
+
+  async function ensureLoanFilterReady() {
+    if (state.loanFilter !== "loan") return;
+    const clubs = clubsForLoanFilter();
+    await loadLoansForClubs(clubs, {
+      statusMessage: clubs.length ? `Checking loans (${clubs.length} clubs)…` : "",
+      silent: false,
+    });
+  }
+
   async function loadTeamSheetExtras() {
     const clubs = selectedClubOrder()
       .filter((row) => !row.unmatched)
@@ -231,30 +395,7 @@
       );
     }
     if (missingLoans.length) {
-      const params = new URLSearchParams();
-      missingLoans.forEach((name) => params.append("club", name));
-      if (state.seasonLabel) params.set("season", state.seasonLabel);
-      jobs.push(
-        fetchJson(`/api/who-to-scout/loans?${params}`)
-          .then((data) => {
-            for (const [club, rows] of Object.entries(data.clubs || {})) {
-              const byName = {};
-              const byLast = {};
-              for (const row of rows || []) {
-                const info = { from: row.from, name: row.name };
-                byName[nameKey(row.name)] = info;
-                const last = lastNameKey(row.name);
-                if (last) (byLast[last] ||= []).push(info);
-              }
-              state.loansByClub[club] = { byName, byLast };
-            }
-          })
-          .catch(() => {
-            missingLoans.forEach((name) => {
-              if (!state.loansByClub[name]) state.loansByClub[name] = { byName: {}, byLast: {} };
-            });
-          }),
-      );
+      jobs.push(loadLoansForClubs(missingLoans, { silent: true }));
     }
     if (jobs.length) await Promise.all(jobs);
     setStatus("");
@@ -329,6 +470,372 @@
 
   function posShort(label, value) {
     return POS_SHORT[value] || label || value || "—";
+  }
+
+  function pipelinePlayerId(p) {
+    const raw = p?.playerId ?? p?.player_id ?? null;
+    if (raw != null && raw !== "") {
+      const n = Number(raw);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    }
+    const composite = String(p?.id || "");
+    if (composite.includes(":")) {
+      const parts = composite.split(":");
+      const mid = Number(parts[1]);
+      if (Number.isFinite(mid) && mid > 0) return mid;
+      const tail = Number(parts[parts.length - 1]);
+      return Number.isFinite(tail) && tail > 0 ? tail : null;
+    }
+    return null;
+  }
+
+  function updateWatchCount() {
+    let count = 0;
+    for (const row of state.watchByPlayerId.values()) {
+      if (row.stage === WATCH_STAGE) count += 1;
+    }
+    if (els.watchCount) {
+      els.watchCount.textContent = String(count);
+      els.watchCount.hidden = count === 0;
+    }
+    if (els.watchLink) {
+      els.watchLink.title =
+        count === 0
+          ? "Open Watch list"
+          : `${count} player${count === 1 ? "" : "s"} on the Watch list`;
+    }
+  }
+
+  async function loadWatchList() {
+    try {
+      const data = await fetchJson("/api/player-pipelines/track-index");
+      state.pipelinesLive = Boolean(data.pipelines_live);
+      const pipelinesLink = document.getElementById("pipelinesLink");
+      if (pipelinesLink) pipelinesLink.hidden = !state.pipelinesLive;
+      const next = new Map();
+      for (const target of data.targets || []) {
+        const pid = Number(target.player_id || 0);
+        if (!pid) continue;
+        next.set(pid, {
+          id: String(target.id || ""),
+          stage: String(target.stage || ""),
+          name: String(target.name || ""),
+        });
+      }
+      state.watchByPlayerId = next;
+      updateWatchCount();
+      // Don't rewrite every chip here — next renderGrid paints correct state.
+    } catch {
+      /* watch list optional — tables still work */
+    }
+  }
+
+  function watchCell(p, { exportMode = false } = {}) {
+    if (exportMode) return "";
+    const pid = pipelinePlayerId(p);
+    if (!pid) {
+      return `<td class="col-watch"><span class="watch-chip watch-chip--disabled" title="No Impect id">—</span></td>`;
+    }
+    const existing = state.watchByPlayerId.get(pid);
+    const busy = state.watchBusy.has(pid);
+    return `<td class="col-watch">${watchChipHtml(pid, existing, busy)}</td>`;
+  }
+
+  function watchChipHtml(pid, existing, busy) {
+    if (!existing) {
+      return `<button type="button"
+        class="watch-chip watch-chip--idle${busy ? " is-busy" : ""}"
+        data-player-id="${pid}"
+        ${busy ? "disabled" : ""}
+        title="Add to Watch list"
+        aria-label="Add to Watch list">
+        <span class="watch-chip__mark" aria-hidden="true">+</span>
+        <span class="watch-chip__label">Add</span>
+      </button>`;
+    }
+    const meta = stageChipMeta(existing.stage);
+    const hrefNote =
+      meta.kind === "pipe" || meta.kind === "closed"
+        ? " · open Pipelines from the header if you want the board"
+        : "";
+    return `<button type="button"
+      class="watch-chip watch-chip--${meta.kind}${busy ? " is-busy" : ""}"
+      data-player-id="${pid}"
+      data-stage="${escAttr(existing.stage || "")}"
+      ${busy ? "disabled" : ""}
+      title="${escAttr(meta.title)}${hrefNote}"
+      aria-label="${escAttr(meta.title)}">
+      <span class="watch-chip__mark" aria-hidden="true"></span>
+      <span class="watch-chip__label">${escAttr(meta.label)}</span>
+    </button>`;
+  }
+
+  function escAttr(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;");
+  }
+
+  function ensureWatchChrome() {
+    if (!document.getElementById("watchToast")) {
+      const toast = document.createElement("div");
+      toast.id = "watchToast";
+      toast.className = "watch-toast hidden";
+      toast.setAttribute("role", "status");
+      document.body.appendChild(toast);
+    }
+    if (!document.getElementById("watchPrompt")) {
+      const prompt = document.createElement("div");
+      prompt.id = "watchPrompt";
+      prompt.className = "watch-prompt hidden";
+      prompt.innerHTML = `
+        <div class="watch-prompt__card" role="dialog" aria-modal="true" aria-labelledby="watchPromptTitle">
+          <p class="watch-prompt__eyebrow" id="watchPromptEyebrow"></p>
+          <p class="watch-prompt__title" id="watchPromptTitle">Watch list</p>
+          <p class="watch-prompt__sub" id="watchPromptSub"></p>
+          <div class="watch-prompt__actions">
+            <button type="button" class="btn btn--ghost" data-watch-cancel>Cancel</button>
+            <a class="btn btn--ghost" data-watch-open href="/player-pipelines" hidden>Open Pipelines</a>
+            <button type="button" class="btn btn--primary" data-watch-confirm>Add to Watch list</button>
+          </div>
+        </div>`;
+      document.body.appendChild(prompt);
+      prompt.addEventListener("click", (event) => {
+        if (event.target === prompt || event.target.closest("[data-watch-cancel]")) {
+          closeWatchPrompt();
+        }
+      });
+      prompt.querySelector("[data-watch-confirm]")?.addEventListener("click", () => {
+        const pending = state.watchPrompt;
+        closeWatchPrompt();
+        if (!pending) return;
+        void applyWatch(pending.pid, pending.wantOn, pending.playerName);
+      });
+    }
+  }
+
+  function showWatchToast(message, isError) {
+    ensureWatchChrome();
+    const toast = document.getElementById("watchToast");
+    if (!toast) return;
+    toast.textContent = message;
+    toast.classList.toggle("is-error", Boolean(isError));
+    toast.classList.remove("hidden");
+    clearTimeout(showWatchToast._timer);
+    showWatchToast._timer = setTimeout(() => toast.classList.add("hidden"), 3200);
+  }
+
+  function closeWatchPrompt() {
+    state.watchPrompt = null;
+    const prompt = document.getElementById("watchPrompt");
+    prompt?.classList.add("hidden");
+  }
+
+  function openWatchPrompt(button) {
+    const pid = Number(button.dataset.playerId || 0);
+    if (!pid || state.watchBusy.has(pid)) return;
+
+    const existing = state.watchByPlayerId.get(pid);
+    const player =
+      state.players.find((row) => pipelinePlayerId(row) === pid) || null;
+    const name = player?.name || existing?.name || `Player ${pid}`;
+    const club = player?.club || "";
+    const wantOn = !existing;
+
+    // Add is one click — confirm only when removing.
+    if (wantOn) {
+      void applyWatch(pid, true, name);
+      return;
+    }
+
+    ensureWatchChrome();
+    state.watchPrompt = { pid, wantOn, playerName: name };
+    const prompt = document.getElementById("watchPrompt");
+    const eyebrow = document.getElementById("watchPromptEyebrow");
+    const title = document.getElementById("watchPromptTitle");
+    const sub = document.getElementById("watchPromptSub");
+    const confirmBtn = prompt?.querySelector("[data-watch-confirm]");
+    const openLink = prompt?.querySelector("[data-watch-open]");
+
+    if (existing.stage === WATCH_STAGE) {
+      if (eyebrow) eyebrow.textContent = "Already on Watch list";
+      if (title) title.textContent = "Remove from Watch list?";
+      if (sub) sub.textContent = club ? `${name} · ${club}` : name;
+      if (confirmBtn) {
+        confirmBtn.hidden = false;
+        confirmBtn.textContent = "Remove";
+        confirmBtn.classList.add("btn--danger");
+        confirmBtn.classList.remove("btn--primary");
+      }
+      if (openLink) {
+        openLink.hidden = false;
+        openLink.href = "/watch-list";
+        openLink.textContent = "Open Watch list";
+      }
+    } else {
+      const meta = stageChipMeta(existing.stage);
+      if (eyebrow) eyebrow.textContent = "Already on Player Pipelines";
+      if (title) title.textContent = meta.title.replace(" — click to remove", "");
+      if (sub) {
+        sub.textContent = club
+          ? `${name} · ${club} · stage: ${meta.label}`
+          : `${name} · stage: ${meta.label}`;
+      }
+      if (confirmBtn) {
+        confirmBtn.hidden = false;
+        confirmBtn.textContent = "Remove from Pipelines";
+        confirmBtn.classList.add("btn--danger");
+        confirmBtn.classList.remove("btn--primary");
+      }
+      if (openLink) {
+        openLink.hidden = !state.pipelinesLive;
+        openLink.href = "/player-pipelines";
+        openLink.textContent = "Open Pipelines";
+      }
+    }
+    prompt?.classList.remove("hidden");
+  }
+
+  function syncWatchButtons(pid) {
+    const existing = state.watchByPlayerId.get(pid) || null;
+    const busy = state.watchBusy.has(pid);
+    document.querySelectorAll(`.watch-chip[data-player-id="${pid}"]`).forEach((node) => {
+      const wrap = document.createElement("div");
+      wrap.innerHTML = watchChipHtml(pid, existing, busy);
+      const next = wrap.firstElementChild;
+      if (next) node.replaceWith(next);
+    });
+  }
+
+  function bestProfileSeed(player) {
+    const scores = player?.profileScores || {};
+    let topName = "";
+    let topScore = null;
+    for (const [name, value] of Object.entries(scores)) {
+      if (value == null || value === "") continue;
+      const num = Number(value);
+      if (!Number.isFinite(num)) continue;
+      if (topScore == null || num > topScore) {
+        topScore = num;
+        topName = name;
+      }
+    }
+    return {
+      top_profile: topName
+        ? String(topName)
+            .replace(/^PV\s*[-–]\s*/i, "")
+            .replace(/\s*\([^)]*\)\s*/g, " ")
+            .replace(/\s+/g, " ")
+            .trim()
+        : "",
+      top_profile_score: topScore,
+    };
+  }
+
+  async function applyWatch(pid, wantOn, playerName) {
+    if (!pid || state.watchBusy.has(pid)) return;
+
+    const existing = state.watchByPlayerId.get(pid);
+    const player =
+      state.players.find((row) => pipelinePlayerId(row) === pid) || null;
+
+    state.watchBusy.add(pid);
+    // Optimistic chip update — don't wait on the network to feel done.
+    if (wantOn) {
+      state.watchByPlayerId.set(pid, {
+        id: existing?.id || `pending-${pid}`,
+        stage: WATCH_STAGE,
+        name: player?.name || existing?.name || playerName || `Player ${pid}`,
+      });
+    } else {
+      state.watchByPlayerId.delete(pid);
+    }
+    updateWatchCount();
+    syncWatchButtons(pid);
+
+    try {
+      if (wantOn) {
+        const seed = bestProfileSeed(player);
+        const overall =
+          player?.overall != null && player.overall !== ""
+            ? Number(player.overall)
+            : playerOverall(player);
+        const res = await fetch("/api/player-pipelines/targets", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            player_id: pid,
+            name: player?.name || existing?.name || playerName || `Player ${pid}`,
+            club: player?.club || "",
+            league: player?.league || "",
+            position: player?.position || "",
+            position_label: player?.positionLabel || "",
+            age: player?.age ?? null,
+            stage: WATCH_STAGE,
+            tags: [WATCH_TAG],
+            overall_score: Number.isFinite(overall) ? overall : null,
+            minutes: player?.minutes ?? null,
+            top_profile: seed.top_profile,
+            top_profile_score: seed.top_profile_score,
+            enrich: false,
+          }),
+        });
+        if (!res.ok) {
+          const raw = await res.text();
+          let message = `Could not add to watch list (${res.status}).`;
+          try {
+            message = JSON.parse(raw).detail || message;
+          } catch {
+            if (raw) message = raw.slice(0, 160);
+          }
+          throw new Error(message);
+        }
+        const data = await res.json();
+        const target = data.target || {};
+        state.watchByPlayerId.set(pid, {
+          id: String(target.id || existing?.id || ""),
+          stage: String(target.stage || WATCH_STAGE),
+          name: String(target.name || player?.name || playerName || ""),
+        });
+        const msg = `Added ${target.name || playerName || "player"} to the Watch list.`;
+        setStatus(msg, "ok");
+        showWatchToast(msg, false);
+      } else {
+        const targetId = existing?.id;
+        if (targetId && !String(targetId).startsWith("pending-")) {
+          const res = await fetch(
+            `/api/player-pipelines/targets/${encodeURIComponent(targetId)}`,
+            { method: "DELETE", credentials: "same-origin" },
+          );
+          if (!res.ok && res.status !== 404) {
+            throw new Error(`Could not remove from watch list (${res.status}).`);
+          }
+        }
+        state.watchByPlayerId.delete(pid);
+        const msg = `Removed ${existing?.name || playerName || "player"} from tracking.`;
+        setStatus(msg, "ok");
+        showWatchToast(msg, false);
+      }
+      updateWatchCount();
+      syncWatchButtons(pid);
+    } catch (err) {
+      // Roll back optimistic chip.
+      if (wantOn) {
+        if (existing) state.watchByPlayerId.set(pid, existing);
+        else state.watchByPlayerId.delete(pid);
+      } else if (existing) {
+        state.watchByPlayerId.set(pid, existing);
+      }
+      const msg = err.message || "Watch list update failed.";
+      setStatus(msg, "error");
+      showWatchToast(msg, true);
+      syncWatchButtons(pid);
+    } finally {
+      state.watchBusy.delete(pid);
+      syncWatchButtons(pid);
+    }
   }
 
   function playerHref(p) {
@@ -536,17 +1043,21 @@
     const minAge = parseNum(els.minAge);
     const maxAge = parseNum(els.maxAge);
     const minHeight = parseNum(els.minHeight);
+    const age = player.age == null || player.age === "" ? null : Number(player.age);
 
     if (minMinutes > 0) {
       const mins = Number(player.minutes) || 0;
       if (mins < minMinutes) return false;
     }
-    if (minAge != null && (player.age == null || player.age < minAge)) return false;
-    if (maxAge != null && (player.age == null || player.age > maxAge)) return false;
+    if (state.ageBand === "u21" && (age == null || !(age < 21))) return false;
+    if (state.ageBand === "u25" && (age == null || !(age < 25))) return false;
+    if (minAge != null && (age == null || age < minAge)) return false;
+    if (maxAge != null && (age == null || age > maxAge)) return false;
     if (minHeight != null) {
       const cm = parseHeightCm(player.height);
       if (cm == null || cm < minHeight) return false;
     }
+    if (state.loanFilter === "loan" && !loanInfoForPlayer(player)) return false;
     const watchNeedle = clubNeedle().toLowerCase();
     const awayNeedle = oppoNeedle().toLowerCase();
     if (watchNeedle || awayNeedle) {
@@ -874,6 +1385,7 @@
       rankStart = 0,
       profileCols = [],
       showClub = true,
+      compactLeague = false,
     } = {},
   ) {
     return (players || [])
@@ -901,14 +1413,28 @@
             return `<td class="col-profile-score">${fmt(value, 0)}</td>`;
           })
           .join("");
+        const overallCell = `<td class="col-overall" title="${scoreLabel}">${fmt(p.overall, 1)}</td>`;
+        if (compactLeague) {
+          return `<tr${rowClass ? ` class="${rowClass}"` : ""}>
+            ${watchCell(p, { exportMode })}
+            <td class="col-rank">${rankStart + index + 1}</td>
+            ${nameCell}
+            ${overallCell}
+            ${showPos ? `<td class="col-pos" title="${p.positionLabel || p.position || ""}">${pos}</td>` : ""}
+            ${showClub ? `<td class="col-club" title="${p.club || ""}">${p.club || "—"}</td>` : ""}
+            <td class="col-age${ageClass ? ` ${ageClass}` : ""}">${age}</td>
+            <td class="col-mins">${mins}</td>
+          </tr>`;
+        }
         return `<tr${rowClass ? ` class="${rowClass}"` : ""}>
+          ${watchCell(p, { exportMode })}
           <td class="col-rank">${rankStart + index + 1}</td>
           ${nameCell}
           ${showClub ? `<td class="col-club" title="${p.club || ""}">${p.club || "—"}</td>` : ""}
           ${showLeague ? `<td class="col-league" title="${p.league || ""}">${p.league || "—"}</td>` : ""}
           ${showPos ? `<td class="col-pos" title="${p.positionLabel || p.position || ""}">${pos}</td>` : ""}
           <td class="col-age${ageClass ? ` ${ageClass}` : ""}">${age}</td>
-          <td class="col-overall">${fmt(p.overall, 1)}</td>
+          ${overallCell}
           ${profileCells}
           <td class="col-mins">${mins}</td>
           ${showScout ? scoutCountCell(scout.live_watches, "live") : ""}
@@ -930,56 +1456,63 @@
       rankStart = 0,
       profileCols = [],
       showClub = true,
+      compactLeague = false,
     } = {},
   ) {
+    const watchCol = exportMode ? "" : '<col class="col-watch">';
+    const watchHead = exportMode
+      ? ""
+      : '<th class="col-watch" title="Watch list / Pipelines status">Track</th>';
     const clubCol = showClub ? '<col class="col-club">' : "";
     const leagueCol = showLeague ? '<col class="col-league">' : "";
     const posCol = showPos ? '<col class="col-pos">' : "";
     const clubHead = showClub ? '<th class="col-club">Club</th>' : "";
     const leagueHead = showLeague ? '<th class="col-league">League</th>' : "";
     const posHead = showPos ? '<th class="col-pos">Pos</th>' : "";
-    const scoutCols = showScout
+    const scoutCols = showScout && !compactLeague
       ? '<col class="col-scout"><col class="col-scout"><col class="col-scout">'
       : "";
-    const scoutHead = showScout
+    const scoutHead = showScout && !compactLeague
       ? `<th class="col-scout">Live</th><th class="col-scout">Vid</th><th class="col-scout">Rep</th>`
       : "";
-    const profileColMarkup = (profileCols || [])
-      .map(() => '<col class="col-profile-score">')
-      .join("");
-    const profileHead = (profileCols || [])
-      .map(
-        (profile) =>
-          `<th class="col-profile-score" title="${profile.apiName || profile.label}">${shortProfileLabel(profile.label)}</th>`,
-      )
-      .join("");
+    const profileColMarkup = compactLeague
+      ? ""
+      : (profileCols || [])
+          .map(() => '<col class="col-profile-score">')
+          .join("");
+    const profileHead = compactLeague
+      ? ""
+      : (profileCols || [])
+          .map(
+            (profile) =>
+              `<th class="col-profile-score" title="${profile.apiName || profile.label}">${shortProfileLabel(profile.label)}</th>`,
+          )
+          .join("");
     const viewClass = profileCols?.length
       ? "team"
-      : showPos
+      : compactLeague
         ? "league"
-        : showLeague
-          ? "position"
-          : "profile";
+        : showPos
+          ? "league"
+          : showLeague
+            ? "position"
+            : "profile";
+    const colgroup = compactLeague
+      ? `${watchCol}<col class="col-rank"><col class="col-player"><col class="col-overall">${posCol}${clubCol}<col class="col-age"><col class="col-mins">`
+      : `${watchCol}<col class="col-rank"><col class="col-player">${clubCol}${leagueCol}${posCol}<col class="col-age"><col class="col-overall">${profileColMarkup}<col class="col-mins">${scoutCols}`;
+    const headRow = compactLeague
+      ? `${watchHead}<th class="col-rank">#</th><th class="col-player">Player</th><th class="col-overall">${scoreLabel}</th>${posHead}${clubHead}<th class="col-age">Age</th><th class="col-mins">Mins</th>`
+      : `${watchHead}<th class="col-rank">#</th><th class="col-player">Player</th>${clubHead}${leagueHead}${posHead}<th class="col-age">Age</th><th class="col-overall">${scoreLabel}</th>${profileHead}<th class="col-mins">Mins</th>${scoutHead}`;
     return `<div class="league-scroll"><table class="scout-table scout-table--${viewClass}-view">
       <colgroup>
-        <col class="col-rank"><col class="col-player">${clubCol}${leagueCol}${posCol}
-        <col class="col-age"><col class="col-overall">${profileColMarkup}<col class="col-mins">${scoutCols}
+        ${colgroup}
       </colgroup>
       <thead>
         <tr>
-          <th class="col-rank">#</th>
-          <th class="col-player">Player</th>
-          ${clubHead}
-          ${leagueHead}
-          ${posHead}
-          <th class="col-age">Age</th>
-          <th class="col-overall">${scoreLabel}</th>
-          ${profileHead}
-          <th class="col-mins">Mins</th>
-          ${scoutHead}
+          ${headRow}
         </tr>
       </thead>
-      <tbody>${playerRows(players, { showPos, showLeague, scoreLabel, showScout, exportMode, rankStart, profileCols, showClub })}</tbody>
+      <tbody>${playerRows(players, { showPos, showLeague, scoreLabel, showScout, exportMode, rankStart, profileCols, showClub, compactLeague })}</tbody>
     </table></div>`;
   }
 
@@ -1086,7 +1619,7 @@
     return hints;
   }
 
-  function renderGrid() {
+  function renderGrid({ skipLoanTag = false } = {}) {
     if (state.building) {
       els.leagueGrid.innerHTML = '<p class="empty">Building player pool — this can take a minute…</p>';
       updateExportButton({ blocks: [] });
@@ -1119,8 +1652,9 @@
 
     const showPos = viewMode === "leagues";
     const showLeague = !teamMode && viewMode !== "leagues" && state.league === "ALL";
-    const showScout = !teamMode && (viewMode === "leagues" || (viewMode === "positions" && state.league === "ALL"));
+    const showScout = !teamMode && viewMode !== "leagues" && (viewMode === "positions" && state.league === "ALL");
     const showClub = !teamMode || (grouped.clubs || []).length > 1;
+    const compactLeague = !teamMode && viewMode === "leagues";
 
     const cards = blocks
       .map((block) => {
@@ -1142,6 +1676,7 @@
               scoreLabel,
               showScout,
               showClub,
+              compactLeague: compactLeague && block.kind === "league",
               profileCols: block.profileCols || [],
             })
           : `<p class="league-card__empty">${
@@ -1182,6 +1717,10 @@
       ? `<p class="empty">No players found for “${clubNeedle()}”. Try the club’s full name from the list.</p>`
       : `<p class="empty">No ${groupLabel}s to show.</p>`);
     lastGrouped = grouped;
+
+    if (!skipLoanTag && !teamMode) {
+      void tagLoansOnScreen();
+    }
 
     els.leagueGrid.querySelectorAll("[data-drill-league]").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -1245,7 +1784,9 @@
         : viewMode === "profiles"
           ? "Ranked by raw Impect profile score (0–100) for each PV profile."
           : "Season overall uses Impect PV profile ratings (0–100).";
-    els.pageNote.textContent = `${note} Top ${limit} per ${viewText} · ${leagueLabel} · ${posLabelText}. Live / Video / Reports from Fixture Planner — unscouted names are your priority targets.`;
+    els.pageNote.textContent = `${note} Top ${limit} per ${viewText} · ${leagueLabel} · ${posLabelText}${
+      state.ageBand === "u21" ? " · U21" : state.ageBand === "u25" ? " · U25" : ""
+    }${state.loanFilter === "loan" ? " · on loan only" : ""}. Names in blue are on loan. Live / Video / Reports from Fixture Planner — unscouted names are your priority targets.`;
     updateExportButton(grouped);
   }
 
@@ -1637,6 +2178,11 @@
       renderWeights();
       if (isTeamSheetMode()) {
         loadTeamSheetExtras();
+      } else if (state.loanFilter === "loan") {
+        void (async () => {
+          await ensureLoanFilterReady();
+          renderGrid();
+        })();
       } else {
         renderGrid();
       }
@@ -1713,6 +2259,33 @@
       renderGrid();
     });
 
+    els.ageBandGroup?.addEventListener("click", (event) => {
+      const btn = event.target.closest("[data-age-band]");
+      if (!btn) return;
+      state.ageBand = btn.dataset.ageBand || "all";
+      els.ageBandGroup.querySelectorAll(".filter__btn").forEach((el) => {
+        el.classList.toggle("is-active", el === btn);
+      });
+      updateSeasonLabel({});
+      renderGrid();
+    });
+
+    els.loanFilterGroup?.addEventListener("click", (event) => {
+      const btn = event.target.closest("[data-loan]");
+      if (!btn) return;
+      state.loanFilter = btn.dataset.loan || "all";
+      els.loanFilterGroup.querySelectorAll(".filter__btn").forEach((el) => {
+        el.classList.toggle("is-active", el === btn);
+      });
+      void (async () => {
+        if (state.loanFilter === "loan") {
+          await ensureLoanFilterReady();
+        }
+        updateSeasonLabel({});
+        renderGrid();
+      })();
+    });
+
     function debounce(fn, ms) {
       let timer = 0;
       return () => {
@@ -1760,6 +2333,16 @@
 
     els.refreshBtn?.addEventListener("click", () => loadData({ refresh: true }));
     els.exportPdfBtn?.addEventListener("click", exportPdf);
+
+    els.leagueGrid?.addEventListener("click", (event) => {
+      const button = event.target.closest("button.watch-chip");
+      if (!button) return;
+      event.preventDefault();
+      openWatchPrompt(button);
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeWatchPrompt();
+    });
   }
 
   async function init() {
@@ -1781,6 +2364,7 @@
       /* meta optional — data endpoint includes profiles */
     }
 
+    void loadWatchList();
     loadData();
   }
 

@@ -211,6 +211,10 @@ ${wrapped}
    * @param {string|null} [options.activeClass]
    * @param {string} [options.bodyClass]
    * @param {string} [options.background]
+   * @param {boolean} [options.forceNativeSize] Use CSS design size (1920×1080) instead of
+   *   scaled on-screen rect — required when slides use transform:scale() in a preview pane.
+   * @param {number} [options.nativeWidth]
+   * @param {number} [options.nativeHeight]
    * @param {(msg:string)=>void} [options.onProgress]
    */
   async function captureSlideHtmlPages(options = {}) {
@@ -233,6 +237,9 @@ ${wrapped}
     const bodyClass =
       options.bodyClass ||
       ["is-exporting", ...[...document.body.classList].filter((c) => c !== "is-present")].join(" ");
+    const forceNative = Boolean(options.forceNativeSize);
+    const nativeW = Math.max(1, Math.round(options.nativeWidth || frameWidth));
+    const nativeH = Math.max(1, Math.round(options.nativeHeight || frameHeight));
 
     if (document.fonts?.ready) {
       try {
@@ -257,14 +264,17 @@ ${wrapped}
       const unfreeze = freezeCanvases(slide);
       try {
         const rect = slide.getBoundingClientRect();
-        const liveW = Math.max(1, Math.round(rect.width));
-        const liveH = Math.max(1, Math.round(rect.height));
+        const liveW = forceNative ? nativeW : Math.max(1, Math.round(rect.width));
+        const liveH = forceNative ? nativeH : Math.max(1, Math.round(rect.height));
         const clone = prepareClone(slide, {
           width: liveW,
           height: liveH,
           stripClasses,
           activeClass,
         });
+        // Kill preview-only transform leftover on cloned slides.
+        clone.style.transform = "none";
+        clone.style.transformOrigin = "top left";
         await inlineImages(clone);
         const doc = buildDocument({
           slideHtml: clone.outerHTML,
@@ -281,7 +291,8 @@ ${wrapped}
         const title =
           slide.dataset.slideTitle ||
           slide.getAttribute("data-title") ||
-          slide.querySelector("h1, h2, .slide__hero-title")?.textContent ||
+          slide.getAttribute("data-slide") ||
+          slide.querySelector("h1, h2, .slide__hero-title, .mfp-profile__title")?.textContent ||
           `slide-${index + 1}`;
         htmlFilenames.push(slugify(title, `slide-${index + 1}`));
       } finally {
@@ -346,6 +357,58 @@ ${wrapped}
     };
   }
 
+  async function downloadPngZip({
+    htmlPages,
+    htmlFilenames,
+    width = FRAME_W,
+    height = FRAME_H,
+    scale = DEVICE_SCALE,
+    filename = "port-vale-export.zip",
+    documentTitle = "Port Vale export",
+    endpoint = "/api/wysiwyg-export-png-zip",
+    opponentName = null,
+  }) {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        html_pages: htmlPages,
+        html_filenames: htmlFilenames,
+        width,
+        height,
+        scale,
+        filename,
+        document_title: documentTitle,
+        opponent_name: opponentName,
+      }),
+    });
+    if (!response.ok) {
+      let detail = "";
+      try {
+        const payload = await response.json();
+        detail = payload.detail || "";
+      } catch {
+        detail = await response.text();
+      }
+      throw new Error(detail || "PNG zip export failed");
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    return {
+      blob,
+      savedPath: response.headers.get("X-Saved-Desktop-Path"),
+      sizeMb: (blob.size / (1024 * 1024)).toFixed(1),
+      pageCount: htmlPages.length,
+    };
+  }
+
   global.PortValeWysiwygExport = {
     FRAME_W,
     FRAME_H,
@@ -360,5 +423,6 @@ ${wrapped}
     slugify,
     captureSlideHtmlPages,
     downloadPdf,
+    downloadPngZip,
   };
 })(typeof window !== "undefined" ? window : globalThis);

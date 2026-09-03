@@ -6,7 +6,7 @@
   <title>Project Promotion · Players Strategy · v20260802a-blocks</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
       --gold: #f5c518;
@@ -23,7 +23,7 @@
       --phase-sp: #ca8a04;
     }
     *, *::before, *::after { box-sizing: border-box; }
-    body { margin: 0; font-family: "DM Sans", system-ui, sans-serif; background: #080808; color: #f5f5f5; }
+    body { margin: 0; font-family: "Manrope", system-ui, sans-serif; background: #080808; color: #f5f5f5; }
     a { color: inherit; text-decoration: none; }
 
     .app { padding: 1.25rem 1.5rem 3rem; }
@@ -662,7 +662,7 @@
     .title-copy--nn .nn-lede {
       margin: 0.55rem auto 0;
       max-width: 22ch;
-      font-family: "DM Sans", sans-serif;
+      font-family: "Manrope", sans-serif;
       font-size: clamp(0.85rem, 1.9cqw, 1.05rem);
       font-weight: 600;
       line-height: 1.35;
@@ -738,7 +738,7 @@
       display: block;
       margin-top: 0.08rem;
       max-width: 28ch;
-      font-family: "DM Sans", sans-serif;
+      font-family: "Manrope", sans-serif;
       font-size: clamp(0.68rem, 1.45cqw, 0.82rem);
       font-weight: 600;
       line-height: 1.2;
@@ -4387,32 +4387,68 @@
 
     async function exportToPdf() {
       setExportBusy(true);
+      const wasPresent = document.body.classList.contains("is-present");
+      if (wasPresent) setPresent(false);
+      clearMorphGhosts();
+      document.body.classList.add("is-exporting");
       try {
-        if (!document.body.classList.contains("is-pdf-view")) setPdfView(true);
-        setExportStatus("Preparing PDF from large slides…", "loading");
-        const canvases = await captureAllSlides((msg) => setExportStatus(msg, "loading"));
-        await loadExportScript("https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js");
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF({
-          orientation: "landscape",
-          unit: "mm",
-          format: [EXPORT_PDF_W_MM, EXPORT_PDF_H_MM],
-          compress: true,
+        if (!window.PortValeWysiwygExport) {
+          throw new Error("WYSIWYG export helper failed to load — hard refresh and try again.");
+        }
+        setExportStatus("Preparing WhatsApp PDF from on-screen slides…", "loading");
+        setExportOverlay("Building WhatsApp PDF (Chrome)…");
+
+        // Settle reveals so numbers/copy match Present — without export-capture layout hacks.
+        slides.forEach((s) => {
+          settleSlide(s);
+          setOutcomeBuilt(s, true);
+          s.querySelectorAll(".outcome-lanes .podium-col").forEach((c) => {
+            c.classList.add("is-built", "is-revealed");
+          });
         });
-        canvases.forEach((canvas, i) => {
-          // High-quality JPEG from 2× raster — sharp text, sane file size
-          const imageData = canvas.toDataURL("image/jpeg", 0.95);
-          if (i > 0) pdf.addPage([EXPORT_PDF_W_MM, EXPORT_PDF_H_MM], "landscape");
-          pdf.addImage(imageData, "JPEG", 0, 0, EXPORT_PDF_W_MM, EXPORT_PDF_H_MM);
+
+        const pack = await window.PortValeWysiwygExport.captureSlideHtmlPages({
+          slides,
+          stripClasses: ["is-export-capture", "is-export-hidden", "is-leaving", "is-entering", "is-morphing-host"],
+          activeClass: "is-active",
+          background: "#0b1220",
+          beforeSlide: (i) => {
+            slides.forEach((s, n) => s.classList.toggle("is-active", n === i));
+          },
+          settleSlide: async (slideEl) => {
+            settleSlide(slideEl);
+            setOutcomeBuilt(slideEl, true);
+            slideEl.querySelectorAll(".morph-ghost").forEach((g) => g.remove());
+            slideEl.querySelectorAll(".outcome-lanes .podium-col").forEach((c) => {
+              c.classList.add("is-built", "is-revealed");
+            });
+          },
+          onProgress: (msg) => {
+            setExportStatus(msg, "loading");
+            setExportOverlay(msg);
+          },
         });
-        pdf.save(`${EXPORT_FILE_BASE}.pdf`);
-        setExportStatus(`PDF downloaded (${canvases.length} slides). Still in PDF version — Back to deck when done.`, "success");
+
+        setExportOverlay("Rendering PDF in Chrome…");
+        const result = await window.PortValeWysiwygExport.downloadPdf({
+          ...pack,
+          filename: `${EXPORT_FILE_BASE}.pdf`,
+          documentTitle: "Project Promotion",
+          endpoint: "/api/wysiwyg-export-pdf",
+        });
+        setExportStatus(
+          `PDF downloaded (${result.pageCount} slides · ${result.sizeMb} MB). Matches what you see on screen.`,
+          "success",
+        );
       } catch (err) {
         setExportStatus(err.message || "PDF export failed.", "error");
         console.error(err);
       } finally {
+        document.body.classList.remove("is-exporting");
+        slides.forEach((s) => s.classList.remove("is-export-capture", "is-export-hidden"));
         setExportOverlay("");
         setExportBusy(false);
+        if (wasPresent) setPresent(true);
       }
     }
 
@@ -4516,6 +4552,7 @@
 
     showInstant(0);
   </script>
+  <script src="/static/wysiwyg-export.js"></script>
   <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>

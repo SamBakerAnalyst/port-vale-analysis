@@ -18,8 +18,10 @@ MONTHLY_DEFAULT_MIN_MINUTES = 180.0
 
 _matches_cache: dict[int, tuple[float, list[dict[str, Any]]]] = {}
 _match_kpi_cache: dict[int, tuple[float, dict[tuple[int, int], list[dict[str, Any]]]]] = {}
+_match_position_score_cache: dict[tuple[int, str], tuple[float, list[dict[str, Any]]]] = {}
 _MATCHES_CACHE_TTL = 3600
 _MATCH_KPI_CACHE_TTL = 3600
+_MATCH_POSITION_SCORE_CACHE_TTL = 3600
 
 
 class ScoutingMonthlyListRequest(BaseModel):
@@ -116,6 +118,12 @@ def _flatten_match_players(payload: dict[str, Any], squad_key: str) -> list[dict
 
 
 def _fetch_match_position_scores(match_id: int, position: str) -> list[dict[str, Any]]:
+    cache_key = (match_id, position)
+    cached = _match_position_score_cache.get(cache_key)
+    now = time.time()
+    if cached and now - cached[0] < _MATCH_POSITION_SCORE_CACHE_TTL:
+        return cached[1]
+
     impect = _impect()
     path = (
         f"/v5/{impect._api_prefix()}/matches/{match_id}"
@@ -126,6 +134,7 @@ def _fetch_match_position_scores(match_id: int, position: str) -> list[dict[str,
     rows: list[dict[str, Any]] = []
     for squad_key in ("squadHome", "squadAway"):
         rows.extend(_flatten_match_players(payload, squad_key))
+    _match_position_score_cache[cache_key] = (now, rows)
     return rows
 
 
@@ -165,11 +174,13 @@ def prefetch_monthly_match_kpis(
     leagues: list[str],
     year: int,
     month: int,
+    warm_position_scores: bool = False,
 ) -> dict[str, Any]:
     """Warm match lists + KPI cache once before a multi-position monthly report."""
     from app.scouting import (
         SCOUTING_COMPETITION_TO_LEAGUE,
         SCOUTING_LEAGUE_TO_COMPETITION,
+        _scouting_export_positions,
         _scouting_iteration_rows,
     )
 
@@ -206,15 +217,29 @@ def prefetch_monthly_match_kpis(
             warnings.append(f"{league_label} {season_label}: skipped ({exc.detail}).")
 
     # Load KPIs once per match — shared by every position in this report.
+    positions = _scouting_export_positions() if warm_position_scores else []
     for index, match_id in enumerate(match_ids):
+        kpi_cache_hit = match_id in _match_kpi_cache
         try:
             _fetch_match_player_kpis(match_id)
         except HTTPException as exc:
             if exc.status_code == 429:
                 raise
             warnings.append(f"Match {match_id} KPI prefetch skipped ({exc.detail}).")
-        if index < len(match_ids) - 1:
+        if warm_position_scores:
+            for position in positions:
+                try:
+                    _fetch_match_position_scores(match_id, position)
+                except HTTPException as exc:
+                    if exc.status_code == 429:
+                        raise
+                    warnings.append(
+                        f"Match {match_id} {position} prefetch skipped ({exc.detail})."
+                    )
+        if index < len(match_ids) - 1 and not kpi_cache_hit:
             time.sleep(MONTHLY_MATCH_PAUSE_SECONDS)
+        elif index < len(match_ids) - 1 and warm_position_scores:
+            time.sleep(MONTHLY_MATCH_PAUSE_SECONDS * 0.5)
 
     return {
         "matchCount": len(match_ids),
@@ -494,6 +519,8 @@ def _load_monthly_match_rows(
 
     for index, match in enumerate(month_matches):
         match_id = int(match["id"])
+        score_cached = (match_id, position) in _match_position_score_cache
+        kpi_cached = match_id in _match_kpi_cache
         try:
             players = _fetch_match_position_scores(match_id, position)
             kpi_lookup = _fetch_match_player_kpis(match_id)
@@ -516,8 +543,7 @@ def _load_monthly_match_rows(
                     player_row["kpis"] = kpis
             match_rows.append(player_row)
 
-        # Only throttle when we actually hit the scores endpoint for this match.
-        if index < len(month_matches) - 1:
+        if index < len(month_matches) - 1 and not (score_cached and kpi_cached):
             time.sleep(MONTHLY_MATCH_PAUSE_SECONDS)
 
     return match_rows, len(month_matches), warnings

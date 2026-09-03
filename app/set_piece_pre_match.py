@@ -69,7 +69,7 @@ from app.post_match.report import _player_directory
 SET_PIECE_MATCH_LIMIT = 8
 _SEASON_SET_PLAY_CACHE: dict[tuple[Any, ...], tuple[float, dict[str, Any]]] = {}
 _SEASON_SET_PLAY_TTL = 6 * 60 * 60
-_MATCH_VIEW_MEM_CACHE: dict[tuple[int, int], tuple[float, dict[str, Any]]] = {}
+_MATCH_VIEW_MEM_CACHE: dict[tuple[int, int, int], tuple[float, dict[str, Any]]] = {}
 _MATCH_VIEW_TTL = 7 * 24 * 60 * 60
 _REPORT_MEM_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 _REPORT_TTL = 6 * 60 * 60
@@ -218,7 +218,7 @@ def _report_cache_path(cache_key: str) -> Path:
 
 
 def _match_view_cache_path(match_id: int, squad_id: int) -> Path:
-    return _ensure_set_piece_cache_dir() / f"match_{match_id}_{squad_id}.json"
+    return _ensure_set_piece_cache_dir() / f"match_{match_id}_{squad_id}_v5.json"
 
 
 def _load_cached_report(cache_key: str) -> dict[str, Any] | None:
@@ -254,24 +254,46 @@ def _height_cm(player: dict[str, Any]) -> int | None:
 
 
 def _height_label_from_cm(cm: int | None) -> str:
-    if not cm:
+    """Format cm as feet/inches. Reject nonsense values (avoids 0'0 from bad data)."""
+    try:
+        value = int(round(float(cm))) if cm is not None else 0
+    except (TypeError, ValueError):
         return "—"
-    feet = int(cm // 30.48)
-    inches = int(round((cm / 2.54) % 12))
+    # Senior/academy footballers are almost never under 140cm or over 220cm.
+    if value < 140 or value > 220:
+        return "—"
+    feet = int(value // 30.48)
+    inches = int(round((value / 2.54) % 12))
     if inches == 12:
         feet += 1
         inches = 0
+    if feet <= 0:
+        return "—"
     return f"{feet}'{inches}\""
 
 
 def _parse_tm_height_cm(text: str) -> int | None:
-    match = re.search(r"(\d),(\d{2})\s*m", str(text or ""))
-    if not match:
-        return None
-    try:
-        return int(match.group(1)) * 100 + int(match.group(2))
-    except (TypeError, ValueError):
-        return None
+    """Parse Transfermarkt height cells: '1,88 m', '1.88m', or UK '6 ft 3 in'."""
+    raw = str(text or "")
+    metric = re.search(r"(\d)[,.](\d{2})\s*m\b", raw, flags=re.I)
+    if metric:
+        try:
+            return int(metric.group(1)) * 100 + int(metric.group(2))
+        except (TypeError, ValueError):
+            return None
+    imperial = re.search(
+        r"(\d+)\s*(?:ft|'|’)\s*(\d{1,2})\s*(?:in|\"|”)?",
+        raw,
+        flags=re.I,
+    )
+    if imperial:
+        try:
+            inches = int(imperial.group(1)) * 12 + int(imperial.group(2))
+        except (TypeError, ValueError):
+            return None
+        if 48 <= inches <= 90:
+            return int(round(inches * 2.54))
+    return None
 
 
 def _tm_position_abbr(position: str | None) -> str:
@@ -302,6 +324,85 @@ def _tm_profiles_disk_path(club_id: int, season_year: int) -> Path:
     return _ensure_set_piece_cache_dir() / f"tm_{int(club_id)}_{int(season_year)}.json"
 
 
+def _tm_profiles_have_heights(profiles: dict[str, Any] | None) -> bool:
+    if not profiles:
+        return False
+    return any(
+        isinstance(row, dict) and row.get("height_cm")
+        for row in profiles.values()
+    )
+
+
+def _backfill_tm_heights_from_previous_season(
+    profiles: dict[str, dict[str, Any]],
+    club_id: int,
+    season_year: int,
+) -> dict[str, dict[str, Any]]:
+    """Copy last season's TM height onto this season's row when the new table has '-'."""
+    if not profiles:
+        return profiles
+    prev = _read_json_cache(
+        _tm_profiles_disk_path(int(club_id), int(season_year) - 1),
+        ttl=90 * 24 * 60 * 60,
+    )
+    if not isinstance(prev, dict):
+        return profiles
+    for key, row in profiles.items():
+        if not isinstance(row, dict) or row.get("height_cm"):
+            continue
+        prior = prev.get(key)
+        if not isinstance(prior, dict) or not prior.get("height_cm"):
+            continue
+        try:
+            row["height_cm"] = int(prior["height_cm"])
+        except (TypeError, ValueError):
+            continue
+    return profiles
+
+
+def _height_chart_incomplete(report: dict[str, Any] | None) -> bool:
+    if not isinstance(report, dict):
+        return True
+    chart = report.get("height_chart")
+    if not isinstance(chart, dict):
+        return True
+    assigned = int(chart.get("count") or 0)
+    unknown = int(chart.get("unknown_count") or len(chart.get("unknown") or []))
+    if int(chart.get("version") or 0) < HEIGHT_CHART_VERSION:
+        return True
+    return assigned == 0 and unknown > 0
+
+
+def _for_slide_incomplete(report: dict[str, Any] | None) -> bool:
+    if not isinstance(report, dict):
+        return True
+    attacking = (report.get("set_plays") or {}).get("attacking") or {}
+    return "left" not in attacking
+
+
+def _against_slide_incomplete(report: dict[str, Any] | None) -> bool:
+    if not isinstance(report, dict):
+        return True
+    defending = (report.get("set_plays") or {}).get("defending") or {}
+    return "goalPoints" not in defending or "left" not in defending
+
+
+def _store_tm_profiles(
+    profiles: dict[str, dict[str, Any]],
+    *,
+    club_id: int,
+    season_year: int,
+    now: float,
+    cache_key: tuple[int, int],
+    disk_path: Path,
+) -> dict[str, dict[str, Any]]:
+    profiles = _backfill_tm_heights_from_previous_season(profiles, club_id, season_year)
+    if _tm_profiles_have_heights(profiles):
+        _TM_SQUAD_CACHE[cache_key] = (now, profiles)
+        _write_json_cache(disk_path, profiles)
+    return profiles
+
+
 def _fetch_transfermarkt_squad_profiles(
     club_name: str, season: str | None
 ) -> dict[str, dict[str, Any]]:
@@ -313,16 +414,33 @@ def _fetch_transfermarkt_squad_profiles(
     cache_key = (int(club_id), int(season_year))
     cached = _TM_SQUAD_CACHE.get(cache_key)
     now = time.time()
-    # Only reuse successful (non-empty) caches. Failed scrapes must not
-    # poison the chart for the full TTL — that showed as "No player heights".
-    if cached and cached[1] and now - cached[0] < _TM_HEIGHT_TTL:
-        return cached[1]
+    # Only reuse successful caches that actually have heights. Failed scrapes
+    # (or the old metric-only parser) must not poison the chart for the TTL.
+    if (
+        cached
+        and _tm_profiles_have_heights(cached[1])
+        and now - cached[0] < _TM_HEIGHT_TTL
+    ):
+        return _store_tm_profiles(
+            cached[1],
+            club_id=int(club_id),
+            season_year=int(season_year),
+            now=now,
+            cache_key=cache_key,
+            disk_path=_tm_profiles_disk_path(int(club_id), int(season_year)),
+        )
 
     disk_path = _tm_profiles_disk_path(int(club_id), int(season_year))
     disk = _read_json_cache(disk_path, ttl=_TM_HEIGHT_TTL)
-    if disk:
-        _TM_SQUAD_CACHE[cache_key] = (now, disk)
-        return disk
+    if _tm_profiles_have_heights(disk):
+        return _store_tm_profiles(
+            disk,
+            club_id=int(club_id),
+            season_year=int(season_year),
+            now=now,
+            cache_key=cache_key,
+            disk_path=disk_path,
+        )
 
     url = (
         f"https://www.transfermarkt.co.uk/startseite/kader/verein/"
@@ -334,25 +452,51 @@ def _fetch_transfermarkt_squad_profiles(
         if response.status_code >= 400:
             # Live servers are often blocked by Transfermarkt — keep last good disk seed.
             stale = _read_json_cache(disk_path, ttl=30 * 24 * 60 * 60)
-            return stale or {}
+            if _tm_profiles_have_heights(stale):
+                return _store_tm_profiles(
+                    stale,
+                    club_id=int(club_id),
+                    season_year=int(season_year),
+                    now=now,
+                    cache_key=cache_key,
+                    disk_path=disk_path,
+                )
+            return {}
         html = response.text
     except requests.RequestException:
         stale = _read_json_cache(disk_path, ttl=30 * 24 * 60 * 60)
-        return stale or {}
+        if _tm_profiles_have_heights(stale):
+            return _store_tm_profiles(
+                stale,
+                club_id=int(club_id),
+                season_year=int(season_year),
+                now=now,
+                cache_key=cache_key,
+                disk_path=disk_path,
+            )
+        return {}
 
-    chunks = re.split(r'(?=<td[^>]*class="[^"]*rueckennummer)', html, flags=re.I)
+    chunks = re.split(r'(?=<td[^>]*rueckennummer)', html, flags=re.I)
     for chunk in chunks[1:]:
         head = chunk[:2500]
-        name_match = re.search(r'alt="([^"]+)"', head, flags=re.I) or re.search(
-            r'class="hauptlink"[^>]*>\s*<a[^>]*>\s*([^<]+)',
+        name_match = re.search(
+            r'href="/[^"]+/profil/spieler/\d+"\s*>\s*([^<]+)',
             head,
-            flags=re.S | re.I,
-        )
+            flags=re.I,
+        ) or re.search(
+            r'data-src="https://img\.a\.transfermarkt\.technology/portrait/[^"]+"[^>]*alt="([^"]+)"',
+            head,
+            flags=re.I,
+        ) or re.search(r'alt="([^"]+)"', head, flags=re.I)
         if not name_match:
             continue
         clean_name = re.sub(r"\s+", " ", name_match.group(1)).strip()
         key = _normalize_name_key(clean_name)
         if not key:
+            continue
+        # Club-badge alts (e.g. "Milton Keynes Dons") sneak in when a row has
+        # no player profile link — skip those so they never land on the chart.
+        if "/profil/spieler/" not in head.casefold() and "portrait/" not in head.casefold():
             continue
 
         title_match = re.search(r'title="([^"]+)"', head[:260], flags=re.I)
@@ -391,17 +535,29 @@ def _fetch_transfermarkt_squad_profiles(
             "is_gk": is_gk,
         }
 
-    if profiles:
-        _TM_SQUAD_CACHE[cache_key] = (now, profiles)
-        _write_json_cache(disk_path, profiles)
-        return profiles
+    if _tm_profiles_have_heights(profiles):
+        return _store_tm_profiles(
+            profiles,
+            club_id=int(club_id),
+            season_year=int(season_year),
+            now=now,
+            cache_key=cache_key,
+            disk_path=disk_path,
+        )
 
-    # Empty scrape (common on the live IP) — fall back to a previously seeded file.
+    # Empty / height-less scrape (common on the live IP) — fall back to a
+    # previously seeded file, but only if it actually has heights.
     stale = _read_json_cache(disk_path, ttl=30 * 24 * 60 * 60)
-    if stale:
-        _TM_SQUAD_CACHE[cache_key] = (now, stale)
-        return stale
-    return {}
+    if _tm_profiles_have_heights(stale):
+        return _store_tm_profiles(
+            stale,
+            club_id=int(club_id),
+            season_year=int(season_year),
+            now=now,
+            cache_key=cache_key,
+            disk_path=disk_path,
+        )
+    return _backfill_tm_heights_from_previous_season(profiles, int(club_id), int(season_year))
 
 
 def _fetch_transfermarkt_heights(club_name: str, season: str | None) -> dict[str, int]:
@@ -747,6 +903,7 @@ def _merge_dual_windows(
             )
             recent_decorated["season"] = season_decorated
             side[recent_key] = recent_decorated
+        side["season"] = _side_kpi_snapshot(season_side)
         out[side_key] = side
     out["seasonGameCount"] = int(season.get("gameCount") or 0)
     return out
@@ -826,6 +983,26 @@ def _finalize_totals(totals: dict[str, float], games: int) -> dict[str, Any]:
     }
 
 
+_SIDE_KPI_KEYS = (
+    "gameCount",
+    "chains",
+    "avgChains",
+    "deliverySuccessPct",
+    "firstContactWonPct",
+    "intoBoxPct",
+    "shots",
+    "avgShots",
+    "goals",
+    "avgGoals",
+    "shotXg",
+    "avgShotXg",
+)
+
+
+def _side_kpi_snapshot(side: dict[str, Any]) -> dict[str, Any]:
+    return {key: side.get(key) for key in _SIDE_KPI_KEYS}
+
+
 def _opponent_id_for_match(match: dict[str, Any], squad_id: int) -> int | None:
     home = int(match.get("homeSquadId") or 0)
     away = int(match.get("awaySquadId") or 0)
@@ -833,6 +1010,24 @@ def _opponent_id_for_match(match: dict[str, Any], squad_id: int) -> int | None:
         return away
     if away == squad_id and home:
         return home
+    return None
+
+
+def _delivery_side(chain: dict[str, Any]) -> str | None:
+    side = str(chain.get("side") or "").strip().lower()
+    if side in {"left", "right"}:
+        return side
+    coords = chain.get("startCoords") or chain.get("deliveryCoords")
+    if not coords or len(coords) < 2:
+        return None
+    try:
+        wing_y = float(coords[1])
+    except (TypeError, ValueError, IndexError):
+        return None
+    if wing_y > 0:
+        return "left"
+    if wing_y < 0:
+        return "right"
     return None
 
 
@@ -865,8 +1060,17 @@ def _empty_match_view(*, defending: bool = False) -> dict[str, Any]:
         "summary": empty_summary,
         "summaryCorners": empty_summary,
         "summaryFreeKicks": empty_summary,
+        "summaryLeft": empty_summary,
+        "summaryRight": empty_summary,
         "firstContactPoints": [],
         "contactLeaders": {},
+        "contactLeadersByFamily": {"corners": {}, "freeKicks": {}},
+        "takersByFamily": {"corners": {}, "freeKicks": {}},
+        "scorersByFamily": {"corners": {}, "freeKicks": {}},
+        "contactLeadersBySide": {"left": {}, "right": {}},
+        "takersBySide": {"left": {}, "right": {}},
+        "scorersBySide": {"left": {}, "right": {}},
+        "goalPoints": [],
     }
 
 
@@ -911,22 +1115,125 @@ def _match_delivery_set_play_view(
     chains = _annotate_first_contact_perspective(chains, defending=defending)
     corner_chains = [chain for chain in chains if _is_corner_chain(chain)]
     free_kick_chains = [chain for chain in chains if _is_free_kick_chain(chain)]
+    left_chains = [chain for chain in chains if _delivery_side(chain) == "left"]
+    right_chains = [chain for chain in chains if _delivery_side(chain) == "right"]
     summary = _summarize_chains(chains, defending=defending)
     summary_corners = _summarize_chains(corner_chains, defending=defending)
     summary_free_kicks = _summarize_chains(free_kick_chains, defending=defending)
+    summary_left = _summarize_chains(left_chains, defending=defending)
+    summary_right = _summarize_chains(right_chains, defending=defending)
 
     if not include_details:
         return {
             "summary": summary,
             "summaryCorners": summary_corners,
             "summaryFreeKicks": summary_free_kicks,
+            "summaryLeft": summary_left,
+            "summaryRight": summary_right,
             "firstContactPoints": [],
             "contactLeaders": {},
+            "contactLeadersByFamily": {"corners": {}, "freeKicks": {}},
+            "takersByFamily": {"corners": {}, "freeKicks": {}},
+            "scorersByFamily": {"corners": {}, "freeKicks": {}},
+            "contactLeadersBySide": {"left": {}, "right": {}},
+            "takersBySide": {"left": {}, "right": {}},
+            "scorersBySide": {"left": {}, "right": {}},
+            "goalPoints": [],
         }
 
     points: list[dict[str, Any]] = []
+    goal_points: list[dict[str, Any]] = []
     leaders: dict[int, dict[str, Any]] = {}
+    contact_by_family: dict[str, dict[int, dict[str, Any]]] = {"corners": {}, "freeKicks": {}}
+    takers_by_family: dict[str, dict[int, dict[str, Any]]] = {"corners": {}, "freeKicks": {}}
+    scorers_by_family: dict[str, dict[int, dict[str, Any]]] = {"corners": {}, "freeKicks": {}}
+    contact_by_side: dict[str, dict[int, dict[str, Any]]] = {"left": {}, "right": {}}
+    takers_by_side: dict[str, dict[int, dict[str, Any]]] = {"left": {}, "right": {}}
+    scorers_by_side: dict[str, dict[int, dict[str, Any]]] = {"left": {}, "right": {}}
     for chain in chains:
+        family_key = "corners" if _is_corner_chain(chain) else "freeKicks"
+        delivery_side = _delivery_side(chain)
+        deliverer_id = chain.get("delivererId")
+        deliverer_name = chain.get("delivererName")
+        taker_row = _ensure_player_row(
+            takers_by_family[family_key],
+            deliverer_id,
+            name=deliverer_name,
+            initials=chain.get("delivererInitials") or _player_initials(deliverer_name),
+        )
+        if taker_row:
+            taker_row["takes"] += 1
+        if delivery_side in takers_by_side:
+            side_taker = _ensure_player_row(
+                takers_by_side[delivery_side],
+                deliverer_id,
+                name=deliverer_name,
+                initials=chain.get("delivererInitials") or _player_initials(deliverer_name),
+            )
+            if side_taker:
+                side_taker["takes"] += 1
+
+        chain_has_goal = False
+        for shot in chain.get("shots") or []:
+            scorer_row = _ensure_player_row(
+                scorers_by_family[family_key],
+                shot.get("playerId"),
+                name=shot.get("playerName"),
+                initials=_player_initials(shot.get("playerName")),
+            )
+            if scorer_row:
+                scorer_row["shots"] += 1
+                scorer_row["xg"] = round(
+                    float(scorer_row.get("xg") or 0.0) + float(shot.get("xg") or 0.0), 3
+                )
+            if delivery_side in scorers_by_side:
+                side_scorer = _ensure_player_row(
+                    scorers_by_side[delivery_side],
+                    shot.get("playerId"),
+                    name=shot.get("playerName"),
+                    initials=_player_initials(shot.get("playerName")),
+                )
+                if side_scorer:
+                    side_scorer["shots"] += 1
+                    side_scorer["xg"] = round(
+                        float(side_scorer.get("xg") or 0.0) + float(shot.get("xg") or 0.0), 3
+                    )
+            if not shot.get("isGoal"):
+                continue
+            chain_has_goal = True
+            if scorer_row:
+                scorer_row["goals"] += 1
+            if delivery_side in scorers_by_side:
+                side_goal = _ensure_player_row(
+                    scorers_by_side[delivery_side],
+                    shot.get("playerId"),
+                    name=shot.get("playerName"),
+                    initials=_player_initials(shot.get("playerName")),
+                )
+                if side_goal:
+                    side_goal["goals"] += 1
+            goal_coords = _normalize_attacking_third_coords(
+                shot.get("coords") or chain.get("firstContactCoords")
+            )
+            if not goal_coords:
+                continue
+            shooter_name = shot.get("playerName")
+            goal_points.append(
+                {
+                    "kind": "goal",
+                    "impectX": float(goal_coords[0]),
+                    "impectY": float(goal_coords[1]),
+                    "playerId": shot.get("playerId"),
+                    "playerName": shooter_name,
+                    "playerInitials": _player_initials(shooter_name),
+                    "typeLabel": chain.get("typeLabel"),
+                    "restartFamily": "corner" if _is_corner_chain(chain) else "freeKick",
+                    "deliverySide": delivery_side,
+                    "minuteLabel": chain.get("minuteLabel"),
+                    "xg": shot.get("xg"),
+                }
+            )
+
         first = chain.get("firstContact") or {}
         coords = _normalize_attacking_third_coords(chain.get("firstContactCoords"))
         player_id = first.get("playerId")
@@ -966,8 +1273,10 @@ def _match_delivery_set_play_view(
                     or _player_initials(player_name),
                     "typeLabel": chain.get("typeLabel"),
                     "restartFamily": "corner" if _is_corner_chain(chain) else "freeKick",
+                    "deliverySide": delivery_side,
                     "minuteLabel": chain.get("minuteLabel"),
                     "intoBox": into_box,
+                    "ledToGoal": chain_has_goal,
                 }
             )
 
@@ -993,13 +1302,43 @@ def _match_delivery_set_play_view(
             bucket["into_box"] += 1
         if player_name and bucket["name"].startswith("Player "):
             bucket["name"] = player_name
+        family_contact = _ensure_player_row(
+            contact_by_family[family_key],
+            pid,
+            name=bucket["name"],
+            initials=bucket.get("initials"),
+        )
+        if family_contact:
+            family_contact["contacts"] += 1
+            if chain.get("intoBox"):
+                family_contact["into_box"] += 1
+        if delivery_side in contact_by_side:
+            side_contact = _ensure_player_row(
+                contact_by_side[delivery_side],
+                pid,
+                name=bucket["name"],
+                initials=bucket.get("initials"),
+            )
+            if side_contact:
+                side_contact["contacts"] += 1
+                if chain.get("intoBox"):
+                    side_contact["into_box"] += 1
 
     return {
         "summary": summary,
         "summaryCorners": summary_corners,
         "summaryFreeKicks": summary_free_kicks,
+        "summaryLeft": summary_left,
+        "summaryRight": summary_right,
         "firstContactPoints": points,
+        "goalPoints": goal_points,
         "contactLeaders": leaders,
+        "contactLeadersByFamily": contact_by_family,
+        "takersByFamily": takers_by_family,
+        "scorersByFamily": scorers_by_family,
+        "contactLeadersBySide": contact_by_side,
+        "takersBySide": takers_by_side,
+        "scorersBySide": scorers_by_side,
     }
 
 
@@ -1008,9 +1347,51 @@ def _strip_match_view_details(view: dict[str, Any]) -> dict[str, Any]:
         "summary": view.get("summary") or _summarize_chains([], defending=False),
         "summaryCorners": view.get("summaryCorners") or _summarize_chains([], defending=False),
         "summaryFreeKicks": view.get("summaryFreeKicks") or _summarize_chains([], defending=False),
+        "summaryLeft": view.get("summaryLeft") or _summarize_chains([], defending=False),
+        "summaryRight": view.get("summaryRight") or _summarize_chains([], defending=False),
         "firstContactPoints": [],
         "contactLeaders": {},
+        "contactLeadersByFamily": {"corners": {}, "freeKicks": {}},
+        "takersByFamily": {"corners": {}, "freeKicks": {}},
+        "scorersByFamily": {"corners": {}, "freeKicks": {}},
+        "contactLeadersBySide": {"left": {}, "right": {}},
+        "takersBySide": {"left": {}, "right": {}},
+        "scorersBySide": {"left": {}, "right": {}},
+        "goalPoints": [],
     }
+
+
+def _match_view_has_family_maps(payload: dict[str, Any] | None) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    for_view = payload.get("for") or {}
+    return isinstance((for_view.get("summaryLeft")), dict)
+
+
+def _read_legacy_match_view(match_id: int, squad_id: int) -> dict[str, Any] | None:
+    cache_dir = _ensure_set_piece_cache_dir()
+    for name in (
+        f"match_{match_id}_{squad_id}_v4.json",
+        f"match_{match_id}_{squad_id}_v3.json",
+        f"match_{match_id}_{squad_id}_v2.json",
+        f"match_{match_id}_{squad_id}.json",
+    ):
+        disk = _read_json_cache(cache_dir / name, ttl=_MATCH_VIEW_TTL)
+        if disk and isinstance(disk.get("for"), dict) and isinstance(disk.get("against"), dict):
+            return disk
+    return None
+
+
+def _split_match_view_payload(
+    payload: dict[str, Any],
+    *,
+    include_details: bool,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    for_view = payload.get("for") or _empty_match_view(defending=False)
+    against_view = payload.get("against") or _empty_match_view(defending=True)
+    if not include_details:
+        return _strip_match_view_details(for_view), _strip_match_view_details(against_view)
+    return for_view, against_view
 
 
 def _match_both_sides_set_play_view(
@@ -1023,30 +1404,29 @@ def _match_both_sides_set_play_view(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Load events once per match (disk-cached) and build for + against views."""
     match_id = int(match["id"])
-    cache_key = (match_id, squad_id)
+    cache_key = (match_id, squad_id, 5)
     now = time.time()
 
     if not refresh:
         mem = _MATCH_VIEW_MEM_CACHE.get(cache_key)
         if mem and now - mem[0] < _MATCH_VIEW_TTL:
             payload = mem[1]
-            for_view = payload.get("for") or _empty_match_view(defending=False)
-            against_view = payload.get("against") or _empty_match_view(defending=True)
-            if not include_details:
-                return _strip_match_view_details(for_view), _strip_match_view_details(against_view)
-            return for_view, against_view
+            if not include_details or _match_view_has_family_maps(payload):
+                return _split_match_view_payload(payload, include_details=include_details)
 
         disk = _read_json_cache(
             _match_view_cache_path(match_id, squad_id),
             ttl=_MATCH_VIEW_TTL,
         )
         if disk and isinstance(disk.get("for"), dict) and isinstance(disk.get("against"), dict):
-            _MATCH_VIEW_MEM_CACHE[cache_key] = (now, disk)
-            for_view = disk["for"]
-            against_view = disk["against"]
-            if not include_details:
-                return _strip_match_view_details(for_view), _strip_match_view_details(against_view)
-            return for_view, against_view
+            if not include_details or _match_view_has_family_maps(disk):
+                _MATCH_VIEW_MEM_CACHE[cache_key] = (now, disk)
+                return _split_match_view_payload(disk, include_details=include_details)
+
+        if not include_details:
+            legacy = _read_legacy_match_view(match_id, squad_id)
+            if legacy:
+                return _split_match_view_payload(legacy, include_details=False)
 
     events, xg_by_event = _fetch_match_events_and_xg(match_id)
     for_view = _match_delivery_set_play_view(
@@ -1084,6 +1464,107 @@ def _match_both_sides_set_play_view(
         return _strip_match_view_details(for_view), _strip_match_view_details(against_view)
     return for_view, against_view
 
+
+
+def _ensure_player_row(
+    store: dict[int, dict[str, Any]],
+    player_id: Any,
+    *,
+    name: str | None = None,
+    initials: str | None = None,
+) -> dict[str, Any] | None:
+    if player_id is None or player_id == "":
+        return None
+    try:
+        pid = int(player_id)
+    except (TypeError, ValueError):
+        return None
+    if pid <= 0:
+        return None
+    bucket = store.setdefault(
+        pid,
+        {
+            "player_id": pid,
+            "name": name or f"Player {pid}",
+            "initials": initials or "?",
+            "takes": 0,
+            "contacts": 0,
+            "into_box": 0,
+            "goals": 0,
+            "xg": 0.0,
+            "shots": 0,
+        },
+    )
+    if name and str(bucket.get("name") or "").startswith("Player "):
+        bucket["name"] = name
+    if initials:
+        bucket["initials"] = initials
+    return bucket
+
+
+def _merge_player_maps(
+    target: dict[int, dict[str, Any]],
+    incoming: dict[int, dict[str, Any]] | None,
+) -> None:
+    for player_id, row in (incoming or {}).items():
+        bucket = _ensure_player_row(
+            target,
+            player_id,
+            name=row.get("name"),
+            initials=row.get("initials"),
+        )
+        if not bucket:
+            continue
+        bucket["takes"] += int(row.get("takes") or 0)
+        bucket["contacts"] += int(row.get("contacts") or 0)
+        bucket["into_box"] += int(row.get("into_box") or 0)
+        bucket["goals"] += int(row.get("goals") or 0)
+        bucket["shots"] += int(row.get("shots") or 0)
+        bucket["xg"] = round(float(bucket.get("xg") or 0.0) + float(row.get("xg") or 0.0), 3)
+
+
+def _merge_family_player_maps(
+    target: dict[str, dict[int, dict[str, Any]]],
+    incoming: dict[str, dict[int, dict[str, Any]]] | None,
+) -> None:
+    incoming = incoming or {}
+    for family_key in ("corners", "freeKicks"):
+        _merge_player_maps(target.setdefault(family_key, {}), incoming.get(family_key) or {})
+
+
+def _rank_takers(leaders: dict[int, dict[str, Any]], *, limit: int = 4) -> list[dict[str, Any]]:
+    rows = [row for row in leaders.values() if int(row.get("takes") or 0) > 0]
+    rows.sort(
+        key=lambda row: (
+            -int(row.get("takes") or 0),
+            str(row.get("name") or "").casefold(),
+        )
+    )
+    return rows[:limit]
+
+
+def _rank_goal_leaders(leaders: dict[int, dict[str, Any]], *, limit: int = 4) -> list[dict[str, Any]]:
+    rows = [row for row in leaders.values() if int(row.get("goals") or 0) > 0]
+    rows.sort(
+        key=lambda row: (
+            -int(row.get("goals") or 0),
+            -float(row.get("xg") or 0),
+            str(row.get("name") or "").casefold(),
+        )
+    )
+    return rows[:limit]
+
+
+def _rank_xg_leaders(leaders: dict[int, dict[str, Any]], *, limit: int = 4) -> list[dict[str, Any]]:
+    rows = [row for row in leaders.values() if float(row.get("xg") or 0) > 0]
+    rows.sort(
+        key=lambda row: (
+            -float(row.get("xg") or 0),
+            -int(row.get("goals") or 0),
+            str(row.get("name") or "").casefold(),
+        )
+    )
+    return rows[:limit]
 
 
 def _merge_contact_leaders(
@@ -1175,22 +1656,66 @@ def _side_payload(
     points: list[dict[str, Any]],
     leaders: dict[int, dict[str, Any]],
     trim_points,
+    contact_by_family: dict[str, dict[int, dict[str, Any]]] | None = None,
+    takers_by_family: dict[str, dict[int, dict[str, Any]]] | None = None,
+    scorers_by_family: dict[str, dict[int, dict[str, Any]]] | None = None,
+    contact_by_side: dict[str, dict[int, dict[str, Any]]] | None = None,
+    takers_by_side: dict[str, dict[int, dict[str, Any]]] | None = None,
+    scorers_by_side: dict[str, dict[int, dict[str, Any]]] | None = None,
+    left: dict[str, float] | None = None,
+    right: dict[str, float] | None = None,
+    goal_points: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    contact_by_family = contact_by_family or {"corners": {}, "freeKicks": {}}
+    takers_by_family = takers_by_family or {"corners": {}, "freeKicks": {}}
+    scorers_by_family = scorers_by_family or {"corners": {}, "freeKicks": {}}
+    contact_by_side = contact_by_side or {"left": {}, "right": {}}
+    takers_by_side = takers_by_side or {"left": {}, "right": {}}
+    scorers_by_side = scorers_by_side or {"left": {}, "right": {}}
+    left = left or _empty_chain_totals()
+    right = right or _empty_chain_totals()
     corner_block = {
         **_finalize_totals(corners, games),
         "label": "Corners",
+        "firstContactLeaders": _rank_contact_leaders(contact_by_family.get("corners") or {}, limit=4),
+        "takers": _rank_takers(takers_by_family.get("corners") or {}),
+        "goalLeaders": _rank_goal_leaders(scorers_by_family.get("corners") or {}),
+        "xgLeaders": _rank_xg_leaders(scorers_by_family.get("corners") or {}),
     }
     free_kick_block = {
         **_finalize_totals(free_kicks, games),
         "label": "Free kicks",
         "byType": _by_type_rows(free_kick_by_type),
+        "firstContactLeaders": _rank_contact_leaders(contact_by_family.get("freeKicks") or {}, limit=4),
+        "takers": _rank_takers(takers_by_family.get("freeKicks") or {}),
+        "goalLeaders": _rank_goal_leaders(scorers_by_family.get("freeKicks") or {}),
+        "xgLeaders": _rank_xg_leaders(scorers_by_family.get("freeKicks") or {}),
+    }
+    left_block = {
+        **_finalize_totals(left, games),
+        "label": "Left",
+        "firstContactLeaders": _rank_contact_leaders(contact_by_side.get("left") or {}, limit=4),
+        "takers": _rank_takers(takers_by_side.get("left") or {}),
+        "goalLeaders": _rank_goal_leaders(scorers_by_side.get("left") or {}),
+        "xgLeaders": _rank_xg_leaders(scorers_by_side.get("left") or {}),
+    }
+    right_block = {
+        **_finalize_totals(right, games),
+        "label": "Right",
+        "firstContactLeaders": _rank_contact_leaders(contact_by_side.get("right") or {}, limit=4),
+        "takers": _rank_takers(takers_by_side.get("right") or {}),
+        "goalLeaders": _rank_goal_leaders(scorers_by_side.get("right") or {}),
+        "xgLeaders": _rank_xg_leaders(scorers_by_side.get("right") or {}),
     }
     return {
         **_finalize_totals(totals, games),
         "byType": _by_type_rows(by_type),
         "corners": corner_block,
         "freeKicks": free_kick_block,
+        "left": left_block,
+        "right": right_block,
         "firstContactPoints": trim_points(points),
+        "goalPoints": list(goal_points or []),
         "firstContactLeaders": _rank_contact_leaders(leaders),
         "firstContactTotal": len(points),
     }
@@ -1252,14 +1777,50 @@ def _aggregate_recent_set_plays(
     defending_corners = _empty_chain_totals()
     attacking_free_kicks = _empty_chain_totals()
     defending_free_kicks = _empty_chain_totals()
+    attacking_left = _empty_chain_totals()
+    defending_left = _empty_chain_totals()
+    attacking_right = _empty_chain_totals()
+    defending_right = _empty_chain_totals()
     by_type_for: dict[str, int] = {}
     by_type_against: dict[str, int] = {}
     fk_by_type_for: dict[str, int] = {}
     fk_by_type_against: dict[str, int] = {}
     attacking_points: list[dict[str, Any]] = []
     defending_points: list[dict[str, Any]] = []
+    attacking_goal_points: list[dict[str, Any]] = []
+    defending_goal_points: list[dict[str, Any]] = []
     attacking_leaders: dict[int, dict[str, Any]] = {}
     defending_leaders: dict[int, dict[str, Any]] = {}
+    attacking_contact_by_family: dict[str, dict[int, dict[str, Any]]] = {
+        "corners": {},
+        "freeKicks": {},
+    }
+    defending_contact_by_family: dict[str, dict[int, dict[str, Any]]] = {
+        "corners": {},
+        "freeKicks": {},
+    }
+    attacking_takers_by_family: dict[str, dict[int, dict[str, Any]]] = {
+        "corners": {},
+        "freeKicks": {},
+    }
+    defending_takers_by_family: dict[str, dict[int, dict[str, Any]]] = {
+        "corners": {},
+        "freeKicks": {},
+    }
+    attacking_scorers_by_family: dict[str, dict[int, dict[str, Any]]] = {
+        "corners": {},
+        "freeKicks": {},
+    }
+    defending_scorers_by_family: dict[str, dict[int, dict[str, Any]]] = {
+        "corners": {},
+        "freeKicks": {},
+    }
+    attacking_contact_by_side: dict[str, dict[int, dict[str, Any]]] = {"left": {}, "right": {}}
+    defending_contact_by_side: dict[str, dict[int, dict[str, Any]]] = {"left": {}, "right": {}}
+    attacking_takers_by_side: dict[str, dict[int, dict[str, Any]]] = {"left": {}, "right": {}}
+    defending_takers_by_side: dict[str, dict[int, dict[str, Any]]] = {"left": {}, "right": {}}
+    attacking_scorers_by_side: dict[str, dict[int, dict[str, Any]]] = {"left": {}, "right": {}}
+    defending_scorers_by_side: dict[str, dict[int, dict[str, Any]]] = {"left": {}, "right": {}}
     games = 0
     names = player_names if player_names is not None else _player_directory(iteration_id)
 
@@ -1294,6 +1855,10 @@ def _aggregate_recent_set_plays(
                 _accumulate_summary(
                     defending_free_kicks, against_view.get("summaryFreeKicks") or {}
                 )
+                _accumulate_summary(attacking_left, for_view.get("summaryLeft") or {})
+                _accumulate_summary(defending_left, against_view.get("summaryLeft") or {})
+                _accumulate_summary(attacking_right, for_view.get("summaryRight") or {})
+                _accumulate_summary(defending_right, against_view.get("summaryRight") or {})
                 for label, count in (for_summary.get("byType") or {}).items():
                     by_type_for[label] = by_type_for.get(label, 0) + int(count)
                     if label != "Corner":
@@ -1307,8 +1872,53 @@ def _aggregate_recent_set_plays(
                 if include_details:
                     attacking_points.extend(for_view.get("firstContactPoints") or [])
                     defending_points.extend(against_view.get("firstContactPoints") or [])
+                    attacking_goal_points.extend(for_view.get("goalPoints") or [])
+                    defending_goal_points.extend(against_view.get("goalPoints") or [])
                     _merge_contact_leaders(attacking_leaders, for_view.get("contactLeaders") or {})
                     _merge_contact_leaders(defending_leaders, against_view.get("contactLeaders") or {})
+                    _merge_family_player_maps(
+                        attacking_contact_by_family, for_view.get("contactLeadersByFamily")
+                    )
+                    _merge_family_player_maps(
+                        defending_contact_by_family, against_view.get("contactLeadersByFamily")
+                    )
+                    _merge_family_player_maps(
+                        attacking_takers_by_family, for_view.get("takersByFamily")
+                    )
+                    _merge_family_player_maps(
+                        defending_takers_by_family, against_view.get("takersByFamily")
+                    )
+                    _merge_family_player_maps(
+                        attacking_scorers_by_family, for_view.get("scorersByFamily")
+                    )
+                    _merge_family_player_maps(
+                        defending_scorers_by_family, against_view.get("scorersByFamily")
+                    )
+                    for side_key in ("left", "right"):
+                        _merge_player_maps(
+                            attacking_contact_by_side[side_key],
+                            (for_view.get("contactLeadersBySide") or {}).get(side_key),
+                        )
+                        _merge_player_maps(
+                            defending_contact_by_side[side_key],
+                            (against_view.get("contactLeadersBySide") or {}).get(side_key),
+                        )
+                        _merge_player_maps(
+                            attacking_takers_by_side[side_key],
+                            (for_view.get("takersBySide") or {}).get(side_key),
+                        )
+                        _merge_player_maps(
+                            defending_takers_by_side[side_key],
+                            (against_view.get("takersBySide") or {}).get(side_key),
+                        )
+                        _merge_player_maps(
+                            attacking_scorers_by_side[side_key],
+                            (for_view.get("scorersBySide") or {}).get(side_key),
+                        )
+                        _merge_player_maps(
+                            defending_scorers_by_side[side_key],
+                            (against_view.get("scorersBySide") or {}).get(side_key),
+                        )
 
     # Prefer into-box contacts on the map if we have many points.
     def _trim_points(points: list[dict[str, Any]], *, cap: int = 70) -> list[dict[str, Any]]:
@@ -1332,6 +1942,15 @@ def _aggregate_recent_set_plays(
             points=attacking_points,
             leaders=attacking_leaders,
             trim_points=_trim_points,
+            contact_by_family=attacking_contact_by_family,
+            takers_by_family=attacking_takers_by_family,
+            scorers_by_family=attacking_scorers_by_family,
+            contact_by_side=attacking_contact_by_side,
+            takers_by_side=attacking_takers_by_side,
+            scorers_by_side=attacking_scorers_by_side,
+            left=attacking_left,
+            right=attacking_right,
+            goal_points=attacking_goal_points,
         ),
         "defending": _side_payload(
             defending,
@@ -1343,6 +1962,15 @@ def _aggregate_recent_set_plays(
             points=defending_points,
             leaders=defending_leaders,
             trim_points=_trim_points,
+            contact_by_family=defending_contact_by_family,
+            takers_by_family=defending_takers_by_family,
+            scorers_by_family=defending_scorers_by_family,
+            contact_by_side=defending_contact_by_side,
+            takers_by_side=defending_takers_by_side,
+            scorers_by_side=defending_scorers_by_side,
+            left=defending_left,
+            right=defending_right,
+            goal_points=defending_goal_points,
         ),
         "pitch": _pitch_meta(),
         "typeLabels": dict(TYPE_LABELS),
@@ -1582,6 +2210,7 @@ HEIGHT_BAND_DEFS: tuple[tuple[str, int | None, int | None], ...] = (
     ("<5'9\"", None, 69),
 )
 HEIGHT_UNKNOWN_BAND = "No height"
+HEIGHT_CHART_VERSION = 2
 
 
 def _cm_to_total_inches(cm: int) -> int:
@@ -1625,6 +2254,7 @@ def _empty_height_chart(*, excluded_gk: int = 0) -> dict[str, Any]:
         "count": 0,
         "unknown_count": 0,
         "excluded_gk": excluded_gk,
+        "version": HEIGHT_CHART_VERSION,
     }
 
 
@@ -1716,6 +2346,7 @@ def _height_chart(
         "count": len(with_height),
         "unknown_count": len(unknown_players),
         "excluded_gk": excluded_gk,
+        "version": HEIGHT_CHART_VERSION,
     }
 
 
@@ -1802,7 +2433,7 @@ def build_set_piece_pre_match_report(body: SetPiecePreMatchRequest | PreMatchRep
     )
     if not refresh:
         cached_report = _load_cached_report(report_key)
-        if cached_report:
+        if cached_report and not _height_chart_incomplete(cached_report) and not _for_slide_incomplete(cached_report) and not _against_slide_incomplete(cached_report):
             cached_report = dict(cached_report)
             cached_report["cache"] = {"hit": True, "refreshed": False}
             return cached_report
@@ -1918,28 +2549,19 @@ def _build_set_piece_pre_match_report_uncached(
         player_sp = player_sp_future.result()
         tm_profiles = heights_future.result()
 
-    # Last-8 first (caches each match to disk), then season reuses those caches.
-    recent_set_plays = _aggregate_recent_set_plays(
+    # One window: every completed match (no last-8 vs season split).
+    set_plays = _aggregate_recent_set_plays(
         iteration_id,
         squad_id,
         before=before,
         exclude_match_id=exclude_match_id,
-        limit=match_limit,
+        limit=None,
         include_details=True,
         player_names=player_names,
         refresh=refresh,
     )
-    season_set_plays = _cached_season_set_plays(
-        iteration_id,
-        squad_id,
-        before=before,
-        exclude_match_id=exclude_match_id,
-        player_names=player_names,
-        refresh=refresh,
-    )
-    set_plays = _merge_dual_windows(
-        recent_set_plays,
-        season_set_plays,
+    set_plays = _attach_family_ranks(
+        set_plays,
         iteration_id=iteration_id,
         squad_id=squad_id,
     )
@@ -1982,7 +2604,7 @@ def _build_set_piece_pre_match_report_uncached(
     )
 
     games_used = int(set_plays.get("gameCount") or 0)
-    season_games = int(set_plays.get("seasonGameCount") or 0)
+    season_games = games_used
 
     report = {
         "fixture": fixture_out,
@@ -1994,8 +2616,8 @@ def _build_set_piece_pre_match_report_uncached(
         },
         "season": season_label,
         "iteration_id": iteration_id,
-        "match_window": games_used or match_limit,
-        "match_window_label": f"Last {match_limit} games",
+        "match_window": games_used,
+        "match_window_label": f"{games_used} games" if games_used else "Season",
         "season_games": season_games,
         "team_metrics": rankings,
         "set_plays": set_plays,
@@ -2006,9 +2628,9 @@ def _build_set_piece_pre_match_report_uncached(
         "cache": {"hit": False, "refreshed": refresh},
         "source": {
             "note": (
-                f"Corner/FK cards show last {match_limit} games and full season "
-                f"({season_games or 'all'} matches). First-contact maps & player KPIs use the last "
-                f"{match_limit} games. Team rankings use full-season Impect squad KPIs. "
+                f"Set-play cards use every completed match this season "
+                f"({season_games or 'all'}). Maps show first contacts won, split by "
+                "left / right delivery. Team rankings use full-season Impect squad KPIs. "
                 "Heights from Transfermarkt; headshots from club site when available. "
                 "Reports are disk-cached — use Refresh data to rebuild."
             ),
@@ -2073,7 +2695,7 @@ def register_set_piece_pre_match_routes(app: FastAPI) -> None:
     def set_piece_pre_match_export_whatsapp_pdf(body: PreMatchPngExportRequest) -> Response:
         from app.main import _safe_export_filename, _save_export_to_desktop
 
-        if not body.pages:
+        if not body.html_pages and not body.pages:
             raise HTTPException(status_code=400, detail="No export pages provided.")
         try:
             pdf_bytes = build_pre_match_whatsapp_pdf(body)

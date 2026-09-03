@@ -6,37 +6,42 @@
   <title>Meeting Front Pages</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@400;500;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/meeting-front-pages.css?v=5" />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/meeting-front-pages.css?v=34" />
 </head>
 <body>
   <div class="mfp-app">
-    <header class="mfp-toolbar">
-      <div class="mfp-toolbar__left">
-        <p class="mfp-toolbar__eyebrow">Scouts · <a href="/">← All apps</a></p>
-        <h1 class="mfp-toolbar__title">Meeting Front Pages</h1>
-        <p class="mfp-toolbar__subtitle">Identity + profile title PNGs for scout video presentations</p>
+    <header class="mfp-chrome">
+      <div class="mfp-chrome__brand">
+        <a class="mfp-chrome__back" href="/">← Hub</a>
+        <div>
+          <p class="mfp-chrome__eyebrow">Scouts · Video title cards</p>
+          <h1 class="mfp-chrome__title">Meeting Front Pages</h1>
+        </div>
       </div>
-      <div class="mfp-toolbar__right">
+      <div class="mfp-chrome__actions">
         <button type="button" class="mfp-btn mfp-btn--ghost" id="refreshPhotosBtn" disabled>Find web photos</button>
-        <button type="button" class="mfp-btn mfp-btn--ghost" id="refreshBtn" disabled>Reload player</button>
-        <button type="button" class="mfp-btn" id="downloadBtn" disabled>Download PNG pack</button>
+        <button type="button" class="mfp-btn mfp-btn--ghost" id="refreshBtn" disabled>Reload</button>
+        <button type="button" class="mfp-btn mfp-btn--primary" id="downloadBtn" disabled>Download PNG pack</button>
       </div>
     </header>
 
     <section class="mfp-controls">
       <div class="mfp-search">
         <label class="mfp-label" for="playerSearch">Player</label>
-        <input id="playerSearch" class="mfp-input" type="search" placeholder="Search Impect players…" autocomplete="off" />
+        <input id="playerSearch" class="mfp-input" type="search" placeholder="Type a name — e.g. Trevan Sanusi" autocomplete="off" />
         <ul id="searchResults" class="mfp-results" hidden></ul>
       </div>
       <div class="mfp-cutout">
-        <label class="mfp-label" for="cutoutInput">Own cutout (optional)</label>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <input id="cutoutInput" type="file" accept="image/png,image/jpeg,image/webp" />
-          <button type="button" class="mfp-btn mfp-btn--ghost mfp-btn--small" id="clearCutoutBtn" disabled>Clear upload</button>
+        <label class="mfp-label" for="cutoutInput">Own cutout <span class="mfp-label__optional">optional</span></label>
+        <div class="mfp-cutout__row">
+          <label class="mfp-file" for="cutoutInput">
+            <span class="mfp-file__btn">Choose image</span>
+            <span class="mfp-file__name" id="cutoutFileName">PNG / JPG — applies to selected slide</span>
+            <input id="cutoutInput" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+          </label>
+          <button type="button" class="mfp-btn mfp-btn--ghost mfp-btn--small" id="clearCutoutBtn" disabled>Clear</button>
         </div>
-        <p class="mfp-hint">Prefer a web photo below — or paste/upload a transparent PNG cutout.</p>
       </div>
     </section>
 
@@ -56,8 +61,10 @@
     </div>
   </div>
 
+  <script defer src="/static/wysiwyg-export.js?v=2"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script src="/static/meeting-front-pages.js?v=5"></script>
+  <script defer src="/static/meeting-front-pages.js?v=34"></script>
+  <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>

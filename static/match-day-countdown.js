@@ -247,6 +247,8 @@
 
     els.app.classList.toggle("is-live", toKickoff <= 0 && toKickoff > -2 * 60 * 60 * 1000);
     els.app.classList.toggle("is-done", toKickoff <= -2 * 60 * 60 * 1000);
+    document.body.classList.toggle("is-mdc-live", toKickoff <= 0 && toKickoff > -2 * 60 * 60 * 1000);
+    document.body.classList.toggle("is-mdc-done", toKickoff <= -2 * 60 * 60 * 1000);
 
     if (toKickoff > 0) {
       els.kickoffLabel.textContent = "Kick off";

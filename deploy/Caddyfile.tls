@@ -1,0 +1,44 @@
+{
+	email {$CADDY_EMAIL:admin@port-vale.co.uk}
+}
+
+# Shared body so the domain and the bare IP cannot drift apart.
+(hub) {
+	encode zstd gzip
+
+	handle /static/* {
+		root * /srv
+		header Cache-Control "no-store"
+		file_server
+	}
+
+	@standalone_assets path_regexp ^/standalone/.*\.(js|css|png|jpe?g|webp|svg|json|woff2?|map)$
+	handle @standalone_assets {
+		root * /srv
+		header Cache-Control "no-store"
+		file_server
+	}
+
+	# Single upstream — no active health checker (was marking hub dead under load → 503).
+	handle {
+		reverse_proxy hub:8000 {
+			transport http {
+				read_timeout 120s
+				write_timeout 120s
+			}
+		}
+	}
+}
+
+# Real domain: Caddy gets and renews the Let's Encrypt certificate itself, and
+# redirects http://SITE_DOMAIN to https automatically.
+{$SITE_DOMAIN} {
+	import hub
+}
+
+# Bare IP over plain HTTP, so existing bookmarks to 178.128.161.215 keep working.
+# Being host-less this is less specific than the block above, so requests for the
+# domain still get TLS.
+http:// {
+	import hub
+}

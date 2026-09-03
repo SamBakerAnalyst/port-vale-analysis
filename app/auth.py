@@ -27,6 +27,11 @@ PUBLIC_PATHS = frozenset(
         "/api/auth/login",
         "/api/auth/logout",
         "/fixture-planner/reject-assignment",
+        # Assets for the tokenised coach scoring page, which has no login to
+        # fetch them with. Listed file by file rather than opening /static.
+        "/static/goal-involvement.css",
+        "/static/goal-involvement-link.css",
+        "/static/goal-involvement-link.js",
     }
 )
 PUBLIC_PREFIXES = (
@@ -35,6 +40,10 @@ PUBLIC_PREFIXES = (
     "/static/stadiums.json",
     "/api/player-photo",
     "/api/availability/photo",
+    # Signed per-coach Goal Involvement scoring links. The token itself carries
+    # the identity and is scoped to one coach + one match — it grants nothing else.
+    "/gi/",
+    "/api/gi/",
 )
 
 # Paths an analysis-only account may hit (prefix match, except "/" which is exact).
@@ -69,13 +78,15 @@ def _analysis_allowed_prefixes() -> tuple[str, ...]:
             "/api/schedule",
             "/api/feedback",
             "/api/apps",
+            "/api/wysiwyg-export-pdf",
+            "/api/wysiwyg-export-png-zip",
             "/static/",
             "/standalone/",
         )
 
 
 ROLE_GROUPS = {
-    "admin": ("analysis", "recruitment", "scouts", "strategy"),
+    "admin": ("analysis", "recruitment", "scouts", "strategy", "presentations"),
     "analysis": ("analysis",),
 }
 

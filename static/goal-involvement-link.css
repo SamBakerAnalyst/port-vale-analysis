@@ -1,0 +1,127 @@
+/* Coach scoring link — phone first, nothing but the job in hand. */
+
+.gil-body {
+  margin: 0;
+  background: #0d1117;
+}
+
+.gil-app {
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 1rem 1rem 7rem;
+}
+
+.gil-header {
+  padding: .4rem 0 .9rem;
+  border-bottom: 1px solid rgba(255, 255, 255, .1);
+  margin-bottom: 1rem;
+}
+
+.gil-header .gi-title {
+  margin: .1rem 0 .2rem;
+}
+
+.gil-progress {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  margin-top: .75rem;
+}
+
+.gil-progress__bar {
+  flex: 1;
+  height: .45rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .12);
+  overflow: hidden;
+}
+
+.gil-progress__bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #ffd54a;
+  transition: width .25s ease;
+}
+
+.gil-progress__label {
+  font-size: .78rem;
+  color: rgba(255, 255, 255, .65);
+  white-space: nowrap;
+}
+
+.gil-goal {
+  margin: .15rem 0 .35rem;
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 1.65rem;
+  line-height: 1.1;
+}
+
+.gil-instruction {
+  margin-bottom: 1rem;
+}
+
+.gil-error {
+  margin-top: .9rem;
+  padding: .6rem .75rem;
+  border-radius: .5rem;
+  background: rgba(255, 92, 92, .14);
+  border: 1px solid rgba(255, 92, 92, .4);
+  color: #ffb4b4;
+  font-size: .85rem;
+}
+
+.gil-done {
+  text-align: center;
+  padding: 1.5rem 0;
+}
+
+.gil-tick {
+  width: 3.4rem;
+  height: 3.4rem;
+  margin: 0 auto 1rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 1.8rem;
+  color: #0d1117;
+  background: #58d68d;
+}
+
+.gil-recap {
+  list-style: none;
+  padding: 0;
+  margin: 1.25rem 0;
+  text-align: left;
+}
+
+.gil-recap li {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .55rem .1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+  font-size: .88rem;
+}
+
+.gil-recap__state {
+  margin-left: auto;
+  font-size: .75rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: rgba(255, 255, 255, .55);
+}
+
+.gil-dead {
+  padding: 2rem 0;
+  text-align: center;
+}
+
+/* The link page has no "Close" button, so the sticky bar is submit-only. */
+.gil-app .gi-sticky {
+  gap: .75rem;
+}
+
+.gil-app .gi-sticky .gi-btn {
+  flex: 1;
+}

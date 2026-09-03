@@ -4,7 +4,8 @@ import json
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import UTC, datetime
+from collections import defaultdict
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +19,10 @@ COMPETITIONS = ("League Two", "League One")
 DEFAULT_COMPETITION = "League Two"
 FOCUS_SQUAD_TOKENS = ("port vale",)
 LEAGUE_MATCH_LIMIT = 46
-CACHE_TTL_SECONDS = 1800
+# Keep club strategy report disk caches around for the full daily refresh window.
+# The hub prebuilds the cache via `app/hub_snapshots.py`, so click-path loads
+# shouldn't trigger fresh Impect recomputation.
+CACHE_TTL_SECONDS = 36 * 3600
 DISK_CACHE_DIR = CLUB_STRATEGY_CACHE_DIR
 DISK_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -59,6 +63,8 @@ _MATCH_CLOCK_RE = re.compile(r"^(\d+):(\d+(?:\.\d+)?)")
 _report_cache: dict[int, tuple[float, dict[str, Any]]] = {}
 _first_goal_cache: dict[int, tuple[float, dict[str, Any]]] = {}
 _match_events_cache: dict[int, tuple[float, list[dict[str, Any]]]] = {}
+_fotmob_results_cache: dict[str, tuple[float, dict[tuple[str, str], list[tuple[str, int, int]]]]] = {}
+FOTMOB_RESULTS_TTL_SECONDS = 300.0
 
 
 def _impect():
@@ -122,6 +128,250 @@ def _match_is_complete(match: dict[str, Any]) -> bool:
     home_goals = (goals.get("home") or {}).get("fullTime")
     away_goals = (goals.get("away") or {}).get("fullTime")
     return home_goals is not None and away_goals is not None
+
+
+def _match_kickoff_passed(match: dict[str, Any], *, now: datetime | None = None) -> bool:
+    """True once a fixture is past full-time (approx), even if Impect has no score yet."""
+    now = now or datetime.now(UTC)
+    raw = str(match.get("scheduledDate") or "").strip()
+    if not raw:
+        return False
+    try:
+        kickoff = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if kickoff.tzinfo is None:
+        kickoff = kickoff.replace(tzinfo=UTC)
+    return now >= kickoff + timedelta(minutes=100)
+
+
+def _fotmob_results_by_pair(
+    competition: str,
+    season: str,
+) -> dict[tuple[str, str], list[tuple[str, int, int]]]:
+    """Finished FotMob league scores keyed by normalised home|away pair."""
+    cache_key = f"{competition}|{season}"
+    cached = _fotmob_results_cache.get(cache_key)
+    now = time.time()
+    if cached and now - cached[0] < FOTMOB_RESULTS_TTL_SECONDS:
+        return cached[1]
+
+    from app.fixture_planner import (
+        FIXTURE_LEAGUE_BY_UI,
+        _fetch_fotmob_fixtures,
+        _fixture_day,
+        _normalize_team_name,
+    )
+
+    config = FIXTURE_LEAGUE_BY_UI.get(competition)
+    out: dict[tuple[str, str], list[tuple[str, int, int]]] = defaultdict(list)
+    if not config or not config.get("fotmob_id"):
+        _fotmob_results_cache[cache_key] = (now, out)
+        return out
+
+    try:
+        fixtures = _fetch_fotmob_fixtures(
+            int(config["fotmob_id"]),
+            league_ui=competition,
+            season=season or "26/27",
+        )
+    except Exception:
+        fixtures = []
+
+    for row in fixtures:
+        if str(row.get("status") or "") != "completed":
+            continue
+        home_score = row.get("home_score")
+        away_score = row.get("away_score")
+        if home_score is None or away_score is None:
+            continue
+        home = row.get("home") or {}
+        away = row.get("away") or {}
+        key = (
+            _normalize_team_name(str(home.get("name") or "")),
+            _normalize_team_name(str(away.get("name") or "")),
+        )
+        if not key[0] or not key[1]:
+            continue
+        day = _fixture_day(str(row.get("kickoff_utc") or row.get("scheduled_date") or ""))
+        out[key].append((day, int(home_score), int(away_score)))
+
+    _fotmob_results_cache[cache_key] = (now, out)
+    return out
+
+
+def _claim_fotmob_score(
+    index: dict[tuple[str, str], list[tuple[str, int, int]]],
+    *,
+    home_name: str,
+    away_name: str,
+    scheduled_date: str,
+) -> tuple[int, int] | None:
+    """Return one FotMob score and remove it so the same result cannot fill twice."""
+    from app.fixture_planner import _days_between, _fixture_day, _normalize_team_name
+
+    home = _normalize_team_name(home_name)
+    away = _normalize_team_name(away_name)
+    if not home or not away:
+        return None
+    day = _fixture_day(scheduled_date)
+    candidates = index.get((home, away)) or []
+    if not candidates:
+        return None
+
+    pick_at: int | None = None
+    if day:
+        for idx, (candidate_day, _home_goals, _away_goals) in enumerate(candidates):
+            if candidate_day == day or _days_between(candidate_day, day) <= 1:
+                pick_at = idx
+                break
+    elif len(candidates) == 1:
+        pick_at = 0
+
+    if pick_at is None:
+        return None
+
+    candidate_day, home_goals, away_goals = candidates.pop(pick_at)
+    if not candidates:
+        index.pop((home, away), None)
+    return home_goals, away_goals
+
+
+def _with_fotmob_full_time(match: dict[str, Any], home_goals: int, away_goals: int) -> dict[str, Any]:
+    filled = dict(match)
+    goals = dict(filled.get("goals") or {})
+    home = dict(goals.get("home") or {})
+    away = dict(goals.get("away") or {})
+    home["fullTime"] = int(home_goals)
+    away["fullTime"] = int(away_goals)
+    goals["home"] = home
+    goals["away"] = away
+    filled["goals"] = goals
+    filled["available"] = True
+    filled["_score_source"] = "fotmob"
+    return filled
+
+
+def _standings_fixture_key(
+    match: dict[str, Any],
+    squads: dict[int, str],
+) -> str | None:
+    """Stable home|away|day key so the same fixture cannot enter the table twice."""
+    from app.fixture_planner import _fixture_day, _normalize_team_name, _teams_pair_key
+
+    home_id = int(match.get("homeSquadId") or 0)
+    away_id = int(match.get("awaySquadId") or 0)
+    home = squads.get(home_id) or ""
+    away = squads.get(away_id) or ""
+    if not _normalize_team_name(home) or not _normalize_team_name(away):
+        return None
+    day = _fixture_day(str(match.get("scheduledDate") or ""))
+    if not day:
+        return None
+    return f"{_teams_pair_key(home, away)}|{day}"
+
+
+def _dedupe_standings_matches(
+    matches: list[dict[str, Any]],
+    squads: dict[int, str],
+) -> list[dict[str, Any]]:
+    """One row per Impect id / home|away|day. Prefer Impect scores over FotMob fills."""
+    ranked = sorted(
+        matches,
+        key=lambda match: (
+            0 if match.get("_score_source") != "fotmob" else 1,
+            _match_sort_key(match),
+        ),
+    )
+    out: list[dict[str, Any]] = []
+    seen_ids: set[int] = set()
+    seen_keys: set[str] = set()
+    for match in ranked:
+        match_id = int(match["id"]) if match.get("id") is not None else 0
+        fixture_key = _standings_fixture_key(match, squads)
+        if match_id and match_id in seen_ids:
+            continue
+        if fixture_key and fixture_key in seen_keys:
+            continue
+        if match_id:
+            seen_ids.add(match_id)
+        if fixture_key:
+            seen_keys.add(fixture_key)
+        out.append(match)
+    return out
+
+
+def _standings_matches(iteration_id: int) -> list[dict[str, Any]]:
+    """League matches for the table: Impect spine, FotMob scores only when Impect has none.
+
+    Do **not** union FotMob fixtures into the list — that is how we used to double-count.
+    Every row is an Impect match. FotMob only paints full-time onto past Impect rows that
+    still have null scores, and each FotMob result is claimed at most once.
+    Event-level tools keep using ``_league_matches`` (Impect-complete only).
+    """
+    iteration = _resolve_iteration(iteration_id)
+    competition = str(iteration.get("competition_name") or "").strip()
+    season = str(iteration.get("season") or "").strip()
+    squads = _squads_map(iteration_id)
+    impect = _impect()
+    raw = _unwrap_items(
+        impect._impect_get(f"/v5/{impect._api_prefix()}/iterations/{iteration_id}/matches")["data"]
+    )
+
+    included: list[dict[str, Any]] = []
+    included_ids: set[int] = set()
+    included_keys: set[str] = set()
+    gaps: list[dict[str, Any]] = []
+
+    for match in raw:
+        if not _is_league_match(match, competition):
+            continue
+        match_id = int(match["id"]) if match.get("id") is not None else 0
+        fixture_key = _standings_fixture_key(match, squads)
+
+        # Prefer any Impect full-time score, even before ``available`` flips true.
+        if _match_is_complete(match):
+            included.append(match)
+            if match_id:
+                included_ids.add(match_id)
+            if fixture_key:
+                included_keys.add(fixture_key)
+            continue
+        if _match_kickoff_passed(match):
+            gaps.append(match)
+
+    if gaps:
+        # Copy so claim/pop does not mutate the shared TTL cache entry.
+        fotmob_cached = _fotmob_results_by_pair(competition, season)
+        fotmob = {
+            pair: list(scores) for pair, scores in fotmob_cached.items()
+        }
+        for match in gaps:
+            match_id = int(match["id"]) if match.get("id") is not None else 0
+            fixture_key = _standings_fixture_key(match, squads)
+            if match_id and match_id in included_ids:
+                continue
+            if fixture_key and fixture_key in included_keys:
+                continue
+            home_id = int(match.get("homeSquadId") or 0)
+            away_id = int(match.get("awaySquadId") or 0)
+            score = _claim_fotmob_score(
+                fotmob,
+                home_name=squads.get(home_id, ""),
+                away_name=squads.get(away_id, ""),
+                scheduled_date=str(match.get("scheduledDate") or ""),
+            )
+            if score is None:
+                continue
+            included.append(_with_fotmob_full_time(match, score[0], score[1]))
+            if match_id:
+                included_ids.add(match_id)
+            if fixture_key:
+                included_keys.add(fixture_key)
+
+    included = _dedupe_standings_matches(included, squads)
+    included.sort(key=_match_sort_key)
+    return included
 
 
 def _competition_iterations(competition: str) -> list[dict[str, Any]]:
@@ -226,7 +476,7 @@ def _build_standings(iteration_id: int) -> list[dict[str, Any]]:
     }
     form_by_squad: dict[int, list[str]] = {squad_id: [] for squad_id in squads}
 
-    for match in _league_matches(iteration_id):
+    for match in _standings_matches(iteration_id):
         home_id = int(match.get("homeSquadId") or 0)
         away_id = int(match.get("awaySquadId") or 0)
         if home_id <= 0 or away_id <= 0:
@@ -794,12 +1044,14 @@ def build_club_strategy_report(
     force_refresh: bool = False,
 ) -> dict[str, Any]:
     memory_key = iteration_id if not include_first_goal else iteration_id + 100000
-    disk_name = "report-v3" if not include_first_goal else "report-full-v3"
+    disk_name = "report-v4" if not include_first_goal else "report-full-v4"
     if force_refresh:
         _report_cache.pop(memory_key, None)
         _first_goal_cache.pop(iteration_id, None)
         for name in (
             disk_name,
+            "report-v3",
+            "report-full-v3",
             "report-v2",
             "report-full-v2",
             "report",

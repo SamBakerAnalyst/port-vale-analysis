@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Port Vale Analysis Hub · Board briefing</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/board-briefing.css?v=20260831f" />
+</head>
+<body>
+  <div class="app">
+    <header class="toolbar">
+      <div>
+        <p class="toolbar__eyebrow">Board pack</p>
+        <h1 class="toolbar__title">Port Vale Analysis Hub</h1>
+        <p class="toolbar__sub">Present in the room. Download PDF for the papers. Notes stay off the slides.</p>
+      </div>
+      <div class="toolbar__right">
+        <p class="toolbar__meta" id="slideMeta"></p>
+        <div class="toolbar__buttons">
+          <button type="button" class="btn" id="notesBtn">Speaker notes</button>
+          <button type="button" class="btn" id="exportPdf">Download PDF</button>
+          <button type="button" class="btn btn--gold" id="presentBtn">Present</button>
+        </div>
+        <p class="toolbar__export-status" id="exportStatus"></p>
+      </div>
+    </header>
+    <nav class="filmstrip" id="filmstrip" aria-label="Slides"></nav>
+
+    <div class="deck" id="deck">
+
+      <section class="slide is-active" data-label="Title" data-notes="Four groups of tools. 25 hours a week is the time we get back. Then walk analysis, scouting, recruitment, strategy.">
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" width="22" height="25" alt="" />
+            <span class="slide__bar-kicker">Port Vale Football Club</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body">
+          <div class="hours">
+            <div class="hours__hero">
+              <b>25+</b>
+              <span>hours a week saved</span>
+              <p>The hub: analysis, scouting, recruitment and strategy. One login.</p>
+            </div>
+            <div class="depts">
+              <article class="dept"><em>14</em><strong>Analysis</strong><p>Match reports for the manager and coaches.</p></article>
+              <article class="dept"><em>7</em><strong>Scouting</strong><p>Who goes to which game, and a record of what we have been to.</p></article>
+              <article class="dept"><em>7</em><strong>Recruitment</strong><p>Find players, track them, plan the squad.</p></article>
+              <article class="dept"><em>8</em><strong>Strategy</strong><p>How we are doing, and what we are on track for.</p></article>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" data-label="Analysis" data-notes="Better reports, quicker, to the manager and coaches. Point at the two-pager, Present and WhatsApp PDF on the screenshots.">
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker">Performance analysis</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body">
+          <div class="sec">
+            <div class="sec__copy">
+              <p class="kicker">Why this has improved the department</p>
+              <h2 class="headline">Better reports. Quicker. Straight to the manager and coaches.</h2>
+              <div class="points">
+                <article class="point"><strong>Better reports</strong><p>Pre-match and set pieces come out of the tool — opponent style, XI, set-piece threats — not a blank PowerPoint.</p></article>
+                <article class="point"><strong>Quicker</strong><p>Pick the game. The report builds. We are not starting from scratch every week.</p></article>
+                <article class="point"><strong>To the manager and coaches</strong><p>Two-pager, Present in the room, or a PDF on WhatsApp. Same numbers they see in the meeting.</p></article>
+              </div>
+            </div>
+            <div class="shots shots--2">
+              <figure class="shot"><img src="/static/board-briefing/pre-match.png" alt="Pre-match report" /><span>Pre-match report</span></figure>
+              <figure class="shot"><img src="/static/board-briefing/set-piece.png" alt="Set piece pre-match" /><span>Set piece pre-match</span></figure>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" data-label="Scouting" data-notes="Fixture planner is who goes where. Played fixtures is what we have already been to. Address tool is the map — who can get to which ground.">
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker">Scouting</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body">
+          <div class="sec">
+            <div class="sec__copy">
+              <p class="kicker">Why we are better at scouting</p>
+              <h2 class="headline">Organised coverage. A record of the games. A map for travel.</h2>
+              <div class="points">
+                <article class="point"><strong>Fixture planner</strong><p>Upcoming games in one place. Assign live or video. 500+ fixtures loaded for the season.</p></article>
+                <article class="point"><strong>What we have been to</strong><p>Played fixtures keeps the games that have gone — who went, live or video, reports in.</p></article>
+                <article class="point"><strong>Scouting address tool</strong><p>Put in a postcode. See which grounds are within an hour. Plan the travel properly.</p></article>
+              </div>
+            </div>
+            <div class="shots shots--3">
+              <figure class="shot"><img src="/static/board-briefing/fixture-planner.png" alt="Fixture planner" /><span>Fixture planner</span></figure>
+              <figure class="shot"><img src="/static/board-briefing/played-fixtures.png" alt="Played fixtures" /><span>Played fixtures</span></figure>
+              <figure class="shot"><img src="/static/board-briefing/scouting-address.png" alt="Scouting address tool" /><span>Address tool</span></figure>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" data-label="Recruitment" data-notes="API is Who To Scout — ranked lists from Impect. Pipelines is tracking. Scoutable teams is club by club. Squad planner is current and future squad.">
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker">Recruitment</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body">
+          <div class="sec">
+            <div class="sec__copy">
+              <p class="kicker">Why recruitment is better</p>
+              <h2 class="headline">Find players. Track them. Plan the squad.</h2>
+              <div class="points">
+                <article class="point"><strong>Using the API to find players</strong><p>Who To Scout ranks players from the data, by league and position, how we play.</p></article>
+                <article class="point"><strong>Player tracking</strong><p>Pipelines: watched, data, video, live — the whole group sees the same board.</p></article>
+                <article class="point"><strong>Scoutable teams</strong><p>Every club by league. Open a team, see coverage, move players onto the board.</p></article>
+                <article class="point"><strong>Squad design and future planning</strong><p>Squad planner: current team and a shadow team, by formation, gaps by position.</p></article>
+              </div>
+            </div>
+            <div class="shots shots--4">
+              <figure class="shot"><img src="/static/board-briefing/who-to-scout.png" alt="Who To Scout" /><span>Who to scout</span></figure>
+              <figure class="shot"><img src="/static/board-briefing/player-pipelines.png" alt="Player pipelines" /><span>Player tracking</span></figure>
+              <figure class="shot"><img src="/static/board-briefing/scoutable-teams.png" alt="Scoutable teams" /><span>Scoutable teams</span></figure>
+              <figure class="shot"><img src="/static/board-briefing/squad-planner.png" alt="Squad planner" /><span>Squad planner</span></figure>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" data-label="Strategy" data-notes="Season progress is the live picture: how we are doing, behind or on track vs auto / play-off / champions. Players strategy is the dressing-room version.">
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker">Strategy</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body">
+          <div class="sec">
+            <div class="sec__copy">
+              <p class="kicker">The season, live</p>
+              <h2 class="headline">How we are doing. Where we are struggling. What we are on track for.</h2>
+              <div class="points">
+                <article class="point"><strong>How are we performing?</strong><p>Points, position, projection — against automatic, play-offs and champions.</p></article>
+                <article class="point"><strong>Where are we struggling?</strong><p>The same screen flags what is behind the pace — points, wins, goals scored.</p></article>
+                <article class="point"><strong>What are we good at?</strong><p>What is on track vs those targets — so far, goals conceded is the one holding up.</p></article>
+                <article class="point"><strong>What are we on track for?</strong><p>Season projection vs the number you usually need to go up. Updated as games are played.</p></article>
+              </div>
+            </div>
+            <div class="shots shots--2">
+              <figure class="shot"><img src="/static/board-briefing/strategy-tracker.png" alt="Season progress report" /><span>Season progress</span></figure>
+              <figure class="shot"><img src="/static/board-briefing/players-strategy.png" alt="Players strategy report" /><span>Players strategy</span></figure>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" data-label="Close" data-notes="Three boxes then the gold line. Offer to open any tool. Stop.">
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker">Port Vale Analysis Hub</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body">
+          <div class="close-facts">
+            <article>
+              <strong>25+ hours a week</strong>
+              <p>Not spent making slides, copying numbers, or chasing who went to what game.</p>
+            </article>
+            <article>
+              <strong>Better reports, faster</strong>
+              <p>To the manager and coaches. Coverage organised. Players found and tracked.</p>
+            </article>
+            <article>
+              <strong>The season on one screen</strong>
+              <p>How we are doing, where we are short, what we are on track for.</p>
+            </article>
+          </div>
+          <p class="close-line">This level of organisation can drive the club forward.</p>
+        </div>
+      </section>
+
+    </div>
+
+    <aside class="notes-panel" id="notesPanel">
+      <h2 id="notesTitle">Speaker notes</h2>
+      <p id="notesBody"></p>
+    </aside>
+  </div>
+
+  <div class="present-ui" aria-hidden="true">
+    <button type="button" id="presentPrev" aria-label="Previous slide">‹</button>
+    <div id="presentProgress"></div>
+    <span id="presentCount">01 / 06</span>
+    <button type="button" id="presentNext" aria-label="Next slide">›</button>
+  </div>
+  <div id="export-overlay"></div>
+
+  <script src="/static/wysiwyg-export.js"></script>
+  <script src="/static/board-briefing.js?v=20260831f"></script>
+  <script defer src="/static/hub-feedback.js?v=1"></script>
+</body>
+</html>

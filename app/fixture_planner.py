@@ -40,7 +40,7 @@ DEFAULT_SEASON = "26/27"
 ALLOWED_FIXTURE_SEASONS: tuple[str, ...] = ("26/27", "25/26")
 FIXTURE_CACHE_TTL_SECONDS = 1800
 FIXTURE_CACHE_STALE_SECONDS = 12 * 3600
-FIXTURE_CACHE_VERSION = "v16"
+FIXTURE_CACHE_VERSION = "v17"
 
 FIXTURE_STAFF_TEAMS: tuple[dict[str, Any], ...] = (
     {
@@ -637,11 +637,18 @@ FIXTURE_LEAGUES: tuple[dict[str, Any], ...] = (
         "color": "#22d3ee",
         "calendar_year": True,
     },
+    {
+        # League competition (not a cup) — Pulse source; incomplete/missing on FotMob.
+        "ui": "Professional Development League",
+        "competition": "Professional Development League",
+        "pulse_competition_id": 6,
+        "color": "#14b8a6",
+    },
 )
 
 # Domestic cups — shown under a dedicated Cups toggle with stacked layout.
 # Prefer FotMob when fotmob_id is set; use Premier League Pulse when pulse_competition_id is set
-# (PDL / Premier League Cup / Vertu Trophy are incomplete or missing on FotMob).
+# (Premier League Cup / Vertu Trophy are incomplete or missing on FotMob).
 FIXTURE_CUPS: tuple[dict[str, Any], ...] = (
     {
         "ui": "FA Cup",
@@ -680,13 +687,6 @@ FIXTURE_CUPS: tuple[dict[str, Any], ...] = (
         "competition": "Premier League Cup",
         "pulse_competition_id": 9,
         "color": "#a855f7",
-        "cup": True,
-    },
-    {
-        "ui": "Professional Development League",
-        "competition": "Professional Development League",
-        "pulse_competition_id": 6,
-        "color": "#14b8a6",
         "cup": True,
     },
     {

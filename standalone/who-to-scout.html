@@ -6,8 +6,8 @@
   <title>Who To Scout</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/who-to-scout.css?v=10" />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/who-to-scout.css?v=16" />
 </head>
 <body>
   <div class="app">
@@ -18,7 +18,10 @@
           <h1 class="page-head__title">Who To Scout</h1>
         </div>
         <div class="page-head__actions">
-          <a class="btn btn--ghost" href="/scouting">Player Search</a>
+          <a class="btn btn--ghost" id="watchListLink" href="/watch-list" title="Open Watch list">
+            Watch list<span class="watch-count" id="watchListCount" hidden>0</span>
+          </a>
+          <a class="btn btn--ghost" href="/player-pipelines" id="pipelinesLink" hidden>Player Pipelines</a>
           <a class="btn btn--ghost" href="/fixture-planner">Fixture Planner</a>
           <button type="button" class="btn btn--export" id="exportPdfBtn" disabled title="A4 PDF of current view">Export PDF</button>
           <button type="button" class="btn btn--ghost" id="refreshBtn">Refresh data</button>
@@ -65,6 +68,14 @@
           <label for="minMinutes">Min minutes</label>
           <input type="number" id="minMinutes" class="filter__input" min="0" step="50" value="0" />
         </div>
+        <div class="filter">
+          <span class="filter__label">Age band</span>
+          <div class="filter__control" id="ageBandGroup" role="group" aria-label="Age band">
+            <button type="button" class="filter__btn is-active" data-age-band="all">All</button>
+            <button type="button" class="filter__btn" data-age-band="u21" title="Under 21">U21</button>
+            <button type="button" class="filter__btn" data-age-band="u25" title="Under 25">U25</button>
+          </div>
+        </div>
         <div class="filter filter--num">
           <label for="minAge">Min age</label>
           <input type="number" id="minAge" class="filter__input" min="15" max="45" placeholder="—" />
@@ -72,6 +83,13 @@
         <div class="filter filter--num">
           <label for="maxAge">Max age</label>
           <input type="number" id="maxAge" class="filter__input" min="15" max="45" placeholder="—" />
+        </div>
+        <div class="filter">
+          <span class="filter__label">Loans</span>
+          <div class="filter__control" id="loanFilterGroup" role="group" aria-label="Loan filter">
+            <button type="button" class="filter__btn is-active" data-loan="all">All</button>
+            <button type="button" class="filter__btn" data-loan="loan" title="Players on loan at their current club (Transfermarkt)">On loan</button>
+          </div>
         </div>
         <div class="filter filter--num">
           <label for="minHeight">Min height (cm)</label>
@@ -113,7 +131,7 @@
     <div id="exportRoot" class="export-root" aria-hidden="true"></div>
   </div>
 
-  <script defer src="/static/who-to-scout.js?v=17"></script>
+  <script defer src="/static/who-to-scout.js?v=26"></script>
   <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>

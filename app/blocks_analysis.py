@@ -78,7 +78,7 @@ KPI_ASSISTS = 77
 KPI_PXT_SHOT = 1408
 KPI_PXT_DRIBBLE = 1405
 MATCH_KPI_CACHE_TTL = 6 * 3600
-MATCH_STATS_CACHE_VERSION = 18
+MATCH_STATS_CACHE_VERSION = 24
 # Bump when cross PXT logic changes — does not invalidate full match KPI cache.
 CROSS_PXT_VERSION = 2
 # Shot actions stripped from match + player xG boards (open-play / set-piece delivery only).
@@ -104,8 +104,13 @@ PAYLOAD_CACHE_TTL = 45
 PLAYER_NAMES_TTL = 6 * 3600
 BENCHMARK_CACHE_TTL = 600
 UNIT_TOP7_TTL = 24 * 3600
-UNIT_TOP7_VERSION = 6
+UNIT_TOP7_VERSION = 7
 UNIT_TOP7_GAMES_PER_SQUAD = 8
+# Fallback Req when sampled top-7 rows are empty (early season / sparse Impect).
+UNIT_TOP7_REQ_FLOORS: dict[tuple[str, str], float] = {
+    ("ATT", "shots"): 2.5,
+    ("ATT", "crossPxt"): 12.0,
+}
 FORM_BASELINE_GAMES = 7
 UNITS: tuple[str, ...] = ("DEF", "MID", "ATT")
 UNIT_BASELINE_STARTERS: dict[str, int] = {"DEF": 4, "MID": 3, "ATT": 3}
@@ -151,6 +156,10 @@ POSITION_TO_UNIT: dict[str, str | None] = {
     "RIGHT_WINGBACK_DEFENDER": "DEF",
     "DEFENSE_MIDFIELD": "MID",
     "CENTRAL_MIDFIELD": "MID",
+    "LEFT_MIDFIELD": "MID",
+    "RIGHT_MIDFIELD": "MID",
+    "LEFT_CENTRAL_MIDFIELD": "MID",
+    "RIGHT_CENTRAL_MIDFIELD": "MID",
     "ATTACKING_MIDFIELD": "MID",
     "LEFT_WINGER": "ATT",
     "RIGHT_WINGER": "ATT",
@@ -406,17 +415,220 @@ def _is_wingback_position(position: Any) -> bool:
     return bool(text) and ("WINGBACK" in text or "WING_BACK" in text)
 
 
+def _formation_parts(formation: str | None) -> list[int]:
+    text = str(formation or "").strip()
+    if not text:
+        return []
+    dashed = [int(token) for token in re.findall(r"\d+", text)]
+    if len(dashed) >= 2:
+        return dashed
+    digits = re.sub(r"\D", "", text)
+    if 3 <= len(digits) <= 4:
+        return [int(ch) for ch in digits]
+    return dashed
+
+
+def _clean_formation_label(formation: str | None) -> str | None:
+    text = str(formation or "").strip()
+    if not text:
+        return None
+    parts = _formation_parts(text)
+    if not parts:
+        return text
+    return "-".join(str(part) for part in parts)
+
+
 def _formation_back_line(formation: str | None) -> int | None:
-    parts = [int(token) for token in re.findall(r"\d+", str(formation or ""))]
+    parts = _formation_parts(formation)
     return parts[0] if parts else None
 
 
 def _wide_players_are_midfield(formation: str | None) -> bool:
-    """4-4-2 / 4-5-1 wide mids sit in MID; 4-3-3 / 4-2-3-1 wingers stay ATT."""
-    parts = [int(token) for token in re.findall(r"\d+", str(formation or ""))]
-    if len(parts) != 3:
+    """4-5-1 wide mids sit in MID. In 4-4-2 wingers count in ATT for unit targets."""
+    if _is_442_formation(formation):
         return False
-    return parts[1] >= 4
+    parts = _formation_parts(formation)
+    if len(parts) >= 3:
+        return parts[1] >= 4
+    return False
+
+
+def _is_442_formation(formation: str | None) -> bool:
+    return _formation_parts(formation) == [4, 4, 2]
+
+
+def _is_433_formation(formation: str | None) -> bool:
+    return _formation_parts(formation) == [4, 3, 3]
+
+
+LYNCH_PLAYER_ID = 239824
+
+
+def _starter_positions_by_id(
+    starting_positions: list[dict[str, Any]] | None,
+) -> dict[int, str]:
+    out: dict[int, str] = {}
+    for row in starting_positions or []:
+        if not isinstance(row, dict):
+            continue
+        pid = int(row.get("playerId") or 0)
+        if pid <= 0:
+            continue
+        out[pid] = str(row.get("position") or "").upper()
+    return out
+
+
+def _am_second_striker_pair(
+    starting_positions: list[dict[str, Any]] | None,
+) -> bool:
+    """Oliver Lynch as the 10 behind a separate 9 → coaches' 4-4-2 (Tranmere shape)."""
+    starters = _starter_positions_by_id(starting_positions)
+    if starters.get(LYNCH_PLAYER_ID) != "ATTACKING_MIDFIELD":
+        return False
+    return any(
+        pos in _FORWARD_POSITION_CODES
+        for pid, pos in starters.items()
+        if pid != LYNCH_PLAYER_ID
+    )
+
+
+_FORWARD_POSITION_CODES = frozenset(
+    {"CENTER_FORWARD", "CENTRE_FORWARD", "CENTRAL_FORWARD", "SECOND_STRIKER"}
+)
+_WIDE_MID_POSITION_CODES = frozenset(
+    {"LEFT_MIDFIELD", "RIGHT_MIDFIELD", "LEFT_WINGER", "RIGHT_WINGER"}
+)
+
+
+def _coach_formation_from_lineup(
+    impect_formation: str | None,
+    starting_positions: list[dict[str, Any]] | None,
+) -> str | None:
+    """Prefer the shape coaches recognise over Impect's kick-off tag."""
+    cleaned = _clean_formation_label(impect_formation)
+    if not cleaned:
+        return None
+    codes = [
+        str(row.get("position") or "").upper()
+        for row in (starting_positions or [])
+        if isinstance(row, dict)
+    ]
+    if not codes:
+        return cleaned
+
+    parts = _formation_parts(cleaned)
+    token = "-".join(str(part) for part in parts) if parts else cleaned
+
+    if token in {"5-2-2-1", "5-2-1-2"}:
+        n_dm = sum(1 for code in codes if code == "DEFENSE_MIDFIELD")
+        n_am = sum(1 for code in codes if code == "ATTACKING_MIDFIELD")
+        n_cf = sum(1 for code in codes if code in _FORWARD_POSITION_CODES)
+        if n_dm >= 2 and n_am >= 2 and n_cf >= 1:
+            return "4-2-3-1"
+
+    # Impect tags 4-2-3-1 for both 4-4-2 and 4-3-3 — infer from the starting roles.
+    if token in {"4-2-3-1", "4231"} or (len(parts) == 4 and parts[1] == 2 and parts[2] == 3):
+        n_dm = sum(1 for code in codes if code == "DEFENSE_MIDFIELD")
+        n_am = sum(1 for code in codes if code == "ATTACKING_MIDFIELD")
+        n_wide = sum(1 for code in codes if code in _WIDE_MID_POSITION_CODES)
+        n_cf = sum(1 for code in codes if code in _FORWARD_POSITION_CODES)
+        n_ten = sum(
+            1 for code in codes if code in {"SECOND_STRIKER", "ATTACKING_MIDFIELD"}
+        )
+        n_cm = sum(
+            1
+            for code in codes
+            if code
+            in {"CENTRAL_MIDFIELD", "LEFT_CENTRAL_MIDFIELD", "RIGHT_CENTRAL_MIDFIELD"}
+        )
+        # Double pivot + linking 8 + wingers + lone 9 (e.g. Garrity mid, Lynch CF).
+        if (
+            n_dm >= 2
+            and n_am == 1
+            and n_wide >= 2
+            and n_cf >= 1
+            and not _am_second_striker_pair(starting_positions)
+        ):
+            return "4-3-3"
+        # Lynch as second striker behind Faal → 4-4-2 with wingers in attack.
+        if _am_second_striker_pair(starting_positions) and n_wide >= 2 and n_cf >= 1:
+            return "4-4-2"
+        if n_wide >= 2 and n_cf >= 1 and (n_ten >= 1 or n_cm >= 2):
+            return "4-4-2"
+
+    return cleaned
+
+
+def _unit_baselines_for_formation(formation: str | None) -> dict[str, int]:
+    if _is_442_formation(formation):
+        # Two pivots in MID; wide players + strikers in ATT — scale Req to four-man attack.
+        return {"DEF": 4, "MID": 2, "ATT": 4}
+    parts = _formation_parts(formation)
+    if len(parts) == 3:
+        return {"DEF": parts[0], "MID": parts[1], "ATT": parts[2]}
+    if len(parts) == 4:
+        if parts[1] == 2 and parts[2] == 3:
+            return {"DEF": parts[0], "MID": 2, "ATT": parts[2] + parts[3]}
+        if parts[1] == 1 and parts[2] >= 4:
+            return {"DEF": parts[0], "MID": parts[1] + parts[2], "ATT": parts[3]}
+    return dict(UNIT_BASELINE_STARTERS)
+
+
+def _match_squad_block(match_id: int, squad_id: int) -> dict[str, Any] | None:
+    try:
+        raw = impect_get(v5_path(f"/matches/{match_id}"))["data"]
+        if isinstance(raw, dict) and isinstance(raw.get("data"), dict):
+            raw = raw["data"]
+        if not isinstance(raw, dict):
+            return None
+        for key in ("squadHome", "squadAway"):
+            block = raw.get(key) or {}
+            if int(block.get("id") or 0) == int(squad_id):
+                return block if isinstance(block, dict) else None
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+def _match_roster_names(match_id: int) -> dict[int, str]:
+    """Names from the match squad list — covers new signings missing from iteration players."""
+    names: dict[int, str] = {}
+    try:
+        raw = impect_get(v5_path(f"/matches/{match_id}"))["data"]
+        if isinstance(raw, dict) and isinstance(raw.get("data"), dict):
+            raw = raw["data"]
+        if not isinstance(raw, dict):
+            return names
+        for key in ("squadHome", "squadAway"):
+            squad = raw.get(key) or {}
+            for player in squad.get("players") or []:
+                if not isinstance(player, dict):
+                    continue
+                player_id = player.get("id") or player.get("playerId")
+                if player_id is None:
+                    continue
+                label = (
+                    str(player.get("commonname") or player.get("commonName") or "").strip()
+                    or f"{player.get('firstname', '')} {player.get('lastname', '')}".strip()
+                )
+                if label:
+                    names[int(player_id)] = label
+    except Exception:  # noqa: BLE001
+        return names
+    return names
+
+
+def _match_starting_formation(match_id: int, squad_id: int) -> str | None:
+    squad = _match_squad_block(match_id, squad_id)
+    if not squad:
+        return None
+    coach = _coach_formation_from_lineup(
+        squad.get("startingFormation"),
+        squad.get("startingPositions"),
+    )
+    if coach:
+        return coach
+    return _clean_formation_label(squad.get("startingFormation"))
 
 
 def _unit_for_position(
@@ -433,12 +645,16 @@ def _unit_for_position(
         if back is not None and back != 4:
             return "WB"
         return "DEF"
-    # Starter 10s stay in MID. A bench arrival listed as AM is an attacking sub
-    # (e.g. Faal on for a holding mid while the 10 tucks in).
+    # In 4-4-2 Impect often codes the second striker as ATTACKING_MIDFIELD — still ATT.
+    if text == "ATTACKING_MIDFIELD" and _is_442_formation(formation) and not on_as_sub:
+        return "ATT"
+    # Starter 10s stay in MID in other shapes. Bench AM arrivals are attacking subs.
     if text == "ATTACKING_MIDFIELD" and on_as_sub:
         return "ATT"
     if text in {"LEFT_WINGER", "RIGHT_WINGER"} and _wide_players_are_midfield(formation):
         return "MID"
+    if _is_442_formation(formation) and not on_as_sub and text in _WIDE_MID_POSITION_CODES:
+        return "ATT"
     if text in POSITION_TO_UNIT:
         return POSITION_TO_UNIT[text]
     if not text or "GOAL" in text:
@@ -462,8 +678,13 @@ def _unit_shares_for_position(position: Any, formation: str | None = None) -> li
 
 
 def _short_unit_name(name: str) -> str:
-    parts = str(name or "").strip().split()
-    return parts[-1] if parts else str(name or "")
+    text = str(name or "").strip()
+    if not text:
+        return text
+    parts = text.split()
+    if len(parts) >= 2 and parts[0].lower() == "player" and parts[-1].isdigit():
+        return text
+    return parts[-1] if parts else text
 
 
 def _lineup_roles(match_id: int, squad_id: int) -> dict[int, dict[str, Any]]:
@@ -483,7 +704,14 @@ def _lineup_roles(match_id: int, squad_id: int) -> dict[int, dict[str, Any]]:
                 break
         if not squad:
             return roles
-        formation = str(squad.get("startingFormation") or "")
+        formation = (
+            _coach_formation_from_lineup(
+                squad.get("startingFormation"),
+                squad.get("startingPositions"),
+            )
+            or _clean_formation_label(squad.get("startingFormation"))
+            or str(squad.get("startingFormation") or "")
+        )
         for row in squad.get("startingPositions") or []:
             if not isinstance(row, dict):
                 continue
@@ -585,7 +813,11 @@ def _finalize_unit_row(row: dict[str, float]) -> dict[str, Any]:
     }
 
 
-def _units_from_players(players: list[dict[str, Any]], squad_id: int) -> dict[str, dict[str, Any]]:
+def _units_from_players(
+    players: list[dict[str, Any]],
+    squad_id: int,
+    formation: str | None = None,
+) -> dict[str, dict[str, Any]]:
     buckets: dict[str, dict[str, float]] = {
         unit: {
             "defendersBypassed": 0.0,
@@ -613,7 +845,7 @@ def _units_from_players(players: list[dict[str, Any]], squad_id: int) -> dict[st
     for row in _consolidate_player_match_rows(
         [item for item in players if int(item.get("squadId") or 0) == int(squad_id)]
     ):
-        shares = _unit_shares_for_position(row.get("position"))
+        shares = _unit_shares_for_position(row.get("position"), formation)
         if not shares:
             continue
         kpis = row.get("kpis") or {}
@@ -1514,6 +1746,10 @@ def _hydrate_lineup_units(stats: dict[str, Any], match_id: int, squad_id: int) -
     before = [(player.get("playerId"), player.get("unit")) for player in players]
     _apply_lineup_roles(players, roles)
     stats["players"] = players
+    formation = _match_starting_formation(match_id, squad_id)
+    if formation:
+        stats["formation"] = formation
+        stats["unitBaselines"] = _unit_baselines_for_formation(formation)
     stats["units"] = _units_from_report(players)
     after = [(player.get("playerId"), player.get("unit")) for player in players]
     return before != after
@@ -1899,13 +2135,17 @@ def _fetch_match_stats(
 ) -> dict[str, Any]:
     kpis = _fetch_squad_kpis(match_id)
     stats = _extract_match_kpis(kpis) if kpis else _empty_kpi_stats()
-    names = player_names or {}
+    formation = _match_starting_formation(match_id, squad_id)
+    stats["formation"] = formation
+    stats["unitBaselines"] = _unit_baselines_for_formation(formation)
+    names = dict(player_names or {})
+    names.update(_match_roster_names(match_id))
     try:
         players = _flatten_player_kpis(
             impect_get(v5_path(f"/matches/{match_id}/player-kpis"))["data"],
             names,
         )
-        stats["units"] = _units_from_players(players, squad_id)
+        stats["units"] = _units_from_players(players, squad_id, formation)
         stats["players"] = _player_match_report(players, squad_id, names)
         _apply_lineup_roles(stats["players"], _lineup_roles(match_id, squad_id))
         stats["units"] = _units_from_report(stats["players"])
@@ -1993,6 +2233,8 @@ def _empty_kpi_stats() -> dict[str, Any]:
         "fieldTilt": None,
         "phases": None,
         "inBehind": None,
+        "formation": None,
+        "unitBaselines": None,
     }
 
 
@@ -2026,12 +2268,19 @@ def _load_match_kpis(
         ):
             stats = cached["stats"]
             before = int(((stats.get("units") or {}).get("ATT") or {}).get("shots") or 0)
+            formation_dirty = False
+            if not stats.get("formation"):
+                formation = _match_starting_formation(match_id, PORT_VALE_SQUAD_ID)
+                if formation:
+                    stats["formation"] = formation
+                    stats["unitBaselines"] = _unit_baselines_for_formation(formation)
+                    formation_dirty = True
             lineup = _hydrate_lineup_units(stats, match_id, PORT_VALE_SQUAD_ID)
             shot_changed = _hydrate_open_play_shots(
                 stats, PORT_VALE_SQUAD_ID, match_id, fetch_remote=False
             )
             after = int(((stats.get("units") or {}).get("ATT") or {}).get("shots") or 0)
-            if lineup or shot_changed or after != before:
+            if lineup or shot_changed or formation_dirty or after != before:
                 cached["stats"] = stats
                 dirty = True
             result[match_id] = stats
@@ -2147,15 +2396,39 @@ def _iteration_top7_sample_matches(
     return list(unique.values())
 
 
+def _fetch_match_unit_stats(
+    match_id: int,
+    squad_id: int,
+) -> dict[str, dict[str, Any]]:
+    """Unit rows for benchmarks — open-play shots and cross threat need event hydration."""
+    names = dict(_merged_player_names())
+    names.update(_match_roster_names(match_id))
+    try:
+        players = _flatten_player_kpis(
+            impect_get(v5_path(f"/matches/{match_id}/player-kpis"))["data"],
+            names,
+        )
+        report = _player_match_report(players, squad_id, names)
+        _apply_lineup_roles(report, _lineup_roles(match_id, squad_id))
+        stats: dict[str, Any] = {
+            "players": report,
+            "units": _units_from_report(report),
+        }
+        _hydrate_open_play_shots(stats, squad_id, match_id, fetch_remote=True)
+        units = stats.get("units")
+        return units if isinstance(units, dict) else _empty_units()
+    except Exception:  # noqa: BLE001
+        return _empty_units()
+
+
 def _fetch_match_player_units(
     match_id: int,
     squad_ids: list[int],
 ) -> dict[int, dict[str, dict[str, Any]]]:
-    players = _flatten_player_kpis(
-        impect_get(v5_path(f"/matches/{match_id}/player-kpis"))["data"],
-        {},
-    )
-    return {int(squad_id): _units_from_players(players, int(squad_id)) for squad_id in squad_ids}
+    return {
+        int(squad_id): _fetch_match_unit_stats(match_id, int(squad_id))
+        for squad_id in squad_ids
+    }
 
 
 def _empty_unit_benchmarks() -> dict[str, dict[str, Any]]:
@@ -2358,7 +2631,12 @@ def build_unit_benchmarks(
                 if team_val is not None:
                     payload[unit][key]["teamFrom"] = "previous"
             payload[unit][key]["team"] = team_val
-            payload[unit][key]["top7"] = top_row.get(key)
+            top_val = top_row.get(key)
+            if top_val is None or (
+                float(top_val or 0) <= 0 and (unit, key) in UNIT_TOP7_REQ_FLOORS
+            ):
+                top_val = UNIT_TOP7_REQ_FLOORS.get((unit, key), top_val)
+            payload[unit][key]["top7"] = top_val
             payload[unit][key]["higherBetter"] = spec["higherBetter"]
             payload[unit][key]["rate"] = spec["rate"]
             payload[unit][key]["digits"] = spec["digits"]

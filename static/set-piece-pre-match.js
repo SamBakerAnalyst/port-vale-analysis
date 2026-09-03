@@ -6,6 +6,7 @@ const state = {
   slideIndex: 0,
   loading: false,
   heightEdit: null,
+  deckMode: "two_pager",
 };
 
 const els = {
@@ -32,6 +33,8 @@ const els = {
   prevSlideBtn: document.getElementById("prevSlideBtn"),
   nextSlideBtn: document.getElementById("nextSlideBtn"),
   slideCounter: document.getElementById("slideCounter"),
+  deckModeFullBtn: document.getElementById("deckModeFullBtn"),
+  deckModeTwoBtn: document.getElementById("deckModeTwoBtn"),
 };
 
 const SLIDE_EXPORT_WIDTH = 1920;
@@ -313,54 +316,55 @@ async function exportWhatsappPdf() {
   if (!state.report || !els.exportWhatsappPdfBtn) return;
   setModeButtonsEnabled(false);
   els.refreshBtn.disabled = true;
-  setExportOverlay("Building WhatsApp PDF…");
-  setStatus("Building full-quality WhatsApp PDF (1920×1080)…", "loading");
+  setExportOverlay("Building WhatsApp PDF (Chrome)…");
+  setStatus("Building WhatsApp PDF via real Chrome screenshots…", "loading");
+  const wasPresent = document.body.classList.contains("is-present");
+  if (wasPresent) setPresent(false);
+  document.body.classList.add("is-exporting");
   try {
-    const pages = await captureSetPieceSlides({
-      layoutWidth: SLIDE_EXPORT_WIDTH,
-      layoutHeight: SLIDE_EXPORT_HEIGHT,
-      width: WHATSAPP_EXPORT_WIDTH,
-      height: WHATSAPP_EXPORT_HEIGHT,
-      scale: WHATSAPP_CAPTURE_SCALE,
-      mimeType: "image/jpeg",
-      quality: WHATSAPP_JPEG_QUALITY,
-      progressLabel: "Capturing slides",
-    });
-    const filename = `${exportWhatsappPdfBaseName()}.pdf`;
-    const response = await fetch("/api/set-piece-pre-match/export-whatsapp-pdf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        pages,
-        filename,
-        document_title: `Set Piece Pre-Match · ${state.report?.opponent?.name || "Opponent"}`,
-        opponent_name: state.report?.opponent?.name || "opponent",
-      }),
-    });
-    if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(detail || "WhatsApp PDF export failed");
+    if (!window.PortValeWysiwygExport) {
+      throw new Error("WYSIWYG export helper failed to load — hard refresh and try again.");
     }
-    const blob = await response.blob();
-    downloadBlob(blob, filename);
-    const savedPath = response.headers.get("X-Saved-Desktop-Path");
-    const sizeMb = (blob.size / (1024 * 1024)).toFixed(1);
-    if (savedPath) {
-      setStatus(`WhatsApp PDF ready · ${pages.length} slides · ${sizeMb} MB · Desktop`, "");
-      setExportStatus(`PDF downloaded · ${pages.length} slides · still in PDF version`, "success");
-      els.statusBar.textContent = `Share from Desktop: ${savedPath.split("/").pop()}`;
+    const slides = [...els.deck.querySelectorAll(".sp-slide")];
+    const pack = await window.PortValeWysiwygExport.captureSlideHtmlPages({
+      slides,
+      stripClasses: ["sp-slide--export-capture", "sp-slide--exporting"],
+      activeClass: "sp-slide--active",
+      background: "#0b1220",
+      beforeSlide: (index) => highlightSlide(index),
+      onProgress: (msg) => {
+        setExportStatus(msg, "loading");
+        setStatus(msg, "loading");
+      },
+    });
+    setExportOverlay("Rendering PDF in Chrome…");
+    const filename = `${exportWhatsappPdfBaseName()}.pdf`;
+    const result = await window.PortValeWysiwygExport.downloadPdf({
+      ...pack,
+      filename,
+      documentTitle: `Set Piece Pre-Match · ${state.report?.opponent?.name || "Opponent"}`,
+      opponentName: state.report?.opponent?.name || "opponent",
+      endpoint: "/api/set-piece-pre-match/export-whatsapp-pdf",
+    });
+    const n = result.pageCount;
+    if (result.savedPath) {
+      setStatus(`WhatsApp PDF ready · ${n} slides · ${result.sizeMb} MB · Desktop`, "");
+      setExportStatus(`PDF downloaded · ${n} slides`, "success");
+      els.statusBar.textContent = `Share from Desktop: ${result.savedPath.split("/").pop()}`;
     } else {
-      setStatus(`WhatsApp PDF downloaded · ${pages.length} slides · ${sizeMb} MB`, "");
-      setExportStatus(`PDF downloaded · ${pages.length} slides`, "success");
+      setStatus(`WhatsApp PDF downloaded · ${n} slides · ${result.sizeMb} MB`, "");
+      setExportStatus(`PDF downloaded · ${n} slides`, "success");
       els.statusBar.textContent = "PDF ready — attach in WhatsApp";
     }
   } catch (error) {
     setStatus(error.message || "WhatsApp PDF export failed", "error");
     setExportStatus(error.message || "WhatsApp PDF export failed", "error");
   } finally {
+    document.body.classList.remove("is-exporting");
     setExportOverlay("");
     setModeButtonsEnabled(Boolean(state.report));
     els.refreshBtn.disabled = false;
+    if (wasPresent) setPresent(true);
   }
 }
 
@@ -457,14 +461,40 @@ async function apiPost(path, body) {
   return res.json();
 }
 
+function crestUrl(team) {
+  if (team?.badge_url) return team.badge_url;
+  const name = String(team?.name || "").toLowerCase();
+  if (name.includes("port vale")) return "/standalone/port-vale-badge.png?v=2";
+  return team?.image_url || team?.imageUrl || team?.image || "";
+}
+
+function crestInitials(name) {
+  return String(name || "?")
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
 function crestHtml(team, className = "sp-cover__crest") {
   const name = team?.name || "Team";
-  const image = team?.badge_url || team?.image_url || team?.imageUrl || team?.image || "";
+  const image = crestUrl(team);
   if (image) {
     return `<img class="${className}" src="${escapeHtml(image)}" alt="${escapeHtml(name)}" />`;
   }
   const initial = (name || "?").trim().charAt(0).toUpperCase();
   return `<div class="sp-cover__crest-fallback" aria-hidden="true">${escapeHtml(initial)}</div>`;
+}
+
+function matchBarCrestHtml(team) {
+  const name = team?.name || "?";
+  const src = crestUrl(team);
+  const initials = crestInitials(name);
+  if (src) {
+    return `<img class="sp-match-bar__crest" src="${escapeHtml(src)}" alt="${escapeHtml(name)}" onerror="this.onerror=null;this.replaceWith(Object.assign(document.createElement('div'),{className:'sp-match-bar__crest-fallback',textContent:'${escapeHtml(initials)}'}))" />`;
+  }
+  return `<div class="sp-match-bar__crest-fallback">${escapeHtml(initials)}</div>`;
 }
 
 function slideShell({ title, subtitle, body, foot = "Port Vale FC · Set Piece Pre-Match", barClass = "" }) {
@@ -482,8 +512,7 @@ function renderCoverSlide(report) {
   const opponent = fixture.opponent || report.opponent || { name: "Opponent" };
   const dateLine = formatKickoff(fixture.scheduled_date);
   const venue = fixture.is_home ? "Home" : "Away";
-  const windowLabel = report.match_window_label || "Last 8 games";
-  const seasonGames = report.season_games;
+  const windowLabel = report.match_window_label || "Season";
 
   return `<section class="sp-slide sp-slide--cover" data-slide-title="Cover">
     <div class="sp-cover__accent" aria-hidden="true"></div>
@@ -503,7 +532,7 @@ function renderCoverSlide(report) {
         </div>
       </div>
       ${dateLine ? `<p class="sp-cover__date">${escapeHtml(dateLine)}</p>` : ""}
-      <p class="sp-cover__meta">${escapeHtml(venue)} · ${escapeHtml(windowLabel)}${seasonGames ? ` + full season (${escapeHtml(seasonGames)})` : " + full season"} · League One</p>
+      <p class="sp-cover__meta">${escapeHtml(venue)} · ${escapeHtml(windowLabel)} · left vs right delivery · League One</p>
     </div>
     <div class="sp-cover__footer">Set Piece <span>Pre Match</span></div>
   </section>`;
@@ -726,11 +755,11 @@ function familyTrendBars(block) {
 
 function familyLeadersHtml(rows, { defending = false } = {}) {
   if (!rows?.length) {
-    return `<div class="sp-side-mini-empty">No L8 first-contact winners</div>`;
+    return `<div class="sp-side-mini-empty">No first-contact winners</div>`;
   }
   const hint = defending ? "clears" : "wins";
   return `<div class="sp-side-mini-leaders">
-    <div class="sp-side-mini-leaders__title">L8 first contact ${escapeHtml(hint)}</div>
+    <div class="sp-side-mini-leaders__title">First contact ${escapeHtml(hint)}</div>
     ${rows
       .map((row, index) => {
         return `
@@ -744,119 +773,408 @@ function familyLeadersHtml(rows, { defending = false } = {}) {
   </div>`;
 }
 
-function renderSideFamilyPanel(
-  block,
-  {
-    title,
-    hint,
-    dangerContact = false,
-    familyKey = "corners",
-    side = {},
-    pitch = {},
-    defending = false,
-  } = {}
-) {
-  const kpis = sideFamilyKpis(block, { dangerContact });
-  const recentVolume = display(block?.chains, "0");
-  const seasonVolume = display(block?.season?.chains, "—");
-  const chips = (block?.byType || [])
-    .map(
-      (row) =>
-        `<span class="sp-type-chip"><strong>${escapeHtml(row.count)}</strong>${escapeHtml(row.label)}</span>`
+function formatXg(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return "0.00";
+  return n.toFixed(2);
+}
+
+function forTeamKpis(side) {
+  return sideFamilyKpis(side, { dangerContact: false }).filter((kpi) =>
+    ["avgChains", "deliverySuccessPct", "firstContactWonPct", "avgShotXg", "goals", "intoBoxPct"].includes(
+      kpi.key
     )
-    .join("");
-  const points = familyContactPoints(side, familyKey);
-  const leaders = familyLeadersFromPoints(points);
-  const mapHtml = points.length
-    ? renderFirstContactPitch(points, pitch, { drawW: 320, compact: true })
-    : `<div class="sp-side-mini-empty">No L8 first-contact map points</div>`;
-  const wonLabel = defending ? "Opp clear" : "Opp win";
-  const lostLabel = defending ? "Attacker wins" : "Defended";
+  );
+}
+
+function renderMiniLeaderList(rows, { title, empty, stat } = {}) {
+  if (!rows?.length) {
+    return `<div class="sp-side-mini-leaders sp-side-mini-leaders--tight">
+      <div class="sp-side-mini-leaders__title">${escapeHtml(title)}</div>
+      <div class="sp-side-mini-empty sp-side-mini-empty--tight">${escapeHtml(empty || "—")}</div>
+    </div>`;
+  }
+  return `<div class="sp-side-mini-leaders sp-side-mini-leaders--tight">
+    <div class="sp-side-mini-leaders__title">${escapeHtml(title)}</div>
+    ${rows
+      .map((row, index) => {
+        return `
+          <div class="sp-side-mini-leader">
+            <span class="sp-side-mini-leader__rank">${index + 1}</span>
+            <span class="sp-side-mini-leader__name">${escapeHtml(row.name || "—")}</span>
+            <span class="sp-side-mini-leader__stat">${escapeHtml(stat(row))}</span>
+          </div>`;
+      })
+      .join("")}
+  </div>`;
+}
+
+function teamKpisSingle(side, { dangerContact = false } = {}) {
+  const ranks = side?.ranks || {};
+  const higherBetter = side?.rankHigherBetter || {};
+  const specs = [
+    { key: "avgChains", value: display(side?.avgChains), label: "Per game", accent: true },
+    { key: "deliverySuccessPct", value: pct(side?.deliverySuccessPct), label: "Delivery success" },
+    {
+      key: "firstContactWonPct",
+      value: pct(side?.firstContactWonPct),
+      label: "1st contact won",
+      danger: dangerContact,
+    },
+    { key: "avgShotXg", value: display(side?.avgShotXg), label: "xG / game", accent: true },
+    { key: "goals", value: display(side?.goals), label: "Goals" },
+    { key: "intoBoxPct", value: pct(side?.intoBoxPct), label: "Into box %" },
+  ];
+  return specs.map((kpi) => {
+    const rank = ranks[kpi.key] || null;
+    const rankNum = parseRankNumber(rank);
+    const prefersHigh = higherBetter[kpi.key] !== false;
+    const elite = rankNum != null && rankNum <= 5 && prefersHigh;
+    const warn = rankNum != null && rankNum <= 5 && !prefersHigh;
+    return { ...kpi, rank, elite, warn };
+  });
+}
+
+function clampPct(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+function teamMetricTone(side, key, { danger = false } = {}) {
+  const ranks = side?.ranks || {};
+  const higherBetter = side?.rankHigherBetter || {};
+  const rank = ranks[key] || null;
+  const rankNum = parseRankNumber(rank);
+  const prefersHigh = higherBetter[key] !== false;
+  const elite = rankNum != null && rankNum <= 5 && prefersHigh;
+  const warn = (rankNum != null && rankNum <= 5 && !prefersHigh) || danger;
+  return { rank, elite, warn };
+}
+
+function renderTeamMeter(side, { key, label, value, danger = false } = {}) {
+  const tone = teamMetricTone(side, key, { danger });
+  const bar = clampPct(value);
+  const hasValue = value !== null && value !== undefined;
+  return `
+    <div class="sp-team-meter${tone.elite ? " sp-team-meter--elite" : ""}${tone.warn ? " sp-team-meter--warn" : ""}">
+      <div class="sp-team-meter__row">
+        <span class="sp-team-meter__label">${escapeHtml(label)}</span>
+        <span class="sp-team-meter__value">${escapeHtml(hasValue ? pct(value) : "—")}</span>
+      </div>
+      <div class="sp-team-meter__track" aria-hidden="true">
+        <span class="sp-team-meter__fill" style="width:${hasValue ? bar : 0}%"></span>
+      </div>
+      ${tone.rank ? `<span class="sp-team-meter__rank">Lg ${escapeHtml(tone.rank)}</span>` : ""}
+    </div>`;
+}
+
+function renderTeamBoard(side, { dangerContact = false, accent = "gold", games = "0" } = {}) {
+  const leftChains = Number(side?.left?.chains) || 0;
+  const rightChains = Number(side?.right?.chains) || 0;
+  const sideTotal = leftChains + rightChains;
+  const leftShare = sideTotal ? Math.round((leftChains / sideTotal) * 100) : 0;
+  const rightShare = sideTotal ? 100 - leftShare : 0;
+  const goalsTone = teamMetricTone(side, "goals");
+  const perGameTone = teamMetricTone(side, "avgChains");
+  const xgTone = teamMetricTone(side, "avgShotXg");
 
   return `
-    <div class="sp-side-family">
-      <div class="sp-side-family__head">
-        <h3 class="sp-side-family__title">${escapeHtml(title)}</h3>
-        <span class="sp-side-family__count"><strong>${escapeHtml(recentVolume)}</strong> L8 · <strong>${escapeHtml(seasonVolume)}</strong> SZN</span>
-      </div>
-      ${hint ? `<p class="sp-side-family__hint">${escapeHtml(hint)}</p>` : ""}
-      <div class="sp-kpi-grid sp-kpi-grid--compact sp-kpi-grid--dual">
-        ${kpis
-          .map(
-            (kpi) => `
-          <div class="sp-kpi sp-kpi--dual${kpi.accent ? " sp-kpi--accent" : ""}${kpi.danger ? " sp-kpi--danger" : ""}${kpi.elite ? " sp-kpi--elite" : ""}${kpi.warn ? " sp-kpi--warn" : ""}">
-            <div class="sp-kpi__label">${escapeHtml(kpi.label)}</div>
-            <div class="sp-kpi__dual">
-              <div class="sp-kpi__col">
-                <div class="sp-kpi__col-label">L8</div>
-                <div class="sp-kpi__value">${escapeHtml(kpi.recent)}</div>
-                ${kpi.recentRank ? `<span class="sp-kpi__rank">Lg ${escapeHtml(kpi.recentRank)}</span>` : `<span class="sp-kpi__rank sp-kpi__rank--empty">—</span>`}
-              </div>
-              <div class="sp-kpi__col">
-                <div class="sp-kpi__col-label">Season</div>
-                <div class="sp-kpi__value">${escapeHtml(kpi.season)}</div>
-                ${kpi.seasonRank ? `<span class="sp-kpi__rank">Lg ${escapeHtml(kpi.seasonRank)}</span>` : `<span class="sp-kpi__rank sp-kpi__rank--empty">—</span>`}
-              </div>
-            </div>
-          </div>`
-          )
-          .join("")}
-      </div>
-      <div class="sp-side-family__lower">
-        <div class="sp-side-mini-map">
-          <div class="sp-side-mini-map__title">L8 first contacts · ${escapeHtml(String(points.length))} pts</div>
-          <div class="sp-side-mini-map__pitch">${mapHtml}</div>
-          <div class="sp-map-legend sp-map-legend--mini">
-            <span class="sp-map-legend__item"><span class="sp-map-legend__swatch sp-map-legend__swatch--won"></span>${escapeHtml(wonLabel)}</span>
-            <span class="sp-map-legend__item"><span class="sp-map-legend__swatch sp-map-legend__swatch--lost"></span>${escapeHtml(lostLabel)}</span>
-          </div>
+    <div class="sp-team-board sp-team-board--${escapeHtml(accent)}">
+      <div class="sp-team-board__head">
+        <div>
+          <h3 class="sp-side-family__title">Team</h3>
+          <p class="sp-team-board__eyebrow">Season totals</p>
         </div>
-        <div class="sp-side-family__aside">
-          ${familyTrendBars(block)}
-          ${familyLeadersHtml(leaders, { defending })}
-          ${chips ? `<div class="sp-type-row sp-type-row--compact">${chips}</div>` : ""}
+        <span class="sp-team-board__games">${escapeHtml(games)} games</span>
+      </div>
+
+      <div class="sp-team-heroes">
+        <div class="sp-team-hero${perGameTone.elite ? " sp-team-hero--elite" : ""}">
+          <div class="sp-team-hero__value">${escapeHtml(display(side?.avgChains))}</div>
+          <div class="sp-team-hero__label">Per game</div>
+          <div class="sp-team-hero__sub">${escapeHtml(display(side?.chains, "0"))} total</div>
+        </div>
+        <div class="sp-team-hero${goalsTone.elite || xgTone.elite ? " sp-team-hero--elite" : ""}${goalsTone.warn ? " sp-team-hero--warn" : ""}">
+          <div class="sp-team-hero__value">${escapeHtml(display(side?.goals))}</div>
+          <div class="sp-team-hero__label">Goals</div>
+          <div class="sp-team-hero__sub">${escapeHtml(display(side?.avgShotXg))} xG / game</div>
+        </div>
+      </div>
+
+      <div class="sp-team-meters">
+        ${renderTeamMeter(side, {
+          key: "deliverySuccessPct",
+          label: "Delivery success",
+          value: side?.deliverySuccessPct,
+        })}
+        ${renderTeamMeter(side, {
+          key: "firstContactWonPct",
+          label: "1st contact won",
+          value: side?.firstContactWonPct,
+          danger: dangerContact,
+        })}
+        ${renderTeamMeter(side, {
+          key: "intoBoxPct",
+          label: "Into box",
+          value: side?.intoBoxPct,
+        })}
+      </div>
+
+      <div class="sp-team-mix">
+        <div class="sp-team-mix__head">
+          <span class="sp-team-mix__title">Delivery side</span>
+          <span class="sp-team-mix__total">${escapeHtml(display(sideTotal, "0"))} set plays</span>
+        </div>
+        <div class="sp-team-mix__bar" aria-hidden="true">
+          <span class="sp-team-mix__seg sp-team-mix__seg--left" style="flex:${Math.max(leftShare, sideTotal ? 1 : 0)}"></span>
+          <span class="sp-team-mix__seg sp-team-mix__seg--right" style="flex:${Math.max(rightShare, sideTotal ? 1 : 0)}"></span>
+        </div>
+        <div class="sp-team-mix__stats">
+          <div class="sp-team-mix__side sp-team-mix__side--left">
+            <span class="sp-team-mix__dot"></span>
+            <div>
+              <strong>Left</strong>
+              <span>${escapeHtml(display(leftChains, "0"))} · ${escapeHtml(String(leftShare))}%</span>
+            </div>
+          </div>
+          <div class="sp-team-mix__side sp-team-mix__side--right">
+            <span class="sp-team-mix__dot"></span>
+            <div>
+              <strong>Right</strong>
+              <span>${escapeHtml(display(rightChains, "0"))} · ${escapeHtml(String(rightShare))}%</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>`;
 }
 
-function renderSideSlide(report, sideKey) {
-  const side = report.set_plays?.[sideKey] || {};
+function wonContactPoints(points) {
+  return (points || []).filter((point) => firstContactWon(point) === true);
+}
+
+function deliverySideOf(point) {
+  const side = String(point?.deliverySide || point?.side || "").toLowerCase();
+  return side === "left" || side === "right" ? side : null;
+}
+
+function restartFamilyOf(point) {
+  const family = String(point?.restartFamily || "").toLowerCase();
+  if (family === "corner" || family === "freekick") {
+    return family === "freekick" ? "freeKick" : "corner";
+  }
+  const label = String(point?.typeLabel || "").toLowerCase();
+  if (label.includes("corner")) return "corner";
+  if (label.includes("free")) return "freeKick";
+  return null;
+}
+
+function sideContactPoints(side, deliverySide) {
+  return wonContactPoints(side?.firstContactPoints).filter(
+    (point) => deliverySideOf(point) === deliverySide
+  );
+}
+
+function sideGoalPoints(side, deliverySide) {
+  return (side?.goalPoints || []).filter((point) => deliverySideOf(point) === deliverySide);
+}
+
+function deliveryLegendHtml({ compact = false } = {}) {
+  return `<div class="sp-map-legend${compact ? " sp-map-legend--mini" : ""}">
+    <span class="sp-map-legend__item"><span class="sp-map-legend__swatch sp-map-legend__swatch--left"></span>Left</span>
+    <span class="sp-map-legend__item"><span class="sp-map-legend__swatch sp-map-legend__swatch--right"></span>Right</span>
+  </div>`;
+}
+
+function familyLegendHtml({ compact = false } = {}) {
+  return `<div class="sp-map-legend${compact ? " sp-map-legend--mini" : ""}">
+    <span class="sp-map-legend__item"><span class="sp-map-legend__swatch sp-map-legend__swatch--corner"></span>Corner</span>
+    <span class="sp-map-legend__item"><span class="sp-map-legend__swatch sp-map-legend__swatch--fk"></span>Free kick</span>
+  </div>`;
+}
+
+function familyWonContactPoints(side, familyKey) {
+  return wonContactPoints(familyContactPoints(side, familyKey));
+}
+
+function familyGoalPoints(side, familyKey) {
+  const want = familyRestartKey(familyKey);
+  return (side?.goalPoints || []).filter((point) => {
+    if (point.restartFamily) return point.restartFamily === want;
+    const label = String(point.typeLabel || "").toLowerCase();
+    if (want === "corner") return label.includes("corner");
+    return label.includes("free") || label.includes("fk");
+  });
+}
+
+function renderFamilyColumn(
+  block,
+  {
+    title,
+    familyKey = "corners",
+    side = {},
+    pitch = {},
+    tone = "gold",
+    defending = false,
+  } = {}
+) {
+  const volume = display(block?.chains, "0");
+  const perGame = display(block?.avgChains);
+  const points = familyWonContactPoints(side, familyKey);
+  const goalPts = familyGoalPoints(side, familyKey);
+  const contacts = (
+    block?.firstContactLeaders?.length
+      ? block.firstContactLeaders
+      : familyLeadersFromPoints(points, { limit: 5 })
+  ).slice(0, 5);
+  const goals = (block?.goalLeaders || []).slice(0, 4);
+  const xg = (block?.xgLeaders || []).slice(0, 4);
+  const leftCount = points.filter((pt) => deliverySideOf(pt) === "left").length;
+  const rightCount = points.filter((pt) => deliverySideOf(pt) === "right").length;
+  const mapHtml =
+    points.length || goalPts.length
+      ? renderFirstContactPitch(points, pitch, {
+          drawW: 300,
+          compact: true,
+          bySide: true,
+          goals: goalPts,
+        })
+      : `<div class="sp-side-mini-empty">No won first contacts</div>`;
+
+  const lists = defending
+    ? `${renderMiniLeaderList(contacts, {
+        title: "Who clears",
+        empty: "No defensive first contacts",
+        stat: (row) => `${display(row.contacts, "0")} · ${display(row.into_box, "0")} box`,
+      })}
+      ${
+        goals.length
+          ? renderMiniLeaderList(goals, {
+              title: "Goals conceded",
+              empty: "No goals conceded",
+              stat: (row) => `${display(row.goals, "0")} · ${formatXg(row.xg)} xG`,
+            })
+          : ""
+      }
+      ${renderMiniLeaderList(xg, {
+        title: "Highest xG",
+        empty: "No xG against",
+        stat: (row) => `${formatXg(row.xg)} · ${display(row.goals, "0")} g`,
+      })}`
+    : `${renderMiniLeaderList(contacts, {
+        title: "Most 1st contacts",
+        empty: "No won first contacts",
+        stat: (row) => `${display(row.contacts, "0")} · ${display(row.into_box, "0")} box`,
+      })}
+      ${renderMiniLeaderList(goals, {
+        title: "Most goals",
+        empty: "No goals",
+        stat: (row) => `${display(row.goals, "0")} · ${formatXg(row.xg)} xG`,
+      })}
+      ${renderMiniLeaderList(xg, {
+        title: "Highest xG",
+        empty: "No xG",
+        stat: (row) => `${formatXg(row.xg)} · ${display(row.goals, "0")} g`,
+      })}`;
+
+  return `
+    <div class="sp-for-family sp-for-family--${escapeHtml(tone)}${defending ? " sp-for-family--against" : ""}">
+      <div class="sp-side-family__head">
+        <h3 class="sp-side-family__title">${escapeHtml(title)}</h3>
+        <span class="sp-side-family__count"><strong>${escapeHtml(volume)}</strong> · ${escapeHtml(perGame)} / game</span>
+      </div>
+      <div class="sp-for-family__map">
+        <div class="sp-side-mini-map">
+          <div class="sp-side-mini-map__title">${defending ? "Clears" : "Won 1st contacts"} · ${escapeHtml(String(points.length))}</div>
+          <div class="sp-side-mini-map__split">
+            <span><i class="sp-map-legend__swatch sp-map-legend__swatch--left"></i>${escapeHtml(String(leftCount))} left</span>
+            <span><i class="sp-map-legend__swatch sp-map-legend__swatch--right"></i>${escapeHtml(String(rightCount))} right</span>
+          </div>
+          <div class="sp-side-mini-map__pitch">${mapHtml}</div>
+        </div>
+      </div>
+      <div class="sp-for-family__lists${defending ? " sp-for-family__lists--against" : ""}">
+        ${lists}
+      </div>
+    </div>`;
+}
+
+function renderForSlide(report, { twoPager = false } = {}) {
+  const side = report.set_plays?.attacking || {};
   const pitch = report.set_plays?.pitch || {};
   const opponent = report.opponent?.name || "Opponent";
-  const attacking = sideKey === "attacking";
-  const title = attacking ? "Attacking Set Plays" : "Defending Set Plays";
-  const subtitle = attacking
-    ? `${opponent} · Corners vs free kicks for · last 8 + season`
-    : `${opponent} · Corners vs free kicks against · last 8 + season`;
-  const dangerContact = !attacking;
-  const corners = side.corners || {};
-  const freeKicks = side.freeKicks || {};
+  const title = twoPager ? "For" : "Attacking Set Plays";
+  const games = display(side.gameCount || report.season_games, "0");
 
   return `<section class="sp-slide" data-slide-title="${title}">${slideShell({
     title,
-    subtitle,
+    subtitle: `${opponent} · Season totals · corners vs free kicks · colour = left / right delivery`,
+    barClass: "sp-slide__bar--gold",
     body: `
-      <div class="sp-side-split">
-        ${renderSideFamilyPanel(corners, {
+      <div class="sp-for">
+        <div class="sp-for-totals">
+          ${renderTeamBoard(side, { accent: "gold", games })}
+        </div>
+        ${renderFamilyColumn(side.corners || {}, {
           title: "Corners",
-          dangerContact,
           familyKey: "corners",
           side,
           pitch,
-          defending: !attacking,
+          tone: "gold",
         })}
-        ${renderSideFamilyPanel(freeKicks, {
+        ${renderFamilyColumn(side.freeKicks || {}, {
           title: "Free kicks",
-          hint: "Attacking-third free kicks only",
-          dangerContact,
           familyKey: "freeKicks",
           side,
           pitch,
-          defending: !attacking,
+          tone: "teal",
         })}
       </div>`,
   })}</section>`;
+}
+
+function renderAgainstSlide(report, { twoPager = false } = {}) {
+  const side = report.set_plays?.defending || {};
+  const pitch = report.set_plays?.pitch || {};
+  const opponent = report.opponent?.name || "Opponent";
+  const title = twoPager ? "Against" : "Defending Set Plays";
+  const games = display(side.gameCount || report.season_games, "0");
+
+  return `<section class="sp-slide" data-slide-title="${title}">${slideShell({
+    title,
+    subtitle: `${opponent} · Season totals · corners vs free kicks · colour = left / right delivery`,
+    barClass: "sp-slide__bar--orange",
+    body: `
+      <div class="sp-for">
+        <div class="sp-for-totals">
+          ${renderTeamBoard(side, { dangerContact: true, accent: "orange", games })}
+        </div>
+        ${renderFamilyColumn(side.corners || {}, {
+          title: "Corners",
+          familyKey: "corners",
+          side,
+          pitch,
+          tone: "gold",
+          defending: true,
+        })}
+        ${renderFamilyColumn(side.freeKicks || {}, {
+          title: "Free kicks",
+          familyKey: "freeKicks",
+          side,
+          pitch,
+          tone: "teal",
+          defending: true,
+        })}
+      </div>`,
+  })}</section>`;
+}
+
+function renderSideSlide(report, sideKey, { twoPager = false } = {}) {
+  if (sideKey === "attacking") {
+    return renderForSlide(report, { twoPager });
+  }
+  return renderAgainstSlide(report, { twoPager });
 }
 
 function opponentPhotoUrl(name, report = state.report) {
@@ -879,6 +1197,34 @@ const HEIGHT_BAND_ORDER = [
 ];
 const HEIGHT_UNKNOWN_BAND = "No height";
 
+function normalizeBandLabel(label) {
+  return String(label || "")
+    .replace(/[’′]/g, "'")
+    .replace(/[“”″]/g, '"')
+    .trim();
+}
+
+function heightBandFromPlayer(player) {
+  let cm = Number(player?.height_cm);
+  if (!Number.isFinite(cm) || cm <= 0) {
+    const raw = String(player?.height || "");
+    const imperial = raw.match(/(\d+)\s*(?:ft|'|’)\s*(\d{1,2})/i);
+    if (imperial) {
+      cm = Math.round((Number(imperial[1]) * 12 + Number(imperial[2])) * 2.54);
+    }
+  }
+  if (!Number.isFinite(cm) || cm <= 0) return null;
+  const inches = Math.round(cm / 2.54);
+  if (inches >= 76) return "6'4\"+";
+  if (inches === 75) return "6'3\"";
+  if (inches === 74) return "6'2\"";
+  if (inches === 73) return "6'1\"";
+  if (inches === 72) return "6'0\"";
+  if (inches === 71) return "5'11\"";
+  if (inches === 70) return "5'10\"";
+  return "<5'9\"";
+}
+
 function cloneHeightPlayer(player) {
   return {
     player_id: player.player_id,
@@ -893,25 +1239,59 @@ function cloneHeightPlayer(player) {
   };
 }
 
-function buildHeightEditState(chart) {
-  const bands = HEIGHT_BAND_ORDER.map((label) => {
-    const source = (chart.bands || []).find((band) => band.label === label);
-    return {
-      label,
-      players: (source?.players || []).map(cloneHeightPlayer),
-    };
-  });
-  const unknown = (chart.unknown || []).map((player) =>
-    cloneHeightPlayer({ ...player, band: HEIGHT_UNKNOWN_BAND })
-  );
-  // Legacy fallback: players without height_cm still in chart.players
-  if (!unknown.length && Array.isArray(chart.players)) {
-    for (const player of chart.players) {
-      if (player.height_cm) continue;
-      if (String(player.position_abbr || "").toUpperCase() === "GK") continue;
-      unknown.push(cloneHeightPlayer({ ...player, band: HEIGHT_UNKNOWN_BAND }));
+function buildHeightEditState(chart, squad = []) {
+  const bands = HEIGHT_BAND_ORDER.map((label) => ({ label, players: [] }));
+  const bandByLabel = Object.fromEntries(bands.map((band) => [band.label, band]));
+  const placed = new Set();
+  const unknown = [];
+
+  const resolvableBand = (player) => {
+    const fromApi = normalizeBandLabel(player?.band);
+    if (fromApi && HEIGHT_BAND_ORDER.includes(fromApi)) return fromApi;
+    return heightBandFromPlayer(player);
+  };
+
+  const place = (player) => {
+    if (!player) return;
+    const id = String(player.player_id ?? player.name ?? "");
+    if (!id || placed.has(id)) return;
+    placed.add(id);
+    const bandLabel = resolvableBand(player);
+    if (bandLabel && bandByLabel[bandLabel]) {
+      bandByLabel[bandLabel].players.push(cloneHeightPlayer({ ...player, band: bandLabel }));
+      return;
+    }
+    unknown.push(cloneHeightPlayer({ ...player, band: HEIGHT_UNKNOWN_BAND }));
+  };
+
+  const sources = [];
+  for (const source of chart.bands || []) {
+    const label = normalizeBandLabel(source.label);
+    for (const player of source.players || []) {
+      sources.push({ ...player, band: player.band || label });
     }
   }
+  if (Array.isArray(chart.players)) {
+    for (const player of chart.players) {
+      if (String(player.position_abbr || "").toUpperCase() === "GK") continue;
+      sources.push(player);
+    }
+  }
+  for (const player of squad || []) {
+    if (String(player.position_abbr || "").toUpperCase() === "GK") continue;
+    sources.push(player);
+  }
+  for (const player of chart.unknown || []) sources.push(player);
+
+  const withBand = [];
+  const rest = [];
+  for (const player of sources) {
+    if (resolvableBand(player)) withBand.push(player);
+    else rest.push(player);
+  }
+  for (const player of withBand) place(player);
+  for (const player of rest) place(player);
+
   return {
     bands,
     unknown,
@@ -921,15 +1301,21 @@ function buildHeightEditState(chart) {
 
 function ensureHeightEditState(report) {
   const opponentId = report?.opponent?.id ?? report?.fixture?.opponent?.id ?? null;
+  const chart = report?.height_chart || {};
+  const assigned = Number(chart.count || 0);
   if (
     state.heightEdit &&
     String(state.heightEdit.opponentId) === String(opponentId)
   ) {
-    return state.heightEdit;
+    const placed = (state.heightEdit.bands || []).reduce(
+      (n, band) => n + (band.players || []).length,
+      0
+    );
+    if (assigned === 0 || placed >= assigned) return state.heightEdit;
   }
   state.heightEdit = {
     opponentId,
-    ...buildHeightEditState(report.height_chart || {}),
+    ...buildHeightEditState(chart, report?.squad || []),
   };
   return state.heightEdit;
 }
@@ -1250,14 +1636,40 @@ function firstContactWon(point) {
   return point.defending ? !point.sameTeam : point.sameTeam;
 }
 
-function firstContactMarkerStyle(point) {
+function firstContactMarkerStyle(point, { bySide = false, byFamily = false } = {}) {
+  if (byFamily) {
+    const family = restartFamilyOf(point);
+    if (family === "corner") return { fill: "#f5c518", stroke: "#111111", text: "#111111" };
+    if (family === "freeKick") return { fill: "#e85d04", stroke: "#7c2d12", text: "#ffffff" };
+    return { fill: "#e2e8f0", stroke: "#64748b", text: "#111111" };
+  }
+  if (bySide) {
+    const side = deliverySideOf(point);
+    if (side === "left") return { fill: "#f5c518", stroke: "#111111", text: "#111111" };
+    if (side === "right") return { fill: "#0d9488", stroke: "#042f2e", text: "#ffffff" };
+    return { fill: "#e2e8f0", stroke: "#64748b", text: "#111111" };
+  }
   const won = firstContactWon(point);
-  if (won === true) return { fill: "#38bdf8", stroke: "#0369a1" };
-  if (won === false) return { fill: "#fb7185", stroke: "#9f1239" };
-  return { fill: "#e2e8f0", stroke: "#64748b" };
+  if (won === true) return { fill: "#38bdf8", stroke: "#0369a1", text: "#111111" };
+  if (won === false) return { fill: "#fb7185", stroke: "#9f1239", text: "#111111" };
+  return { fill: "#e2e8f0", stroke: "#64748b", text: "#111111" };
 }
 
-function renderFirstContactPitch(points, pitch, { drawW = 420, compact = false } = {}) {
+function goalMarkerStyle(point, { bySide = false, byFamily = false } = {}) {
+  if (byFamily) {
+    const family = restartFamilyOf(point);
+    if (family === "freeKick") return { fill: "#e85d04", stroke: "#7c2d12", text: "#ffffff" };
+    return { fill: "#f5c518", stroke: "#111111", text: "#111111" };
+  }
+  if (bySide) {
+    const side = deliverySideOf(point);
+    if (side === "right") return { fill: "#0d9488", stroke: "#042f2e", text: "#ffffff" };
+    return { fill: "#f5c518", stroke: "#111111", text: "#111111" };
+  }
+  return { fill: "#f5c518", stroke: "#111111", text: "#111111" };
+}
+
+function renderFirstContactPitch(points, pitch, { drawW = 420, compact = false, goals = [], bySide = false, byFamily = false } = {}) {
   const pitchMeta = resolvePitchMeta(pitch);
   const padX = compact ? 6 : 10;
   const padY = compact ? 6 : 10;
@@ -1273,8 +1685,8 @@ function renderFirstContactPitch(points, pitch, { drawW = 420, compact = false }
   const sixWidth = ((pitchMeta.sixYardWidthM ?? 18.32) / pitchMeta.widthM) * drawW;
   const penX = pitchX + (drawW - penWidth) / 2;
   const sixX = pitchX + (drawW - sixWidth) / 2;
-  const markerR = compact ? 4.4 : 6.2;
-  const fontSize = compact ? 4.2 : 5.4;
+  const markerR = compact ? 8.2 : 6.2;
+  const fontSize = compact ? 7.2 : 5.4;
 
   const markers = (points || [])
     .map((pt) => {
@@ -1282,27 +1694,51 @@ function renderFirstContactPitch(points, pitch, { drawW = 420, compact = false }
       if (!normalized) return "";
       const svg = crossImpectToSvg(normalized.x, normalized.y, pitchMeta, drawW, plotH, pitchY, padX, padY);
       if (!Number.isFinite(svg.x) || !Number.isFinite(svg.y)) return "";
-      const colors = firstContactMarkerStyle(pt);
+      const colors = firstContactMarkerStyle(pt, { bySide, byFamily });
       const r = markerR;
-      const shape = `<polygon points="${svg.x},${svg.y - r} ${svg.x + r * 0.9},${svg.y} ${svg.x},${svg.y + r} ${svg.x - r * 0.9},${svg.y}" fill="${colors.fill}" stroke="${colors.stroke}" stroke-width="1.1" />`;
+      const goldRing = pt.ledToGoal
+        ? `<circle cx="${svg.x}" cy="${svg.y}" r="${(r + 2.8).toFixed(1)}" fill="none" stroke="#111" stroke-width="1.6" />`
+        : "";
+      const shape = compact
+        ? `<circle cx="${svg.x}" cy="${svg.y}" r="${r}" fill="${colors.fill}" stroke="${colors.stroke}" stroke-width="1.35" />`
+        : `<polygon points="${svg.x},${svg.y - r} ${svg.x + r * 0.9},${svg.y} ${svg.x},${svg.y + r} ${svg.x - r * 0.9},${svg.y}" fill="${colors.fill}" stroke="${colors.stroke}" stroke-width="1.1" />`;
       const label = pt.playerInitials
-        ? `<text x="${svg.x}" y="${svg.y + 0.35}" text-anchor="middle" dominant-baseline="middle"
-            fill="#111" font-family="Barlow Condensed, sans-serif" font-size="${fontSize}" font-weight="800">${escapeHtml(pt.playerInitials)}</text>`
+        ? `<text x="${svg.x}" y="${svg.y + (compact ? 0.55 : 0.35)}" text-anchor="middle" dominant-baseline="middle"
+            fill="${colors.text}" font-family="Barlow Condensed, sans-serif" font-size="${fontSize}" font-weight="800" letter-spacing="-0.02em">${escapeHtml(pt.playerInitials)}</text>`
         : "";
       const title = `${pt.minuteLabel || ""} ${pt.playerName || pt.playerInitials || "First contact"} · ${pt.typeLabel || ""}`;
-      return `<g><title>${escapeHtml(title)}</title>${shape}${label}</g>`;
+      return `<g><title>${escapeHtml(title)}</title>${goldRing}${shape}${label}</g>`;
+    })
+    .join("");
+
+  const goalR = compact ? 8.4 : 7.4;
+  const goalMarkers = (goals || [])
+    .map((pt) => {
+      const normalized = normalizeAttackingThirdCoords(pt.impectX, pt.impectY);
+      if (!normalized) return "";
+      const svg = crossImpectToSvg(normalized.x, normalized.y, pitchMeta, drawW, plotH, pitchY, padX, padY);
+      if (!Number.isFinite(svg.x) || !Number.isFinite(svg.y)) return "";
+      const colors = goalMarkerStyle(pt, { bySide, byFamily });
+      const title = `${pt.minuteLabel || ""} ${pt.playerName || "Goal"} · ${pt.typeLabel || "Set play"}`;
+      return `<g>
+        <title>${escapeHtml(title)}</title>
+        <circle cx="${svg.x}" cy="${svg.y}" r="${goalR}" fill="${colors.fill}" stroke="${colors.stroke}" stroke-width="1.5" />
+        <text x="${svg.x}" y="${svg.y + 0.55}" text-anchor="middle" dominant-baseline="middle"
+          fill="${colors.text}" font-family="Barlow Condensed, sans-serif" font-size="${compact ? 8 : 7.4}" font-weight="800">G</text>
+      </g>`;
     })
     .join("");
 
   return `
     <svg class="sp-pitch${compact ? " sp-pitch--compact" : ""}" viewBox="0 0 ${vbW.toFixed(2)} ${vbH.toFixed(2)}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="First contact pitch map">
-      <rect x="${pitchX}" y="${pitchY}" width="${drawW}" height="${drawH}" fill="#3f9f45" stroke="#fff" stroke-width="1.2" />
+      <rect x="${pitchX}" y="${pitchY}" width="${drawW}" height="${drawH}" fill="#2f7430" stroke="#fff" stroke-width="1.2" />
       <rect x="${penX}" y="${pitchY}" width="${penWidth}" height="${penDepth}" fill="none" stroke="#fff" stroke-width="0.9" opacity="0.9" />
       <rect x="${sixX}" y="${pitchY}" width="${sixWidth}" height="${sixDepth}" fill="none" stroke="#fff" stroke-width="0.8" opacity="0.8" />
       <line x1="${pitchX}" y1="${pitchY + drawH}" x2="${pitchX + drawW}" y2="${pitchY + drawH}" stroke="#fff" stroke-width="0.8" opacity="0.75" />
-      <text x="${pitchX + drawW / 2}" y="${pitchY + (compact ? 9 : 11)}" text-anchor="middle" fill="rgba(255,255,255,0.9)"
-        font-family="Barlow Condensed, sans-serif" font-size="${compact ? 7 : 8}" font-weight="800">GOAL</text>
+      ${compact ? "" : `<text x="${pitchX + drawW / 2}" y="${pitchY + 11}" text-anchor="middle" fill="rgba(255,255,255,0.9)"
+        font-family="Barlow Condensed, sans-serif" font-size="8" font-weight="800">GOAL</text>`}
       ${markers}
+      ${goalMarkers}
     </svg>`;
 }
 
@@ -1334,17 +1770,16 @@ function renderFirstContactSlide(report, sideKey) {
     ? `${opponent} attacking set plays · who wins the first ball`
     : `${opponent} defending set plays · who clears the first ball`;
   const wonLabel = attacking ? "Opp win" : "Opp clear";
-  const lostLabel = attacking ? "Defended" : "Attacker wins";
-  const points = side.firstContactPoints || [];
-  const wonCount = points.filter((pt) => firstContactWon(pt) === true).length;
+  const points = wonContactPoints(side.firstContactPoints);
+  const wonCount = points.length;
   const intoBox = points.filter((pt) => pt.intoBox).length;
   const contactTotal =
     Number(side.firstContactTotal) > 0
       ? Number(side.firstContactTotal)
       : points.length;
   const pitchHtml = points.length
-    ? renderFirstContactPitch(points, pitch)
-    : `<div class="sp-empty">No first-contact locations in the recent window.</div>`;
+    ? renderFirstContactPitch(points, pitch, { bySide: true })
+    : `<div class="sp-empty">No won first-contact locations this season.</div>`;
 
   return `<section class="sp-slide" data-slide-title="${title}">${slideShell({
     title,
@@ -1353,13 +1788,9 @@ function renderFirstContactSlide(report, sideKey) {
       <div class="sp-map-layout">
         <div class="sp-map-panel">
           <h3 class="sp-map-panel__title">First contact map</h3>
-          <p class="sp-map-panel__hint">Attacking third · diamonds = first contact locations</p>
+          <p class="sp-map-panel__hint">Attacking third · won first contacts only · gold = left, teal = right</p>
           <div class="sp-pitch-wrap">${pitchHtml}</div>
-          <div class="sp-map-legend">
-            <span class="sp-map-legend__item"><span class="sp-map-legend__swatch sp-map-legend__swatch--won"></span>${escapeHtml(wonLabel)}</span>
-            <span class="sp-map-legend__item"><span class="sp-map-legend__swatch sp-map-legend__swatch--lost"></span>${escapeHtml(lostLabel)}</span>
-            <span class="sp-map-legend__item"><span class="sp-map-legend__swatch sp-map-legend__swatch--neutral"></span>Unknown</span>
-          </div>
+          ${deliveryLegendHtml()}
         </div>
         <div class="sp-map-panel">
           <h3 class="sp-map-panel__title">Who gets them</h3>
@@ -1449,6 +1880,13 @@ function renderSquadSlide(report) {
 }
 
 function buildSlides(report) {
+  if (state.deckMode === "two_pager") {
+    return [
+      renderSideSlide(report, "attacking", { twoPager: true }),
+      renderSideSlide(report, "defending", { twoPager: true }),
+      renderHeightSlide(report),
+    ];
+  }
   return [
     renderCoverSlide(report),
     renderHeightSlide(report),
@@ -1460,6 +1898,40 @@ function buildSlides(report) {
     renderLeadersSlide(report),
     renderSquadSlide(report),
   ];
+}
+
+function setDeckMode(mode) {
+  const next = mode === "two_pager" ? "two_pager" : "full";
+  state.deckMode = next;
+  document.body.classList.toggle("is-two-pager", next === "two_pager");
+  els.deckModeFullBtn?.classList.toggle("sp-deck-mode__btn--active", next === "full");
+  els.deckModeTwoBtn?.classList.toggle("sp-deck-mode__btn--active", next === "two_pager");
+  try {
+    localStorage.setItem("sp-deck-mode", next);
+  } catch {
+    /* ignore */
+  }
+  if (state.report) {
+    if (document.body.classList.contains("is-pdf-view")) setPdfView(false);
+    state.slides = buildSlides(state.report);
+    paintDeck();
+    highlightSlide(0);
+    showSlide(0, { scroll: true });
+  }
+}
+
+function restoreDeckMode() {
+  let saved = "";
+  try {
+    saved = localStorage.getItem("sp-deck-mode") || "";
+  } catch {
+    saved = "";
+  }
+  const mode = saved === "full" ? "full" : "two_pager";
+  state.deckMode = mode;
+  document.body.classList.toggle("is-two-pager", mode === "two_pager");
+  els.deckModeFullBtn?.classList.toggle("sp-deck-mode__btn--active", mode === "full");
+  els.deckModeTwoBtn?.classList.toggle("sp-deck-mode__btn--active", mode === "two_pager");
 }
 
 function updateSlideNav() {
@@ -1556,25 +2028,27 @@ function renderSeasons() {
   });
 }
 
-function fixtureLabel(fixture) {
-  const opponent = fixture.opponent?.name || "Opponent";
-  const venue = fixture.is_home ? "H" : "A";
-  return `${opponent} (${venue})`;
-}
-
 function renderFixtures() {
+  const selectedMatchId = Number(els.matchId.value || 0);
+  const selectedOpponentId = Number(els.opponentId.value || 0);
   els.matchBar.innerHTML = state.fixtures
     .map((fixture) => {
       const opponentId = fixture.opponent?.id;
       const matchId = fixture.match_id || "";
-      const active =
-        String(opponentId) === String(els.opponentId.value) &&
-        String(matchId || "") === String(els.matchId.value || "");
-      return `<button type="button" class="sp-fixture-chip${active ? " is-active" : ""}" role="option" data-opponent-id="${opponentId}" data-match-id="${matchId}">${escapeHtml(fixtureLabel(fixture))}</button>`;
+      const active = selectedMatchId
+        ? Number(matchId) === selectedMatchId
+        : String(opponentId) === String(selectedOpponentId);
+      const matchDay = fixture.match_day ? `MD${fixture.match_day}` : "";
+      const kickoff = fixture.kickoff_label || (fixture.is_home ? "H" : "A") || "vs";
+      const title = [fixture.opponent?.name, matchDay, kickoff].filter(Boolean).join(" · ");
+      return `<button type="button" class="sp-match-bar__item${active ? " sp-match-bar__item--active" : ""}" role="option" aria-selected="${active ? "true" : "false"}" data-opponent-id="${opponentId}" data-match-id="${matchId}" title="${escapeHtml(title)}">
+        ${matchBarCrestHtml(fixture.opponent)}
+        <span class="sp-match-bar__kickoff">${escapeHtml(kickoff)}</span>
+      </button>`;
     })
     .join("");
 
-  els.matchBar.querySelectorAll("button").forEach((btn) => {
+  els.matchBar.querySelectorAll(".sp-match-bar__item").forEach((btn) => {
     btn.addEventListener("click", async () => {
       els.opponentId.value = btn.dataset.opponentId;
       els.matchId.value = btn.dataset.matchId || "";
@@ -1582,6 +2056,11 @@ function renderFixtures() {
       await loadReport();
     });
   });
+
+  const activeEl = els.matchBar.querySelector(".sp-match-bar__item--active");
+  if (activeEl) {
+    activeEl.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }
 }
 
 async function loadFixtures() {
@@ -1660,6 +2139,9 @@ async function loadReport({ refresh = false } = {}) {
 }
 
 async function boot() {
+  restoreDeckMode();
+  els.deckModeFullBtn?.addEventListener("click", () => setDeckMode("full"));
+  els.deckModeTwoBtn?.addEventListener("click", () => setDeckMode("two_pager"));
   els.refreshBtn.addEventListener("click", () => loadReport({ refresh: true }));
   if (els.exportWhatsappPdfBtn) els.exportWhatsappPdfBtn.addEventListener("click", exportWhatsappPdf);
   if (els.pdfViewBtn) els.pdfViewBtn.addEventListener("click", () => setPdfView(true));

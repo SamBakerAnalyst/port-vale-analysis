@@ -37,6 +37,13 @@ APP_GROUPS: list[dict[str, Any]] = [
         "icon": "📈",
         "accent": "#f5c518",
     },
+    {
+        "id": "presentations",
+        "title": "Presentations",
+        "subtitle": "Personal decks — off the daily rail",
+        "icon": "🎬",
+        "accent": "#a78bfa",
+    },
 ]
 
 # roles: which login roles may open the tool. "admin" always sees everything.
@@ -211,6 +218,22 @@ APPS: list[dict[str, Any]] = [
         "router": "xg_chance_analysis",
     },
     {
+        "id": "goal-involvement",
+        "group": "analysis",
+        "title": "Goal Involvement",
+        "description": (
+            "Coaches split 10 points on every goal we score or concede. "
+            "Averages, disagreement flags, and player season totals."
+        ),
+        "href": "/goal-involvement",
+        "icon": "🔟",
+        "accent": "#eab308",
+        "tags": ["Goals", "Coaches", "Match day"],
+        "roles": ("analysis", "admin"),
+        "api_prefixes": ("/goal-involvement", "/api/goal-involvement"),
+        "router": "goal_involvement",
+    },
+    {
         "id": "blocks-analysis",
         "group": "analysis",
         "title": "Blocks Analysis",
@@ -271,24 +294,13 @@ APPS: list[dict[str, Any]] = [
         "accent": "#34d399",
         "tags": ["Scouting", "Profiles", "Leagues"],
         "roles": ("admin",),
-        "api_prefixes": ("/who-to-scout", "/api/who-to-scout"),
-        "router": "who_to_scout",
-    },
-    {
-        "id": "player-search",
-        "group": "recruitment",
-        "title": "Player Search Dashboard",
-        "description": (
-            "Profile-weighted scouting lists by position and league. Rank, "
-            "filter, export Excel or PDF."
+        "api_prefixes": (
+            "/who-to-scout",
+            "/api/who-to-scout",
+            "/api/player-pipelines",
+            "/api/watch-list",
         ),
-        "href": "/scouting",
-        "icon": "🔍",
-        "accent": "#3d8bfd",
-        "tags": ["Scouting", "Search"],
-        "roles": ("admin",),
-        "api_prefixes": ("/scouting", "/api/scouting"),
-        "router": "scouting",
+        "router": "who_to_scout",
     },
     {
         "id": "squad-balance",
@@ -307,21 +319,53 @@ APPS: list[dict[str, Any]] = [
         "router": "squad_balance",
     },
     {
+        "id": "watch-list",
+        "group": "recruitment",
+        "title": "Watch list",
+        "description": (
+            "Players spotted on Who To Scout / Stand outs — review here, then promote "
+            "into Player Pipelines when scouts should progress them."
+        ),
+        "href": "/watch-list",
+        "icon": "👀",
+        "accent": "#38bdf8",
+        "tags": ["Watch list", "Scouting", "Targets"],
+        "roles": ("admin",),
+        "api_prefixes": ("/watch-list", "/api/watch-list", "/api/player-pipelines"),
+        "router": "player_pipelines",
+    },
+    {
         "id": "player-pipelines",
         "group": "recruitment",
         "title": "Player Pipelines",
         "description": (
-            "Shared recruitment board — add targets, drag between Data identified, "
-            "Video scouted, Live scouted, Gone / turned us down, and Not the right fit. Notes and tags "
-            "are visible to the whole team."
+            "Shared recruitment progression board — promote from the Watch list, then drag "
+            "between Data identified, Video scouted, Live scouted, Gone / turned us down, "
+            "and Not the right fit. Notes and tags are visible to the whole team."
         ),
         "href": "/player-pipelines",
         "icon": "📌",
         "accent": "#a78bfa",
-        "tags": ["Scouting", "Targets", "Notes"],
+        "tags": ["Pipelines", "Scouting", "Targets", "Notes"],
         "roles": ("admin",),
         "api_prefixes": ("/player-pipelines", "/api/player-pipelines"),
         "router": "player_pipelines",
+    },
+    {
+        "id": "scoutable-teams",
+        "group": "recruitment",
+        "title": "Scoutable Teams",
+        "description": (
+            "Monday-style league boards — open any club, see player data scores, "
+            "and move prospects straight onto Player Pipelines."
+        ),
+        "href": "/scoutable-teams",
+        "icon": "🏟️",
+        "accent": "#34d399",
+        "tags": ["Scouting", "Clubs", "Pipelines"],
+        "roles": ("admin",),
+        "api_prefixes": ("/scoutable-teams", "/api/scoutable-teams"),
+        "router": "scoutable_teams",
     },
     {
         "id": "squad-planner",
@@ -455,6 +499,8 @@ APPS: list[dict[str, Any]] = [
             "/api/player",
             "/api/player-photo",
             "/api/pre-match/player-photo",
+            "/api/wysiwyg-export-pdf",
+            "/api/wysiwyg-export-png-zip",
         ),
         "router": "meeting_front_pages",
     },
@@ -491,6 +537,22 @@ APPS: list[dict[str, Any]] = [
         "router": "availability_tracker",
     },
     {
+        "id": "win-drivers",
+        "group": "strategy",
+        "title": "What Wins Games",
+        "description": (
+            "The 15 Impect stats most linked to winning in League Two history — "
+            "why each matters, live table, Port Vale highlighted."
+        ),
+        "href": "/win-drivers",
+        "icon": "🏆",
+        "accent": "#f5c518",
+        "tags": ["League Two", "Impect", "Table"],
+        "roles": ("admin",),
+        "api_prefixes": ("/win-drivers", "/api/win-drivers"),
+        "router": "win_drivers",
+    },
+    {
         "id": "club-strategy",
         "group": "strategy",
         "title": "Club Strategy",
@@ -507,8 +569,24 @@ APPS: list[dict[str, Any]] = [
         "router": "club_strategy",
     },
     {
+        "id": "presentations",
+        "group": "presentations",
+        "title": "Presentations",
+        "description": (
+            "Personal decks — strategy reports, origin story, window review. "
+            "Off the daily rail; admin only."
+        ),
+        "href": "/presentations",
+        "icon": "🎬",
+        "accent": "#a78bfa",
+        "tags": ["Personal", "Decks"],
+        "roles": ("admin",),
+        "api_prefixes": ("/presentations",),
+        "router": "presentations",
+    },
+    {
         "id": "league-two-strategy",
-        "group": "strategy",
+        "group": "presentations",
         "title": "League Two Strategy Report",
         "description": (
             "Season strategy slides — promotion point benchmarks, league "
@@ -516,15 +594,16 @@ APPS: list[dict[str, Any]] = [
         ),
         "href": "/strategy",
         "icon": "📈",
-        "accent": "#f5c518",
+        "accent": "#a78bfa",
         "tags": ["League Two", "Strategy"],
         "roles": ("admin",),
         "api_prefixes": ("/strategy", "/strategy/assets"),
         "router": "scouting",
+        "sidebar": False,
     },
     {
         "id": "players-strategy",
-        "group": "strategy",
+        "group": "presentations",
         "title": "Players Strategy Report",
         "description": (
             "Dressing-room presentation — punchy promotion standards. Build "
@@ -532,45 +611,48 @@ APPS: list[dict[str, Any]] = [
         ),
         "href": "/players-strategy",
         "icon": "🗣️",
-        "accent": "#f5c518",
+        "accent": "#a78bfa",
         "tags": ["League Two", "Players", "Presentation"],
         "roles": ("admin",),
         "api_prefixes": ("/players-strategy",),
         "router": "scouting",
+        "sidebar": False,
     },
     {
         "id": "players-strategy-staff",
-        "group": "strategy",
+        "group": "presentations",
         "title": "Staff Strategy Report",
         "description": (
             "Staff edition of Project Promotion — same benchmarks, fuller detail."
         ),
         "href": "/players-strategy-staff",
         "icon": "📋",
-        "accent": "#f5c518",
+        "accent": "#a78bfa",
         "tags": ["League Two", "Staff", "Presentation"],
         "roles": ("admin",),
         "api_prefixes": ("/players-strategy-staff",),
         "router": "scouting",
+        "sidebar": False,
     },
     {
         "id": "players-strategy-values",
-        "group": "strategy",
+        "group": "presentations",
         "title": "Values Report",
         "description": (
             "Our values and non-negotiables — culture first, before the numbers."
         ),
         "href": "/players-strategy-values",
         "icon": "🧭",
-        "accent": "#f5c518",
+        "accent": "#a78bfa",
         "tags": ["League Two", "Values", "Presentation"],
         "roles": ("admin",),
         "api_prefixes": ("/players-strategy-values",),
         "router": "scouting",
+        "sidebar": False,
     },
     {
         "id": "league-two-progress",
-        "group": "strategy",
+        "group": "presentations",
         "title": "Season Progress Report",
         "description": (
             "Live promotion pace, Impect style stats, and a Present / PDF board pack "
@@ -578,11 +660,46 @@ APPS: list[dict[str, Any]] = [
         ),
         "href": "/strategy-tracker",
         "icon": "📉",
-        "accent": "#fbbf24",
+        "accent": "#a78bfa",
         "tags": ["League Two", "Progress", "Pace"],
         "roles": ("admin",),
         "api_prefixes": ("/strategy-tracker", "/api/strategy-tracker"),
         "router": "strategy_tracker",
+        "sidebar": False,
+    },
+    {
+        "id": "hub-origin",
+        "group": "presentations",
+        "title": "Hub Origin Story",
+        "description": (
+            "Why we built the Analysis Hub, how Player Comparison on leave started it, "
+            "and what’s live — Present deck for staff briefings."
+        ),
+        "href": "/hub-origin",
+        "icon": "✦",
+        "accent": "#a78bfa",
+        "tags": ["Story", "Presentation"],
+        "roles": ("admin",),
+        "api_prefixes": ("/hub-origin",),
+        "router": "hub_origin",
+        "sidebar": False,
+    },
+    {
+        "id": "window-review",
+        "group": "presentations",
+        "title": "Summer Window Review",
+        "description": (
+            "End of 26/27 summer window — ins and outs, average age change, "
+            "and squad depth in primary positions. Present or PDF."
+        ),
+        "href": "/window-review",
+        "icon": "🔁",
+        "accent": "#a78bfa",
+        "tags": ["Squad", "Transfers", "Presentation"],
+        "roles": ("admin",),
+        "api_prefixes": ("/window-review", "/api/wysiwyg-export-pdf"),
+        "router": "window_review",
+        "sidebar": False,
     },
 ]
 
@@ -599,8 +716,10 @@ LIVE_ESSENTIAL_IDS = frozenset(
         "xg-chance-analysis",
         "blocks-analysis",
         # Recruitment
+        # Player Pipelines + Scoutable Teams stay held back until every scout
+        # has a personal login (shared board needs real names on the notes).
         "who-to-scout",
-        "player-pipelines",
+        "watch-list",
         # Scouts
         "fixture-planner",
         "played-fixtures",
@@ -609,7 +728,8 @@ LIVE_ESSENTIAL_IDS = frozenset(
         "scouts-calendar",
         # Strategy
         "availability-tracker",
-        "league-two-progress",
+        # Presentations (one rail link; decks live on the gallery page)
+        "presentations",
     }
 )
 
@@ -618,6 +738,20 @@ def _is_staging_env() -> bool:
     import os
 
     return os.getenv("HUB_ENV", "").strip().lower() == "staging"
+
+
+def is_app_live(app_id: str) -> bool:
+    """True when staff can actually open this tool from the rail right now."""
+    return _is_staging_env() or str(app_id) in LIVE_ESSENTIAL_IDS
+
+
+def presentation_decks() -> list[dict[str, Any]]:
+    """Personal Present / PDF decks — listed on /presentations, not the daily rail."""
+    return [
+        app
+        for app in APPS
+        if app.get("group") == "presentations" and app["id"] != "presentations"
+    ]
 
 
 def apps_for_role(role: str, *, include_hidden: bool = False) -> list[dict[str, Any]]:
@@ -660,8 +794,17 @@ def analysis_path_prefixes() -> tuple[str, ...]:
             continue
         for prefix in app.get("api_prefixes") or ():
             prefixes.append(str(prefix))
-    # Shared assets + feedback always allowed for signed-in analysis users.
-    prefixes.extend(("/api/feedback", "/api/apps", "/api/player-photo", "/static/", "/standalone/"))
+    # Shared assets + feedback + WYSIWYG PDF always allowed for signed-in analysis users.
+    prefixes.extend(
+        (
+            "/api/feedback",
+            "/api/apps",
+            "/api/player-photo",
+            "/api/wysiwyg-export-pdf",
+            "/static/",
+            "/standalone/",
+        )
+    )
     # Dedupe, longest-first so more specific prefixes win in mental model
     # (middleware uses startswith either way).
     uniq = sorted(set(prefixes), key=lambda p: (-len(p), p))

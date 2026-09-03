@@ -61,7 +61,7 @@ const statusBarEl = document.getElementById("statusBar");
 const seasonColors = ["#f5c518", "#a78bfa", "#34d399", "#60a5fa", "#fb7185", "#f97316"];
 
 const chartFonts = {
-  family: '"DM Sans", system-ui, sans-serif',
+  family: '"Manrope", system-ui, sans-serif',
   color: "#f5f5f5",
 };
 
@@ -206,14 +206,7 @@ function formatMetricValue(value) {
   return Number(value.toFixed(1)).toString();
 }
 
-function formatPercentileLabel(value) {
-  if (value == null || Number.isNaN(value)) {
-    return "—";
-  }
-  return `${Math.round(value)}%`;
-}
-
-// One percentile scale for the whole tool. On-screen cards and exported slides
+// One score scale for the whole tool. On-screen cards and exported slides
 // both read from here, so a colour means the same thing in every place a coach
 // sees it. Keys match the `--elite`/`--good`/… CSS band classes.
 function percentileBandKey(value) {
@@ -259,56 +252,51 @@ function profileDisplayTitle(label) {
   return text.charAt(0) + text.slice(1).toLowerCase();
 }
 
-function isRateStyleMetric(rawValue, percentile) {
-  const raw = Number(rawValue);
-  const pct = Number(percentile);
-  if (!Number.isFinite(raw) || !Number.isFinite(pct)) {
-    return false;
+// Impect's own score, straight from the API payload. Nothing here re-ranks,
+// rescales or second-guesses the number the Impect platform shows.
+function impectScore(value) {
+  if (value == null || value === "" || Number.isNaN(Number(value))) {
+    return null;
   }
-  // Decimal Impect rates (0.07, 0.49, …).
-  if (Math.abs(raw) < 10 && !Number.isInteger(raw)) {
-    return true;
-  }
-  // Integer raw that is clearly an event rate, not a % score (e.g. raw 9, percentile 98).
-  if (raw > 0 && raw <= 20 && pct - raw >= 20) {
-    return true;
-  }
-  return false;
+  return Number(value);
 }
 
-function resolveBarScores(percentile, rawValue) {
-  let pct = percentile == null || Number.isNaN(Number(percentile)) ? null : Number(percentile);
-  let raw =
-    rawValue == null || rawValue === "" || Number.isNaN(Number(rawValue)) ? null : Number(rawValue);
-  // Guard against occasional API alignment swaps between percentile and raw.
-  if (pct != null && raw != null && raw > 50 && pct <= 25) {
-    [pct, raw] = [raw, pct];
-  }
-  return { percentile: pct, rawValue: raw };
+function barTrackPercentile(value) {
+  const score = impectScore(value);
+  return score == null ? 0 : score;
 }
 
-function barTrackPercentile(percentile, rawValue) {
-  const resolved = resolveBarScores(percentile, rawValue);
-  const pct = resolved.percentile;
-  if (pct == null || Number.isNaN(pct)) {
-    return 0;
+function factorImpectScore(player, factorIndex) {
+  const raw = impectScore(player.bar_raw_values?.[factorIndex]);
+  const standing = impectScore(player.bar_radar_values?.[factorIndex]);
+  if (raw == null || standing == null) {
+    return raw;
   }
-  if (isRateStyleMetric(resolved.rawValue, pct)) {
-    return pct;
+  // Older payloads used the same number for both; don't print it twice.
+  if (Math.abs(raw - standing) < 0.51) {
+    return null;
   }
-  return pct;
+  return raw;
 }
 
-// Bar chips show a percentile as a bare rank, not "60%". A percentile is a
-// position in the cohort, not a percentage, and dropping the sign keeps the
-// number readable at slide size. Raw metric values keep their own units.
-function formatBarInnerValue(percentile, rawValue) {
-  const resolved = resolveBarScores(percentile, rawValue);
-  const pct = resolved.percentile;
-  if (pct != null && !Number.isNaN(pct)) {
-    return String(Math.round(pct));
-  }
-  return formatMetricValue(resolved.rawValue);
+function radarHoverPairs(labels, rawValues, labelFormatter) {
+  return (labels || []).map((label, index) => {
+    const title = String(labelFormatter(label) || label || "")
+      .replace(/<br\s*\/?>/gi, " ")
+      .trim();
+    const raw = rawValues?.[index];
+    const rawLabel =
+      raw == null || Number.isNaN(Number(raw)) ? "—" : formatBarInnerValue(raw);
+    return [title, rawLabel];
+  });
+}
+
+// Bar chips show the Impect score as a bare number, not "60%" — it is a rating
+// on a 0–100 scale, not a percentage, and dropping the sign keeps it readable
+// at slide size.
+function formatBarInnerValue(value) {
+  const score = impectScore(value);
+  return score == null ? "—" : String(Math.round(score));
 }
 
 function formatPlayerMinutes(minutes) {
@@ -424,19 +412,6 @@ const PERCENTILE_SCALE_STEPS = [
   { key: "elite", label: "80–100 elite" },
 ];
 
-// Mean of a player's profile percentiles, shown above their column on the
-// comparison page and on the exported front slide.
-function buildOverallChip(value) {
-  const chip = document.createElement("div");
-  chip.className = `overall-chip pctband pctband--${percentileBandKey(value)}`;
-  chip.innerHTML = `
-    <span class="overall-chip__label">Overall</span>
-    <span class="overall-chip__value">${value == null ? "—" : Math.round(value)}</span>
-    <span class="overall-chip__band">${keynoteBandLabel(value)}</span>
-  `;
-  return chip;
-}
-
 function buildPercentileScaleKey() {
   const key = document.createElement("div");
   key.className = "pct-scale";
@@ -505,19 +480,6 @@ function buildDrilldownPlayerStrip(players) {
   return strip;
 }
 
-function averagePercentileForFactor(players, factorIndex, valueKey = "radar_values") {
-  const values = players
-    .map((player) => player[valueKey]?.[factorIndex])
-    .filter((value) => value != null && !Number.isNaN(value));
-  if (!values.length) {
-    return null;
-  }
-  if (players.length === 1) {
-    return 50;
-  }
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
 function drilldownExportPlayers(entry) {
   if (entry?.players?.length) {
     return entry.players;
@@ -560,7 +522,7 @@ function pizzaTrace(values, labels, name, color = null) {
       size: 12,
       color: "#f8fafc",
     },
-    hovertemplate: "<b>%{theta}</b><br>%{r:.1f} percentile<extra></extra>",
+    hovertemplate: "<b>%{theta}</b><br>Impect score %{r:.1f}<extra></extra>",
   };
 
   if (color) {
@@ -686,9 +648,9 @@ function drilldownThetaTickText(labels) {
         .replace(/\bpost shot xg\b/i, "post xG");
       return `${head}<br>(${qualifier})`;
     }
-    // Three lines rather than two: factor names like "Opponents bypassed left
-    // channel" were being truncated with an ellipsis, losing the meaning.
-    return wrapLabelText(text, 18, 3);
+    // Two lines, not three: a third line on a 7-axis radar sits on the neighbour.
+    const maxLine = labels.length >= 7 ? 14 : 16;
+    return wrapLabelText(text, maxLine, 2);
   });
 }
 
@@ -711,7 +673,14 @@ function extractRadarLabelSeries(snapshot) {
     return angular.categoryarray.map((label) => String(label || "").trim());
   }
   if (Array.isArray(trace.theta) && trace.theta.length > 1) {
-    return trace.theta.slice(0, -1).map((label) => String(label || "").trim());
+    const labels = trace.theta
+      .slice(0, -1)
+      .map((label) => String(label || "").trim())
+      .filter(Boolean);
+    // Numeric theta is the geometry, not the factor names.
+    if (labels.length && labels.every((label) => Number.isNaN(Number(label)))) {
+      return labels;
+    }
   }
   return [];
 }
@@ -731,8 +700,9 @@ function applyWrappedPolarAxis(snapshot, rawLabels, labelCount, wrapFn = wrapped
     return;
   }
 
-  const keys = rawLabels.map((_, index) => `__axis_${index}`);
-  const ticktext = rawLabels.map((label) => wrapFn(label, labelCount));
+  const count = rawLabels.length;
+  const angles = radarThetaDegrees(count);
+  const ticktext = rawLabels.map((label) => wrapFn(label, labelCount || count));
 
   snapshot.data.forEach((trace) => {
     if (!Array.isArray(trace.theta)) {
@@ -741,12 +711,12 @@ function applyWrappedPolarAxis(snapshot, rawLabels, labelCount, wrapFn = wrapped
 
     const pointCount =
       trace.type === "scatterpolar" && Array.isArray(trace.r)
-        ? trace.r.length - 1
+        ? Math.max(trace.r.length - 1, 0)
         : trace.theta.length;
-    const seriesKeys = keys.slice(0, pointCount);
+    const seriesAngles = angles.slice(0, pointCount);
 
-    if (trace.type === "scatterpolar" && pointCount > 0) {
-      trace.theta = [...seriesKeys, seriesKeys[0]];
+    if (trace.type === "scatterpolar" && seriesAngles.length > 0) {
+      trace.theta = [...seriesAngles, seriesAngles[0]];
       if (trace.customdata) {
         const raw = rawLabels.slice(0, pointCount);
         trace.customdata = [...raw, raw[0] || ""];
@@ -755,7 +725,7 @@ function applyWrappedPolarAxis(snapshot, rawLabels, labelCount, wrapFn = wrapped
     }
 
     if (trace.type === "barpolar") {
-      trace.theta = seriesKeys;
+      trace.theta = seriesAngles;
     }
   });
 
@@ -763,14 +733,17 @@ function applyWrappedPolarAxis(snapshot, rawLabels, labelCount, wrapFn = wrapped
   snapshot.layout.polar = snapshot.layout.polar || {};
   snapshot.layout.polar.angularaxis = {
     ...angular,
-    type: "category",
-    categoryorder: "array",
-    categoryarray: keys,
     tickmode: "array",
-    tickvals: keys,
+    tickvals: angles,
     ticktext,
     showticklabels: true,
+    rotation: angularRotation(),
+    direction: "clockwise",
+    period: 360,
   };
+  delete snapshot.layout.polar.angularaxis.type;
+  delete snapshot.layout.polar.angularaxis.categoryarray;
+  delete snapshot.layout.polar.angularaxis.categoryorder;
 }
 
 function applyWrappedExportLabels(snapshot) {
@@ -829,6 +802,51 @@ function radarExportRawLabels(snapshot) {
   return [];
 }
 
+function radarThetaDegrees(count) {
+  const n = Math.max(Number(count) || 0, 1);
+  const step = 360 / n;
+  return Array.from({ length: n }, (_, index) => index * step);
+}
+
+function hexWithAlpha(color, alphaHex) {
+  if (typeof color === "string" && /^#[0-9a-f]{6}/i.test(color)) {
+    return `${color.slice(0, 7)}${alphaHex}`;
+  }
+  return color;
+}
+
+function closePolarSeries(values, angles) {
+  if (!values.length || !angles.length) {
+    return { r: [], theta: [] };
+  }
+  return {
+    r: [...values, values[0]],
+    theta: [...angles, angles[0]],
+  };
+}
+
+function radarAverageTrace(labelCount, angles) {
+  const { r, theta } = closePolarSeries(Array(labelCount).fill(50), angles);
+  return {
+    type: "scatterpolar",
+    mode: "lines",
+    r,
+    theta,
+    name: "Average",
+    fill: "none",
+    line: {
+      color: "rgba(226, 232, 240, 0.38)",
+      width: 1.4,
+      dash: "dot",
+      shape: "linear",
+    },
+    hoverinfo: "skip",
+    showlegend: false,
+    cliponaxis: false,
+    thetaunit: "degrees",
+  };
+}
+
 function radarTrace(
   values,
   labels,
@@ -840,34 +858,48 @@ function radarTrace(
 ) {
   const fullLabels = options.fullLabels || labels;
   const compact = Boolean(options.compact);
-  const { r, theta } = options.thetaLabels
-    ? {
-        r: [...values, values[0]],
-        theta: [...options.thetaLabels, options.thetaLabels[0]],
-      }
-    : closedRadarSeries(values, labels, labelFormatter);
-  const trace = {
+  const standingScale = Boolean(options.standingScale);
+  const angles = options.thetaLabels?.length
+    ? options.thetaLabels
+    : radarThetaDegrees(values.length);
+  const { r, theta } = closePolarSeries(values || [], angles);
+  const hoverPairs = standingScale
+    ? radarHoverPairs(fullLabels, options.rawValues || [], labelFormatter)
+    : (fullLabels || []).map((label) =>
+        String(labelFormatter(label) || label || "")
+          .replace(/<br\s*\/?>/gi, " ")
+          .trim(),
+      );
+  const hovertemplate = standingScale
+    ? "<b>%{customdata[0]}</b><br>Standing %{r:.0f}<br>Impect %{customdata[1]}<extra>%{fullData.name}</extra>"
+    : "<b>%{customdata}</b><br>Impect score %{r:.0f}<extra>%{fullData.name}</extra>";
+  const customdata = hoverPairs.length
+    ? [...hoverPairs, hoverPairs[0]]
+    : undefined;
+  return {
     type: "scatterpolar",
-    mode: "lines",
+    mode: "lines+markers",
     r,
     theta,
     name,
     fill: filled ? "toself" : "none",
+    fillcolor: filled ? hexWithAlpha(color, options.fillAlpha || (compact ? "42" : "34")) : undefined,
     line: {
       color,
-      width: compact ? 2 : 2.5,
-      shape: compact ? "linear" : "spline",
-      smoothing: compact ? 0 : 0.85,
+      width: compact ? 3.2 : 3.4,
+      shape: "linear",
     },
-    fillcolor: filled ? `${color}2e` : undefined,
-    hovertemplate: compact
-      ? "<b>%{customdata}</b><br>%{r:.1f} percentile<extra>%{fullData.name}</extra>"
-      : "<b>%{theta}</b><br>%{r:.1f} percentile<extra></extra>",
+    marker: {
+      color,
+      size: compact ? 9 : 10,
+      symbol: "circle",
+      line: { color: "rgba(6, 8, 14, 0.95)", width: 1.8 },
+    },
+    customdata,
+    hovertemplate,
+    cliponaxis: false,
+    thetaunit: "degrees",
   };
-  if (compact) {
-    trace.customdata = [...fullLabels, fullLabels[0]];
-  }
-  return trace;
 }
 
 function setChartMeta(playerElId, subtitleElId, metaElId, player, subtitle) {
@@ -876,9 +908,10 @@ function setChartMeta(playerElId, subtitleElId, metaElId, player, subtitle) {
   document.getElementById(metaElId).classList.remove("hidden");
 }
 
-function angularRotation(labelCount) {
-  const step = 360 / Math.max(labelCount, 1);
-  return 90 + step / 2;
+function angularRotation() {
+  // First axis at 12 o'clock. Do not add half a step — that parks the vertices
+  // between the spokes, which is why labels used to sit off the shape.
+  return 90;
 }
 
 function shortAxisLabel(label) {
@@ -896,40 +929,47 @@ function polarChartLayout(labelCount, options = {}) {
     compact = false,
     drilldownPanel = false,
     drilldownStacked = false,
-    categoryarray = [],
     ticktext = [],
+    numericTheta = false,
   } = options;
-  const axisTickText = ticktext.length ? ticktext : categoryarray;
-  const angularaxis = compact
+  const angles = radarThetaDegrees(labelCount);
+  const axisTickText = ticktext.length ? ticktext : angles.map(String);
+  const labelFontSize = compact
+    ? labelCount >= 8
+      ? 11
+      : labelCount >= 7
+        ? 12
+        : 13
+    : labelCount >= 7
+      ? 13
+      : 14;
+  const angularaxis = numericTheta
     ? {
-        type: "category",
-        categoryorder: "array",
-        categoryarray,
         showticklabels: true,
         tickmode: "array",
-        tickvals: categoryarray,
+        tickvals: angles,
         ticktext: axisTickText,
         ticklabelstep: 1,
         tickfont: {
           family: chartFonts.family,
-          size: labelCount > 6 ? 12 : 13,
-          color: "#e2e8f0",
+          size: labelFontSize,
+          color: "#f1f5f9",
         },
         showline: false,
-        gridcolor: "rgba(148, 163, 184, 0.14)",
-        linecolor: "rgba(148, 163, 184, 0.08)",
-        rotation: angularRotation(labelCount),
+        gridcolor: "rgba(226, 232, 240, 0.16)",
+        linecolor: "rgba(226, 232, 240, 0.12)",
+        rotation: angularRotation(),
         direction: "clockwise",
       }
     : {
-        gridcolor: "rgba(148, 163, 184, 0.1)",
-        linecolor: "rgba(148, 163, 184, 0.08)",
+        gridcolor: "rgba(226, 232, 240, 0.16)",
+        linecolor: "rgba(226, 232, 240, 0.12)",
         tickfont: {
           family: chartFonts.family,
           size: 12,
-          color: "#e2e8f0",
+          color: "#f1f5f9",
         },
-        rotation: angularRotation(labelCount),
+        rotation: angularRotation(),
         direction: "clockwise",
       };
 
@@ -939,33 +979,44 @@ function polarChartLayout(labelCount, options = {}) {
     font: chartFonts,
     polar: {
       domain: drilldownStacked
-        ? { x: [0.04, 0.96], y: [0.04, 0.96] }
+        ? { x: [0.02, 0.98], y: [0.02, 0.98] }
         : drilldownPanel
-          ? { x: [0.05, 0.95], y: [0.04, showLegend ? 0.88 : 0.96] }
+          ? { x: [0.04, 0.96], y: [0.04, showLegend ? 0.88 : 0.97] }
           : compact
-            ? { x: [0.14, 0.86], y: [0.16, 0.78] }
-            : { x: [0.1, 0.9], y: showLegend ? [0.08, 0.86] : [0.06, 0.94] },
-      // Barely-there plot area. A solid navy disc fought with the card behind it.
-      bgcolor: "rgba(255, 255, 255, 0.022)",
+            ? { x: [0.12, 0.88], y: [0.14, 0.82] }
+            : { x: [0.08, 0.92], y: showLegend ? [0.08, 0.88] : [0.05, 0.95] },
+      bgcolor: "rgba(255, 255, 255, 0.03)",
       radialaxis: {
         visible: true,
-        showticklabels: false,
+        range: [0, 100],
+        tickvals: [25, 50, 75, 100],
+        ticktext: ["25", "50", "75", "100"],
+        showticklabels: true,
         ticks: "",
-        gridcolor: "rgba(148, 163, 184, 0.12)",
+        tickfont: {
+          family: '"IBM Plex Mono", ui-monospace, monospace',
+          size: compact ? 9 : 10,
+          color: "rgba(226, 232, 240, 0.45)",
+        },
+        gridcolor: "rgba(226, 232, 240, 0.18)",
         gridwidth: 1,
-        linecolor: "rgba(148, 163, 184, 0.08)",
-        angle: 90,
+        linecolor: "rgba(226, 232, 240, 0.28)",
+        // Sit the 25/50/75 labels in a gap between spokes, not on the top axis.
+        angle: 90 - 180 / Math.max(labelCount, 1),
         ...radialaxis,
+        showticklabels: true,
+        tickvals: [25, 50, 75, 100],
+        ticktext: ["25", "50", "75", "100"],
       },
       angularaxis,
     },
     margin: drilldownStacked
-      ? { l: 124, r: 124, t: 48, b: 48 }
+      ? { l: 118, r: 118, t: 58, b: 58 }
       : drilldownPanel
-        ? { l: 52, r: 52, t: 8, b: showLegend ? 52 : 24 }
+        ? { l: 64, r: 64, t: 16, b: showLegend ? 52 : 28 }
         : compact
-          ? { l: 72, r: 72, t: 16, b: showLegend ? 64 : 40 }
-          : { l: 110, r: 110, t: 24, b: showLegend ? 72 : 24 },
+          ? { l: 80, r: 80, t: 24, b: showLegend ? 64 : 44 }
+          : { l: 118, r: 118, t: 36, b: showLegend ? 72 : 36 },
     showlegend: showLegend && !drilldownStacked,
     legend: drilldownPanel
       ? {
@@ -1068,15 +1119,16 @@ function showWarning(message) {
   alertBoxEl.classList.remove("hidden");
 }
 
+// The numbers are Impect's own profile ratings, so the subtitle names the
+// scale rather than a cohort we no longer rank against.
 function formatBenchmarkSubtitle(benchmark) {
   if (!benchmark) {
-    return "Cross-league percentile · Nat Lge, Lg Two, Scot Prem · 600+ min";
+    return "Impect score (0–100) · Nat Lge, Lg Two, Scot Prem · 600+ min";
   }
 
   const leagues = (benchmark.competitions || []).join(", ");
-  const cohort = benchmark.cohort_size ?? "?";
   const minMinutes = benchmark.min_minutes ?? 600;
-  return `Percentile vs ${cohort} players · ${leagues} · ${minMinutes}+ min`;
+  return `Impect score (0–100) · ${leagues} · ${minMinutes}+ min`;
 }
 
 function hideAlert() {
@@ -2057,11 +2109,11 @@ const APP_EXPORT_POLAR_BG = "#111111";
 
 const DARK_EXPORT_POLAR_GRID = {
   angularaxis: {
-    gridcolor: "rgba(148, 163, 184, 0.14)",
-    linecolor: "rgba(148, 163, 184, 0.08)",
+    gridcolor: "rgba(226, 232, 240, 0.16)",
+    linecolor: "rgba(226, 232, 240, 0.12)",
   },
   radialaxis: {
-    gridcolor: "rgba(148, 163, 184, 0.12)",
+    gridcolor: "rgba(226, 232, 240, 0.16)",
   },
 };
 
@@ -2219,6 +2271,10 @@ async function mapWithConcurrency(items, limit, worker) {
 }
 
 function drilldownChartLabelCount(layout, data) {
+  const tickCount = layout?.polar?.angularaxis?.tickvals?.length;
+  if (tickCount) {
+    return tickCount;
+  }
   const categoryCount = layout?.polar?.angularaxis?.categoryarray?.length;
   if (categoryCount) {
     return categoryCount;
@@ -2263,23 +2319,34 @@ function boostExportRadarTraces(snapshot) {
     if (trace.type !== "scatterpolar") {
       return;
     }
+    trace.mode = "lines+markers";
     trace.fill = "toself";
     if (trace.line) {
-      trace.line.width = Math.max(Number(trace.line.width) || 2, 2.75);
+      trace.line.width = Math.max(Number(trace.line.width) || 2, 3);
+      trace.line.shape = "linear";
+      delete trace.line.smoothing;
     }
     const lineColor = trace.line?.color;
     if (typeof lineColor === "string" && lineColor.startsWith("#") && lineColor.length >= 7) {
-      trace.fillcolor = `${lineColor.slice(0, 7)}55`;
+      trace.fillcolor = `${lineColor.slice(0, 7)}40`;
+      trace.marker = {
+        ...(trace.marker || {}),
+        color: lineColor.slice(0, 7),
+        size: Math.max(Number(trace.marker?.size) || 8, 10),
+        line: { color: "rgba(6, 8, 14, 0.95)", width: 1.8 },
+      };
     } else if (trace.fillcolor && typeof trace.fillcolor === "string") {
-      trace.fillcolor = trace.fillcolor.replace(/2e$/i, "55").replace(/33$/i, "55");
+      trace.fillcolor = trace.fillcolor.replace(/2e$/i, "40").replace(/33$/i, "40");
     }
-    trace.opacity = 0.92;
+    trace.opacity = 1;
   });
 }
 
 function drilldownSlideChartMargins(labelCount, ticktext = [], panelWidth = 1240) {
   const lineCount = maxWrappedLabelLines(ticktext);
-  const lineBoost = Math.max(0, lineCount - 1) * 14;
+  // Two-line factor names ("Opponents bypassed — from left channel") were
+  // sitting on top of the radar, so wrapped labels buy proportionally more room.
+  const lineBoost = Math.max(0, lineCount - 1) * 18;
   const narrow = panelWidth < 560;
   const baseSide = narrow
     ? labelCount <= 3
@@ -2296,8 +2363,8 @@ function drilldownSlideChartMargins(labelCount, ticktext = [], panelWidth = 1240
   return {
     l: side + 14,
     r: side + 10,
-    t: 62 + lineBoost,
-    b: 62 + lineBoost,
+    t: 66 + Math.round(lineBoost * 1.8),
+    b: 66 + Math.round(lineBoost * 1.8),
   };
 }
 
@@ -2895,8 +2962,8 @@ async function buildDrilldownSlideSurface({ chartId, barsId, title = "" }) {
   sub.className = "keynote-drilldown__sub";
   sub.textContent =
     radarCount > barCount
-      ? `The ${barCount} factors that weigh heaviest in this profile — the radar shows all ${radarCount}`
-      : "Every factor that feeds this profile";
+      ? `Shape = standing at this position. Big number = that standing; small figure = Impect factor score. Radar shows all ${radarCount} factors.`
+      : "Shape = standing at this position. Big number = that standing; small figure = Impect factor score.";
   headText.appendChild(sub);
   head.appendChild(headText);
 
@@ -3038,18 +3105,12 @@ function buildKeynoteFactorBars(entry, players) {
     }
     factor.appendChild(factorHead);
 
-    const averagePercentile = multiPlayer
-      ? averagePercentileForFactor(players, factorIndex, "bar_radar_values")
-      : null;
-
     const rows = document.createElement("div");
     rows.className = "keynote-factor__rows";
     players.forEach((player, playerIndex) => {
-      const resolved = resolveBarScores(
-        player.bar_radar_values?.[factorIndex],
-        player.bar_raw_values?.[factorIndex],
-      );
-      const percentile = barTrackPercentile(resolved.percentile, resolved.rawValue);
+      const score = impectScore(player.bar_radar_values?.[factorIndex]);
+      const impect = factorImpectScore(player, factorIndex);
+      const percentile = barTrackPercentile(score);
       const row = document.createElement("div");
       row.className = `keynote-factor__row ${keynoteBandClass(percentile)}`;
 
@@ -3063,24 +3124,21 @@ function buildKeynoteFactorBars(entry, players) {
 
       const track = document.createElement("div");
       track.className = "keynote-factor__track";
-      if (percentile != null && Number.isFinite(Number(percentile))) {
+      if (score != null) {
         const fill = document.createElement("span");
         fill.className = "keynote-factor__fill";
-        fill.style.width = `${Math.max(2, Math.min(100, Number(percentile)))}%`;
+        fill.style.width = `${Math.max(2, Math.min(100, percentile))}%`;
         track.appendChild(fill);
-      }
-      // Same marker as the on-screen card: where these players average out.
-      if (averagePercentile != null && Number.isFinite(Number(averagePercentile))) {
-        const marker = document.createElement("span");
-        marker.className = "keynote-factor__avg";
-        marker.style.left = `${Math.min(Math.max(Number(averagePercentile), 0), 100)}%`;
-        track.appendChild(marker);
       }
       row.appendChild(track);
 
       const value = document.createElement("span");
       value.className = "keynote-factor__value";
-      value.textContent = formatBarInnerValue(resolved.percentile, resolved.rawValue);
+      if (impect != null) {
+        value.innerHTML = `${formatBarInnerValue(score)}<small>Impect ${formatBarInnerValue(impect)}</small>`;
+      } else {
+        value.textContent = formatBarInnerValue(score);
+      }
       row.appendChild(value);
 
       rows.appendChild(row);
@@ -3097,7 +3155,7 @@ function keynoteMinutesLabel(player) {
   const minutes = Math.round(
     Number(player?.minutes ?? player?.play_duration_minutes) || 0,
   );
-  return minutes > 0 ? `${minutes.toLocaleString()} min` : "";
+  return minutes > 0 ? `${minutes.toLocaleString()}\u00a0min` : "";
 }
 
 function buildKeynotePhoto(source, { color, round = false, className }) {
@@ -3162,7 +3220,7 @@ function buildKeynoteFootnote(data, extra = "") {
   const benchmark = data?.benchmark;
   const parts = [];
   if (benchmark?.cohort_size) {
-    parts.push(`Percentile rank vs ${benchmark.cohort_size} players at this position`);
+    parts.push("Impect score (0–100) for this position");
     const competitions = (benchmark.competitions || []).join(", ");
     if (competitions) {
       parts.push(competitions);
@@ -3300,7 +3358,9 @@ function buildKeynoteComparisonSlide(data) {
       cell.appendChild(meta);
     }
 
-    const seasonLine = [column.season, column.minutes].filter(Boolean).join("  ·  ");
+    // Non-breaking space after the separator so a wrap at 4–5 players carries
+    // "· 1,889 min" down together instead of leaving the dot dangling.
+    const seasonLine = [column.season, column.minutes].filter(Boolean).join("  ·\u00a0");
     if (seasonLine) {
       const minutes = document.createElement("p");
       minutes.className = "keynote-comparison__minutes";
@@ -3314,20 +3374,6 @@ function buildKeynoteComparisonSlide(data) {
     tag.className = "keynote-comparison__tag";
     tag.textContent = column.tag || "\u00a0";
     cell.appendChild(tag);
-
-    // Mean of the profiles on this slide. A manager reads this first and uses
-    // the rows below to see where the average comes from.
-    const overall = meanPercentile(column.scores);
-    const overallEl = document.createElement("div");
-    overallEl.className = `keynote-comparison__overall ${keynoteBandClass(overall)}`;
-    overallEl.innerHTML = `
-      <span class="keynote-comparison__overall-label">Overall</span>
-      <span class="keynote-comparison__overall-value">${
-        overall == null ? "—" : Math.round(overall)
-      }</span>
-      <span class="keynote-comparison__overall-band">${keynoteBandLabel(overall)}</span>
-    `;
-    cell.appendChild(overallEl);
 
     table.appendChild(cell);
   });
@@ -3370,23 +3416,11 @@ function buildKeynoteComparisonSlide(data) {
   footer.appendChild(buildKeynoteScaleKey());
   const footNote = document.createElement("p");
   footNote.className = "keynote-comparison__foot-note";
-  footNote.textContent = "Percentile rank · ★ = best on this slide";
+  footNote.textContent = "Impect score · ★ = best on this slide";
   footer.appendChild(footNote);
   slide.appendChild(footer);
 
   return slide;
-}
-
-// Mean of the percentiles a player actually has. Blank profiles are skipped
-// rather than counted as zero, which would punish missing data.
-function meanPercentile(values) {
-  const numbers = (values || [])
-    .map((value) => Number(value))
-    .filter((value) => Number.isFinite(value));
-  if (!numbers.length) {
-    return null;
-  }
-  return numbers.reduce((total, value) => total + value, 0) / numbers.length;
 }
 
 // Horizontal band key for slide footers.
@@ -3472,7 +3506,7 @@ function buildKeynoteGapSlide(data) {
       <h2 class="keynote-gap__title">${
         players.length > 1 ? "Where the gap is biggest" : "Profile by profile"
       }</h2>
-      <p class="keynote-gap__sub">Every profile on the same 0–100 percentile scale, biggest gap first</p>
+      <p class="keynote-gap__sub">Every profile on the same 0–100 Impect score scale, biggest gap first</p>
     </div>
   `;
   head.appendChild(buildKeynoteCrest());
@@ -3546,10 +3580,15 @@ function buildKeynoteGapRow(row, playerCount) {
     scale.appendChild(span);
   }
 
-  row.points.forEach((point) => {
+  const dotPositions = spreadGapPositions(
+    row.points.map((point) => point.value),
+    playerCount > 1 ? 13 : 9,
+  );
+
+  row.points.forEach((point, pointIndex) => {
     const dot = document.createElement("span");
     dot.className = `keynote-gap__dot ${keynoteBandClass(point.value)}`;
-    dot.style.left = `${clampPercent(point.value)}%`;
+    dot.style.left = `${dotPositions[pointIndex]}%`;
     dot.style.setProperty("--player-color", point.color);
     dot.innerHTML = `
       ${playerCount > 1 ? `<span class="keynote-gap__dot-who">${point.initials}</span>` : ""}
@@ -3577,6 +3616,42 @@ function buildKeynoteGapRow(row, playerCount) {
 
 function clampPercent(value) {
   return Math.min(100, Math.max(0, Number(value) || 0));
+}
+
+// Two close scores (97 vs 95) put their pills on top of each other and hide one
+// player entirely. Nudge the pills apart just enough to read both — the value
+// inside each pill and the span between them still use the true scores.
+function spreadGapPositions(values, minSeparation) {
+  const order = values
+    .map((value, index) => ({ index, position: clampPercent(value) }))
+    .sort((a, b) => a.position - b.position);
+
+  for (let i = 1; i < order.length; i += 1) {
+    const minimum = order[i - 1].position + minSeparation;
+    if (order[i].position < minimum) {
+      order[i].position = minimum;
+    }
+  }
+
+  // Pushing right can run off the end, so pull the whole run back inside.
+  const overflow = order.length ? order[order.length - 1].position - 100 : 0;
+  if (overflow > 0) {
+    order.forEach((item) => {
+      item.position -= overflow;
+    });
+    for (let i = 1; i < order.length; i += 1) {
+      const minimum = order[i - 1].position + minSeparation;
+      if (order[i].position < minimum) {
+        order[i].position = minimum;
+      }
+    }
+  }
+
+  const positions = new Array(values.length);
+  order.forEach((item) => {
+    positions[item.index] = clampPercent(item.position);
+  });
+  return positions;
 }
 
 // Best / worst profile for a radar player, used for the read-out cards.
@@ -3672,7 +3747,7 @@ async function buildMainRadarSlideSurface() {
       <h2 class="keynote-radar__title">${
         players.length > 1 ? "Where each player is strongest" : "Profile shape at a glance"
       }</h2>
-      <p class="keynote-radar__sub">The further the shape reaches, the higher the percentile on that profile</p>
+      <p class="keynote-radar__sub">The further the shape reaches, the higher the Impect score on that profile</p>
     </div>
   `;
   head.appendChild(buildKeynoteCrest());
@@ -4056,7 +4131,7 @@ async function buildExportPayload(data, extension) {
       slideDeck: true,
     });
     if (pizzaImage) {
-      sections.push({ title: "Squad percentile pizza", image_data: pizzaImage });
+      sections.push({ title: "Squad score pizza", image_data: pizzaImage });
     }
   }
 
@@ -5064,11 +5139,12 @@ function buildSeasonTraces(seasons, valueKey, chartType) {
 }
 
 function buildComparedPlayerTraces(comparedPlayers, fallbackLabels = [], options = {}) {
-  const multiPlayer = comparedPlayers.length > 1;
   const mixedPositions =
     new Set(comparedPlayers.map((entry) => entry.position_label || entry.position).filter(Boolean))
       .size > 1;
   const compact = Boolean(options.compact);
+  const fillAlpha =
+    comparedPlayers.length >= 4 ? "28" : comparedPlayers.length >= 3 ? "34" : "44";
 
   return comparedPlayers.map((entry, index) => {
     const traceName = playerLegendLabel(entry, { includePosition: mixedPositions });
@@ -5078,12 +5154,15 @@ function buildComparedPlayerTraces(comparedPlayers, fallbackLabels = [], options
       labels,
       traceName,
       seasonColors[index % seasonColors.length],
-      !multiPlayer || index === 0,
+      true,
       formatAxisLabel,
       {
         compact,
         fullLabels: labels,
         thetaLabels: options.thetaLabels,
+        fillAlpha,
+        standingScale: Boolean(options.standingScale),
+        rawValues: entry.raw_values || [],
       },
     );
   });
@@ -5099,25 +5178,39 @@ function   plotComparedRadar(elementId, comparedPlayers, fallbackLabels, benchma
   const compact = Boolean(options.compact);
   const axisLabels = comparedPlayers[0]?.labels || fallbackLabels || [];
   const labelCount = axisLabels.length;
-  const thetaKeys = compact ? drilldownThetaKeys(labelCount) : null;
-  const thetaTickText = compact ? drilldownThetaTickText(axisLabels) : [];
+  const thetaDegrees = radarThetaDegrees(labelCount);
+  const thetaTickText = compact
+    ? drilldownThetaTickText(axisLabels)
+    : axisLabels.map((label) =>
+        wrapLabelText(
+          chartSourceEl?.value === "profiles"
+            ? profileDisplayTitle(label)
+            : formatAxisLabel(label),
+          labelCount >= 7 ? 16 : 18,
+          2,
+        ),
+      );
   const traces = buildComparedPlayerTraces(comparedPlayers, fallbackLabels, {
     compact,
-    thetaLabels: thetaKeys,
+    thetaLabels: thetaDegrees,
+    standingScale: Boolean(options.standingScale),
   });
+  if (options.standingScale && labelCount >= 3) {
+    traces.unshift(radarAverageTrace(labelCount, thetaDegrees));
+  }
   const showLegend = options.layout?.showLegend ?? traces.length > 1;
   Plotly.newPlot(
     elementId,
     traces,
     polarChartLayout(labelCount, {
+      ...options.layout,
       showLegend,
-      radialaxis: { ticksuffix: "%", range: [0, 100] },
+      numericTheta: true,
+      radialaxis: { range: [0, 100] },
       compact,
       drilldownPanel: compact && !options.layout?.drilldownStacked,
       drilldownStacked: Boolean(options.layout?.drilldownStacked),
-      categoryarray: thetaKeys || [],
       ticktext: thetaTickText,
-      ...options.layout,
     }),
     plotlyConfig,
   ).then(() => keepPlotFittedToContainer(elementId));
@@ -5281,8 +5374,8 @@ function studioComparisonPlayersFromChart(data) {
 function studioMinutesLabel(player) {
   const minutes = Math.round(Number(player.minutes) || 0);
   const season = String(player.season_label || "").trim();
-  const minutesText = minutes > 0 ? `${minutes.toLocaleString()} min` : "";
-  return [season, minutesText].filter(Boolean).join("  ·  ");
+  const minutesText = minutes > 0 ? `${minutes.toLocaleString()}\u00a0min` : "";
+  return [season, minutesText].filter(Boolean).join("  ·\u00a0");
 }
 
 function studioReferenceProfileScores(reference, profileApiNames) {
@@ -5409,17 +5502,11 @@ function renderStudioComparisonFront(data) {
     photo.appendChild(minutes);
 
     // The reference column carries an extra "our most-used" line, so every
-    // column reserves the slot to keep the Overall chips on one baseline.
+    // column reserves the slot to keep the photo row on one baseline.
     const hint = document.createElement("p");
     hint.className = "player-photo__minutes player-photo__minutes--hint";
     hint.innerHTML = "&nbsp;";
     photo.appendChild(hint);
-
-    photo.appendChild(
-      buildOverallChip(
-        meanPercentile(profiles.map((profile) => player.profileScores?.[profile.apiName] ?? null)),
-      ),
-    );
 
     table.appendChild(photo);
   });
@@ -5439,11 +5526,6 @@ function renderStudioComparisonFront(data) {
       <p class="player-photo__minutes">${studioMinutesLabel(reference)}</p>
       <p class="player-photo__minutes player-photo__minutes--hint">Our most-used ${positionShort}</p>
     `;
-    refPhoto.appendChild(
-      buildOverallChip(
-        meanPercentile(profiles.map((profile) => referenceScores[profile.apiName] ?? null)),
-      ),
-    );
   } else {
     refPhoto.innerHTML = `
       <div class="player-photo__image-wrap player-photo__image-wrap--average">
@@ -5469,7 +5551,7 @@ function renderStudioComparisonFront(data) {
     const leaderValue =
       numericValues.length > 0 ? Math.max(...numericValues.map((value) => Number(value))) : null;
 
-    // Bars are banded by percentile, not by player, so a weak score never
+    // Bars are banded by score, not by player, so a weak score never
     // looks the same as a strong one. Player identity lives in the photo row.
     players.forEach((player) => {
       const value = player.profileScores?.[profile.apiName];
@@ -5502,7 +5584,7 @@ function renderStudioComparisonFront(data) {
   body.appendChild(table);
 
   // The photo row above already names every player and their club, so the old
-  // legend repeated it. A percentile key is what actually needed explaining.
+  // legend repeated it. A score key is what actually needed explaining.
   // The benchmark now sits under the title, so repeating it below the table
   // was noise. The key is the only thing left that needs explaining.
   body.appendChild(buildPercentileScaleKey());
@@ -5558,7 +5640,7 @@ function renderRadar(data) {
 }
 
 // Factor bars for the on-screen drilldown card. The track is coloured by
-// percentile band so strong and weak read instantly; the player's own colour
+// score band so strong and weak read instantly; the player's own colour
 // stays on the initial chip so you can still tell the rows apart.
 function renderDrilldownFactorList(entry, players, barsId = "") {
   const list = document.createElement("div");
@@ -5597,16 +5679,11 @@ function renderDrilldownFactorList(entry, players, barsId = "") {
     }
     group.appendChild(groupHead);
 
-    const averagePercentile = multiPlayer
-      ? averagePercentileForFactor(players, factorIndex, "bar_radar_values")
-      : null;
-
     players.forEach((player, playerIndex) => {
       group.appendChild(
         buildFactorBarRow(player, factorIndex, {
           color: seasonColors[playerIndex % seasonColors.length],
           showInitials: multiPlayer,
-          averagePercentile,
         }),
       );
     });
@@ -5617,12 +5694,10 @@ function renderDrilldownFactorList(entry, players, barsId = "") {
   return list;
 }
 
-function buildFactorBarRow(player, factorIndex, { color, showInitials, averagePercentile }) {
-  const resolved = resolveBarScores(
-    player.bar_radar_values?.[factorIndex],
-    player.bar_raw_values?.[factorIndex],
-  );
-  const percentile = barTrackPercentile(resolved.percentile, resolved.rawValue);
+function buildFactorBarRow(player, factorIndex, { color, showInitials }) {
+  const score = impectScore(player.bar_radar_values?.[factorIndex]);
+  const percentile = barTrackPercentile(score);
+  const impect = factorImpectScore(player, factorIndex);
 
   const row = document.createElement("div");
   row.className = `factor__row pctband pctband--${percentileBandKey(percentile)}`;
@@ -5641,22 +5716,23 @@ function buildFactorBarRow(player, factorIndex, { color, showInitials, averagePe
 
   const fill = document.createElement("span");
   fill.className = "factor__fill";
-  fill.style.width = `${Math.max(2, Math.min(100, Number(percentile) || 0))}%`;
+  fill.style.width = `${Math.max(2, Math.min(100, percentile))}%`;
   track.appendChild(fill);
-
-  if (averagePercentile != null && Number.isFinite(Number(averagePercentile))) {
-    const marker = document.createElement("span");
-    marker.className = "factor__avg";
-    marker.style.left = `${Math.min(Math.max(Number(averagePercentile), 0), 100)}%`;
-    marker.title = `Average of these players: ${formatPercentileLabel(averagePercentile)}`;
-    track.appendChild(marker);
-  }
   row.appendChild(track);
 
+  const figures = document.createElement("span");
+  figures.className = "factor__figures";
   const value = document.createElement("span");
   value.className = "factor__value";
-  value.textContent = formatBarInnerValue(resolved.percentile, resolved.rawValue);
-  row.appendChild(value);
+  value.textContent = formatBarInnerValue(score);
+  figures.appendChild(value);
+  if (impect != null) {
+    const raw = document.createElement("span");
+    raw.className = "factor__impect";
+    raw.textContent = `Impect ${formatBarInnerValue(impect)}`;
+    figures.appendChild(raw);
+  }
+  row.appendChild(figures);
 
   return row;
 }
@@ -5771,8 +5847,8 @@ function renderProfileDrilldowns(data) {
     const barCount = entry.bar_labels?.length || radarCount;
     meta.textContent =
       radarCount > barCount
-        ? `The ${barCount} factors that weigh heaviest in this profile — the radar shows all ${radarCount}`
-        : "Every factor that feeds this profile";
+        ? `Further out = higher standing among players at this position. The small figure is Impect’s factor score — not the same 0–100 scale as the profile. Radar shows all ${radarCount} factors.`
+        : "Further out = higher standing among players at this position. The small figure is Impect’s factor score — not the same 0–100 scale as the profile.";
     card.appendChild(meta);
 
     const body = document.createElement("div");
@@ -5808,6 +5884,7 @@ function renderProfileDrilldowns(data) {
 
     plotComparedRadar(chartId, players, entry.labels || [], data.benchmark, {
       compact: true,
+      standingScale: true,
       layout: {
         showLegend: false,
         drilldownStacked: true,

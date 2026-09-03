@@ -46,7 +46,7 @@ Registered in `standalone/apps.js`:
 | Department | Tools |
 |---|---|
 | **Analysis** | Pre-Match Report, Set Piece Pre-Match, Player Cards, xG Chance Analysis, Post-Match Report, Blocks Analysis |
-| **Recruitment** | Player Comparison, Player Search, Player Pipelines, Squad Balance, Squad Planner |
+| **Recruitment** | Who To Scout → Watch list → Player Pipelines; Player Comparison, Squad Balance, Squad Planner |
 | **Scouts** | Fixture Planner, Scouting Address, Scout Summary, Scout Calendar |
 | **Strategy** | Squad Comparison, Squad Availability, Club Strategy, League Two Strategy |
 

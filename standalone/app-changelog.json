@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "date": "2026-09-02",
+      "title": "Summer window review 26/27",
+      "detail": "Present deck for the closed window — ins and outs, average age, and depth in primary positions.",
+      "tag": "New"
+    },
+    {
+      "date": "2026-08-21",
+      "title": "Match Day Countdown on Live",
+      "detail": "Dressing-room kick-off timer is live for match days — open it from the hub when you need the clock on the wall.",
+      "tag": "New"
+    },
+    {
+      "date": "2026-08-20",
+      "title": "League Two 26/27 on the home board",
+      "detail": "Home KPIs, table, and fixtures now point at the new season — empty MD1 widgets fixed.",
+      "tag": "Fix"
+    },
+    {
+      "date": "2026-08-19",
+      "title": "Real road times for scouting",
+      "detail": "Fixture planner drive times and miles use OSRM road routing instead of straight-line guesses.",
+      "tag": "Scouts"
+    },
+    {
+      "date": "2026-08-18",
+      "title": "Port Vale Live + Staging names",
+      "detail": "Yellow stamp = Live, blue = Staging. Same droplet, clearer which product you are on.",
+      "tag": "Hub"
+    },
+    {
+      "date": "2026-08-15",
+      "title": "Suggest on every tool",
+      "detail": "Floating Suggest / bug button on every app page so feedback lands with the page URL and your name.",
+      "tag": "Hub"
+    },
+    {
+      "date": "2026-08-12",
+      "title": "Player Pipelines stages",
+      "detail": "Board and table views, manual players, and a Scout identified stage for the pipeline board.",
+      "tag": "Recruitment"
+    },
+    {
+      "date": "2026-07-23",
+      "title": "Player pages from home search",
+      "detail": "Search any Impect player on Home to open their dossier — photo, profiles, reports, recent games, and scores.",
+      "tag": "Hub"
+    },
+    {
+      "date": "2026-07-23",
+      "title": "Home dashboard relaunch",
+      "detail": "Left app ribbon plus live league table, form, and squad-vs-league widgets.",
+      "tag": "Hub"
+    },
+    {
+      "date": "2026-07-22",
+      "title": "Played Fixtures + Scout Summary",
+      "detail": "VIDEO coverage, player reports, and scout summary now flow from Fixture Planner.",
+      "tag": "Scouts"
+    },
+    {
+      "date": "2026-07-21",
+      "title": "Club Strategy + Availability",
+      "detail": "League standings/xG strategy board and squad availability tracker under Strategy.",
+      "tag": "Strategy"
+    }
+  ]
+}

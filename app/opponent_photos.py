@@ -53,12 +53,39 @@ KNOWN_CLUB_IDS: dict[str, int] = {
     "plymouthargyle": 2262,
     "tranmererovers": 1074,
     "fctranmere": 1074,
+    "crewealexandra": 1042,
+    "fccrewealexandra": 1042,
+    "swindontown": 352,
+    "fcswindontown": 352,
+    "salfordcity": 34888,
+    "fcsalfordcity": 34888,
 }
 
 _club_id_cache: dict[str, tuple[float, int | None]] = {}
 _squad_photo_cache: dict[tuple[int, int, int], tuple[float, dict[str, dict[str, str]]]] = {}
 _loan_arrival_cache: dict[tuple[int, int], tuple[float, dict[str, dict[str, str]]]] = {}
+_club_site_photo_cache: dict[str, tuple[float, dict[str, dict[str, str]]]] = {}
 _SQUAD_CACHE_VERSION = 5
+
+# Official club sites on Gamechanger (squad photos via public football.web API).
+# Key = normalized club name; value = services host (images.gc.<host>).
+GC_CLUB_SERVICES: dict[str, str] = {
+    "tranmererovers": "tranmereroversfcservices.co.uk",
+    "fctranmere": "tranmereroversfcservices.co.uk",
+    "crewealexandra": "crewealexandrafcservices.co.uk",
+    "fccrewealexandra": "crewealexandrafcservices.co.uk",
+    "swindontown": "swindontownfcservices.co.uk",
+    "fcswindontown": "swindontownfcservices.co.uk",
+    "salfordcity": "salfordcityfcservices.co.uk",
+    "fcsalfordcity": "salfordcityfcservices.co.uk",
+}
+GC_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json,text/plain,*/*",
+}
 
 
 def _normalize_name_key(name: str) -> str:
@@ -85,7 +112,7 @@ def _season_year(season: str | None) -> int:
     match = re.search(r"(20\d{2})", text)
     if match:
         return int(match.group(1))
-    return 2025
+    return current_transfermarkt_season_year()
 
 
 def _club_search_key(club_name: str) -> str:
@@ -425,36 +452,350 @@ def fetch_transfermarkt_squad_photos(
 def _match_photo_entry(
     player_name: str,
     entries: dict[str, dict[str, str]],
+    *,
+    shirt_number: int | str | None = None,
 ) -> dict[str, str] | None:
-    if not player_name or not entries:
+    if not entries:
         return None
 
-    direct = entries.get(_normalize_name_key(player_name))
-    if direct:
-        return direct
+    if player_name:
+        direct = entries.get(_normalize_name_key(player_name))
+        if direct:
+            return direct
 
-    first, last = _name_tokens(player_name)
-    if not last:
-        return None
+        first, last = _name_tokens(player_name)
+        if last:
+            candidates: list[dict[str, str]] = []
+            for entry in entries.values():
+                candidate_first, candidate_last = _name_tokens(entry["name"])
+                if candidate_last != last:
+                    continue
+                if first and candidate_first:
+                    if candidate_first.startswith(first[:3]) or first.startswith(
+                        candidate_first[:3]
+                    ):
+                        candidates.append(entry)
+                else:
+                    candidates.append(entry)
 
-    candidates: list[dict[str, str]] = []
-    for entry in entries.values():
-        candidate_first, candidate_last = _name_tokens(entry["name"])
-        if candidate_last != last:
-            continue
-        if first and candidate_first:
-            if candidate_first.startswith(first[:3]) or first.startswith(candidate_first[:3]):
-                candidates.append(entry)
-        else:
-            candidates.append(entry)
+            if len(candidates) == 1:
+                return candidates[0]
+            for entry in candidates:
+                candidate_first, _ = _name_tokens(entry["name"])
+                if candidate_first == first:
+                    return entry
 
-    if len(candidates) == 1:
-        return candidates[0]
-    for entry in candidates:
-        candidate_first, _ = _name_tokens(entry["name"])
-        if candidate_first == first:
-            return entry
+    if shirt_number is not None and str(shirt_number).strip() != "":
+        try:
+            want = str(int(str(shirt_number).strip()))
+        except ValueError:
+            want = str(shirt_number).strip()
+        hits = [
+            entry
+            for entry in entries.values()
+            if str(entry.get("shirt_number") or "") == want
+        ]
+        # Surname aliases can surface the same player twice in entries.values().
+        unique_hits: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for entry in hits:
+            signature = str(entry.get("url") or entry.get("name") or "")
+            if not signature or signature in seen:
+                continue
+            seen.add(signature)
+            unique_hits.append(entry)
+        if len(unique_hits) == 1:
+            return unique_hits[0]
     return None
+
+
+_web_photo_cache: dict[str, tuple[float, str | None]] = {}
+WEB_PHOTO_CACHE_TTL_SECONDS = 6 * 60 * 60
+WEB_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "en-GB,en;q=0.9",
+}
+
+
+def _wikipedia_player_photo_url(player_name: str, club_name: str | None = None) -> str | None:
+    query = f"{player_name} {club_name or ''} footballer".strip()
+    try:
+        response = requests.get(
+            "https://en.wikipedia.org/w/api.php",
+            params={
+                "action": "query",
+                "format": "json",
+                "generator": "search",
+                "gsrsearch": query,
+                "gsrlimit": 5,
+                "prop": "pageimages|pageterms",
+                "piprop": "thumbnail",
+                "pithumbsize": 500,
+                "wbptterms": "description",
+            },
+            timeout=20,
+            headers=WEB_HEADERS,
+        )
+        if response.status_code >= 400:
+            return None
+        pages = ((response.json().get("query") or {}).get("pages") or {})
+    except (requests.RequestException, ValueError, TypeError):
+        return None
+
+    surname = _name_tokens(player_name)[1]
+    ranked: list[tuple[int, str]] = []
+    for page in pages.values():
+        if not isinstance(page, dict):
+            continue
+        thumb = ((page.get("thumbnail") or {}).get("source") or "").strip()
+        if not thumb.startswith("http"):
+            continue
+        title = str(page.get("title") or "")
+        desc = ""
+        terms = page.get("terms") or {}
+        if isinstance(terms, dict):
+            desc_list = terms.get("description") or []
+            if isinstance(desc_list, list) and desc_list:
+                desc = str(desc_list[0])
+        blob = f"{title} {desc}".casefold()
+        if surname and surname not in _normalize_name_key(title):
+            continue
+        score = 0
+        if "football" in blob or "soccer" in blob or "footballer" in blob:
+            score += 3
+        if club_name and _normalize_name_key(club_name)[:6] in _normalize_name_key(blob):
+            score += 2
+        if "disambiguation" in blob:
+            score -= 5
+        ranked.append((score, thumb))
+    if not ranked:
+        return None
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    return ranked[0][1] if ranked[0][0] >= 0 else None
+
+
+def _duckduckgo_player_photo_url(player_name: str, club_name: str | None = None) -> str | None:
+    """Image search fallback (same headshots Google usually surfaces for footballers)."""
+    query = f"{player_name} {club_name or ''} football headshot".strip()
+    try:
+        home = requests.get(
+            "https://duckduckgo.com/",
+            params={"q": query},
+            timeout=20,
+            headers=WEB_HEADERS,
+        )
+        if home.status_code >= 400:
+            return None
+        match = re.search(r"vqd=([\"']?)([\w.\-]+)\1", home.text)
+        if not match:
+            match = re.search(r"vqd=([\w.\-]+)", home.text)
+        if not match:
+            return None
+        vqd = match.group(2) if match.lastindex and match.lastindex >= 2 else match.group(1)
+        response = requests.get(
+            "https://duckduckgo.com/i.js",
+            params={
+                "l": "uk-en",
+                "o": "json",
+                "q": query,
+                "vqd": vqd,
+                "f": ",,,",
+                "p": "1",
+            },
+            timeout=20,
+            headers={**WEB_HEADERS, "Referer": "https://duckduckgo.com/"},
+        )
+        if response.status_code >= 400:
+            return None
+        results = response.json().get("results") or []
+    except (requests.RequestException, ValueError, TypeError):
+        return None
+
+    surname = _name_tokens(player_name)[1]
+    for row in results[:12]:
+        if not isinstance(row, dict):
+            continue
+        image = str(row.get("image") or "").strip()
+        title = str(row.get("title") or "")
+        if not image.startswith("http"):
+            continue
+        if surname and surname not in _normalize_name_key(title) and surname not in _normalize_name_key(image):
+            host = image.casefold()
+            if not any(token in host for token in ("transfermarkt", "wikipedia", "wikimedia", "getty", "imago")):
+                continue
+        if any(bad in image.casefold() for bad in (".svg", "logo", "crest", "badge", "icon")):
+            continue
+        return image
+    return None
+
+
+def resolve_web_player_photo_url(
+    player_name: str,
+    *,
+    club_name: str | None = None,
+) -> str | None:
+    cache_key = f"{_normalize_name_key(player_name)}|{_normalize_name_key(club_name or '')}"
+    cached = _web_photo_cache.get(cache_key)
+    now = time.time()
+    if cached and now - cached[0] < WEB_PHOTO_CACHE_TTL_SECONDS:
+        return cached[1]
+
+    url = _wikipedia_player_photo_url(player_name, club_name)
+    if not url:
+        url = _duckduckgo_player_photo_url(player_name, club_name)
+    _web_photo_cache[cache_key] = (now, url)
+    return url
+
+
+def resolve_gc_club_services(club_name: str | None) -> str | None:
+    """Return Gamechanger services host for a club official website, if known."""
+    if not club_name:
+        return None
+    key = _normalize_name_key(club_name)
+    search_key = _club_search_key(club_name)
+    for candidate in (key, search_key, f"fc{search_key}"):
+        if candidate in GC_CLUB_SERVICES:
+            return GC_CLUB_SERVICES[candidate]
+    return None
+
+
+def _gc_image_url(services_url: str, image_key: str, *, size: int = 256) -> str | None:
+    key = str(image_key or "").strip()
+    if not key or key.lower() in {"null", "none"}:
+        return None
+    if not re.search(r"\.(jpe?g|png|webp)$", key, flags=re.I):
+        key = f"{key}.jpg"
+    return f"https://images.gc.{services_url}/fit-in/{size}x{size}/{key}"
+
+
+def _gc_first_team_id(services_url: str) -> str | None:
+    try:
+        response = requests.get(
+            f"https://filters.football.web.gc.{services_url}/v2/filters",
+            timeout=25,
+            headers=GC_HEADERS,
+        )
+        if response.status_code >= 400:
+            return None
+        payload = response.json()
+    except (requests.RequestException, ValueError, TypeError):
+        return None
+
+    rows = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(rows, list):
+        return None
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        attrs = row.get("attributes") if isinstance(row.get("attributes"), dict) else {}
+        slug = str(attrs.get("slugTeamName") or "").casefold()
+        name = str(attrs.get("teamName") or "").casefold()
+        # Most GC clubs use first-team; Salford (and some others) use mens-team.
+        if slug in {"first-team", "mens-team", "men-s-team"} or name in {
+            "first team",
+            "mens team",
+            "men's team",
+            "men’s team",
+        }:
+            team_id = str(row.get("id") or "").strip()
+            if team_id:
+                return team_id
+    for row in rows:
+        if isinstance(row, dict) and row.get("type") == "team" and row.get("id"):
+            return str(row["id"])
+    return None
+
+
+def fetch_club_website_squad_photos(
+    club_name: str,
+    *,
+    force: bool = False,
+) -> dict[str, dict[str, str]]:
+    """Pull squad headshots from the club's official Gamechanger website API."""
+    services_url = resolve_gc_club_services(club_name)
+    if not services_url:
+        return {}
+
+    cache_key = services_url
+    cached = _club_site_photo_cache.get(cache_key)
+    now = time.time()
+    if not force and cached and now - cached[0] < PHOTO_CACHE_TTL_SECONDS:
+        return cached[1]
+
+    team_id = _gc_first_team_id(services_url)
+    if not team_id:
+        _club_site_photo_cache[cache_key] = (now, {})
+        return {}
+
+    try:
+        response = requests.get(
+            f"https://teams.football.web.gc.{services_url}/v2/squads/opta",
+            params={"teamID": team_id},
+            timeout=30,
+            headers=GC_HEADERS,
+        )
+        if response.status_code >= 400:
+            _club_site_photo_cache[cache_key] = (now, {})
+            return {}
+        payload = response.json()
+    except (requests.RequestException, ValueError, TypeError):
+        _club_site_photo_cache[cache_key] = (now, {})
+        return {}
+
+    body = payload.get("body") if isinstance(payload, dict) else None
+    if not isinstance(body, dict):
+        _club_site_photo_cache[cache_key] = (now, {})
+        return {}
+
+    entries: dict[str, dict[str, str]] = {}
+    for position, rows in body.items():
+        if position == "staff" or not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            first = str(row.get("firstName") or "").strip()
+            surname = str(row.get("surname") or "").strip()
+            known = str(row.get("knownName") or "").strip()
+            full_name = known or " ".join(part for part in (first, surname) if part).strip()
+            if not full_name:
+                continue
+            profile = row.get("playerProfileData") if isinstance(row.get("playerProfileData"), dict) else {}
+            image_key = (
+                profile.get("squadImageKey")
+                or profile.get("playerProfileForegroundKey")
+                or profile.get("profileImage")
+                or profile.get("playerHeadshot")
+                or row.get("imageSrc")
+            )
+            url = _gc_image_url(services_url, str(image_key or ""))
+            if not url:
+                continue
+            key = _normalize_name_key(full_name)
+            bucket: dict[str, str] = {
+                "name": full_name,
+                "url": url,
+                "position": str(row.get("position") or position or ""),
+                "source": "club_website",
+            }
+            shirt = row.get("shirtNumber")
+            if shirt is not None and str(shirt).strip() != "":
+                try:
+                    bucket["shirt_number"] = str(int(str(shirt).strip()))
+                except ValueError:
+                    bucket["shirt_number"] = str(shirt).strip()
+            entries[key] = bucket
+            # Also index bare surname when unique enough for Impect short labels.
+            if surname:
+                surname_key = _normalize_name_key(surname)
+                if surname_key and surname_key not in entries:
+                    entries[surname_key] = dict(bucket)
+
+    _club_site_photo_cache[cache_key] = (now, entries)
+    return entries
 
 
 def resolve_opponent_photo_source_url(
@@ -463,13 +804,24 @@ def resolve_opponent_photo_source_url(
     club_name: str | None = None,
     season: str | None = None,
     force: bool = False,
+    shirt_number: int | str | None = None,
 ) -> str | None:
-    """Prefer Port Vale club photos when applicable, otherwise Transfermarkt."""
+    """Prefer Port Vale club photos, then official club site, then Transfermarkt."""
     if club_name and _is_port_vale_name(club_name):
         return resolve_squad_photo_url(player_name, force=force)
 
     if not club_name:
         return None
+
+    club_site = fetch_club_website_squad_photos(club_name, force=force)
+    if club_site:
+        entry = _match_photo_entry(
+            player_name,
+            club_site,
+            shirt_number=shirt_number,
+        )
+        if entry and entry.get("url"):
+            return entry["url"]
 
     club_id = resolve_transfermarkt_club_id(club_name)
     if not club_id:
@@ -480,8 +832,12 @@ def resolve_opponent_photo_source_url(
         season_year=_season_year(season),
         force=force,
     )
-    entry = _match_photo_entry(player_name, entries)
-    return entry["url"] if entry else None
+    entry = _match_photo_entry(
+        player_name,
+        entries,
+        shirt_number=shirt_number,
+    )
+    return entry["url"] if entry and entry.get("url") else None
 
 
 def _is_port_vale_name(name: str) -> bool:
@@ -493,6 +849,7 @@ def opponent_photo_api_url(
     *,
     club_name: str | None = None,
     season: str | None = None,
+    shirt_number: int | str | None = None,
 ) -> str | None:
     if not player_name:
         return None
@@ -502,6 +859,8 @@ def opponent_photo_api_url(
         params.append(f"club={quote(club_name)}")
     if season:
         params.append(f"season={quote(str(season))}")
+    if shirt_number is not None and str(shirt_number).strip() != "":
+        params.append(f"shirt={quote(str(shirt_number))}")
     return "/api/pre-match/player-photo?" + "&".join(params)
 
 
@@ -514,23 +873,28 @@ def attach_pitch_player_photos(
     if not pitch_players:
         return pitch_players
 
-    # Warm the squad photo map once so matching is free per player.
-    club_id = resolve_transfermarkt_club_id(club_name)
-    if club_id and not _is_port_vale_name(club_name):
-        fetch_transfermarkt_squad_photos(club_id, season_year=_season_year(season))
+    # Warm club-site + Transfermarkt maps once so matching is free per player.
+    if not _is_port_vale_name(club_name):
+        fetch_club_website_squad_photos(club_name)
+        club_id = resolve_transfermarkt_club_id(club_name)
+        if club_id:
+            fetch_transfermarkt_squad_photos(club_id, season_year=_season_year(season))
 
     for player in pitch_players:
         name = str(player.get("name") or "")
+        shirt = player.get("shirt_number")
         source = resolve_opponent_photo_source_url(
             name,
             club_name=club_name,
             season=season,
+            shirt_number=shirt,
         )
         if source:
             player["photo_url"] = opponent_photo_api_url(
                 name,
                 club_name=club_name,
                 season=season,
+                shirt_number=shirt,
             )
         else:
             player["photo_url"] = None
@@ -538,7 +902,21 @@ def attach_pitch_player_photos(
 
 
 def fetch_opponent_photo_bytes(source_url: str) -> tuple[bytes, str]:
-    response = requests.get(source_url, timeout=25, headers=TM_HEADERS)
+    headers = dict(TM_HEADERS)
+    if "images.gc." in source_url:
+        referer = "https://www.tranmererovers.co.uk/"
+        if "crewealexandrafcservices" in source_url:
+            referer = "https://www.crewealex.net/"
+        elif "swindontownfcservices" in source_url:
+            referer = "https://www.swindontownfc.co.uk/"
+        elif "salfordcityfcservices" in source_url:
+            referer = "https://www.salfordcityfc.co.uk/"
+        headers = {
+            "User-Agent": GC_HEADERS["User-Agent"],
+            "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+            "Referer": referer,
+        }
+    response = requests.get(source_url, timeout=25, headers=headers)
     if response.status_code >= 400:
         raise RuntimeError(f"Photo request failed ({response.status_code})")
     content_type = response.headers.get("Content-Type", "image/jpeg").split(";")[0].strip()

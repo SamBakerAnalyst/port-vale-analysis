@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap"
     rel="stylesheet"
   />
   <style>
@@ -27,7 +27,7 @@
       --danger: #f87171;
       --gold: #f5c518;
       --radius: 12px;
-      --font: "DM Sans", system-ui, sans-serif;
+      --font: "Manrope", system-ui, sans-serif;
       --mono: "JetBrains Mono", monospace;
       --rail: 248px;
     }
@@ -150,6 +150,7 @@
     .rail__group--recruitment { --group-accent: #3d8bfd; }
     .rail__group--scouts { --group-accent: #f97316; }
     .rail__group--strategy { --group-accent: #f5c518; }
+    .rail__group--presentations { --group-accent: #a78bfa; }
 
     .rail__link {
       display: flex;
@@ -510,6 +511,25 @@
       background: #5ec8ff;
     }
 
+    .hub__broke-joke {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.28rem 0.7rem;
+      white-space: nowrap;
+      cursor: default;
+    }
+
+    .hub__broke-joke strong {
+      color: var(--gold);
+      font-weight: 800;
+    }
+
     .hub__feedback-link {
       padding: 0;
       font: inherit;
@@ -570,6 +590,18 @@
       display: grid;
       grid-template-columns: 1.35fr 1fr;
       gap: 0.85rem;
+    }
+
+    .home-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+      min-height: 0;
+    }
+
+    .home-stack > .home-card--notes {
+      flex: 1 1 auto;
+      min-height: 14rem;
     }
 
     .home-card--wide {
@@ -1023,6 +1055,179 @@
     .home-filter--month select {
       min-width: 9.5rem;
       border-color: rgba(61, 139, 253, 0.45);
+    }
+
+    .home-standouts-table col.col-watch { width: 2.1rem; }
+    .home-standouts-table col.col-watch { width: 4.6rem; }
+    .home-standouts-table th.col-watch,
+    .home-standouts-table td.col-watch {
+      text-align: center;
+      padding-left: 0.3rem;
+      padding-right: 0.3rem;
+    }
+    .home-watch-chip {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.28rem;
+      min-width: 3.85rem;
+      height: 1.45rem;
+      padding: 0 0.4rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      cursor: pointer;
+      vertical-align: middle;
+      color: var(--text-muted);
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    .home-watch-chip input {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      margin: 0;
+      cursor: pointer;
+    }
+    .home-watch-chip__mark {
+      display: inline-flex;
+      width: 0.7rem;
+      height: 0.7rem;
+      border-radius: 50%;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.72rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .home-watch-chip--idle {
+      color: #9fb2c7;
+      border-color: #3a4658;
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .home-watch-chip--idle .home-watch-chip__mark { color: #38bdf8; }
+    .home-watch-chip--watch {
+      color: #e0f2fe;
+      border-color: rgba(56, 189, 248, 0.7);
+      background: rgba(56, 189, 248, 0.2);
+    }
+    .home-watch-chip--watch .home-watch-chip__mark {
+      background: #38bdf8;
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25);
+    }
+    .home-watch-chip--pipe {
+      color: #ede9fe;
+      border-color: rgba(167, 139, 250, 0.75);
+      background: rgba(167, 139, 250, 0.22);
+    }
+    .home-watch-chip--pipe .home-watch-chip__mark {
+      background: #a78bfa;
+      box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.28);
+    }
+    .home-watch-chip--closed {
+      color: #ffedd5;
+      border-color: rgba(251, 146, 60, 0.65);
+      background: rgba(251, 146, 60, 0.16);
+    }
+    .home-watch-chip--closed .home-watch-chip__mark { background: #fb923c; }
+    .home-watch-chip.is-busy { opacity: 0.45; cursor: wait; }
+    .home-watch-chip--disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      min-width: auto;
+      padding: 0 0.35rem;
+    }
+
+    .home-watch-grid {
+      display: grid;
+      gap: 0.85rem;
+    }
+    .home-watch-stage {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+    .home-watch-stage__head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.65rem 0.85rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-2);
+    }
+    .home-watch-stage__title {
+      margin: 0;
+      font-size: 0.9rem;
+      font-weight: 700;
+    }
+    .home-watch-stage__count {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+    .home-watch-stage__empty {
+      margin: 0;
+      padding: 0.85rem;
+      color: var(--text-muted);
+      font-size: 0.8125rem;
+    }
+    .home-watch-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8125rem;
+    }
+    .home-watch-table th,
+    .home-watch-table td {
+      padding: 0.45rem 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    .home-watch-table th {
+      font-size: 0.6875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+    }
+    .home-watch-table .col-player { font-weight: 650; }
+    .home-watch-table .col-player a {
+      color: inherit;
+      text-decoration: none;
+    }
+    .home-watch-table .col-player a:hover { color: var(--accent); }
+    .home-watch-table .col-stage-dot {
+      display: inline-block;
+      width: 0.55rem;
+      height: 0.55rem;
+      border-radius: 50%;
+      margin-right: 0.4rem;
+      vertical-align: middle;
+    }
+    .home-watch-table .col-promote { white-space: nowrap; text-align: right; }
+    .home-promote-btn {
+      appearance: none;
+      border: 1px solid color-mix(in srgb, #38bdf8 45%, var(--border));
+      background: color-mix(in srgb, #38bdf8 14%, transparent);
+      color: #e8edf4;
+      border-radius: 8px;
+      padding: 0.28rem 0.55rem;
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 650;
+      cursor: pointer;
+    }
+    .home-promote-btn:hover { border-color: #38bdf8; }
+    .home-promote-btn:disabled { opacity: 0.45; cursor: wait; }
+      width: 0.55rem;
+      height: 0.55rem;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 0.4rem;
+      vertical-align: middle;
     }
 
     .home-standouts-note {
@@ -1900,6 +2105,12 @@
       line-height: 1.4;
     }
 
+    .home-card--notes #homeChangelog {
+      max-height: 22rem;
+      overflow: auto;
+      padding-right: 0.25rem;
+    }
+
     .home-quick {
       display: flex;
       flex-wrap: wrap;
@@ -1994,6 +2205,11 @@
             <span id="serverStatusText">Checking…</span>
           </div>
           <span class="hub__build" id="hubBuildStamp" title="Product environment">Port Vale Live · __HUB_BUILD__</span>
+          <span
+            class="hub__broke-joke"
+            id="hubBrokeJoke"
+            title="Little joke. Reset by editing standalone/hub-uptime-joke.json when we next break."
+          >— days since we last broke</span>
           <button type="button" class="hub__restart-btn" id="restartServerBtn">Restart</button>
           <a class="hub__restart-btn" id="startServerLink" href="/standalone/restart.command" hidden>Start server</a>
           <div class="hub__clock" aria-live="polite">
@@ -2040,13 +2256,22 @@
             </article>
           </div>
           <div class="home-grid">
-            <article class="home-card">
-              <div class="home-card__head">
-                <h2 class="home-card__title">Today's schedule</h2>
-                <span class="home-season" style="margin:0" id="homeTodayLabel"></span>
-              </div>
-              <div id="homeTodaySchedule"><p class="home-empty">Loading today's schedule…</p></div>
-            </article>
+            <div class="home-stack">
+              <article class="home-card">
+                <div class="home-card__head">
+                  <h2 class="home-card__title">Today's schedule</h2>
+                  <span class="home-season" style="margin:0" id="homeTodayLabel"></span>
+                </div>
+                <div id="homeTodaySchedule"><p class="home-empty">Loading today's schedule…</p></div>
+              </article>
+              <article class="home-card home-card--notes">
+                <div class="home-card__head">
+                  <h2 class="home-card__title">Release notes</h2>
+                  <span class="home-season" style="margin:0">Staging → Live</span>
+                </div>
+                <div id="homeChangelog"><p class="home-empty">Loading release notes…</p></div>
+              </article>
+            </div>
             <article class="home-card">
               <div class="home-card__head">
                 <h2 class="home-card__title">Month view</h2>
@@ -2090,19 +2315,12 @@
             </article>
           </div>
           <div class="home-live-grid">
-            <article class="home-card">
+            <article class="home-card home-card--wide">
               <div class="home-card__head">
                 <h2 class="home-card__title">Live team activity</h2>
                 <span class="home-season" style="margin:0">Watches · reports · games</span>
               </div>
               <div id="homeActivity"><p class="home-empty">Loading activity…</p></div>
-            </article>
-            <article class="home-card">
-              <div class="home-card__head">
-                <h2 class="home-card__title">What's new on the app</h2>
-                <span class="home-season" style="margin:0">Changelog</span>
-              </div>
-              <div id="homeChangelog"><p class="home-empty">Loading updates…</p></div>
             </article>
           </div>
         </div>
@@ -2200,7 +2418,9 @@
           <div class="home-subtabs" role="tablist" aria-label="Recruitment sections">
             <button type="button" class="home-subtab is-active" data-recruit-sub="league" role="tab">League profile</button>
             <button type="button" class="home-subtab" data-recruit-sub="standouts" role="tab">Stand outs</button>
-            <a class="home-subtab home-subtab--link" href="/who-to-scout" role="tab">Who To Scout →</a>
+            <button type="button" class="home-subtab" data-recruit-sub="watchlist" role="tab">Watch list</button>
+            <a class="home-subtab home-subtab--link" href="/who-to-scout">Who To Scout →</a>
+            <a class="home-subtab home-subtab--link" href="/player-pipelines">Pipelines →</a>
           </div>
 
           <div class="home-subpanel" data-recruit-panel="league">
@@ -2243,8 +2463,9 @@
               <div id="homeRecruitSnapshot"><p class="home-empty">Loading…</p></div>
               <div class="home-quick">
                 <a href="/who-to-scout">Who To Scout</a>
+                <a href="/watch-list">Watch list</a>
+                <a href="/player-pipelines">Player Pipelines</a>
                 <a href="/studio">Player Comparison</a>
-                <a href="/scouting">Player Search</a>
                 <a href="/squad-balance">Squad Balance</a>
                 <a href="/fixture-planner">Fixture Planner</a>
                 <a href="/scout-summary">Scout Summary</a>
@@ -2319,6 +2540,17 @@
               <a href="/who-to-scout">Open Who To Scout →</a> for profile weights and filters.
             </p>
             <div id="homeStandoutsList"><p class="home-empty">Open this tab to load stand outs…</p></div>
+          </div>
+
+          <div class="home-subpanel" data-recruit-panel="watchlist" hidden>
+            <p class="home-season" id="homeWatchSeason">Shared recruitment watch list</p>
+            <p class="home-standouts-note">
+              Tick players on Who To Scout / Stand outs → they land here.
+              When ready for progression, send them to
+              <a href="/player-pipelines">Player Pipelines</a>
+              (or open the full <a href="/watch-list">Watch list</a>).
+            </p>
+            <div id="homeWatchList"><p class="home-empty">Open this tab to load the watch list…</p></div>
           </div>
         </div>
 
@@ -2424,14 +2656,32 @@
       return new Set(window.HubAuth.groups || []);
     }
 
-    const RETIRED_APP_IDS = new Set(["pre-match-handout"]);
+    const RETIRED_APP_IDS = new Set(["pre-match-handout", "board-briefing", "player-search"]);
 
     function visibleApps() {
       // /api/apps already filters by role; keep a group safety net.
       const groups = allowedGroups();
-      const apps = (window.IMPECT_APPS || []).filter((app) => !RETIRED_APP_IDS.has(app.id));
+      const apps = (window.IMPECT_APPS || []).filter(
+        (app) => !RETIRED_APP_IDS.has(app.id) && app.sidebar !== false
+      );
       if (!groups.size || window.HubAuth.allow_all) return apps;
       return apps.filter((app) => groups.has(app.group));
+    }
+
+    // Hardcoded shortcuts (quick links, sub-tabs, card links) must not point at a
+    // tool that is still held back, or staff click through to a hidden product.
+    function hideLinksToComingSoonApps() {
+      const held = (window.IMPECT_APPS || [])
+        .filter((app) => app.comingSoon && app.href)
+        .map((app) => app.href);
+      for (const href of held) {
+        document
+          .querySelectorAll(`#homeDashboard a[href="${href}"]`)
+          .forEach((link) => {
+            link.hidden = true;
+            link.style.display = "none";
+          });
+      }
     }
 
     function greeting() {
@@ -2682,6 +2932,7 @@
       }
 
       applyRoleToUi();
+      hideLinksToComingSoonApps();
       renderRail();
       checkServer();
       setInterval(checkServer, 30_000);

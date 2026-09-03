@@ -37,6 +37,7 @@
 
   const state = {
     stages: [],
+    pipelineStageIds: [],
     positions: [],
     defaultTags: [],
     targets: [],
@@ -288,8 +289,17 @@
     });
   }
 
+  function pipelineStages() {
+    const allowed = new Set(state.pipelineStageIds || []);
+    if (!allowed.size) {
+      return state.stages.filter((stage) => stage.id !== "watch_list" && !stage.watch_list_only);
+    }
+    return state.stages.filter((stage) => allowed.has(stage.id));
+  }
+
   function renderBoard(rows) {
-    els.board.innerHTML = state.stages
+    const stages = pipelineStages();
+    els.board.innerHTML = stages
       .map((stage) => {
         const cards = rows.filter((row) => row.stage === stage.id);
         const color = stage.color || "#3d8bfd";
@@ -344,7 +354,7 @@
       return;
     }
 
-    const groups = state.stages
+    const groups = pipelineStages()
       .map((stage) => ({
         stage,
         rows: rows.filter((row) => row.stage === stage.id),
@@ -572,9 +582,13 @@
     try {
       const data = await fetchJson("/api/player-pipelines");
       state.stages = data.stages || [];
+      state.pipelineStageIds = data.pipeline_stage_ids || [];
       state.positions = data.positions || [];
       state.defaultTags = data.default_tags || [];
-      state.targets = data.targets || [];
+      const pipelineIds = new Set(state.pipelineStageIds);
+      state.targets = (data.targets || []).filter((row) =>
+        pipelineIds.size ? pipelineIds.has(row.stage) : row.stage !== "watch_list",
+      );
       fillFilters();
       setView(state.view);
       if (state.openId) openDrawer(state.openId);

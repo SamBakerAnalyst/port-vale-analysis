@@ -15,7 +15,7 @@ Product roadmap: [`docs/PRODUCT-ROADMAP.md`](docs/PRODUCT-ROADMAP.md).
 ## Where to build
 
 - **Local Mac** (`~/impect-football-dashboard`) — write code here. Default.
-- **Port Vale Staging** — `bash ~/impect-football-dashboard/deploy-staging.sh` then open the Staging URL. Does not touch Live.
+- **Port Vale Staging** — **always** after local work: `bash ~/impect-football-dashboard/deploy-staging.sh` then open the Staging URL. Does not touch Live. Do not wait to be asked.
 - **Port Vale Live** — only when the user explicitly asks: `bash ~/impect-football-dashboard/deploy-live.sh`
 
 Never mark complete after only local changes. Never debug by shipping half-fixes straight to Live while staff are on it.
@@ -71,8 +71,8 @@ Every tool page loads `/static/hub-feedback.js` (floating Suggest). Posts to `PO
 ## Definition of done (Live)
 
 1. Edit in `~/impect-football-dashboard`
-2. **Commit** changes
-3. Prefer **Port Vale Staging** verify first
+2. **Always** run **`bash ~/impect-football-dashboard/deploy-staging.sh`** (do not wait to be asked)
+3. **Commit** changes when asked
 4. Run **`bash ~/impect-football-dashboard/deploy-live.sh`** only when asked to promote
 5. **`deploy/smoke-live.sh` must PASS**
 6. Verify at **Port Vale Live** (hard refresh)

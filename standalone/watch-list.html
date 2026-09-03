@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Watch list</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/watch-list.css?v=4" />
+</head>
+<body>
+  <div class="wl">
+    <header class="wl-toolbar card">
+      <div class="wl-brand">
+        <p class="wl-eyebrow">Recruitment · <a href="/">← All apps</a></p>
+        <h1>Watch list</h1>
+        <p class="wl-sub" id="wlSub">
+          Targets from Who To Scout / Stand outs. Use the stage dropdown to move them into
+          <a href="/player-pipelines">Player Pipelines</a>.
+        </p>
+      </div>
+      <div class="wl-toolbar__right">
+        <div class="wl-refresh">
+          <span id="wlUpdated" class="wl-updated">Checking data…</span>
+          <button type="button" class="btn btn--ghost" id="wlRefreshBtn">Refresh data</button>
+        </div>
+        <a class="btn btn--ghost" href="/who-to-scout">Who To Scout</a>
+        <a class="btn btn--primary" href="/player-pipelines" id="wlPipelinesLink" hidden>Open Pipelines →</a>
+      </div>
+    </header>
+
+    <p id="wlStatus" class="wl-status hidden" role="status"></p>
+    <p class="wl-count" id="wlCount">Loading…</p>
+    <div id="wlList" class="wl-list">
+      <p class="wl-empty">Loading watch list…</p>
+    </div>
+  </div>
+
+  <script defer src="/static/hub-feedback.js?v=1"></script>
+  <script defer src="/static/watch-list.js?v=7"></script>
+</body>
+</html>

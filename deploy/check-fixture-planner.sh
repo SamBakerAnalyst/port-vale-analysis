@@ -19,6 +19,10 @@ if ! grep -Fq 'function staffNames' "$JS"; then
   echo "ERROR: $JS is missing staffNames() — old JS, do not ship."
   fail=1
 fi
+if grep -Eq 'if data\.|if error\.|if response\.' "$JS"; then
+  echo "ERROR: $JS has invalid if syntax (missing parentheses) — Fixture Planner will not load."
+  fail=1
+fi
 if [[ -f "$HTML" ]] && ! grep -Fq 'fp-comp-scope' "$HTML"; then
   echo "ERROR: $HTML is missing Leagues/Cups tabs — stale Fixture Planner page."
   fail=1

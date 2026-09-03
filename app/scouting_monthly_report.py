@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import calendar
+import json
+import time
 from datetime import datetime
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException
@@ -20,8 +23,16 @@ from app.scouting_monthly import (
     prefetch_monthly_match_kpis,
 )
 
-POTM_DEFAULT_LEAGUES = ("League Two", "National League", "Scottish Prem")
+POTM_DEFAULT_LEAGUES: tuple[str, ...] = (
+    "National League",
+    "League One",
+    "League Two",
+    "PL2",
+    "Scottish Prem",
+    "Irish Prem",
+)
 POTM_TOP_N = 10
+POTM_DISK_CACHE_DIR = Path.home() / ".cache" / "impect-scouting" / "potm"
 
 
 class ScoutingMonthlyReportRequest(BaseModel):
@@ -31,6 +42,7 @@ class ScoutingMonthlyReportRequest(BaseModel):
     min_minutes: float = MONTHLY_DEFAULT_MIN_MINUTES
     positions: list[str] = Field(default_factory=list)
     top_n: int = Field(default=POTM_TOP_N, ge=3, le=20)
+    include_season_scores: bool = False
 
 
 def _overall_score(profile_scores: dict[str, Any]) -> float | None:
@@ -194,25 +206,15 @@ def _short_profile_label(label: str) -> str:
     return cleaned[:24]
 
 
-def _profile_row_counts(profile_count: int) -> list[int]:
-    """Columns per row so panels fill the page (no orphan empty slot)."""
-    if profile_count <= 1:
-        return [1]
-    if profile_count == 2:
-        return [2]
-    if profile_count == 3:
-        return [3]
-    if profile_count == 4:
-        return [2, 2]
-    if profile_count == 5:
-        return [2, 3]
-    if profile_count == 6:
-        return [3, 3]
-    if profile_count == 7:
-        return [2, 2, 3]
-    if profile_count == 8:
-        return [3, 3, 2]
-    return [3, 3, 3]
+def _compact_score(value: float | None, *, decimals: int = 0) -> str:
+    if value is None:
+        return "—"
+    return f"{value:.{decimals}f}"
+
+
+def _compact_panels_per_page() -> tuple[int, int]:
+    """Columns × rows of mini-lists on one landscape A4 page."""
+    return 3, 4
 
 
 class MonthlyReportPDF(FPDF):
@@ -225,9 +227,13 @@ class MonthlyReportPDF(FPDF):
     WHITE = (255, 255, 255)
     LINE = (226, 232, 240)
     ROW_ALT = (241, 245, 249)
-    MARGIN = 8.0
-    HEADER_H = 22.0
-    FOOTER_H = 10.0
+    MARGIN = 7.0
+    HEADER_H = 14.0
+    FOOTER_H = 8.0
+    COMPACT_ROW_H = 3.35
+    COMPACT_TITLE_H = 5.0
+    COMPACT_HEADER_H = 3.8
+    COMPACT_GAP = 2.8
 
     def __init__(self, month_label: str, leagues: list[str]) -> None:
         super().__init__(orientation="L", unit="mm", format="A4")
@@ -294,25 +300,23 @@ class MonthlyReportPDF(FPDF):
         self._rgb((203, 213, 225))
         self.multi_cell(
             220,
-            7,
+            6,
             pdf_safe(
-                f"{self.leagues_label}\n"
-                f"{position_count} positions · top {POTM_TOP_N} overall + top {POTM_TOP_N} per profile\n"
-                f"{min_minutes:.0f}+ minutes in the calendar month\n"
-                f"Scores = league-relative percentiles · month (season) shown together"
+                f"{len(self.leagues_label.split(' · '))} leagues · top {POTM_TOP_N} overall + per profile\n"
+                f"{min_minutes:.0f}+ minutes in the month · league-only rankings\n"
+                f"Compact digest — rank, player, age, club, score"
             ),
         )
 
-        self.set_xy(18, 140)
-        self.set_font("Helvetica", "", 11)
+        self.set_xy(18, 128)
+        self.set_font("Helvetica", "", 10)
         self._rgb((148, 163, 184))
         self.multi_cell(
             230,
-            6,
+            5.5,
             pdf_safe(
-                "Page 1 per position: top overall scorers (equal-weighted profile average).\n"
-                "Page 2 per position: profile breakdowns — specialists who may not make the overall top 10.\n"
-                "Read scores as month percentile, with season percentile in brackets — e.g. 68 (45)."
+                "Each league: one page of overall tops by position, then profile leader pages.\n"
+                "Scores are month percentiles vs peers in that league (0–100)."
             ),
         )
 
@@ -327,320 +331,375 @@ class MonthlyReportPDF(FPDF):
         self._rgb((148, 163, 184))
         self.cell(0, 5, pdf_safe(f"Generated {generated_at}"))
 
-    def _header_bar(self, title: str, subtitle: str) -> None:
+    def _page_header(self, title: str, subtitle: str = "") -> None:
         self._fill(self.NAVY)
         self.rect(0, 0, self.w, self.HEADER_H, style="F")
-        self._fill(self.ACCENT)
-        self.rect(0, self.HEADER_H, self.w, 1.4, style="F")
-
-        self.set_xy(self.MARGIN, 4.5)
-        self.set_font("Helvetica", "B", 18)
+        self.set_xy(self.MARGIN, 3.5)
+        self.set_font("Helvetica", "B", 11)
         self._rgb(self.WHITE)
-        self.cell(200, 8, pdf_safe(title))
-
-        self.set_xy(self.MARGIN, 14)
-        self.set_font("Helvetica", "", 9)
-        self._rgb((203, 213, 225))
-        self.cell(210, 5, pdf_safe(subtitle))
-
-        self.set_xy(self.w - 72, 6)
-        self.set_font("Helvetica", "B", 12)
-        self._rgb(self.ACCENT)
-        self.cell(64, 8, self.month_label, align="R")
-
-    def add_overall_page(
-        self,
-        *,
-        position_label: str,
-        profiles: list[dict[str, str]],
-        players: list[dict[str, Any]],
-        leagues: list[str],
-        min_minutes: float,
-    ) -> None:
-        self.add_page()
-        self._fill(self.LIGHT)
-        self.rect(0, 0, self.w, self.h, style="F")
-        self._header_bar(
-            f"{position_label}  ·  Top {len(players)} overall",
-            f"{' · '.join(leagues)} · {min_minutes:.0f}+ min · month (season) · equal-weighted average",
-        )
-
-        if not players:
-            self.set_xy(12, 40)
-            self.set_font("Helvetica", "I", 12)
-            self._rgb(self.MUTED)
-            self.cell(0, 8, "No players met the monthly filter for this position.")
-            return
-
-        profile_cols = profiles[:6]
-        left = self.MARGIN
-        y = self.HEADER_H + 4.0
-        content_bottom = self.h - self.FOOTER_H
-        rank_w = 11.0
-        name_w = 46.0
-        age_w = 11.0
-        min_w = 14.0
-        club_w = 36.0
-        league_w = 28.0
-        overall_w = 26.0
-        remaining = self.w - (self.MARGIN * 2) - rank_w - name_w - age_w - min_w - club_w - league_w - overall_w
-        profile_w = remaining / max(len(profile_cols), 1)
-
-        headers = ["#", "Name", "Age", "Min", "Club", "League"]
-        widths = [rank_w, name_w, age_w, min_w, club_w, league_w]
-        for profile in profile_cols:
-            headers.append(_short_profile_label(profile["label"]))
-            widths.append(profile_w)
-        headers.append("Overall")
-        widths.append(overall_w)
-
-        header_h = 10.0
-        self.set_xy(left, y)
+        self.cell(0, 4.5, pdf_safe(title))
+        if subtitle:
+            self.set_xy(self.MARGIN, 9.0)
+            self.set_font("Helvetica", "", 7.5)
+            self._rgb((203, 213, 225))
+            self.cell(0, 3.5, pdf_safe(subtitle))
+        self.set_xy(self.w - 52, 4.0)
         self.set_font("Helvetica", "B", 9)
-        self._fill(self.SLATE)
-        self._rgb(self.WHITE)
-        for header, width in zip(headers, widths):
-            align = "L" if header in {"Name", "Club", "League"} else "C"
-            self.cell(width, header_h, pdf_safe(header), border=0, align=align, fill=True)
-        y += header_h
+        self._rgb(self.ACCENT)
+        self.cell(44, 5, self.month_label, align="R")
 
-        available = content_bottom - y
-        row_h = available / max(len(players), 1)
-        body_font = 11 if row_h >= 15 else 10 if row_h >= 12 else 9
-
-        for index, player in enumerate(players):
-            if index % 2 == 0:
-                self._fill(self.WHITE)
-            else:
-                self._fill(self.ROW_ALT)
-            self.rect(left, y, sum(widths), row_h, style="F")
-
-            values = [
-                str(index + 1),
-                str(player.get("name") or ""),
-                "" if player.get("age") is None else str(player.get("age")),
-                "" if player.get("minutes") is None else str(int(player.get("minutes"))),
-                str(player.get("club") or ""),
-                str(player.get("league") or ""),
-            ]
-            scores = player.get("profileScores") or {}
-            season_scores = player.get("seasonProfileScores") or {}
-            for profile in profile_cols:
-                values.append(
-                    _format_score_with_season(
-                        scores.get(profile["apiName"]),
-                        season_scores.get(profile["apiName"]),
-                        decimals=0,
-                    )
-                )
-            values.append(
-                _format_score_with_season(
-                    player.get("overall"),
-                    player.get("seasonOverall"),
-                    decimals=1,
-                )
-            )
-
-            text_y = y + (row_h - 4.5) / 2
-            x = left
-            for col_index, (value, width) in enumerate(zip(values, widths)):
-                self.set_xy(x + 0.8, text_y)
-                if col_index == 0:
-                    self.set_font("Helvetica", "B", body_font + 1)
-                    self._rgb(self.GREEN)
-                    align = "C"
-                elif col_index == 1:
-                    self.set_font("Helvetica", "B", body_font)
-                    self._rgb(self.NAVY)
-                    align = "L"
-                elif col_index == len(values) - 1:
-                    self.set_font("Helvetica", "B", body_font)
-                    self._rgb(self.GREEN)
-                    align = "C"
-                elif col_index >= 6:
-                    self.set_font("Helvetica", "B", max(body_font - 1, 8))
-                    self._rgb(self.SLATE)
-                    align = "C"
-                else:
-                    self.set_font("Helvetica", "", body_font)
-                    self._rgb(self.SLATE)
-                    align = "L" if col_index in (4, 5) else "C"
-                self.cell(width - 1.6, 4.5, pdf_safe(value)[:34], align=align)
-                x += width
-            y += row_h
-
-    def add_profile_page(
-        self,
-        *,
-        position_label: str,
-        profiles: list[dict[str, str]],
-        players: list[dict[str, Any]],
-        top_n: int,
-        leagues: list[str],
-    ) -> None:
-        self.add_page()
-        self._fill(self.LIGHT)
-        self.rect(0, 0, self.w, self.h, style="F")
-        self._header_bar(
-            f"{position_label}  ·  Profile strengths",
-            f"Top {top_n} per profile · month (season) · specialists outside overall top 10 · {' · '.join(leagues)}",
+    def _panel_height(self, row_count: int) -> float:
+        return (
+            self.COMPACT_TITLE_H
+            + self.COMPACT_HEADER_H
+            + row_count * self.COMPACT_ROW_H
+            + 1.5
         )
 
-        if not profiles or not players:
-            self.set_xy(12, 40)
-            self.set_font("Helvetica", "I", 12)
-            self._rgb(self.MUTED)
-            self.cell(0, 8, "No profile breakdown available for this position.")
-            return
-
-        gap = 3.5
-        start_y = self.HEADER_H + 3.5
-        usable_h = self.h - start_y - self.FOOTER_H
-        usable_w = self.w - (self.MARGIN * 2)
-        row_counts = _profile_row_counts(len(profiles))
-        panels_per_page = sum(row_counts)
-        row_h = (usable_h - gap * (len(row_counts) - 1)) / max(len(row_counts), 1)
-
-        for index, profile in enumerate(profiles):
-            page_index = index // panels_per_page
-            local_index = index % panels_per_page
-            if page_index > 0 and local_index == 0:
-                self.add_page()
-                self._fill(self.LIGHT)
-                self.rect(0, 0, self.w, self.h, style="F")
-                self._header_bar(
-                    f"{position_label}  ·  Profile strengths (cont.)",
-                    f"Top {top_n} per profile · month (season) · {' · '.join(leagues)}",
-                )
-
-            # Locate which row/col this panel sits in for the current page layout.
-            cursor = 0
-            row_idx = 0
-            col_idx = 0
-            for r, cols_in_row in enumerate(row_counts):
-                if local_index < cursor + cols_in_row:
-                    row_idx = r
-                    col_idx = local_index - cursor
-                    break
-                cursor += cols_in_row
-            cols_in_row = row_counts[row_idx]
-            panel_w = (usable_w - gap * (cols_in_row - 1)) / cols_in_row
-            x = self.MARGIN + col_idx * (panel_w + gap)
-            y = start_y + row_idx * (row_h + gap)
-            ranked = _rank_by_profile(players, profile["apiName"], top_n)
-            self._draw_profile_panel(
-                x,
-                y,
-                panel_w,
-                row_h,
-                profile_label=_short_profile_label(profile["label"]),
-                ranked=ranked,
-            )
-
-    def _draw_profile_panel(
+    def _draw_compact_list(
         self,
         x: float,
         y: float,
         width: float,
-        height: float,
         *,
-        profile_label: str,
-        ranked: list[dict[str, Any]],
+        title: str,
+        rows: list[dict[str, Any]],
     ) -> None:
+        height = self._panel_height(len(rows))
         self._fill(self.WHITE)
         self._draw(self.LINE)
         self.rect(x, y, width, height, style="DF")
 
-        title_h = 10.0
         self._fill(self.SLATE)
-        self.rect(x, y, width, title_h, style="F")
-        self.set_xy(x + 2.5, y + 2.5)
-        self.set_font("Helvetica", "B", 10)
+        self.rect(x, y, width, self.COMPACT_TITLE_H, style="F")
+        self.set_xy(x + 1.8, y + 1.2)
+        self.set_font("Helvetica", "B", 7.5)
         self._rgb(self.WHITE)
-        self.cell(width - 5, 5, pdf_safe(profile_label))
+        self.cell(width - 3.6, 3.5, pdf_safe(title))
 
-        if not ranked:
-            self.set_xy(x + 3, y + 16)
-            self.set_font("Helvetica", "I", 9)
-            self._rgb(self.MUTED)
-            self.cell(width - 6, 5, "No scorers")
-            return
+        pad = 1.6
+        rank_w = 5.5
+        age_w = 7.0
+        score_w = 9.0
+        club_w = min(24.0, width * 0.28)
+        name_w = width - pad * 2 - rank_w - age_w - club_w - score_w
 
-        pad = 2.2
-        rank_w = 9.0
-        min_w = 13.0
-        score_w = 26.0 if width < 100 else 30.0
-        show_club = width >= 105
-        leftover = width - pad * 2 - rank_w - min_w - score_w
-        if show_club:
-            name_w = leftover * 0.58
-            club_w = leftover * 0.42
-        else:
-            name_w = leftover
-            club_w = 0.0
-        name_chars = max(10, int(name_w / 2.05))
-        club_chars = max(5, int(club_w / 2.0)) if show_club else 0
-
-        header_y = y + title_h + 1.5
-        self.set_font("Helvetica", "B", 8)
+        header_y = y + self.COMPACT_TITLE_H + 0.6
+        self.set_font("Helvetica", "B", 6.5)
         self._rgb(self.MUTED)
         self.set_xy(x + pad, header_y)
-        self.cell(rank_w, 4, "#")
-        self.cell(name_w, 4, "Name")
-        if show_club:
-            self.cell(club_w, 4, "Club")
-        self.cell(min_w, 4, "Min", align="R")
-        self.cell(score_w, 4, "Mo (Sea)", align="R")
+        self.cell(rank_w, 3, "#")
+        self.cell(name_w, 3, "Player")
+        self.cell(age_w, 3, "Age", align="C")
+        self.cell(club_w, 3, "Club")
+        self.cell(score_w, 3, "Scr", align="R")
 
-        row_top = header_y + 5.0
-        available = height - (row_top - y) - 2.0
-        row_h = available / max(len(ranked), 1)
-        body_font = 10 if row_h >= 10 else 9 if row_h >= 8 else 8
+        row_top = header_y + self.COMPACT_HEADER_H - 2.0
+        name_chars = max(8, int(name_w / 1.85))
+        club_chars = max(6, int(club_w / 1.75))
 
-        for index, player in enumerate(ranked):
-            ry = row_top + index * row_h
+        for index, row in enumerate(rows):
+            ry = row_top + index * self.COMPACT_ROW_H
             if index % 2 == 0:
                 self._fill(self.ROW_ALT)
-                self.rect(x + 0.6, ry, width - 1.2, row_h, style="F")
+                self.rect(x + 0.5, ry, width - 1.0, self.COMPACT_ROW_H, style="F")
 
-            text_y = ry + (row_h - 4) / 2
+            text_y = ry + (self.COMPACT_ROW_H - 3.2) / 2
             self.set_xy(x + pad, text_y)
-            self.set_font("Helvetica", "B", body_font)
+            self.set_font("Helvetica", "B", 7)
             self._rgb(self.GREEN)
-            self.cell(rank_w, 4, str(index + 1))
+            self.cell(rank_w, 3.2, str(row.get("rank") or index + 1))
 
-            self.set_font("Helvetica", "B", body_font)
+            self.set_font("Helvetica", "B", 7)
             self._rgb(self.NAVY)
-            self.cell(name_w, 4, pdf_safe(str(player.get("name") or ""))[:name_chars])
+            self.cell(name_w, 3.2, pdf_safe(str(row.get("name") or ""))[:name_chars])
 
-            if show_club:
-                self.set_font("Helvetica", "", max(body_font - 1, 7))
-                self._rgb(self.MUTED)
-                self.cell(club_w, 4, pdf_safe(str(player.get("club") or ""))[:club_chars])
-
-            self.set_font("Helvetica", "", body_font)
+            self.set_font("Helvetica", "", 7)
             self._rgb(self.SLATE)
-            self.cell(min_w, 4, str(int(player.get("minutes") or 0)), align="R")
+            age = row.get("age")
+            self.cell(age_w, 3.2, "" if age is None else str(age), align="C")
 
-            profile_name = player.get("_profileApiName")
-            season_scores = player.get("seasonProfileScores") or {}
-            season_value = season_scores.get(profile_name) if profile_name else None
-            self.set_font("Helvetica", "B", body_font)
+            self.set_font("Helvetica", "", 6.5)
+            self._rgb(self.MUTED)
+            self.cell(club_w, 3.2, pdf_safe(str(row.get("club") or ""))[:club_chars])
+
+            self.set_font("Helvetica", "B", 7)
             self._rgb(self.NAVY)
-            self.cell(
-                score_w,
-                4,
-                _format_score_with_season(
-                    player.get("profileValue"),
-                    season_value,
-                    decimals=0,
-                ),
-                align="R",
+            self.cell(score_w, 3.2, pdf_safe(str(row.get("score") or "—")), align="R")
+
+    def _compact_rows_from_players(
+        self,
+        players: list[dict[str, Any]],
+        *,
+        score_key: str = "overall",
+        profile_api: str | None = None,
+    ) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        for index, player in enumerate(players):
+            if score_key == "overall":
+                score = _compact_score(player.get("overall"), decimals=0)
+            else:
+                score = _compact_score(player.get("profileValue"), decimals=0)
+            rows.append(
+                {
+                    "rank": index + 1,
+                    "name": player.get("name") or "",
+                    "age": player.get("age"),
+                    "club": player.get("club") or "",
+                    "score": score,
+                }
             )
+        return rows
+
+    def _layout_compact_panels(
+        self,
+        panels: list[tuple[str, list[dict[str, Any]]]],
+        *,
+        page_title: str,
+        page_subtitle: str,
+    ) -> None:
+        if not panels:
+            return
+
+        cols, row_count = _compact_panels_per_page()
+        panels_per_page = cols * row_count
+        usable_w = self.w - self.MARGIN * 2
+        usable_h = self.h - self.HEADER_H - self.FOOTER_H - 2.0
+        panel_w = (usable_w - self.COMPACT_GAP * (cols - 1)) / cols
+        panel_h = (usable_h - self.COMPACT_GAP * (row_count - 1)) / row_count
+        start_y = self.HEADER_H + 1.5
+
+        for page_start in range(0, len(panels), panels_per_page):
+            chunk = panels[page_start : page_start + panels_per_page]
+            cont = " (cont.)" if page_start else ""
+            self.add_page()
+            self._fill(self.LIGHT)
+            self.rect(0, 0, self.w, self.h, style="F")
+            self._page_header(f"{page_title}{cont}", page_subtitle)
+
+            for index, (title, rows) in enumerate(chunk):
+                col = index % cols
+                row = index // cols
+                x = self.MARGIN + col * (panel_w + self.COMPACT_GAP)
+                y = start_y + row * (panel_h + self.COMPACT_GAP)
+                self._draw_compact_list(x, y, panel_w, title=title, rows=rows)
+
+    def add_league_compact_pages(
+        self,
+        *,
+        league: str,
+        sections: list[dict[str, Any]],
+        top_n: int,
+        min_minutes: float,
+    ) -> None:
+        overall_panels: list[tuple[str, list[dict[str, Any]]]] = []
+        profile_panels: list[tuple[str, list[dict[str, Any]]]] = []
+
+        for section in sections:
+            position_label = str(section.get("positionLabel") or section.get("position") or "")
+            top_overall = list(section.get("topOverall") or [])[:top_n]
+            if top_overall:
+                overall_panels.append(
+                    (
+                        f"{position_label} · overall",
+                        self._compact_rows_from_players(top_overall),
+                    )
+                )
+
+            profiles = [
+                {
+                    "apiName": profile.get("apiName") or profile.get("api_name") or "",
+                    "label": profile.get("label") or "",
+                }
+                for profile in section.get("profiles") or []
+                if profile.get("apiName") or profile.get("api_name")
+            ]
+            players = list(section.get("players") or [])
+            for profile in profiles:
+                ranked = _rank_by_profile(players, profile["apiName"], top_n)
+                if not ranked:
+                    continue
+                short = _short_profile_label(profile["label"])
+                profile_panels.append(
+                    (
+                        f"{position_label} · {short}",
+                        self._compact_rows_from_players(
+                            ranked,
+                            score_key="profile",
+                            profile_api=profile["apiName"],
+                        ),
+                    )
+                )
+
+        subtitle = f"{league} · {min_minutes:.0f}+ min · month percentiles"
+        self._layout_compact_panels(
+            overall_panels,
+            page_title=f"{league} · Top {top_n} overall",
+            page_subtitle=subtitle,
+        )
+        self._layout_compact_panels(
+            profile_panels,
+            page_title=f"{league} · Top {top_n} by profile",
+            page_subtitle=subtitle,
+        )
+
+
+def _potm_disk_cache_key(body: ScoutingMonthlyReportRequest) -> str:
+    leagues = sorted(league for league in body.leagues if league)
+    return (
+        f"potm:{body.year}:{body.month:02d}:"
+        f"{'|'.join(leagues)}:{body.min_minutes:.0f}:{body.top_n}"
+    )
+
+
+def _load_potm_disk_cache(body: ScoutingMonthlyReportRequest) -> dict[str, Any] | None:
+    path = POTM_DISK_CACHE_DIR / f"{_potm_disk_cache_key(body).replace('|', '_').replace(':', '-')}.json"
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(payload, dict) and payload.get("leagueReports"):
+            return payload
+    except (OSError, json.JSONDecodeError, TypeError):
+        return None
+    return None
+
+
+def _save_potm_disk_cache(body: ScoutingMonthlyReportRequest, payload: dict[str, Any]) -> None:
+    try:
+        POTM_DISK_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        path = POTM_DISK_CACHE_DIR / f"{_potm_disk_cache_key(body).replace('|', '_').replace(':', '-')}.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+    except OSError:
+        return
+
+
+def _standout_row_to_potm_player(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": row.get("id"),
+        "name": row.get("name"),
+        "age": row.get("age"),
+        "club": row.get("club"),
+        "league": row.get("league"),
+        "minutes": row.get("minutes"),
+        "profileScores": dict(row.get("profileScores") or {}),
+    }
+
+
+def _empty_potm_section(position: str, position_label: str) -> dict[str, Any]:
+    return {
+        "position": position,
+        "positionLabel": position_label,
+        "profiles": [],
+        "players": [],
+        "topOverall": [],
+    }
+
+
+def _potm_payload_from_standouts_raw(
+    raw: dict[str, Any],
+    body: ScoutingMonthlyReportRequest,
+) -> dict[str, Any]:
+    from app.scouting import _profiles_for_position, _scouting_export_positions, _scouting_position_label
+
+    leagues = [league for league in body.leagues if league] or list(POTM_DEFAULT_LEAGUES)
+    positions = body.positions or _scouting_export_positions()
+    month_label = f"{calendar.month_name[body.month]} {body.year}"
+    all_players = list(raw.get("players") or [])
+    league_reports: list[dict[str, Any]] = []
+
+    for league in leagues:
+        sections: list[dict[str, Any]] = []
+        for position in positions:
+            position_label = _scouting_position_label(position)
+            try:
+                profile_names = _profiles_for_position(position)
+            except HTTPException:
+                profile_names = []
+            profiles = [
+                {"apiName": name, "label": humanize_profile_name(name)} for name in profile_names
+            ]
+            league_players = [
+                _standout_row_to_potm_player(row)
+                for row in all_players
+                if row.get("position") == position
+                and str(row.get("league") or "") == league
+                and float(row.get("minutes") or 0) >= body.min_minutes
+            ]
+            sections.append(
+                {
+                    "position": position,
+                    "positionLabel": position_label,
+                    "profiles": profiles,
+                    "players": league_players,
+                    "topOverall": _rank_overall(league_players, body.top_n),
+                }
+            )
+        league_reports.append({"league": league, "sections": sections})
+
+    return {
+        "monthLabel": month_label,
+        "year": body.year,
+        "month": body.month,
+        "leagues": leagues,
+        "minMinutes": body.min_minutes,
+        "topN": body.top_n,
+        "leagueReports": league_reports,
+        "warnings": list(raw.get("warnings") or []),
+        "generatedAt": datetime.now().strftime("%d %b %Y, %H:%M"),
+        "source": "standouts_cache",
+    }
+
+
+def _try_potm_from_standouts_cache(body: ScoutingMonthlyReportRequest) -> dict[str, Any] | None:
+    from app.home_dashboard import (
+        STANDOUTS_CACHE_TTL,
+        STANDOUTS_LEAGUES,
+        _load_standouts_disk,
+        _standouts_cache,
+        _standouts_raw_cache_key,
+    )
+
+    leagues = [league for league in body.leagues if league] or list(POTM_DEFAULT_LEAGUES)
+    if any(league not in STANDOUTS_LEAGUES for league in leagues):
+        return None
+
+    cache_key = _standouts_raw_cache_key("month", year=body.year, month=body.month)
+    raw: dict[str, Any] | None = None
+    now = time.time()
+
+    cached = _standouts_cache.get(cache_key)
+    if cached and now - cached[0] < STANDOUTS_CACHE_TTL:
+        raw = cached[1]
+    if raw is None:
+        disk = _load_standouts_disk(cache_key)
+        if disk:
+            raw = disk[1]
+
+    if not raw or raw.get("building") or not raw.get("players"):
+        return None
+    if int(raw.get("year") or 0) != body.year or int(raw.get("month") or 0) != body.month:
+        return None
+
+    return _potm_payload_from_standouts_raw(raw, body)
 
 
 def build_monthly_report_payload(body: ScoutingMonthlyReportRequest) -> dict[str, Any]:
     from app.scouting import _scouting_export_positions, _scouting_position_label
+
+    disk_payload = _load_potm_disk_cache(body)
+    if disk_payload:
+        disk_payload["source"] = "potm_disk_cache"
+        return disk_payload
+
+    cached_payload = _try_potm_from_standouts_cache(body)
+    if cached_payload:
+        _save_potm_disk_cache(body, cached_payload)
+        return cached_payload
+
+    from app.home_dashboard import _schedule_standouts_refresh
+
+    _schedule_standouts_refresh("month", year=body.year, month=body.month)
 
     leagues = [league for league in body.leagues if league]
     if not leagues:
@@ -648,16 +707,15 @@ def build_monthly_report_payload(body: ScoutingMonthlyReportRequest) -> dict[str
 
     positions = body.positions or _scouting_export_positions()
     month_label = f"{calendar.month_name[body.month]} {body.year}"
-    sections: list[dict[str, Any]] = []
+    league_sections: dict[str, list[dict[str, Any]]] = {league: [] for league in leagues}
     warnings: list[str] = []
 
-    # Warm shared match/KPI cache once — every position reuses it instead of
-    # re-downloading the same match KPIs 10 times.
     try:
         prefetch = prefetch_monthly_match_kpis(
             leagues=leagues,
             year=body.year,
             month=body.month,
+            warm_position_scores=True,
         )
         warnings.extend(prefetch.get("warnings") or [])
     except HTTPException as exc:
@@ -665,7 +723,9 @@ def build_monthly_report_payload(body: ScoutingMonthlyReportRequest) -> dict[str
             raise
         warnings.append(str(exc.detail))
 
+    # One Impect pull per position (all leagues together) — not once per league × position.
     for position in positions:
+        position_label = _scouting_position_label(position)
         try:
             data = build_scouting_monthly_list(
                 ScoutingMonthlyListRequest(
@@ -677,85 +737,79 @@ def build_monthly_report_payload(body: ScoutingMonthlyReportRequest) -> dict[str
                 )
             )
         except HTTPException as exc:
-            warnings.append(f"{_scouting_position_label(position)}: {exc.detail}")
-            sections.append(
-                {
-                    "position": position,
-                    "positionLabel": _scouting_position_label(position),
-                    "profiles": [],
-                    "players": [],
-                    "topOverall": [],
-                }
-            )
+            warnings.append(f"{position_label}: {exc.detail}")
+            for league in leagues:
+                league_sections[league].append(_empty_potm_section(position, position_label))
             continue
 
         players = list(data.get("players") or [])
         profiles = list(data.get("profiles") or [])
-        try:
-            season_lookup = _load_season_score_lookup(position, leagues)
-            players = _attach_season_scores(players, season_lookup)
-        except Exception as exc:
-            warnings.append(
-                f"{_scouting_position_label(position)}: season scores unavailable ({exc})."
-            )
-        sections.append(
-            {
-                "position": position,
-                "positionLabel": data.get("positionLabel") or _scouting_position_label(position),
-                "profiles": profiles,
-                "players": players,
-                "topOverall": _rank_overall(players, body.top_n),
-                "matchCount": data.get("matchCount"),
-            }
-        )
         for note in data.get("warnings") or []:
             warnings.append(str(note))
 
-    return {
+        for league in leagues:
+            league_players = [
+                player for player in players if str(player.get("league") or "") == league
+            ]
+            if body.include_season_scores:
+                try:
+                    season_lookup = _load_season_score_lookup(position, [league])
+                    league_players = _attach_season_scores(league_players, season_lookup)
+                except Exception as exc:
+                    warnings.append(
+                        f"{league} · {position_label}: season scores unavailable ({exc})."
+                    )
+            league_sections[league].append(
+                {
+                    "position": position,
+                    "positionLabel": data.get("positionLabel") or position_label,
+                    "profiles": profiles,
+                    "players": league_players,
+                    "topOverall": _rank_overall(league_players, body.top_n),
+                    "matchCount": data.get("matchCount"),
+                }
+            )
+
+    league_reports = [
+        {"league": league, "sections": league_sections[league]} for league in leagues
+    ]
+
+    payload = {
         "monthLabel": month_label,
         "year": body.year,
         "month": body.month,
         "leagues": leagues,
         "minMinutes": body.min_minutes,
         "topN": body.top_n,
-        "sections": sections,
+        "leagueReports": league_reports,
         "warnings": warnings,
         "generatedAt": datetime.now().strftime("%d %b %Y, %H:%M"),
+        "source": "live_impect",
     }
+    _save_potm_disk_cache(body, payload)
+    return payload
 
 
 def build_monthly_report_pdf(body: ScoutingMonthlyReportRequest) -> bytes:
     payload = build_monthly_report_payload(body)
+    league_reports = list(payload.get("leagueReports") or [])
+    position_count = len(league_reports[0].get("sections") or []) if league_reports else 0
     pdf = MonthlyReportPDF(payload["monthLabel"], payload["leagues"])
     pdf.add_cover(
         min_minutes=float(payload["minMinutes"]),
-        position_count=len(payload["sections"]),
+        position_count=position_count,
         generated_at=str(payload["generatedAt"]),
         warnings=list(payload.get("warnings") or []),
     )
 
-    for section in payload["sections"]:
-        profiles = [
-            {
-                "apiName": profile.get("apiName") or profile.get("api_name") or "",
-                "label": profile.get("label") or "",
-            }
-            for profile in section.get("profiles") or []
-            if profile.get("apiName") or profile.get("api_name")
-        ]
-        pdf.add_overall_page(
-            position_label=str(section.get("positionLabel") or section.get("position") or ""),
-            profiles=profiles,
-            players=list(section.get("topOverall") or []),
-            leagues=list(payload["leagues"]),
-            min_minutes=float(payload["minMinutes"]),
-        )
-        pdf.add_profile_page(
-            position_label=str(section.get("positionLabel") or section.get("position") or ""),
-            profiles=profiles,
-            players=list(section.get("players") or []),
+    for league_report in payload["leagueReports"]:
+        league = str(league_report.get("league") or "")
+        sections = list(league_report.get("sections") or [])
+        pdf.add_league_compact_pages(
+            league=league,
+            sections=sections,
             top_n=int(payload["topN"]),
-            leagues=list(payload["leagues"]),
+            min_minutes=float(payload["minMinutes"]),
         )
 
     buffer = BytesIO()

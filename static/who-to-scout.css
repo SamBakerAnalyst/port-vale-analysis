@@ -10,7 +10,7 @@
   --amber: #fbbf24;
   --gold: #f5c518;
   --radius: 12px;
-  --font: "DM Sans", system-ui, sans-serif;
+  --font: "Manrope", system-ui, sans-serif;
   --mono: "JetBrains Mono", monospace;
 }
 
@@ -120,6 +120,18 @@ a:hover { text-decoration: underline; }
   cursor: not-allowed;
 }
 .btn--ghost { background: transparent; }
+.btn--primary {
+  background: rgba(56, 189, 248, 0.18);
+  border-color: rgba(56, 189, 248, 0.55);
+  color: #e0f2fe;
+  font-weight: 700;
+}
+.btn--danger {
+  background: rgba(248, 113, 113, 0.14);
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #fecaca;
+  font-weight: 700;
+}
 
 .filters {
   padding: 0.75rem 0.85rem;
@@ -332,9 +344,211 @@ a:hover { text-decoration: underline; }
   color: var(--accent);
 }
 
+.status-banner--ok {
+  border-color: rgba(52, 211, 153, 0.35);
+  color: var(--green);
+}
+
 .status-banner--error {
   border-color: rgba(248, 113, 113, 0.35);
   color: #fca5a5;
+}
+
+.status-banner--warn {
+  border-color: rgba(251, 191, 36, 0.35);
+  color: var(--amber, #fbbf24);
+}
+
+.scout-table col.col-watch { width: 4.6rem; }
+
+.scout-table th.col-watch,
+.scout-table td.col-watch {
+  text-align: center;
+  padding-left: 0.3rem;
+  padding-right: 0.3rem;
+}
+
+.watch-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem;
+  min-width: 3.85rem;
+  height: 1.45rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2, #1a222d);
+  cursor: pointer;
+  vertical-align: middle;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.watch-chip__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.watch-chip--idle {
+  color: #9fb2c7;
+  border-color: #3a4658;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.watch-chip--idle:hover {
+  color: #e8edf4;
+  border-color: rgba(56, 189, 248, 0.65);
+  background: rgba(56, 189, 248, 0.1);
+}
+
+.watch-chip--idle .watch-chip__mark {
+  color: #38bdf8;
+}
+
+.watch-chip--watch {
+  color: #e0f2fe;
+  border-color: rgba(56, 189, 248, 0.7);
+  background: rgba(56, 189, 248, 0.2);
+}
+
+.watch-chip--watch .watch-chip__mark {
+  background: #38bdf8;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25);
+}
+
+.watch-chip--pipe {
+  color: #ede9fe;
+  border-color: rgba(167, 139, 250, 0.75);
+  background: rgba(167, 139, 250, 0.22);
+}
+
+.watch-chip--pipe .watch-chip__mark {
+  background: #a78bfa;
+  box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.28);
+}
+
+.watch-chip--closed {
+  color: #ffedd5;
+  border-color: rgba(251, 146, 60, 0.65);
+  background: rgba(251, 146, 60, 0.16);
+}
+
+.watch-chip--closed .watch-chip__mark {
+  background: #fb923c;
+}
+
+.watch-chip.is-busy {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+.watch-chip--disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  min-width: auto;
+  padding: 0 0.35rem;
+}
+
+.watch-prompt {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(6, 10, 16, 0.55);
+}
+
+.watch-prompt.hidden { display: none; }
+
+.watch-prompt__card {
+  width: min(24rem, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.1rem 1.05rem;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+
+.watch-prompt__eyebrow {
+  margin: 0 0 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.watch-prompt__title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.watch-prompt__sub {
+  margin: 0.35rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.watch-prompt__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.watch-toast {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 90;
+  max-width: min(22rem, calc(100vw - 2rem));
+  padding: 0.7rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  background: #14202c;
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 600;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.watch-toast.hidden { display: none; }
+.watch-toast.is-error {
+  border-color: rgba(248, 113, 113, 0.55);
+  background: #2a1518;
+}
+
+.watch-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  margin-left: 0.35rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: rgba(61, 139, 253, 0.2);
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-family: var(--mono, monospace);
 }
 
 .filter--grow {
@@ -360,8 +574,9 @@ a:hover { text-decoration: underline; }
   gap: 0.85rem;
 }
 
-@media (min-width: 1280px) {
-  .league-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* Keep two league cards wide enough that Ovr / Age / Mins stay on screen. */
+@media (max-width: 980px) {
+  .league-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 .league-card.is-empty {
@@ -454,6 +669,31 @@ a:hover { text-decoration: underline; }
   min-width: 52rem;
   border-collapse: collapse;
   font-size: 0.875rem;
+}
+
+/* League overview: fewer columns so Overall stays visible in a 2-card layout. */
+.scout-table--league-view {
+  min-width: 0;
+  font-size: 0.8125rem;
+}
+
+.scout-table--league-view col.col-watch { width: 4.4rem; }
+.scout-table--league-view col.col-rank { width: 2rem; }
+.scout-table--league-view col.col-player { width: 8.5rem; }
+.scout-table--league-view col.col-overall { width: 3.4rem; }
+.scout-table--league-view col.col-pos { width: 2.4rem; }
+.scout-table--league-view col.col-club { width: 7.5rem; }
+.scout-table--league-view col.col-age { width: 2.4rem; }
+.scout-table--league-view col.col-mins { width: 3.6rem; }
+
+.scout-table--league-view th,
+.scout-table--league-view td {
+  padding: 0.42rem 0.32rem;
+}
+
+.scout-table--league-view .col-overall {
+  font-size: 0.9rem;
+  font-weight: 750;
 }
 
 .scout-table col.col-rank { width: 2.25rem; }
@@ -630,7 +870,7 @@ a:hover { text-decoration: underline; }
 .scout-table tr.is-loan td.col-player a,
 .scout-table tr.has-scout.is-loan td.col-player a,
 .scout-table tr.is-loan.row-veteran td.col-player a {
-  color: #3b82f6 !important;
+  color: #60a5fa !important;
   font-weight: 700;
 }
 

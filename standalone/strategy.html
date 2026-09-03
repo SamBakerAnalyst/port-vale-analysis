@@ -6,9 +6,9 @@
   <title>League Two Strategy Report</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" media="print" onload="this.media='all'" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Manrope:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'" />
   <noscript>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Manrope:wght@400;500;600;700&display=swap" />
   </noscript>
   <style>
     :root {
@@ -20,7 +20,7 @@
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: "DM Sans", system-ui, sans-serif;
+      font-family: "Manrope", system-ui, sans-serif;
       background: #0a0a0a;
       color: #f5f5f5;
     }
@@ -6763,28 +6763,43 @@ const FORM_DATA = {"formSeasons":[{"season":"22/23","top7":[{"team":"Leyton Orie
 
     async function exportToPdf() {
       setExportBusy(true);
+      document.body.classList.add("is-exporting");
       try {
-        setExportStatus("Preparing PDF…", "loading");
-        const canvases = await captureAllSlides(setExportStatus);
-        await loadExportScript("https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js");
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF({
-          orientation: "landscape",
-          unit: "mm",
-          format: [EXPORT_PDF_W_MM, EXPORT_PDF_H_MM],
-          compress: true,
+        if (!window.PortValeWysiwygExport) {
+          throw new Error("WYSIWYG export helper failed to load — hard refresh and try again.");
+        }
+        setExportStatus("Preparing WhatsApp PDF from on-screen slides…", "loading");
+        setExportOverlay("Building WhatsApp PDF (Chrome)…");
+        const slides = deckSlides();
+        if (!slides.length) throw new Error("Load slides before exporting.");
+
+        const pack = await window.PortValeWysiwygExport.captureSlideHtmlPages({
+          slides,
+          stripClasses: ["is-export-capture", "is-export-hidden"],
+          activeClass: "is-active",
+          background: "#0b1220",
+          onProgress: (msg) => {
+            setExportStatus(msg, "loading");
+            setExportOverlay(msg);
+          },
         });
-        canvases.forEach((canvas, index) => {
-          const imageData = canvas.toDataURL("image/png");
-          if (index > 0) pdf.addPage([EXPORT_PDF_W_MM, EXPORT_PDF_H_MM], "landscape");
-          pdf.addImage(imageData, "PNG", 0, 0, EXPORT_PDF_W_MM, EXPORT_PDF_H_MM);
+
+        setExportOverlay("Rendering PDF in Chrome…");
+        const result = await window.PortValeWysiwygExport.downloadPdf({
+          ...pack,
+          filename: `${EXPORT_FILE_BASE}.pdf`,
+          documentTitle: "League Two Strategy",
+          endpoint: "/api/wysiwyg-export-pdf",
         });
-        pdf.save(`${EXPORT_FILE_BASE}.pdf`);
-        setExportStatus("PDF downloaded.", "success");
+        setExportStatus(
+          `PDF downloaded (${result.pageCount} slides · ${result.sizeMb} MB). Matches what you see on screen.`,
+          "success",
+        );
       } catch (err) {
         setExportStatus(err.message || "PDF export failed.", "error");
         console.error(err);
       } finally {
+        document.body.classList.remove("is-exporting");
         setExportOverlay("");
         setExportReady(true);
       }
@@ -7652,6 +7667,7 @@ const FORM_DATA = {"formSeasons":[{"season":"22/23","top7":[{"team":"Leyton Orie
       renderDeck();
     }
   </script>
+  <script src="/static/wysiwyg-export.js"></script>
   <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>

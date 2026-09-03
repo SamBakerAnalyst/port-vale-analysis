@@ -879,7 +879,11 @@ def _fetch_players_parallel(iteration_ids: list[int]) -> dict[int, list[dict[str
         }
         for future in as_completed(futures):
             iteration_id = futures[future]
-            results[iteration_id] = future.result()
+            try:
+                results[iteration_id] = future.result()
+            except Exception:
+                # One bad season/league must not wipe the whole typeahead.
+                results[iteration_id] = []
     return results
 
 
@@ -1862,6 +1866,59 @@ def _cohort_percentile(value: float, cohort_values: list[float]) -> float | None
     return round(max(1.0, min(100.0, percentile)), 1)
 
 
+def _impect_score_0_100(raw_value: float | None) -> float | None:
+    """Impect's own figure, in the units the Impect platform displays.
+
+    Profile ratings are 0–1 and become 0–100 after a unit change only: no cohort
+    re-ranking, blending, weighting or inversion.
+
+    Underlying factor scores are not on that scale. A dribble score of 0.05
+    displays as 5 — that is Impect's number, not 5 out of 100. Drilldown radars
+    therefore plot standing vs the position cohort, not this display figure.
+    """
+    if raw_value is None:
+        return None
+    try:
+        value = float(raw_value)
+    except (TypeError, ValueError):
+        return None
+    if value <= 1.0:
+        return round(value * 100.0, 1)
+    return round(value, 1)
+
+
+def _factor_standing(
+    raw_value: float | None,
+    cohort_values: list[float],
+    *,
+    inverted: bool = False,
+) -> float | None:
+    """How this factor ranks among players at the same position (1–100)."""
+    value = _to_number(raw_value)
+    if value is None or not cohort_values:
+        return None
+    if inverted:
+        return _cohort_percentile(-value, [-item for item in cohort_values])
+    return _cohort_percentile(value, cohort_values)
+
+
+def _metrics_cohort_rows(
+    iteration_id: int,
+    positions: list[str],
+) -> list[dict[str, Any]]:
+    """Same-league, same-position sample for factor standing; wider fallback."""
+    rows = _eligible_cohort_rows(
+        _fetch_iteration_player_scores(iteration_id, positions or [], 0)
+    )
+    if len(rows) >= 8:
+        return rows
+    season = _season_for_iteration(iteration_id)
+    if not season:
+        return rows
+    cohort_rows, _ = _fetch_benchmark_cohort(season, positions or [], "metrics")
+    return cohort_rows or rows
+
+
 def _selected_profiles(body: ChartRequest) -> list[str]:
     if body.profiles:
         return [
@@ -1945,46 +2002,12 @@ def _equivalent_profile_names(
     return names
 
 
-def _profile_cohort_values(
-    profile_name: str,
-    score_rows: list[dict[str, Any]],
-    fallback_rows: list[dict[str, Any]] | None = None,
-    squad_rows: list[dict[str, Any]] | None = None,
-) -> tuple[list[float], str]:
-    profile_definitions = _fetch_player_profile_definitions()
-    for candidate_name in _equivalent_profile_names(profile_name, profile_definitions):
-        cohort_values = _cohort_values_for_key(
-            score_rows, "profileName", candidate_name, "profileScores"
-        )
-        if cohort_values:
-            return cohort_values, "benchmark"
-    for candidate_name in _equivalent_profile_names(profile_name, profile_definitions):
-        if fallback_rows:
-            cohort_values = _cohort_values_for_key(
-                fallback_rows, "profileName", candidate_name, "profileScores"
-            )
-            if cohort_values:
-                return cohort_values, "league"
-    for candidate_name in _equivalent_profile_names(profile_name, profile_definitions):
-        if squad_rows:
-            cohort_values = _cohort_values_for_key(
-                squad_rows, "profileName", candidate_name, "profileScores"
-            )
-            if cohort_values:
-                return cohort_values, "squad"
-    return [], ""
-
-
 def _build_profile_chart(
-    score_rows: list[dict[str, Any]],
     selected: dict[str, Any],
     profile_filters: list[str],
-    fallback_rows: list[dict[str, Any]] | None = None,
-    squad_rows: list[dict[str, Any]] | None = None,
-    league_fallback_profiles: list[str] | None = None,
-    squad_fallback_profiles: list[str] | None = None,
     chart_label_for_profile: dict[str, str] | None = None,
 ) -> tuple[list[str], list[float], list[float]]:
+    """Impect's own profile ratings, 0–100. No cohort ranking is applied."""
     profile_scores = _profile_scores_for_player(selected)
     if profile_filters:
         allowed = {_normalize_profile_name(name) for name in profile_filters}
@@ -2012,19 +2035,9 @@ def _build_profile_chart(
         if not profile_name or not _is_pv_profile(profile_name) or value is None:
             continue
 
-        cohort_values, cohort_source = _profile_cohort_values(
-            profile_name,
-            score_rows,
-            fallback_rows=fallback_rows,
-            squad_rows=squad_rows,
-        )
-        if not cohort_values:
+        score = _impect_score_0_100(value)
+        if score is None:
             continue
-
-        if cohort_source == "league" and league_fallback_profiles is not None:
-            league_fallback_profiles.append(profile_name)
-        if cohort_source == "squad" and squad_fallback_profiles is not None:
-            squad_fallback_profiles.append(profile_name)
 
         chart_label = (
             chart_label_for_profile.get(profile_name, profile_name)
@@ -2032,11 +2045,8 @@ def _build_profile_chart(
             else profile_name
         )
         labels.append(chart_label)
-        percentile = _cohort_percentile(value, cohort_values)
-        if percentile is None:
-            continue
-        radar_values.append(percentile)
-        pizza_values.append(percentile)
+        radar_values.append(score)
+        pizza_values.append(score)
 
     if len(labels) > MAX_CHART_FACTORS:
         labels = labels[:MAX_CHART_FACTORS]
@@ -2149,43 +2159,13 @@ def _player_score_value(row: dict[str, Any], score_id: int) -> float | None:
     return None
 
 
-def _percentile_for_score(
-    value: float,
-    score_id: int,
-    cohort_rows: list[dict[str, Any]],
-    inverted: bool = False,
-    fallback_rows: list[dict[str, Any]] | None = None,
-    squad_rows: list[dict[str, Any]] | None = None,
-) -> float | None:
-    cohort_values: list[float] = []
-    for rows in (cohort_rows, fallback_rows, squad_rows):
-        if not rows:
-            continue
-        cohort_values = _cohort_values_for_key(
-            rows, "playerScoreId", score_id, "playerScores"
-        )
-        if cohort_values:
-            break
-    if not cohort_values:
-        return None
-    percentile = _cohort_percentile(value, cohort_values)
-    if percentile is None:
-        return None
-    if inverted:
-        percentile = round(100.0 - percentile, 1)
-        percentile = max(1.0, min(100.0, percentile))
-    return percentile
-
-
 def _build_single_profile_drilldown(
     profile_name: str,
     selected_metrics_row: dict[str, Any],
-    metrics_cohort_rows: list[dict[str, Any]],
     profile_definitions: dict[str, dict[str, Any]],
     scores_by_name: dict[str, dict[str, Any]],
-    metrics_fallback_rows: list[dict[str, Any]] | None = None,
-    metrics_squad_rows: list[dict[str, Any]] | None = None,
     scores_by_id: dict[int, dict[str, Any]] | None = None,
+    cohort_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
     definition = _resolve_profile_definition(profile_name, profile_definitions)
     if definition is None:
@@ -2210,17 +2190,22 @@ def _build_single_profile_drilldown(
         if not catalog_entry:
             alias_name = FACTOR_SCORE_ALIASES.get(_normalize_factor_key(factor_name), "")
             catalog_entry = scores_by_name.get(alias_name, scores_by_name.get(factor_name.casefold(), {}))
-        percentile = _percentile_for_score(
-            value,
-            score_id,
-            metrics_cohort_rows,
-            inverted=resolve_factor_inverted(factor, catalog_entry),
-            fallback_rows=metrics_fallback_rows,
-            squad_rows=metrics_squad_rows,
-        )
-        if percentile is None:
+        # The printed figure is Impect's factor score. The radar / bar length is
+        # standing vs other players at this position — factor scores are not 0–1
+        # ratings, so plotting them on a 0–100 radar collapses to a blob.
+        score = _impect_score_0_100(value)
+        if score is None:
             missing_factors.append(factor_name)
             continue
+        inverted = resolve_factor_inverted(factor, catalog_entry)
+        cohort_values = _cohort_values_for_key(
+            cohort_rows or [],
+            "playerScoreId",
+            score_id,
+            "playerScores",
+        )
+        standing = _factor_standing(value, cohort_values, inverted=inverted)
+        radar_value = standing if standing is not None else score
 
         raw_label = resolve_factor_label(factor, catalog_entry)
         # Impect occasionally ships a blank catalog label (literally "None") for a
@@ -2232,7 +2217,6 @@ def _build_single_profile_drilldown(
             missing_factors.append(factor_name)
             continue
 
-        inverted = resolve_factor_inverted(factor, catalog_entry)
         resolved_factors.append(
             {
                 "factor_name": factor_name,
@@ -2243,8 +2227,8 @@ def _build_single_profile_drilldown(
                     if not factor_name.casefold().startswith("bypassed_")
                     else raw_label
                 ),
-                "radar_value": float(percentile),
-                "raw_value": float(value),
+                "radar_value": float(radar_value),
+                "raw_value": float(score),
                 "inverted": inverted,
             }
         )
@@ -2339,9 +2323,7 @@ def _drilldown_coverage_warnings(
 def _build_profile_drilldowns(
     profile_names: list[str],
     selected_metrics_row: dict[str, Any] | None,
-    metrics_cohort_rows: list[dict[str, Any]],
-    metrics_fallback_rows: list[dict[str, Any]] | None = None,
-    metrics_squad_rows: list[dict[str, Any]] | None = None,
+    cohort_rows: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     if not profile_names or selected_metrics_row is None:
         return []
@@ -2354,12 +2336,10 @@ def _build_profile_drilldowns(
         drilldown = _build_single_profile_drilldown(
             profile_name,
             selected_metrics_row,
-            metrics_cohort_rows,
             profile_definitions,
             scores_by_name,
-            metrics_fallback_rows,
-            metrics_squad_rows,
             scores_by_id=scores_by_id,
+            cohort_rows=cohort_rows,
         )
         if drilldown is not None:
             drilldowns.append(drilldown)
@@ -2800,14 +2780,6 @@ def _build_single_player_charts(
             )
             if metrics_selected is not None:
                 metric_positions = metric_positions or player_positions
-                season = _season_for_iteration(iteration_id)
-                metrics_cohort, _ = _fetch_benchmark_cohort(season, metric_positions, "metrics")
-                metrics_league_cohort = _iteration_cohort_rows(
-                    iteration_id, metric_positions, "metrics", min_minutes=None
-                )
-                metrics_squad_cohort = _squad_cohort_rows(
-                    iteration_id, squad_id, metric_positions, "metrics"
-                )
                 impect_filters, _ = _resolve_profile_filters_for_row(
                     profile_filters,
                     metrics_selected,
@@ -2815,9 +2787,7 @@ def _build_single_player_charts(
                 profile_drilldowns = _build_profile_drilldowns(
                     impect_filters or profile_filters,
                     metrics_selected,
-                    metrics_cohort,
-                    metrics_league_cohort,
-                    metrics_squad_cohort,
+                    _metrics_cohort_rows(iteration_id, metric_positions),
                 )
                 if metrics_url:
                     source_urls.append(metrics_url)
@@ -2891,45 +2861,20 @@ def _build_single_player_charts(
         season = _season_for_iteration(iteration_id)
         cohort_rows, cohort_meta = _fetch_benchmark_cohort(season, positions, body.chart_source)
         benchmark_meta = cohort_meta
-        league_cohort_rows = _iteration_cohort_rows(
-            iteration_id, positions, body.chart_source, min_minutes=None
-        )
-        squad_cohort_rows = _squad_cohort_rows(
-            iteration_id, squad_id, positions, body.chart_source
-        )
 
         if body.chart_source == "profiles":
             low_minutes = _low_minutes_warning(selected, BENCHMARK_MIN_MINUTES)
             if low_minutes:
                 warnings.append(f"{display_name}: {low_minutes}")
-            league_fallback_profiles: list[str] = []
-            squad_fallback_profiles: list[str] = []
             impect_filters, chart_label_map = _resolve_profile_filters_for_row(
                 profile_filters,
                 selected,
             )
             labels, radar_values, pizza_values = _build_profile_chart(
-                cohort_rows,
                 selected,
                 impect_filters or profile_filters,
-                fallback_rows=league_cohort_rows,
-                squad_rows=squad_cohort_rows,
-                league_fallback_profiles=league_fallback_profiles,
-                squad_fallback_profiles=squad_fallback_profiles,
                 chart_label_for_profile=chart_label_map or None,
             )
-            if league_fallback_profiles:
-                warnings.append(
-                    f"{display_name}: league cohort used for "
-                    f"{', '.join(league_fallback_profiles)} "
-                    "(club profiles not in cross-league benchmark)."
-                )
-            if squad_fallback_profiles:
-                warnings.append(
-                    f"{display_name}: squad cohort used for "
-                    f"{', '.join(squad_fallback_profiles)} "
-                    "(percentile vs Port Vale squad mates)."
-                )
         else:
             low_minutes = _low_minutes_warning(selected, BENCHMARK_MIN_MINUTES)
             if low_minutes:
@@ -2957,23 +2902,10 @@ def _build_single_player_charts(
             )
             if metrics_selected is not None:
                 metric_positions = metric_positions or positions
-                metrics_cohort, _ = _fetch_benchmark_cohort(
-                    season,
-                    metric_positions,
-                    "metrics",
-                )
-                metrics_league_cohort = _iteration_cohort_rows(
-                    iteration_id, metric_positions, "metrics", min_minutes=None
-                )
-                metrics_squad_cohort = _squad_cohort_rows(
-                    iteration_id, squad_id, metric_positions, "metrics"
-                )
                 profile_drilldowns = _build_profile_drilldowns(
                     impect_filters or profile_filters,
                     metrics_selected,
-                    metrics_cohort,
-                    metrics_league_cohort,
-                    metrics_squad_cohort,
+                    _metrics_cohort_rows(iteration_id, metric_positions),
                 )
                 if metrics_url:
                     source_urls.append(metrics_url)
@@ -3461,25 +3393,12 @@ def _studio_port_vale_reference(
     if best_row is None or best_minutes <= 0:
         return None
 
-    season = _season_for_iteration(iteration_id)
-    positions = [position]
-    cohort_rows, _ = _fetch_benchmark_cohort(season, positions, "profiles")
-    league_cohort_rows = _iteration_cohort_rows(
-        iteration_id, positions, "profiles", min_minutes=None
-    )
-    squad_cohort_rows = _squad_cohort_rows(
-        iteration_id, port_vale_squad_id, positions, "profiles"
-    )
-
     impect_filters, chart_label_map = _resolve_profile_filters_for_row(
         canonical_labels, best_row
     )
     labels, radar_values, _ = _build_profile_chart(
-        cohort_rows,
         best_row,
         impect_filters or canonical_labels,
-        fallback_rows=league_cohort_rows,
-        squad_rows=squad_cohort_rows,
         chart_label_for_profile=chart_label_map or None,
     )
 

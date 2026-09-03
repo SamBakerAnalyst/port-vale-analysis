@@ -10,7 +10,7 @@
   --draw: #d97706;
   --loss: #dc2626;
   --radius: 12px;
-  --font: "DM Sans", system-ui, sans-serif;
+  --font: "Manrope", system-ui, sans-serif;
   --display: "Barlow Condensed", sans-serif;
 }
 
@@ -1885,7 +1885,7 @@ a:hover { text-decoration: underline; }
 .ba-race__tick {
   fill: #8a8376;
   font-size: 11px;
-  font-family: "DM Sans", system-ui, sans-serif;
+  font-family: "Manrope", system-ui, sans-serif;
 }
 
 .ba-race__ht {
@@ -2124,7 +2124,7 @@ a:hover { text-decoration: underline; }
   font-size: 9px;
   font-weight: 700;
   letter-spacing: .08em;
-  font-family: "DM Sans", system-ui, sans-serif;
+  font-family: "Manrope", system-ui, sans-serif;
   text-transform: uppercase;
 }
 

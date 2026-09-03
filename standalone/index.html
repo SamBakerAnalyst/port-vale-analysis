@@ -6,13 +6,13 @@
   <title>Player Search Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
   <style>
     :root {
       --bg: #0c0f14; --surface: #141a22; --surface-2: #1a222d; --border: #2a3544;
       --text: #e8edf4; --text-muted: #8b9bb0; --accent: #3d8bfd; --accent-dim: #2563b8;
       --green: #34d399; --green-dim: rgba(52,211,153,.12); --amber: #fbbf24;
-      --radius: 10px; --font: "DM Sans", system-ui, sans-serif; --mono: "JetBrains Mono", monospace;
+      --radius: 10px; --font: "Manrope", system-ui, sans-serif; --mono: "JetBrains Mono", monospace;
     }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: var(--font); background: var(--bg); color: var(--text); line-height: 1.5; }
@@ -85,13 +85,51 @@
     .potm-modal__card p { margin: 0 0 1rem; color: var(--text-muted); font-size: .8125rem; line-height: 1.45; }
     .potm-modal__field { display: flex; flex-direction: column; gap: .4rem; margin-bottom: 1rem; }
     .potm-modal__field label { font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
+    .potm-modal__field--check label {
+      display: flex;
+      align-items: flex-start;
+      gap: .5rem;
+      font-size: .8125rem;
+      font-weight: 400;
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+    .potm-modal__field--check input { margin-top: .15rem; }
+    .potm-modal__leagues .chip { font-size: .75rem; padding: .25rem .55rem; }
     .potm-modal__actions { display: flex; justify-content: flex-end; gap: .55rem; }
     .potm-modal__actions button { padding: .45rem .9rem; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; font-size: .8125rem; cursor: pointer; }
     .potm-modal__actions .btn-potm-go { background: rgba(251,113,133,.15); border-color: rgba(251,113,133,.5); color: #fda4af; font-weight: 600; }
     .status-banner { margin-bottom: 1rem; padding: .75rem 1rem; border-radius: 8px; font-size: .875rem; border: 1px solid var(--border); background: var(--surface); }
     .status-banner--loading { border-color: rgba(61,139,253,.35); color: var(--accent); }
+    .status-banner--ready { border-color: var(--border); color: var(--text-muted); }
     .status-banner--error { border-color: rgba(248,113,113,.35); color: #fca5a5; }
     .status-banner--warn { border-color: rgba(251,191,36,.35); color: var(--amber); }
+    .status-banner--loading::before {
+      content: "";
+      display: inline-block;
+      width: .75rem;
+      height: .75rem;
+      margin-right: .55rem;
+      border: 2px solid rgba(61,139,253,.25);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      vertical-align: -.1rem;
+      animation: status-spin .75s linear infinite;
+    }
+    @keyframes status-spin { to { transform: rotate(360deg); } }
+    .skeleton-row td { padding: .85rem; }
+    .skeleton-bar {
+      display: block;
+      height: .85rem;
+      border-radius: 4px;
+      background: linear-gradient(90deg, var(--surface-2) 0%, rgba(61,139,253,.08) 50%, var(--surface-2) 100%);
+      background-size: 200% 100%;
+      animation: skeleton-shimmer 1.2s ease-in-out infinite;
+    }
+    @keyframes skeleton-shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+    .empty-row { text-align: center; color: var(--text-muted); padding: 2rem 1rem !important; white-space: normal; line-height: 1.5; }
     .weights-panel { margin-bottom: 1.25rem; padding: 1.1rem 1.25rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
     .weights-panel h2 { margin: 0; font-size: .9375rem; }
     .weights-panel p { margin: .2rem 0 1rem; font-size: .8125rem; color: var(--text-muted); }
@@ -220,7 +258,7 @@
       <p class="header__coach-note">Scores are Impect’s exact profile ratings (0–100). Drag a profile weight above 0 to set a minimum and mix it into Overall — leave at 0 to ignore.</p>
     </header>
 
-    <div id="status" class="status-banner status-banner--loading">Connecting to Impect…</div>
+    <div id="status" class="status-banner status-banner--loading">Starting Player Search…</div>
 
     <section class="controls">
       <div class="control-group">
@@ -253,7 +291,7 @@
         <button type="button" class="btn-export-excel" id="exportExcel" disabled title="Excel file for the current filtered table">Export Excel</button>
         <button type="button" class="btn-export-excel btn-export-excel--all" id="exportExcelAll" disabled title="One workbook, each position on its own sheet">Export all positions</button>
         <button type="button" class="btn-export" id="exportSlides" disabled title="A4 PDF matching this table">Export A4 PDF</button>
-        <button type="button" class="btn-potm" id="exportPotm" title="Player of the Month PDF — pick a month, then loads LG2 / National League / Scottish Prem once for every position">Player of the Month PDF</button>
+        <button type="button" class="btn-potm" id="exportPotm" title="Player of the Month PDF — all leagues, every position, top 10 overall + per profile">Player of the Month PDF</button>
         <button type="button" class="btn-reset" id="reset">Reset weights</button>
       </div>
     </section>
@@ -278,10 +316,17 @@
     <div id="potmModal" class="potm-modal" hidden>
       <div class="potm-modal__card" role="dialog" aria-modal="true" aria-labelledby="potmModalTitle">
         <h3 id="potmModalTitle">Player of the Month PDF</h3>
-        <p>Pick the calendar month. Loads League Two, National League and Scottish Prem once for every position — top 10 overall + profile strengths.</p>
+        <p>Compact PDF digest — rank, player, age, club, score. Multiple mini-lists per page (not a full-page table per position).</p>
         <div class="potm-modal__field">
           <label for="potmMonth">Month</label>
           <input id="potmMonth" class="num-input report-month-input" type="month" />
+        </div>
+        <div class="potm-modal__field">
+          <label>Leagues</label>
+          <div class="potm-modal__leagues" id="potmLeagues"></div>
+        </div>
+        <div class="potm-modal__field potm-modal__field--check">
+          <label><input type="checkbox" id="potmIncludeSeason" /> Include season scores in brackets — e.g. 68 (45) — adds ~10+ min</label>
         </div>
         <div class="potm-modal__actions">
           <button type="button" id="potmCancel">Cancel</button>
@@ -312,12 +357,22 @@
       return `${API}${path.startsWith("/") ? path : `/${path}`}`;
     }
 
+    const PREFS_KEY = "scouting-longlist-prefs:v1";
+    const DEFAULT_FIRST_LEAGUES = ["League Two"];
+    const RATE_LIMIT_RETRY_SECONDS = 90;
+    let loadListTimer = null;
+    let rateLimitRetryTimer = null;
+    let networkRetryTimer = null;
+    let loadListInFlight = null;
+    let hasLoadedOnce = false;
+
     const state = {
       reportMonth: "",
       monthLabel: "",
       suggestedMonth: "",
       position: "CENTRAL_DEFENDER",
       leagues: [],
+      selectedLeagues: [],
       profiles: [],
       weights: {},
       players: [],
@@ -352,6 +407,8 @@
       exportPotm: document.getElementById("exportPotm"),
       potmModal: document.getElementById("potmModal"),
       potmMonth: document.getElementById("potmMonth"),
+      potmLeagues: document.getElementById("potmLeagues"),
+      potmIncludeSeason: document.getElementById("potmIncludeSeason"),
       potmCancel: document.getElementById("potmCancel"),
       potmConfirm: document.getElementById("potmConfirm"),
       sendCompare: document.getElementById("sendCompare"),
@@ -361,6 +418,151 @@
     function setStatus(message, kind = "loading") {
       els.status.textContent = message;
       els.status.className = `status-banner status-banner--${kind}`;
+    }
+
+    function isRateLimitError(err) {
+      const message = String(err?.message || err || "");
+      return err?.status === 429 || /rate limit|429|too many requests/i.test(message);
+    }
+
+    function isNetworkError(err) {
+      const message = String(err?.message || err || "");
+      return /failed to fetch|networkerror|load failed|network request failed/i.test(message);
+    }
+
+    function networkErrorMessage() {
+      return `Connection lost to ${API}. The server may still be loading Impect data — wait a moment, then click Load list again.`;
+    }
+
+    function scheduleNetworkRetry(retryFn, { label = "Load list", delaySeconds = 8 } = {}) {
+      if (networkRetryTimer || rateLimitRetryTimer) return;
+      let remaining = delaySeconds;
+      setStatus(`${networkErrorMessage()} Retrying ${label.toLowerCase()} in ${remaining}s…`, "warn");
+      networkRetryTimer = setInterval(() => {
+        remaining -= 1;
+        if (remaining > 0) {
+          setStatus(`${networkErrorMessage()} Retrying ${label.toLowerCase()} in ${remaining}s…`, "warn");
+          return;
+        }
+        clearInterval(networkRetryTimer);
+        networkRetryTimer = null;
+        setStatus(`Retrying ${label.toLowerCase()}…`, "loading");
+        void retryFn();
+      }, 1000);
+    }
+
+    function scheduleRateLimitRetry(retryFn, { label = "Load list" } = {}) {
+      if (rateLimitRetryTimer) return;
+      let remaining = RATE_LIMIT_RETRY_SECONDS;
+      setStatus(
+        `Impect rate limit — ${label} will retry in ${remaining}s. Use one league at a time while waiting.`,
+        "warn",
+      );
+      rateLimitRetryTimer = setInterval(() => {
+        remaining -= 1;
+        if (remaining > 0) {
+          setStatus(
+            `Impect rate limit — ${label} will retry in ${remaining}s. Use one league at a time while waiting.`,
+            "warn",
+          );
+          return;
+        }
+        clearInterval(rateLimitRetryTimer);
+        rateLimitRetryTimer = null;
+        setStatus(`Retrying ${label.toLowerCase()}…`, "loading");
+        void retryFn();
+      }, 1000);
+    }
+
+    function findLooseSessionCache(position, leagues) {
+      const leagueSet = new Set(leagues);
+      let best = null;
+      try {
+        for (let index = 0; index < sessionStorage.length; index += 1) {
+          const storageKey = sessionStorage.key(index);
+          if (!storageKey || (!storageKey.startsWith("scouting:v3:") && !storageKey.startsWith("scouting:monthly:"))) {
+            continue;
+          }
+          const parts = storageKey.split(":");
+          const cachedPosition = parts[2];
+          if (cachedPosition !== position) continue;
+          const cachedLeagues = (parts[3] || "").split("|").filter(Boolean);
+          if (!cachedLeagues.some((league) => leagueSet.has(league))) continue;
+          const raw = sessionStorage.getItem(storageKey);
+          if (!raw) continue;
+          const data = JSON.parse(raw);
+          if (!data?.players?.length) continue;
+          if (!best || data.players.length > best.players.length) {
+            best = data;
+          }
+        }
+      } catch {
+        return null;
+      }
+      return best;
+    }
+
+    function readPrefs() {
+      try {
+        const raw = localStorage.getItem(PREFS_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function writePrefs(prefs) {
+      try {
+        localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+      } catch {
+        return;
+      }
+    }
+
+    function saveCurrentPrefs() {
+      const selectedLeagues = [...els.leagues.querySelectorAll(".chip.chip--active")].map((btn) => btn.dataset.league);
+      writePrefs({
+        position: els.position.value || state.position,
+        leagues: selectedLeagues,
+        minMinutes: Number(els.minMinutes.value) || state.minMinutes,
+        seasonMode: els.seasonMode.value || state.seasonMode,
+        reportMonth: els.reportMonth.value || "",
+      });
+    }
+
+    function applyPrefs(prefs) {
+      if (!prefs) return;
+      if (prefs.position && els.position.querySelector(`option[value="${prefs.position}"]`)) {
+        state.position = prefs.position;
+        els.position.value = prefs.position;
+      }
+      if (Number.isFinite(prefs.minMinutes)) {
+        state.minMinutes = prefs.minMinutes;
+        els.minMinutes.value = prefs.minMinutes;
+      }
+      if (prefs.seasonMode && els.seasonMode.querySelector(`option[value="${prefs.seasonMode}"]`)) {
+        state.seasonMode = prefs.seasonMode;
+        els.seasonMode.value = prefs.seasonMode;
+      }
+      if (typeof prefs.reportMonth === "string") {
+        state.reportMonth = prefs.reportMonth;
+        els.reportMonth.value = prefs.reportMonth;
+        state.monthLabel = monthLabelFromInput(prefs.reportMonth);
+      }
+      if (Array.isArray(prefs.leagues) && prefs.leagues.length) {
+        state.selectedLeagues = prefs.leagues.filter((league) => state.leagues.includes(league));
+      }
+    }
+
+    function scheduleLoadLongList(options = {}) {
+      if (!hasLoadedOnce && !options.forceRefresh) {
+        setStatus("Filters updated — click Load list when ready.", "ready");
+        saveCurrentPrefs();
+        return;
+      }
+      clearTimeout(loadListTimer);
+      const delay = options.immediate ? 0 : 450;
+      loadListTimer = setTimeout(() => loadLongList({ forceRefresh: true, ...options }), delay);
     }
 
     const DEFAULT_WEIGHT = 0;
@@ -782,6 +984,15 @@
       }).join("");
     }
 
+    function renderLoadingSkeleton(rowCount = 8) {
+      const cols = 9 + Math.max(state.profiles.length, 6) + 1;
+      els.thead.innerHTML = buildTheadHtml();
+      els.tbody.innerHTML = Array.from({ length: rowCount }, () =>
+        `<tr class="skeleton-row"><td colspan="${cols}"><span class="skeleton-bar"></span></td></tr>`
+      ).join("");
+      els.count.textContent = "Loading…";
+    }
+
     function renderTable() {
       const ranked = rankedPlayers();
       els.count.textContent = `${ranked.length} player${ranked.length !== 1 ? "s" : ""}`;
@@ -791,7 +1002,9 @@
       if (!ranked.length) {
         const msg = state.players.length
           ? "No players match your profile minimums — lower the sliders or set one to 0."
-          : "No players loaded yet.";
+          : state.loading
+            ? "Fetching players from Impect…"
+            : "No players loaded yet — set your filters above, then click <strong>Load list</strong>. Fewer leagues = faster.";
         els.tbody.innerHTML = `<tr><td colspan="${9 + state.profiles.length + 1}" class="empty-row">${msg}</td></tr>`;
         updateExportButton();
         return;
@@ -1369,7 +1582,35 @@
       }
     }
 
-    const POTM_DEFAULT_LEAGUES = ["League Two", "National League", "Scottish Prem"];
+    const POTM_ALL_LEAGUES = [
+      "National League",
+      "League One",
+      "League Two",
+      "PL2",
+      "Scottish Prem",
+      "Irish Prem",
+    ];
+    let potmSelectedLeagues = new Set(POTM_ALL_LEAGUES);
+
+    function renderPotmLeagues() {
+      if (!els.potmLeagues) return;
+      els.potmLeagues.innerHTML = POTM_ALL_LEAGUES.map((league) =>
+        `<button type="button" class="chip ${potmSelectedLeagues.has(league) ? "chip--active" : ""}" data-league="${league}">${league}</button>`
+      ).join("");
+      els.potmLeagues.querySelectorAll(".chip").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const league = btn.dataset.league;
+          if (potmSelectedLeagues.has(league)) {
+            if (potmSelectedLeagues.size === 1) return;
+            potmSelectedLeagues.delete(league);
+            btn.classList.remove("chip--active");
+          } else {
+            potmSelectedLeagues.add(league);
+            btn.classList.add("chip--active");
+          }
+        });
+      });
+    }
 
     function defaultPotmMonthValue() {
       if (state.suggestedMonth) return state.suggestedMonth;
@@ -1385,6 +1626,8 @@
         return;
       }
       els.potmMonth.value = defaultPotmMonthValue();
+      potmSelectedLeagues = new Set(POTM_ALL_LEAGUES);
+      renderPotmLeagues();
       els.potmModal.hidden = false;
       els.potmMonth.focus();
     }
@@ -1400,13 +1643,18 @@
         return;
       }
 
-      const leagues = [...POTM_DEFAULT_LEAGUES];
+      const leagues = [...potmSelectedLeagues];
+      if (!leagues.length) {
+        setStatus("Select at least one league for the Player of the Month report.", "warn");
+        return;
+      }
       const payload = {
         year: parsed.year,
         month: parsed.month,
         leagues,
         min_minutes: 180,
         top_n: 10,
+        include_season_scores: Boolean(els.potmIncludeSeason?.checked),
       };
 
       const monthText = monthLabelFromInput(els.potmMonth.value) || `${parsed.year}-${parsed.month}`;
@@ -1414,7 +1662,7 @@
       els.exportPotm.disabled = true;
       state.loading = true;
       setStatus(
-        `Building Player of the Month for ${monthText} · ${leagues.join(", ")} · all positions… loads shared match data once, then each position.`,
+        `Building Player of the Month for ${monthText} · ${leagues.length} league${leagues.length === 1 ? "" : "s"} · uses cached monthly pool when available (seconds) or ~2–4 min live. Leave this tab open.`,
         "loading",
       );
 
@@ -1455,11 +1703,21 @@
     }
 
     function renderLeagues() {
-      els.leagues.innerHTML = state.leagues.map((league) =>
-        `<button type="button" class="chip chip--active" data-league="${league}">${league}</button>`
+      const available = state.leagues.length ? state.leagues : [];
+      const selected = new Set(
+        state.selectedLeagues.length
+          ? state.selectedLeagues.filter((league) => available.includes(league))
+          : DEFAULT_FIRST_LEAGUES.filter((league) => available.includes(league)),
+      );
+      if (!selected.size && available.length) {
+        selected.add(available[0]);
+      }
+      state.selectedLeagues = [...selected];
+
+      els.leagues.innerHTML = available.map((league) =>
+        `<button type="button" class="chip ${selected.has(league) ? "chip--active" : ""}" data-league="${league}">${league}</button>`
       ).join("");
 
-      const selected = new Set(state.leagues);
       els.leagues.querySelectorAll(".chip").forEach((btn) => {
         btn.addEventListener("click", () => {
           const league = btn.dataset.league;
@@ -1471,7 +1729,9 @@
             selected.add(league);
             btn.classList.add("chip--active");
           }
-          loadLongList();
+          state.selectedLeagues = [...selected];
+          saveCurrentPrefs();
+          scheduleLoadLongList({ forceRefresh: true });
         });
       });
     }
@@ -1503,12 +1763,19 @@
       els.position.innerHTML = data.positions.map((p) =>
         `<option value="${p.value}">${p.label}</option>`
       ).join("");
-      state.position = data.positions[0]?.value || "CENTRAL_DEFENDER";
+      if (!els.position.querySelector(`option[value="${state.position}"]`)) {
+        state.position = data.positions[0]?.value || "CENTRAL_DEFENDER";
+      }
+      els.position.value = state.position;
       els.position.disabled = false;
-      renderLeagues();
     }
 
-    async function loadLongList() {
+    async function loadLongList({ forceRefresh = false } = {}) {
+      if (loadListInFlight) {
+        return loadListInFlight;
+      }
+
+      const run = (async () => {
       const selectedLeagues = [...els.leagues.querySelectorAll(".chip.chip--active")].map((b) => b.dataset.league);
       if (!selectedLeagues.length) {
         setStatus("Select at least one league.", "warn");
@@ -1521,7 +1788,9 @@
       state.minMinutes = Number(els.minMinutes.value) || 0;
       state.seasonMode = els.seasonMode.value || "current";
       state.seasonModeLabel = els.seasonMode.selectedOptions[0]?.text || state.seasonModeLabel;
+      state.selectedLeagues = selectedLeagues;
       updateMonthFilterUI();
+      saveCurrentPrefs();
 
       const monthFilter = hasMonthFilter();
       const parsedMonth = parseMonthInput(state.reportMonth);
@@ -1535,24 +1804,33 @@
       );
       const cached = readSessionCache(key);
 
-      if (cached) {
+      if (cached && !forceRefresh) {
         applyListData(cached, { keepWeights: true });
+        hasLoadedOnce = true;
         showLoadedMessage(cached);
-        setStatus(`${cached.playerCount} players (cached) — refreshing…`, "loading");
-      } else {
-        state.loading = true;
-        els.reload.disabled = true;
-        updateExportButton();
-        const loadingLabel = monthFilter
-          ? `${state.monthLabel || "month"} ${els.position.selectedOptions[0].text}`
-          : els.position.selectedOptions[0].text;
         setStatus(
-          monthFilter
-            ? `Loading monthly highlights for ${loadingLabel} from Impect… (this can take 1–2 min per league)`
-            : `Loading ${loadingLabel} from Impect…`,
-          "loading",
+          `${cached.playerCount} players loaded from this session · click Load list to refresh from Impect`,
+          "ready",
         );
+        return;
       }
+
+      state.loading = true;
+      els.reload.disabled = true;
+      updateExportButton();
+      const loadingLabel = monthFilter
+        ? `${state.monthLabel || "month"} ${els.position.selectedOptions[0].text}`
+        : els.position.selectedOptions[0].text;
+      const leagueHint = selectedLeagues.length === 1
+        ? selectedLeagues[0]
+        : `${selectedLeagues.length} leagues`;
+      setStatus(
+        monthFilter
+          ? `Loading ${loadingLabel} · ${leagueHint} · monthly highlights from Impect…`
+          : `Loading ${loadingLabel} · ${leagueHint} from Impect…`,
+        "loading",
+      );
+      renderLoadingSkeleton();
 
       try {
         const endpoint = monthFilter ? "/api/scouting/monthly-list" : "/api/scouting/long-list";
@@ -1587,37 +1865,85 @@
               : raw.slice(0, 120) || `Request failed (${res.status}).`
           );
         }
-        if (!res.ok) throw new Error(data.detail || `Failed to load scouting data (${res.status}).`);
+        if (!res.ok) {
+          const err = new Error(data.detail || `Failed to load scouting data (${res.status}).`);
+          err.status = res.status;
+          throw err;
+        }
 
         writeSessionCache(key, data);
         applyListData(data);
         showLoadedMessage(data);
+        hasLoadedOnce = true;
+        if (rateLimitRetryTimer) {
+          clearInterval(rateLimitRetryTimer);
+          rateLimitRetryTimer = null;
+        }
+        if (networkRetryTimer) {
+          clearInterval(networkRetryTimer);
+          networkRetryTimer = null;
+        }
       } catch (err) {
-        if (!cached) {
+        const fallback = cached || findLooseSessionCache(state.position, selectedLeagues);
+        if (isRateLimitError(err)) {
+          if (fallback) {
+            applyListData(fallback, { keepWeights: true });
+            hasLoadedOnce = true;
+            setStatus(
+              `${fallback.playerCount} players (cached) — Impect rate limit, auto-retry in ${RATE_LIMIT_RETRY_SECONDS}s`,
+              "warn",
+            );
+          } else {
+            setStatus(
+              `Impect rate limit — wait ~2 minutes, keep one league selected, then click Load list. Auto-retry in ${RATE_LIMIT_RETRY_SECONDS}s.`,
+              "warn",
+            );
+          }
+          scheduleRateLimitRetry(() => loadLongList({ forceRefresh: true }), { label: "Load list" });
+        } else if (isNetworkError(err)) {
+          if (fallback) {
+            applyListData(fallback, { keepWeights: true });
+            hasLoadedOnce = true;
+            setStatus(`${fallback.playerCount} players (cached) — ${networkErrorMessage()}`, "warn");
+          } else {
+            setStatus(networkErrorMessage(), "warn");
+          }
+          scheduleNetworkRetry(() => loadLongList({ forceRefresh: true }), { label: "Load list" });
+        } else if (fallback && forceRefresh) {
+          applyListData(fallback, { keepWeights: true });
+          hasLoadedOnce = true;
+          setStatus(`${fallback.playerCount} players (cached) — refresh failed: ${err.message || err}`, "warn");
+        } else if (!fallback) {
           setStatus(err.message || "Failed to load data.", "error");
           state.players = [];
           state.profiles = [];
           renderWeights();
           renderTable();
-        } else {
-          setStatus(`${cached.playerCount} players (cached) — refresh failed`, "warn");
         }
       } finally {
         state.loading = false;
         els.reload.disabled = false;
         updateExportButton();
       }
+      })();
+
+      loadListInFlight = run;
+      try {
+        await run;
+      } finally {
+        loadListInFlight = null;
+      }
     }
 
-    els.reportMonth.addEventListener("change", loadLongList);
+    els.reportMonth.addEventListener("change", () => scheduleLoadLongList({ forceRefresh: true }));
     els.clearMonth.addEventListener("click", () => {
       els.reportMonth.value = "";
-      loadLongList();
+      scheduleLoadLongList({ forceRefresh: true, immediate: true });
     });
-    els.position.addEventListener("change", loadLongList);
-    els.seasonMode.addEventListener("change", loadLongList);
-    els.minMinutes.addEventListener("change", loadLongList);
-    els.reload.addEventListener("click", loadLongList);
+    els.position.addEventListener("change", () => scheduleLoadLongList({ forceRefresh: true }));
+    els.seasonMode.addEventListener("change", () => scheduleLoadLongList({ forceRefresh: true }));
+    els.minMinutes.addEventListener("change", () => scheduleLoadLongList({ forceRefresh: true }));
+    els.reload.addEventListener("click", () => loadLongList({ forceRefresh: true }));
     els.exportSlides.addEventListener("click", exportSlides);
     els.exportExcel.addEventListener("click", exportExcel);
     els.exportExcelAll.addEventListener("click", exportAllPositionsExcel);
@@ -1670,6 +1996,10 @@
     (async function init() {
       try {
         await loadMeta();
+        applyPrefs(readPrefs());
+        els.position.value = state.position;
+        renderLeagues();
+        updateMonthFilterUI();
       } catch (err) {
         const msg = String(err?.message || err || "Failed to load");
         const serverDown = /failed to fetch|networkerror|load failed/i.test(msg);
@@ -1681,11 +2011,32 @@
         );
         return;
       }
-      try {
-        await loadLongList();
-      } catch (err) {
-        setStatus(err?.message || "Failed to load list.", "error");
+
+      const selectedLeagues = [...els.leagues.querySelectorAll(".chip.chip--active")].map((b) => b.dataset.league);
+      const key = cacheKey(
+        state.position,
+        selectedLeagues,
+        state.minMinutes,
+        state.seasonMode,
+        state.reportMonth,
+      );
+      const cached = readSessionCache(key);
+      if (cached) {
+        applyListData(cached, { keepWeights: true });
+        hasLoadedOnce = true;
+        showLoadedMessage(cached);
+        setStatus(
+          `${cached.playerCount} players restored from this session · click Load list to refresh from Impect`,
+          "ready",
+        );
+        return;
       }
+
+      renderTable();
+      setStatus(
+        "Ready — pick position and leagues, then click Load list. Start with one league for a quicker first load.",
+        "ready",
+      );
     })();
   </script>
   <script defer src="/static/hub-feedback.js?v=1"></script>

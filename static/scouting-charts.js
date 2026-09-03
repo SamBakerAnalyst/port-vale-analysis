@@ -1,6 +1,6 @@
 (function () {
   const seasonColors = ["#56d4ff", "#a78bfa", "#34d399", "#fbbf24", "#fb7185", "#60a5fa"];
-  const chartFonts = { family: '"DM Sans", system-ui, sans-serif', color: "#e2e8f0" };
+  const chartFonts = { family: '"Manrope", system-ui, sans-serif', color: "#e2e8f0" };
   const plotlyConfig = { responsive: true, displayModeBar: false };
 
   function humanizeFootballLabel(label) {

@@ -281,46 +281,6 @@
   font-size: 0.875rem;
 }
 
-/* Mean of the profiles below, so the column has a headline number like the
-   deck slide does. */
-.overall-chip {
-  margin-top: 0.4rem;
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.45rem;
-  padding: 0.25rem 0.6rem;
-  border-radius: 0.6rem;
-  border: 1px solid color-mix(in srgb, var(--band) 60%, transparent);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--band) 24%, transparent),
-    color-mix(in srgb, var(--band) 10%, transparent)
-  );
-}
-
-.overall-chip__label {
-  font-size: 0.6rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #97a1ae;
-}
-
-.overall-chip__value {
-  font-family: var(--mono, monospace);
-  font-size: 1.15rem;
-  font-weight: 800;
-  line-height: 1;
-  color: #ffffff;
-}
-
-.overall-chip__band {
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--band-text);
-  white-space: nowrap;
-}
-
 .studio-compare-front .player-photo {
   align-items: center;
 }

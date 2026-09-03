@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
+import json
+import os
 import re
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
+from app.auth import current_user_payload
 from app.home_dashboard import STANDOUTS_LEAGUES, _overall_from_profile_scores
 from app.label_utils import humanize_profile_name
 from app.opponent_photos import opponent_photo_api_url
-from app.paths import STANDALONE_DIR
+from app.paths import DATA_ROOT, STANDALONE_DIR, ensure_data_dirs
 from app.player_pipelines import (
     POSITIONS,
     STAGES,
@@ -25,9 +31,10 @@ from app.scouting import (
     POSITION_SHARE_THRESHOLD,
     SCOUTING_COMPETITION_TO_LEAGUE,
     SCOUTING_LEAGUE_TO_COMPETITION,
-    _ensure_position_shares,
     _format_foot,
     _format_height,
+    _get_position_shares,
+    _get_primary_positions,
     _impect_profile_score,
     _normalize_profile_key,
     _profile_value_map,
@@ -43,7 +50,11 @@ _SQUAD_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 _BOARD_TTL = 30 * 60
 _SQUAD_TTL = 6 * 3600
 _MIN_MINUTES = 90.0
-_CACHE_VERSION = 3  # bump: force 26/27 boards after season switch
+_CACHE_VERSION = 5  # no Other-profile dump; stronger primary fallback
+
+SCOUT_NOTES_PATH = DATA_ROOT / "scoutable-teams-notes.json"
+_notes_lock = threading.Lock()
+WATCHED_STAGE = "watched"
 
 LEAGUE_COLORS: dict[str, str] = {
     "League One": "#3d8bfd",
@@ -71,6 +82,250 @@ class SetStatusBody(BaseModel):
     reason: str = ""
 
 
+class ScoutNotesBody(BaseModel):
+    player_id: int
+    scout_scores: dict[str, int | None] = Field(default_factory=dict)
+    scout_comment: str = ""
+    name: str = ""
+    club: str = ""
+    league: str = ""
+    position: str = ""
+    position_label: str = ""
+    age: int | None = None
+
+
+def _clean_scout_scores(raw: Any) -> dict[str, int]:
+    out: dict[str, int] = {}
+    if not isinstance(raw, dict):
+        return out
+    for key, val in raw.items():
+        profile_key = str(key or "").strip()
+        if not profile_key:
+            continue
+        if val is None:
+            continue
+        try:
+            out[profile_key] = max(0, min(100, int(val)))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _notes_now() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+def _notes_staff(request: Request) -> str:
+    payload = current_user_payload(request)
+    return str(payload.get("display_name") or payload.get("username") or "Staff").strip() or "Staff"
+
+
+def _empty_notes_store() -> dict[str, Any]:
+    return {"version": 1, "notes": {}}
+
+
+def _load_scout_notes_store() -> dict[str, Any]:
+    ensure_data_dirs()
+    if not SCOUT_NOTES_PATH.exists():
+        return _empty_notes_store()
+    try:
+        payload = json.loads(SCOUT_NOTES_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return _empty_notes_store()
+    if not isinstance(payload, dict):
+        return _empty_notes_store()
+    notes = payload.get("notes")
+    if not isinstance(notes, dict):
+        notes = {}
+    return {"version": 1, "notes": notes}
+
+
+def _save_scout_notes_store(store: dict[str, Any]) -> None:
+    ensure_data_dirs()
+    payload = {"version": 1, "notes": store.get("notes") or {}}
+    with _notes_lock:
+        temp_path = SCOUT_NOTES_PATH.with_suffix(".json.tmp")
+        temp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        temp_path.replace(SCOUT_NOTES_PATH)
+
+
+def _scout_notes_index() -> dict[int, dict[str, Any]]:
+    store = _load_scout_notes_store()
+    out: dict[int, dict[str, Any]] = {}
+    for key, row in (store.get("notes") or {}).items():
+        if not isinstance(row, dict):
+            continue
+        try:
+            player_id = int(key)
+        except (TypeError, ValueError):
+            continue
+        out[player_id] = row
+    return out
+
+
+def _player_scout_comment(player_id: int) -> str:
+    row = _scout_notes_index().get(int(player_id)) or {}
+    return str(row.get("scout_comment") or "").strip()
+
+
+def _upsert_scout_notes(
+    request: Request,
+    *,
+    player_id: int,
+    scout_scores: dict[str, int | None] | None,
+    scout_comment: str,
+) -> dict[str, Any]:
+    if not player_id:
+        raise HTTPException(status_code=400, detail="player_id is required")
+    cleaned_comment = " ".join(str(scout_comment or "").split())[:280]
+
+    store = _load_scout_notes_store()
+    notes = store.setdefault("notes", {})
+    key = str(int(player_id))
+    existing = notes.get(key) if isinstance(notes.get(key), dict) else {}
+    merged_scores = _clean_scout_scores(scout_scores)
+    staff = _notes_staff(request)
+    now = _notes_now()
+
+    if not merged_scores and not cleaned_comment:
+        if key in notes:
+            del notes[key]
+            _save_scout_notes_store(store)
+        return {
+            "player_id": int(player_id),
+            "scout_scores": {},
+            "scout_comment": "",
+            "removed": True,
+        }
+
+    row = {
+        "scout_scores": merged_scores,
+        "scout_comment": cleaned_comment,
+        "updated_by": staff,
+        "updated_at": now,
+    }
+    if existing.get("created_at"):
+        row["created_at"] = existing["created_at"]
+        row["created_by"] = existing.get("created_by") or staff
+    else:
+        row["created_at"] = now
+        row["created_by"] = staff
+    notes[key] = row
+    _save_scout_notes_store(store)
+    return {
+        "player_id": int(player_id),
+        "scout_scores": merged_scores,
+        "scout_comment": cleaned_comment,
+        "removed": False,
+    }
+
+
+def _attach_scout_notes(
+    payload: dict[str, Any], notes_index: dict[int, dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    index = notes_index if notes_index is not None else _scout_notes_index()
+    for player in payload.get("players") or []:
+        try:
+            player_id = int(player.get("player_id") or 0)
+        except (TypeError, ValueError):
+            player_id = 0
+        note = index.get(player_id) or {}
+        player["scout_scores"] = _clean_scout_scores(note.get("scout_scores"))
+        player["scout_comment"] = str(note.get("scout_comment") or "")
+    return payload
+
+
+def _attach_player_pipeline_status(
+    payload: dict[str, Any], pipeline_index: dict[int, dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    index = pipeline_index if pipeline_index is not None else pipeline_index_by_player_id()
+    for player in payload.get("players") or []:
+        target = index.get(int(player.get("player_id") or 0))
+        if target:
+            player["in_pipeline"] = True
+            player["pipeline_stage"] = target.get("stage")
+            player["pipeline_stage_title"] = next(
+                (
+                    stage["title"]
+                    for stage in STAGES
+                    if stage["id"] == target.get("stage")
+                ),
+                target.get("stage"),
+            )
+            player["pipeline_stage_color"] = next(
+                (
+                    stage["color"]
+                    for stage in STAGES
+                    if stage["id"] == target.get("stage")
+                ),
+                "#3d8bfd",
+            )
+            player["pipeline_target_id"] = target.get("id")
+        else:
+            player["in_pipeline"] = False
+            player["pipeline_stage"] = ""
+            player["pipeline_stage_title"] = ""
+            player["pipeline_stage_color"] = ""
+            player["pipeline_target_id"] = ""
+    return payload
+
+
+def _finalize_club_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    pipeline_index = pipeline_index_by_player_id()
+    notes_index = _scout_notes_index()
+    payload = _attach_scout_notes(payload, notes_index)
+    return _attach_player_pipeline_status(payload, pipeline_index)
+
+
+def _apply_pipeline_target_to_player(player: dict[str, Any], target: dict[str, Any]) -> None:
+    stage = str(target.get("stage") or WATCHED_STAGE)
+    player["in_pipeline"] = True
+    player["pipeline_stage"] = stage
+    player["pipeline_stage_title"] = next(
+        (row["title"] for row in STAGES if row["id"] == stage),
+        target.get("stage") or "Watched",
+    )
+    player["pipeline_stage_color"] = next(
+        (row["color"] for row in STAGES if row["id"] == stage),
+        target.get("stage_color") or "#eab308",
+    )
+    player["pipeline_target_id"] = target.get("id") or ""
+
+
+def _ensure_watched_for_commented_player(
+    request: Request,
+    *,
+    player_id: int,
+    scout_comment: str,
+    name: str = "",
+    club: str = "",
+    league: str = "",
+    position: str = "",
+    position_label: str = "",
+    age: int | None = None,
+) -> dict[str, Any] | None:
+    if not player_id or not str(scout_comment or "").strip():
+        return None
+    result = upsert_pipeline_from_scout(
+        request,
+        player_id=player_id,
+        name=name,
+        club=club,
+        league=league,
+        position=position,
+        position_label=position_label,
+        age=age,
+        stage=WATCHED_STAGE,
+        only_create=True,
+    )
+    target = result.get("target")
+    if not isinstance(target, dict):
+        return None
+    if result.get("created"):
+        return target
+    return None
+
+
 def _club_key(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", str(name or "").casefold())
 
@@ -84,6 +339,77 @@ def _photo_url(name: str, club: str = "") -> str:
     if name:
         return f"/api/pre-match/player-photo?name={quote(name)}"
     return ""
+
+
+def _squad_primary_and_shares(
+    iteration_id: int, squad_id: int
+) -> tuple[dict[int, str], dict[int, dict[str, float]], dict[int, dict[str, Any]]]:
+    """Resolve positions for one club only — never scan the whole league.
+
+    Full-league `_ensure_position_shares` hammers Impect and causes 429 /
+    browser "Failed to fetch" when opening a club.
+    """
+    from app import main as impect
+
+    cached_primary = _get_primary_positions(iteration_id) or {}
+    cached_shares = _get_position_shares(iteration_id) or {}
+    if cached_primary and cached_shares:
+        return cached_primary, cached_shares, {}
+
+    best: dict[int, tuple[float, str, dict[str, Any]]] = {}
+    shares_out: dict[int, dict[str, float]] = {}
+    rate_limited = False
+
+    def fetch(position: str) -> tuple[str, list[dict[str, Any]]]:
+        try:
+            rows, _ = impect._fetch_profile_scores(
+                iteration_id, squad_id, [position], 0
+            )
+            return position, rows or []
+        except HTTPException as exc:
+            if int(getattr(exc, "status_code", 0) or 0) == 429:
+                raise
+            return position, []
+
+    try:
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            futures = [
+                pool.submit(fetch, position)
+                for position in impect.ALLOWED_POSITIONS
+            ]
+            for future in as_completed(futures):
+                position, rows = future.result()
+                for row in rows:
+                    try:
+                        player_id = int(row.get("playerId") or 0)
+                    except (TypeError, ValueError):
+                        continue
+                    if not player_id:
+                        continue
+                    match_share = float(row.get("matchShare") or 0)
+                    if match_share > 0:
+                        shares_out.setdefault(player_id, {})[position] = match_share
+                    current = best.get(player_id)
+                    if current is None or match_share > current[0]:
+                        best[player_id] = (match_share, position, row)
+    except HTTPException as exc:
+        if int(getattr(exc, "status_code", 0) or 0) == 429:
+            rate_limited = True
+        else:
+            raise
+
+    if rate_limited and not best:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                "Impect is rate-limiting right now. Wait a minute, then open "
+                "the club again."
+            ),
+        )
+
+    primary_out = {player_id: pos for player_id, (_, pos, _) in best.items()}
+    rows_by_id = {player_id: row for player_id, (_, _, row) in best.items()}
+    return primary_out, shares_out, rows_by_id
 
 
 def _pick_iteration_for_competition(competition: str) -> dict[str, Any] | None:
@@ -119,7 +445,7 @@ def build_leagues_board() -> dict[str, Any]:
     now = time.time()
     if cached and now - cached[0] < _BOARD_TTL:
         payload = dict(cached[1])
-        return _attach_pipeline_counts(payload)
+        return _attach_board_counts(payload)
 
     leagues: list[dict[str, Any]] = []
     for league in STANDOUTS_LEAGUES:
@@ -166,20 +492,126 @@ def build_leagues_board() -> dict[str, Any]:
         "leagues": leagues,
     }
     _BOARD_CACHE[cache_key] = (now, payload)
-    return _attach_pipeline_counts(dict(payload))
+    return _attach_board_counts(dict(payload))
 
 
-def _attach_pipeline_counts(payload: dict[str, Any]) -> dict[str, Any]:
+def _core_club_key(name: str) -> str:
+    """Match Impect squad names to fixture planner labels (FC / AFC prefixes)."""
+    key = _club_key(name)
+    for prefix in ("afc", "fc", "cf", "sc"):
+        if key.startswith(prefix) and len(key) > len(prefix) + 2:
+            return key[len(prefix) :]
+    return key
+
+
+def _club_lookup_keys(name: str) -> list[str]:
+    """Keys used to match Impect squad labels to fixture planner team names."""
+    full = _club_key(name)
+    core = _core_club_key(name)
+    keys: list[str] = []
+    for key in (full, core):
+        if key and key not in keys:
+            keys.append(key)
+    return keys
+
+
+def _load_fixture_assignments_for_counts() -> dict[str, Any]:
+    """Assignments for watch badges — pick the richest store (Live mount on staging)."""
+    from pathlib import Path
+
+    paths: list[Path] = []
+    live_path = Path("/live-data/cache/impect-fixture-planner/assignments.json")
+    if live_path.exists():
+        paths.append(live_path)
+
+    env_live = str(os.environ.get("LIVE_ASSIGNMENTS_PATH") or "").strip()
+    if env_live:
+        paths.append(Path(env_live))
+
+    try:
+        from app.fixture_planner import ASSIGNMENTS_PATH
+
+        paths.append(Path(ASSIGNMENTS_PATH))
+    except Exception:  # noqa: BLE001
+        pass
+
+    best: dict[str, Any] = {"assignments": {}}
+    best_count = -1
+    seen: set[str] = set()
+    for path in paths:
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        if not path.exists():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        assignments = payload.get("assignments")
+        if not isinstance(assignments, dict):
+            continue
+        count = len(assignments)
+        if count > best_count:
+            best = payload
+            best_count = count
+    return best
+
+
+def _fixture_watch_counts_by_club() -> dict[str, dict[str, int]]:
+    """Live / video assignment counts per club from the fixture planner store."""
+    store = _load_fixture_assignments_for_counts()
+    counts: dict[str, dict[str, int]] = {}
+    for row in (store.get("assignments") or {}).values():
+        if not isinstance(row, dict):
+            continue
+        watch = str(row.get("watch_type") or "").strip().upper()
+        if watch not in {"LIVE", "VIDEO"}:
+            continue
+        for team_name in (row.get("home"), row.get("away")):
+            for key in _club_lookup_keys(str(team_name or "")):
+                bucket = counts.setdefault(key, {"live": 0, "video": 0})
+                if watch == "LIVE":
+                    bucket["live"] += 1
+                else:
+                    bucket["video"] += 1
+    return counts
+
+
+def _watch_counts_for_club(
+    watch_counts: dict[str, dict[str, int]], club_name: str
+) -> dict[str, int]:
+    live = 0
+    video = 0
+    for key in _club_lookup_keys(club_name):
+        row = watch_counts.get(key) or {}
+        live = max(live, int(row.get("live") or 0))
+        video = max(video, int(row.get("video") or 0))
+    return {"live": live, "video": video, "total": live + video}
+
+
+def _attach_board_counts(payload: dict[str, Any]) -> dict[str, Any]:
     index = pipeline_index_by_player_id()
-    # Counts by club name from pipeline targets — approximate for overview badges.
     by_club: dict[str, int] = {}
     for target in index.values():
-        key = _club_key(target.get("club") or "")
-        if key:
+        for key in _club_lookup_keys(target.get("club") or ""):
             by_club[key] = by_club.get(key, 0) + 1
+
+    watch_counts = _fixture_watch_counts_by_club()
     for league in payload.get("leagues") or []:
         for club in league.get("clubs") or []:
-            club["pipeline_count"] = by_club.get(_club_key(club.get("name") or ""), 0)
+            name = str(club.get("name") or "")
+            pipe = 0
+            for key in _club_lookup_keys(name):
+                pipe = max(pipe, by_club.get(key, 0))
+            watches = _watch_counts_for_club(watch_counts, name)
+            club["pipeline_count"] = pipe
+            club["watch_live"] = watches["live"]
+            club["watch_video"] = watches["video"]
+            club["watch_total"] = watches["total"]
     return payload
 
 
@@ -204,9 +636,38 @@ def _score_row_to_player(
             profile_scores[name] = _impect_profile_score(
                 values.get(_normalize_profile_key(name))
             )
-    if not any(value is not None for value in profile_scores.values()):
-        for key, raw in values.items():
-            profile_scores[key] = _impect_profile_score(raw)
+    # Unpositioned players: still need an overall, but never dump every PV
+    # profile into the UI (that blew up the "Other" group).
+    if not profile_names:
+        all_scores = {
+            key: _impect_profile_score(raw) for key, raw in values.items()
+        }
+        overall_probe = _overall_from_profile_scores(all_scores)
+        if overall_probe is None:
+            return None
+        scored_all = {k: float(v) for k, v in all_scores.items() if v is not None}
+        top_api = max(scored_all, key=scored_all.get) if scored_all else ""
+        name = impect._extract_player_name(catalog) or f"Player {player_id}"
+        return {
+            "player_id": player_id,
+            "name": name,
+            "age": impect._player_age(catalog),
+            "height": _format_height(catalog),
+            "foot": _format_foot(catalog.get("leg")),
+            "club": club,
+            "league": league,
+            "season": season,
+            "minutes": int(round(float(impect._play_duration_minutes(row) or 0))),
+            "position": "",
+            "position_label": "—",
+            "overall": round(float(overall_probe)),
+            "top_profile": humanize_profile_name(top_api) if top_api else "",
+            "top_profile_score": round(scored_all[top_api]) if top_api else None,
+            "profile_scores": {},
+            "photo_url": _photo_url(name, club),
+            "dossier_href": f"/player/{player_id}",
+            "iteration_id": iteration_id,
+        }
     if not any(value is not None for value in profile_scores.values()):
         return None
     overall = _overall_from_profile_scores(profile_scores)
@@ -262,7 +723,7 @@ def build_club_board(
     cached = _SQUAD_CACHE.get(cache_key)
     now = time.time()
     if cached and now - cached[0] < _SQUAD_TTL:
-        return _attach_player_pipeline_status(dict(cached[1]))
+        return _finalize_club_payload(dict(cached[1]))
 
     chosen: dict[str, Any] | None = None
     score_rows: list[dict[str, Any]] = []
@@ -374,15 +835,29 @@ def build_club_board(
             pid = player.get("id")
             if pid is not None:
                 catalog_by_id[int(pid)] = player
-    except HTTPException:
+    except HTTPException as exc:
+        if int(getattr(exc, "status_code", 0) or 0) == 429:
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    "Impect is rate-limiting right now. Wait a minute, then open "
+                    "the club again."
+                ),
+            ) from exc
         catalog_by_id = {}
 
     try:
-        primary, shares = _ensure_position_shares(iid)
+        primary, shares, rows_by_position = _squad_primary_and_shares(
+            iid, int(chosen["squad_id"])
+        )
+    except HTTPException:
+        raise
     except Exception:  # noqa: BLE001
-        primary, shares = None, None
-    primary = primary or {}
-    shares = shares or {}
+        primary, shares, rows_by_position = {}, {}, {}
+
+    # Prefer the primary-position score row when we fetched per-position.
+    if rows_by_position:
+        score_rows = list(rows_by_position.values())
 
     players: list[dict[str, Any]] = []
     seen: set[int] = set()
@@ -406,6 +881,10 @@ def build_club_board(
                 for pos, value in ranked
                 if (value / total) >= POSITION_SHARE_THRESHOLD
             ]
+            # Always keep a primary even when share is below the usual threshold
+            # (early-season / low minutes) so players don't dump into "Other".
+            if not positions and ranked:
+                positions = [ranked[0][0]]
         primary_pos = primary.get(player_id)
         if primary_pos:
             if primary_pos in positions:
@@ -443,14 +922,30 @@ def build_club_board(
     )
 
     profiles_by_position: dict[str, list[dict[str, str]]] = {}
-    for code, _short in POSITIONS:
-        try:
-            names = _profiles_for_position(code) or []
-        except Exception:  # noqa: BLE001
-            names = []
-        profiles_by_position[code] = [
-            {"apiName": name, "label": humanize_profile_name(name)} for name in names
-        ]
+    try:
+        definitions = impect._fetch_player_profile_definitions()
+        for code, _short in POSITIONS:
+            names = [
+                name
+                for name, definition in definitions.items()
+                if impect._is_pv_profile(name)
+                and code in (definition.get("positions") or [])
+            ]
+            profiles_by_position[code] = [
+                {"apiName": name, "label": humanize_profile_name(name)}
+                for name in sorted(
+                    names, key=lambda item: humanize_profile_name(item).casefold()
+                )
+            ]
+    except Exception:  # noqa: BLE001
+        for code, _short in POSITIONS:
+            try:
+                names = _profiles_for_position(code) or []
+            except Exception:  # noqa: BLE001
+                names = []
+            profiles_by_position[code] = [
+                {"apiName": name, "label": humanize_profile_name(name)} for name in names
+            ]
 
     payload = {
         "club": club_name,
@@ -465,40 +960,7 @@ def build_club_board(
         "players": players,
     }
     _SQUAD_CACHE[cache_key] = (now, payload)
-    return _attach_player_pipeline_status(dict(payload))
-
-
-def _attach_player_pipeline_status(payload: dict[str, Any]) -> dict[str, Any]:
-    index = pipeline_index_by_player_id()
-    for player in payload.get("players") or []:
-        target = index.get(int(player.get("player_id") or 0))
-        if target:
-            player["in_pipeline"] = True
-            player["pipeline_stage"] = target.get("stage")
-            player["pipeline_stage_title"] = next(
-                (
-                    stage["title"]
-                    for stage in STAGES
-                    if stage["id"] == target.get("stage")
-                ),
-                target.get("stage"),
-            )
-            player["pipeline_stage_color"] = next(
-                (
-                    stage["color"]
-                    for stage in STAGES
-                    if stage["id"] == target.get("stage")
-                ),
-                "#3d8bfd",
-            )
-            player["pipeline_target_id"] = target.get("id")
-        else:
-            player["in_pipeline"] = False
-            player["pipeline_stage"] = ""
-            player["pipeline_stage_title"] = ""
-            player["pipeline_stage_color"] = ""
-            player["pipeline_target_id"] = ""
-    return payload
+    return _finalize_club_payload(dict(payload))
 
 
 def register_scoutable_teams_routes(app: FastAPI) -> None:
@@ -527,11 +989,42 @@ def register_scoutable_teams_routes(app: FastAPI) -> None:
             league=league,
         )
 
+    @app.post("/api/scoutable-teams/scout-notes")
+    def scoutable_teams_save_notes(
+        request: Request, body: ScoutNotesBody
+    ) -> dict[str, Any]:
+        result = _upsert_scout_notes(
+            request,
+            player_id=body.player_id,
+            scout_scores=body.scout_scores,
+            scout_comment=body.scout_comment,
+        )
+        if not result.get("removed") and str(result.get("scout_comment") or "").strip():
+            target = _ensure_watched_for_commented_player(
+                request,
+                player_id=body.player_id,
+                scout_comment=str(result.get("scout_comment") or ""),
+                name=body.name,
+                club=body.club,
+                league=body.league,
+                position=body.position,
+                position_label=body.position_label,
+                age=body.age,
+            )
+            if target:
+                result["pipeline"] = target
+        return result
+
     @app.post("/api/scoutable-teams/set-status")
     def scoutable_teams_set_status(
         request: Request, body: SetStatusBody
     ) -> dict[str, Any]:
         stage = str(body.stage or "").strip().lower()
+        if stage == WATCHED_STAGE and not _player_scout_comment(int(body.player_id)):
+            raise HTTPException(
+                status_code=400,
+                detail="Add scout comments before marking as Watched.",
+            )
         if stage in ("", "none", "not_in_pipeline", "not-in-pipeline"):
             removed = remove_pipeline_by_player_id(int(body.player_id))
             return {

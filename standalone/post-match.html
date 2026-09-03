@@ -6,7 +6,7 @@
   <title>Post-Match Report</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
       --pv-gold: #f5c518;
@@ -20,7 +20,7 @@
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: "DM Sans", system-ui, sans-serif;
+      font-family: "Manrope", system-ui, sans-serif;
       background: #0a0a0a;
       color: #f5f5f5;
     }
@@ -1718,7 +1718,7 @@
     .touch-map-svg .zone-val--conv { font-size: 17px; }
     .touch-map-svg .zone-val--conv.zone-val--side { font-size: 13px; }
     .touch-map-svg .zone-name {
-      font-family: "DM Sans", Arial, sans-serif;
+      font-family: "Manrope", Arial, sans-serif;
       font-size: 6px;
       font-weight: 700;
       pointer-events: none;
@@ -2156,7 +2156,7 @@
       line-height: 1;
     }
     .duels-cell__avg {
-      font-family: "DM Sans", sans-serif;
+      font-family: "Manrope", sans-serif;
       font-size: 0.72rem;
       font-weight: 600;
       color: #475569;
@@ -5154,6 +5154,7 @@
   <button type="button" class="present-ui present-nav present-nav--prev" id="presentPrev" aria-label="Previous slide">‹</button>
   <button type="button" class="present-ui present-nav present-nav--next" id="presentNext" aria-label="Next slide">›</button>
   <div class="present-ui present-hint" id="presentHint">← Back · Click or → Forward · Esc exit</div>
+  <script src="/static/wysiwyg-export.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -6090,7 +6091,7 @@
 
     function touchZoneNameAttrs(narrow) {
       const size = touchZoneNameFontSize(narrow);
-      return `font-family="DM Sans, Arial, sans-serif" font-size="${size}" font-weight="700"`;
+      return `font-family="Manrope, Arial, sans-serif" font-size="${size}" font-weight="700"`;
     }
 
     function fmtTouchStat(value) {
@@ -6523,7 +6524,7 @@
             legend: { display: false },
             tooltip: {
               titleFont: { family: "Barlow Condensed", weight: "800", size: 13 },
-              bodyFont: { family: "DM Sans", weight: "600", size: 12 },
+              bodyFont: { family: "Manrope", weight: "600", size: 12 },
               callbacks: {
                 title(items) {
                   const item = items[0];
@@ -7007,8 +7008,9 @@
       const cx = pitchX + drawW / 2;
       const rx = arcHalfSvg;
       const ry = (arcRadiusM / pitch.depthM) * plotH;
-      return `<path d="M ${cx - rx} ${paLineY} A ${rx} ${ry} 0 0 1 ${cx + rx} ${paLineY}"
-        fill="none" stroke="#fff" stroke-width="0.9" opacity="0.9" />`;
+      // Goal is at the top (smaller Y). Sweep 0 bulges the D into the pitch, away from goal.
+      return `<path d="M ${cx - rx} ${paLineY} A ${rx} ${ry} 0 0 0 ${cx + rx} ${paLineY}"
+        fill="none" stroke="#fff" stroke-width="1.1" opacity="0.95" />`;
     }
 
     function crossDotInitialsColor(fill) {
@@ -7324,8 +7326,8 @@
       const paLineY = pitchY + penDepth;
       const arcHalfSvg = (arcHalfM / pitch.widthM) * drawW;
       const ry = (arcRadiusM / pitch.depthM) * plotH;
-      const penaltyArc = `<path d="M ${cx - arcHalfSvg} ${paLineY} A ${arcHalfSvg} ${ry} 0 0 1 ${cx + arcHalfSvg} ${paLineY}"
-        fill="none" stroke="#fff" stroke-width="0.9" opacity="0.9" />`;
+      const penaltyArc = `<path d="M ${cx - arcHalfSvg} ${paLineY} A ${arcHalfSvg} ${ry} 0 0 0 ${cx + arcHalfSvg} ${paLineY}"
+        fill="none" stroke="#fff" stroke-width="1.1" opacity="0.95" />`;
 
       const maxXg = points.reduce((max, pt) => Math.max(max, Number(pt.xg) || 0), 0);
 
@@ -9763,27 +9765,54 @@
 
     async function exportPdf() {
       setExportButtonsDisabled(true);
+      const wasPresent = document.body.classList.contains("is-present");
+      if (wasPresent) setPresent(false);
+      document.body.classList.add("is-exporting");
       try {
-        if (!document.body.classList.contains("is-pdf-view")) setPdfView(true);
-        setExportStatus("Preparing PDF from large slides…", "loading");
-        const canvases = await captureAllSlidesForExport((msg) => setExportStatus(msg, "loading"));
-        await loadExportScript("https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js");
-        const { jsPDF } = window.jspdf;
-        if (!jsPDF) throw new Error("PDF library failed to load.");
-        const pdf = new jsPDF({
-          orientation: "landscape",
-          unit: "mm",
-          format: [EXPORT_PDF_W_MM, EXPORT_PDF_H_MM],
-          compress: true,
+        if (!window.PortValeWysiwygExport) {
+          throw new Error("WYSIWYG export helper failed to load — hard refresh and try again.");
+        }
+        setExportStatus("Preparing WhatsApp PDF from on-screen slides…", "loading");
+        setExportOverlay("Building WhatsApp PDF (Chrome)…");
+        const slides = deckSlides.length
+          ? deckSlides
+          : [...document.querySelectorAll(".deck .slide:not(.slide--placeholder)")];
+        if (!slides.length) throw new Error("Load a report before exporting.");
+
+        const pack = await window.PortValeWysiwygExport.captureSlideHtmlPages({
+          slides,
+          stripClasses: ["slide--pdf-capture", "is-export-capture", "is-export-hidden"],
+          activeClass: "is-active",
+          background: "#0c0c0c",
+          beforeSlide: (index) => {
+            if (typeof showSlide === "function") showSlide(index);
+          },
+          settleSlide: async (slide) => {
+            await waitForImages(slide);
+            if (xgRaceChartInstance && slide.classList.contains("slide--overview")) {
+              xgRaceChartInstance.resize();
+              xgRaceChartInstance.update("none");
+            }
+          },
+          onProgress: (msg) => {
+            setExportStatus(msg, "loading");
+            setExportOverlay(msg);
+          },
         });
-        canvases.forEach((canvas, index) => {
-          const imageData = canvas.toDataURL("image/jpeg", WHATSAPP_PDF_JPEG_QUALITY);
-          if (index > 0) pdf.addPage([EXPORT_PDF_W_MM, EXPORT_PDF_H_MM], "landscape");
-          pdf.addImage(imageData, "JPEG", 0, 0, EXPORT_PDF_W_MM, EXPORT_PDF_H_MM);
+
+        setExportOverlay("Rendering PDF in Chrome…");
+        const filename = `${slideExportFileStem()}.pdf`;
+        const result = await window.PortValeWysiwygExport.downloadPdf({
+          ...pack,
+          filename,
+          documentTitle: `Post-Match · ${filename}`,
+          endpoint: "/api/wysiwyg-export-pdf",
         });
-        pdf.save(`${slideExportFileStem()}.pdf`);
-        setExportStatus(`PDF downloaded (${canvases.length} slides). Still in PDF version — Back to deck when done.`, "success");
-        setBanner(`WhatsApp PDF ready (${canvases.length} slides)`, "loading");
+        setExportStatus(
+          `PDF downloaded (${result.pageCount} slides · ${result.sizeMb} MB). Matches what you see on screen.`,
+          "success",
+        );
+        setBanner(`WhatsApp PDF ready (${result.pageCount} slides)`, "loading");
         setTimeout(() => setBanner(""), 4000);
       } catch (err) {
         console.error("Post-match PDF export failed", err);
@@ -9791,7 +9820,10 @@
         setExportStatus(message, "error");
         setBanner(message, "error");
       } finally {
+        document.body.classList.remove("is-exporting");
+        setExportOverlay("");
         setExportButtonsDisabled(false);
+        if (wasPresent) setPresent(true);
       }
     }
 

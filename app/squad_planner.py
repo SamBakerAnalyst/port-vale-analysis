@@ -611,15 +611,27 @@ def build_squad_planner_player(body: SquadPlannerPlayerRequest) -> dict[str, Any
     competitions_used = [hit["competition"] for hit in selected]
 
     profile_scores: dict[str, float | None] = {}
+    impect_profile_scores: dict[str, float | None] = {}
+    newest_impect_profile_scores: dict[str, float | None] = {}
+    newest_raw_values = _profile_value_map(newest["row"])
     for profile_key, profile_name in profile_keys.items():
         raw_value = combined_values.get(profile_key)
         cohort_values = league_cohort.get(profile_key, [])
+        impect_profile_scores[profile_name] = (
+            impect._impect_score_0_100(raw_value) if raw_value is not None else None
+        )
+        newest_raw = newest_raw_values.get(profile_key)
+        newest_impect_profile_scores[profile_name] = (
+            impect._impect_score_0_100(newest_raw) if newest_raw is not None else None
+        )
         if raw_value is None or not cohort_values:
             profile_scores[profile_name] = None
             continue
         profile_scores[profile_name] = impect._cohort_percentile(raw_value, cohort_values)
 
-    if not any(value is not None for value in profile_scores.values()):
+    if not any(value is not None for value in profile_scores.values()) and not any(
+        value is not None for value in impect_profile_scores.values()
+    ):
         raise HTTPException(
             status_code=404,
             detail=(
@@ -648,6 +660,9 @@ def build_squad_planner_player(body: SquadPlannerPlayerRequest) -> dict[str, Any
         "iterationId": newest_iteration_id,
         "impectPlayerId": body.impect_player_id,
         "profileScores": profile_scores,
+        "profileScoresImpect": impect_profile_scores,
+        # Current season only — same window as Who To Scout Overall.
+        "profileScoresImpectNewest": newest_impect_profile_scores,
         "profiles": [
             {"apiName": name, "label": humanize_profile_name(name)}
             for name in profiles

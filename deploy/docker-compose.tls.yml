@@ -1,0 +1,49 @@
+# Domain + HTTPS deploy. Same app as docker-compose.ip.yml, but Caddy also holds
+# :443 and issues its own certificate for SITE_DOMAIN. The bare IP still serves
+# over :80 so existing bookmarks do not break.
+#
+# Needs, before this will work:
+#   1. An A record for SITE_DOMAIN pointing at the droplet
+#   2. Ports 80 and 443 open on the droplet firewall
+#   3. SITE_DOMAIN and CADDY_EMAIL set in .env
+services:
+  hub:
+    build: .
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8000
+      DATA_ROOT: /data
+      UVICORN_WORKERS: "1"
+    volumes:
+      - pv-data:/data
+    restart: unless-stopped
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile.tls:/etc/caddy/Caddyfile:ro
+      - ./static:/srv/static:ro
+      - ./standalone:/srv/standalone:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      hub:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pv-data:
+  caddy-data:
+  caddy-config:

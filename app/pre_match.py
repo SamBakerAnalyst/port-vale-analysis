@@ -7,9 +7,10 @@ import math
 import re
 import time
 import zipfile
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse, Response
@@ -18,6 +19,7 @@ from pydantic import BaseModel
 from app.opponent_photos import (
     attach_pitch_player_photos,
     fetch_opponent_photo_bytes,
+    opponent_photo_api_url,
     player_on_transfermarkt_squad,
     resolve_opponent_photo_source_url,
     resolve_transfermarkt_club_id,
@@ -28,16 +30,25 @@ from app.paths import HUB_ROOT
 from app.scouting import SCOUTING_DIR
 from app.squad_photos import fetch_photo_bytes, resolve_local_photo_path
 
+# Port Vale kick-offs always display in UK local time (GMT/BST).
+_UK_TZ = ZoneInfo("Europe/London")
 _PLAYER_PHOTO_CACHE_TTL_SECONDS = 6 * 60 * 60
 _player_photo_bytes_cache: dict[str, tuple[float, bytes, str]] = {}
 
 
-def _player_photo_cache_key(name: str, club: str | None, season: str | None) -> str:
+def _player_photo_cache_key(
+    name: str,
+    club: str | None,
+    season: str | None,
+    shirt: int | str | None = None,
+) -> str:
     parts = [re.sub(r"\s+", " ", str(name or "").strip().casefold())]
     if club:
         parts.append(re.sub(r"\s+", " ", str(club).strip().casefold()))
     if season:
         parts.append(re.sub(r"\s+", " ", str(season).strip().casefold()))
+    if shirt is not None and str(shirt).strip() != "":
+        parts.append(f"#{str(shirt).strip()}")
     return "|".join(parts)
 
 
@@ -46,8 +57,9 @@ def _resolve_player_photo_bytes(
     *,
     club: str | None,
     season: str | None,
+    shirt: int | str | None = None,
 ) -> tuple[bytes, str]:
-    cache_key = _player_photo_cache_key(name, club, season)
+    cache_key = _player_photo_cache_key(name, club, season, shirt)
     cached = _player_photo_bytes_cache.get(cache_key)
     now = time.time()
     if cached and now - cached[0] < _PLAYER_PHOTO_CACHE_TTL_SECONDS:
@@ -70,12 +82,13 @@ def _resolve_player_photo_bytes(
         name,
         club_name=club,
         season=season,
+        shirt_number=shirt,
     )
     if not source_url:
         raise HTTPException(status_code=404, detail=f"No photo found for {name}")
 
     try:
-        if "transfermarkt" in source_url:
+        if "transfermarkt" in source_url or "images.gc." in source_url:
             image_bytes, content_type = fetch_opponent_photo_bytes(source_url)
         else:
             image_bytes, content_type = fetch_photo_bytes(source_url)
@@ -132,7 +145,7 @@ def _enrich_team_crest(team: dict[str, Any], iteration_id: int) -> dict[str, Any
         if fallback:
             enriched["image_url"] = fallback
     return enriched
-PRE_MATCH_DEFAULT_OPPONENT_NAMES: tuple[str, ...] = ("Lincoln City", "Mansfield Town")
+PRE_MATCH_DEFAULT_OPPONENT_NAMES: tuple[str, ...] = ()
 
 _kpi_name_cache: tuple[float, dict[int, str]] | None = None
 _squad_kpi_cache: dict[int, tuple[float, dict[int, dict[str, float]]]] = {}
@@ -145,6 +158,8 @@ MIN_PITCH_MINUTES = 45
 PITCH_STARTER_LIMIT = 11
 PREVIOUS_XI_LIMIT = 3
 LAST_GAME_PHASE_LIMIT = 3
+TWO_MATCH_LIMIT = 2
+TWO_PAGER_MIN_MINUTES_PER90 = 45.0
 
 SIDE_X: dict[str, float] = {
     "LEFT": 12.0,
@@ -342,6 +357,7 @@ SQUAD_LIST_IN_POSSESSION_METRICS: tuple[dict[str, Any], ...] = (
         ),
     },
 )
+
 SQUAD_LIST_OUT_OF_POSSESSION_METRICS: tuple[dict[str, Any], ...] = (
     {"key": "CONCEDED_GOALS", "label": "Goals against", "higher_better": False},
     {"key": "CONCEDED_SHOT_XG", "label": "xG against", "higher_better": False},
@@ -369,36 +385,60 @@ TEAM_STYLE_RADAR_AXES: tuple[dict[str, Any], ...] = (
         "key": "possession",
         "label": "Possession",
         "hint": "Ball retention vs the rest of the league",
+        "coach_meaning": "Do they keep the ball, or give it away and defend?",
+        "coach_stats": "Ball retention vs the rest of the league.",
+        "coach_high": "Circulate and control games.",
+        "coach_low": "Happy without the ball — defend and break.",
         "scores": ((23, False),),
     },
     {
         "key": "pressing",
         "label": "Pressing",
         "hint": "Opening-ball press, PPDA, and average press height",
+        "coach_meaning": "How hard and how high do they press after losing it?",
+        "coach_stats": "Opening-ball pressure, PPDA, and average press height.",
+        "coach_high": "Chase the ball high — aggressive.",
+        "coach_low": "Drop into a block — protect the box first.",
         "scores": ((63, False), (112, True), (57, False)),
     },
     {
         "key": "progression",
         "label": "Progression",
         "hint": "Bypassing opponents and positive packing threat",
+        "coach_meaning": "How well do they play the ball through the opposition?",
+        "coach_stats": "Packing / bypassing opponents and positive packing threat.",
+        "coach_high": "Play through lines into dangerous areas.",
+        "coach_low": "Struggle to play through — recycle or go long.",
         "scores": ((98, False), (48, False)),
     },
     {
         "key": "aerial",
         "label": "Aerial",
         "hint": "Aerial duel share vs the league",
+        "coach_meaning": "How much of their game is in the air?",
+        "coach_stats": "Share of aerial duels vs the rest of the league.",
+        "coach_high": "Long balls, crosses, second balls — win headers.",
+        "coach_low": "Keep it on the floor — fewer aerial battles.",
         "scores": ((29, False),),
     },
     {
         "key": "direct",
         "label": "Direct play",
         "hint": "Vertical play — low reverse passing and bypassing opponents",
+        "coach_meaning": "Do they attack quickly and go forward, or build slowly?",
+        "coach_stats": "Looks at how vertical their play is — fewer backwards passes, more packing through lines.",
+        "coach_high": "Go forward fast — skip midfield, attack space.",
+        "coach_low": "Patient / sideways — build slowly.",
         "scores": ((5, True), (98, False)),
     },
     {
         "key": "transition",
         "label": "Transition",
         "hint": "Counter-press intensity and packing wins",
+        "coach_meaning": "How dangerous are they the second they win the ball?",
+        "coach_stats": "Counter-press intensity plus packing wins after regain.",
+        "coach_high": "Win it and go — quick counters.",
+        "coach_low": "Reset after winning it — less threat on the break.",
         "scores": ((61, False), (2, False)),
     },
 )
@@ -466,6 +506,12 @@ class PreMatchPngExportPage(BaseModel):
 
 class PreMatchPngExportRequest(BaseModel):
     pages: list[PreMatchPngExportPage] = []
+    # Full HTML documents for Playwright WYSIWYG capture (preferred over imageData).
+    html_pages: list[str] = []
+    html_filenames: list[str] = []
+    width: int = 1920
+    height: int = 1080
+    scale: float = 2.0
     filename: str | None = None
     document_title: str | None = None
     opponent_name: str | None = None
@@ -734,6 +780,10 @@ def _build_team_style(iteration_id: int, squad_id: int) -> dict[str, Any]:
                     "key": axis["key"],
                     "label": axis["label"],
                     "hint": axis.get("hint"),
+                    "coach_meaning": axis.get("coach_meaning"),
+                    "coach_stats": axis.get("coach_stats"),
+                    "coach_high": axis.get("coach_high"),
+                    "coach_low": axis.get("coach_low"),
                     "value": team_pct,
                     "league_avg": league_mid,
                     "rank": rank,
@@ -837,6 +887,70 @@ def _rank_metric(
 def _match_play_minutes(row: dict[str, Any]) -> float:
     impect = _impect()
     return float(impect._play_duration_minutes(row) or 0.0)
+
+
+def _merge_match_player_kpi_row(
+    bucket: dict[str, Any] | None,
+    row: dict[str, Any],
+    *,
+    names: dict[int, str],
+    wanted: set[int] | None = None,
+) -> dict[str, Any]:
+    """Merge duplicate Impect player rows from one match (position stints).
+
+    Impect can emit multiple rows per player in a match. The old logic kept only
+    the longest stint, which dropped goals/assists logged on shorter stints.
+    """
+    minutes = _match_play_minutes(row)
+    match_share = float(row.get("matchShare") or 0.0)
+    goals = 0
+    assists = 0
+    kpi_totals = {kpi_id: 0.0 for kpi_id in (wanted or set())}
+    for kpi in row.get("kpis") or []:
+        try:
+            kpi_id = int(kpi.get("kpiId") or -1)
+        except (TypeError, ValueError):
+            continue
+        value = float(kpi.get("value") or 0.0)
+        label = names.get(kpi_id)
+        if label == "GOALS":
+            goals = int(round(value))
+        elif label == "ASSISTS":
+            assists = int(round(value))
+        if wanted and kpi_id in wanted:
+            kpi_totals[kpi_id] += value
+
+    if bucket is None:
+        out: dict[str, Any] = {
+            "minutes": minutes,
+            "match_share": match_share,
+            "position": str(row.get("position") or ""),
+            "goals": goals,
+            "assists": assists,
+        }
+        if wanted:
+            out["kpi_totals"] = kpi_totals
+        return out
+
+    bucket["goals"] = int(bucket.get("goals") or 0) + goals
+    bucket["assists"] = int(bucket.get("assists") or 0) + assists
+    bucket["minutes"] = float(bucket.get("minutes") or 0.0) + minutes
+    if wanted:
+        merged = bucket.setdefault(
+            "kpi_totals",
+            {kpi_id: 0.0 for kpi_id in wanted},
+        )
+        for kpi_id, value in kpi_totals.items():
+            merged[kpi_id] = float(merged.get(kpi_id) or 0.0) + value
+
+    if minutes >= float(bucket.get("_longest_stint_minutes") or 0.0):
+        bucket["_longest_stint_minutes"] = minutes
+        bucket["match_share"] = max(float(bucket.get("match_share") or 0.0), match_share)
+        if row.get("position"):
+            bucket["position"] = str(row.get("position") or "")
+    else:
+        bucket["match_share"] = max(float(bucket.get("match_share") or 0.0), match_share)
+    return bucket
 
 
 TM_POSITION_TO_CODE: dict[str, str] = {
@@ -1707,6 +1821,34 @@ def _parse_match_datetime(value: Any) -> datetime | None:
         return None
 
 
+FIXTURE_KICKOFF_GRACE_HOURS = 3
+
+
+def _fixture_scheduled_dt(row: dict[str, Any]) -> datetime | None:
+    scheduled = row.get("scheduled_date") or row.get("scheduledDate")
+    return _parse_match_datetime(scheduled)
+
+
+def _fixture_is_still_next(row: dict[str, Any], *, now: datetime | None = None) -> bool:
+    """True when kickoff has not passed (with a short grace for live games)."""
+    kickoff = _fixture_scheduled_dt(row)
+    if kickoff is None:
+        return True
+    current = now or datetime.now(UTC)
+    return kickoff >= current - timedelta(hours=FIXTURE_KICKOFF_GRACE_HOURS)
+
+
+def _pick_next_fixture(fixtures: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if not fixtures:
+        return None
+    with_match_id = [fixture for fixture in fixtures if fixture.get("match_id")]
+    pool = with_match_id or fixtures
+    for fixture in pool:
+        if _fixture_is_still_next(fixture):
+            return fixture
+    return pool[-1]
+
+
 def _match_sort_key(match: dict[str, Any]) -> tuple[datetime, int, int]:
     dt = _parse_match_datetime(match.get("scheduledDate")) or datetime.min.replace(tzinfo=UTC)
     return (dt, _match_day_index(match), int(match.get("id") or 0))
@@ -1779,6 +1921,38 @@ def _clean_formation_label(formation: str | None) -> str | None:
     if not text or text.upper() == "UNKNOWN":
         return None
     return text
+
+
+def _coach_formation_from_lineup(
+    impect_formation: str | None,
+    players: list[dict[str, Any]] | None,
+) -> str | None:
+    """Prefer the shape coaches recognise when Impect tags a 4-2-3-1 as 5-2-2-1.
+
+    Impect often codes a back four + double pivot + two 10s + 9 as 5-2-2-1
+    (third centre-back + wing-backs). When the XI has 2 DM + 2 AM + 1 CF,
+    show 4-2-3-1 instead.
+    """
+    cleaned = _clean_formation_label(impect_formation)
+    if not cleaned:
+        return None
+    token = _normalize_formation_key(cleaned)
+    if token not in {"5-2-2-1", "5-2-1-2"}:
+        return cleaned
+
+    codes = [str(player.get("position") or "").upper() for player in (players or [])]
+    if not codes:
+        return cleaned
+    n_dm = sum(1 for code in codes if code == "DEFENSE_MIDFIELD")
+    n_am = sum(1 for code in codes if code == "ATTACKING_MIDFIELD")
+    n_cf = sum(
+        1
+        for code in codes
+        if code in {"CENTER_FORWARD", "CENTRE_FORWARD", "CENTRAL_FORWARD", "SECOND_STRIKER"}
+    )
+    if n_dm >= 2 and n_am >= 2 and n_cf >= 1:
+        return "4-2-3-1"
+    return cleaned
 
 
 def _unique_formations_in_match(squad: dict[str, Any]) -> list[str]:
@@ -2509,19 +2683,44 @@ def _team_payload(squad: dict[str, Any]) -> dict[str, Any]:
 
 
 def _format_kickoff(scheduled: str | None) -> tuple[str | None, str | None]:
+    """Date + kick-off clock in UK local time (never raw UTC)."""
     if not scheduled:
         return None, None
     try:
         normalized = str(scheduled).replace("Z", "+00:00")
         dt = datetime.fromisoformat(normalized)
-        if dt.tzinfo is not None:
-            dt = dt.astimezone(UTC).replace(tzinfo=None)
+        if dt.tzinfo is None:
+            # Impect timestamps without offset are UTC wall-clock.
+            dt = dt.replace(tzinfo=UTC)
+        local = dt.astimezone(_UK_TZ)
         return (
-            dt.strftime("%A %d %B %Y"),
-            dt.strftime("%H:%M"),
+            local.strftime("%A %d %B %Y"),
+            local.strftime("%H:%M"),
         )
     except (TypeError, ValueError):
         return str(scheduled)[:10], None
+
+
+def _kickoff_label(scheduled_date: str | None, is_home: bool) -> str:
+    """Compact match-bar label: H/A + UK date (and time when known)."""
+    prefix = "H" if is_home else "A"
+    if not scheduled_date:
+        return "vs"
+    try:
+        normalized = str(scheduled_date).replace("Z", "+00:00")
+        dt = datetime.fromisoformat(normalized)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        local = dt.astimezone(_UK_TZ)
+        short = f"{local.strftime('%a')} {local.day} {local.strftime('%b')}"
+        clock = local.strftime("%H:%M")
+        return f"{prefix} {short} · {clock}"
+    except (TypeError, ValueError):
+        try:
+            day = str(scheduled_date)[5:10].replace("-", "/")
+        except (TypeError, IndexError):
+            day = ""
+        return f"{prefix} {day}".strip() if day else prefix
 
 
 def _build_fixture_context(
@@ -2853,6 +3052,781 @@ def _lineup_players_from_match_detail(
     return players
 
 
+# Two-pager player leader KPI ids (Impect).
+_TP_KPI_GOALS = 28
+_TP_KPI_ASSISTS = 77
+_TP_KPI_BALL_PROGRESSION = 1399  # bypassed opponents
+_TP_KPI_BYPASSED_DEFENDERS = 1400
+_TP_KPI_OFFENSIVE_INTERVENTIONS = 24
+_TP_KPI_BALL_WINS_VS_DEFENDERS = 25
+_TP_KPI_SHOT_XG = 82
+_TP_KPI_CONCEDED_SHOT_XG = 1463
+_TP_SCORE_BALL_POSSESSION = 23
+# Match masthead xG: open play only (same rule as blocks VS card).
+_TP_XG_EXCLUDED_ACTIONS = frozenset({"PENALTY", "PENALTY_KICK", "DIRECT_FREE_KICK"})
+
+
+def _parse_match_kpi_list(items: Any) -> dict[int, float]:
+    out: dict[int, float] = {}
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        kpi_id = item.get("kpiId")
+        value = item.get("value")
+        if kpi_id is None or value is None:
+            continue
+        try:
+            out[int(kpi_id)] = float(value)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _parse_match_score_list(items: Any) -> dict[int, float]:
+    out: dict[int, float] = {}
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        score_id = item.get("squadScoreId") or item.get("scoreId")
+        value = item.get("value")
+        if score_id is None or value is None:
+            continue
+        try:
+            out[int(score_id)] = float(value)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _match_side_lookup(raw_data: Any, *, scores: bool = False) -> dict[int, dict[int, float]]:
+    """Home/away match payload → {squad_id: {metric_id: value}}."""
+    lookup: dict[int, dict[int, float]] = {}
+    payload = raw_data
+    if isinstance(raw_data, dict) and isinstance(raw_data.get("data"), dict):
+        payload = raw_data["data"]
+    if isinstance(payload, dict) and (payload.get("squadHome") or payload.get("squadAway")):
+        for key in ("squadHome", "squadAway"):
+            squad = payload.get(key) or {}
+            squad_id = squad.get("id")
+            if squad_id is None:
+                continue
+            items = squad.get("squadScores") if scores else squad.get("kpis")
+            lookup[int(squad_id)] = (
+                _parse_match_score_list(items) if scores else _parse_match_kpi_list(items)
+            )
+        return lookup
+    for row in _unwrap_items(payload if not isinstance(payload, list) else payload):
+        squad_id = row.get("squadId") or row.get("squad_id") or row.get("id")
+        if squad_id is None:
+            continue
+        if scores:
+            items = row.get("squadScores") or row.get("scores")
+            lookup[int(squad_id)] = _parse_match_score_list(items)
+        else:
+            items = row.get("kpis")
+            lookup[int(squad_id)] = _parse_match_kpi_list(items)
+    return lookup
+
+
+def _open_play_xg_from_shots(shots: list[dict[str, Any]], squad_id: int) -> float:
+    """Sum shot xG for a squad, excluding pens and direct free kicks."""
+    total = 0.0
+    for row in shots:
+        try:
+            if int(row.get("squadId") or 0) != int(squad_id):
+                continue
+        except (TypeError, ValueError):
+            continue
+        action = str(row.get("action") or "").upper()
+        if action in _TP_XG_EXCLUDED_ACTIONS:
+            continue
+        total += float(row.get("xg") or 0.0)
+    return round(total, 2)
+
+
+def _match_team_snapshot(match_id: int, squad_id: int) -> dict[str, float | None]:
+    """Last-match coach chips: open-play xG for/against + possession %."""
+    empty: dict[str, float | None] = {
+        "xg_for": None,
+        "xg_against": None,
+        "possession_pct": None,
+    }
+    impect = _impect()
+
+    # Possession from Impect ball-possession squad score (0–1).
+    possession_pct: float | None = None
+    try:
+        score_raw = impect._impect_get(
+            f"/v5/{impect._api_prefix()}/matches/{match_id}/squad-scores"
+        )["data"]
+        scores = _match_side_lookup(score_raw, scores=True).get(squad_id) or {}
+        poss_raw = scores.get(_TP_SCORE_BALL_POSSESSION)
+        if poss_raw is not None:
+            possession_pct = (
+                round(float(poss_raw) * 100.0, 1)
+                if float(poss_raw) <= 1.5
+                else round(float(poss_raw), 1)
+            )
+    except Exception:
+        possession_pct = None
+
+    # Open-play xG from shot events (no pens / direct free kicks).
+    xg_for: float | None = None
+    xg_against: float | None = None
+    try:
+        from app.post_match.xg_race import _fetch_shots_with_xg
+
+        shots, _events = _fetch_shots_with_xg(int(match_id))
+        xg_for = _open_play_xg_from_shots(shots, squad_id)
+        # Against = open-play xG of every other squad in the match.
+        against_total = 0.0
+        other_ids = {
+            int(row.get("squadId") or 0)
+            for row in shots
+            if int(row.get("squadId") or 0) and int(row.get("squadId") or 0) != int(squad_id)
+        }
+        for other_id in other_ids:
+            against_total += _open_play_xg_from_shots(shots, other_id)
+        xg_against = round(against_total, 2)
+    except Exception:
+        # Fallback: full-match squad KPIs if event xG unavailable.
+        try:
+            kpi_raw = impect._impect_get(
+                f"/v5/{impect._api_prefix()}/matches/{match_id}/squad-kpis"
+            )["data"]
+            kpis = _match_side_lookup(kpi_raw, scores=False).get(squad_id) or {}
+            if kpis.get(_TP_KPI_SHOT_XG) is not None:
+                xg_for = round(float(kpis[_TP_KPI_SHOT_XG]), 2)
+            if kpis.get(_TP_KPI_CONCEDED_SHOT_XG) is not None:
+                xg_against = round(float(kpis[_TP_KPI_CONCEDED_SHOT_XG]), 2)
+        except Exception:
+            pass
+
+    if xg_for is None and xg_against is None and possession_pct is None:
+        return empty
+    return {
+        "xg_for": xg_for,
+        "xg_against": xg_against,
+        "possession_pct": possession_pct,
+    }
+
+
+_TP_LEADER_SPECS: tuple[dict[str, Any], ...] = (
+    {"key": "goals", "label": "Most goals", "kpi_id": _TP_KPI_GOALS, "per90": False},
+    {"key": "assists", "label": "Most assists", "kpi_id": _TP_KPI_ASSISTS, "per90": False},
+    {
+        "key": "ball_progression",
+        "label": "Ball progression",
+        "kpi_id": _TP_KPI_BALL_PROGRESSION,
+        "per90": True,
+    },
+    {
+        "key": "bypassed_defenders",
+        "label": "Defenders bypassed",
+        "kpi_id": _TP_KPI_BYPASSED_DEFENDERS,
+        "per90": True,
+    },
+    {
+        "key": "offensive_interventions",
+        "label": "Offensive interventions",
+        "kpi_id": _TP_KPI_OFFENSIVE_INTERVENTIONS,
+        "per90": True,
+    },
+    {
+        "key": "ball_wins_vs_defenders",
+        "label": "Ball wins vs defenders",
+        "kpi_id": _TP_KPI_BALL_WINS_VS_DEFENDERS,
+        "per90": True,
+    },
+)
+
+
+def _player_kpis_for_match(
+    match_id: int,
+    squad_id: int,
+    *,
+    player_names: dict[int, str],
+    shirts: dict[int, int] | None = None,
+) -> list[dict[str, Any]]:
+    """Per-player minutes / goals / assists (+ two-pager KPIs) for one match."""
+    impect = _impect()
+    names = _kpi_names()
+    shirts = shirts or {}
+    wanted = {spec["kpi_id"] for spec in _TP_LEADER_SPECS}
+    payload = _unwrap_match_player_payload(
+        impect._impect_get(
+            f"/v5/{impect._api_prefix()}/matches/{match_id}/player-kpis"
+        )["data"]
+    )
+    rows: list[dict[str, Any]] = []
+    for side in ("squadHome", "squadAway"):
+        squad = payload.get(side) or {}
+        if int(squad.get("id") or -1) != squad_id:
+            continue
+        per_match_best: dict[int, dict[str, Any]] = {}
+        for row in squad.get("players") or []:
+            player_id = row.get("id")
+            if player_id is None:
+                continue
+            player_id = int(player_id)
+            per_match_best[player_id] = _merge_match_player_kpi_row(
+                per_match_best.get(player_id),
+                row,
+                names=names,
+                wanted=wanted,
+            )
+        for player_id, match_row in per_match_best.items():
+            if match_row["minutes"] <= 0 and match_row["goals"] <= 0 and match_row["assists"] <= 0:
+                continue
+            name = player_names.get(player_id, f"Player {player_id}")
+            rows.append(
+                {
+                    "player_id": player_id,
+                    "name": name,
+                    "short_name": _player_surname(name),
+                    "shirt_number": shirts.get(player_id),
+                    "position": match_row["position"],
+                    "minutes": int(round(match_row["minutes"])),
+                    "goals": match_row["goals"],
+                    "assists": match_row["assists"],
+                    "started": match_row["match_share"] >= 0.5,
+                    "kpi_totals": match_row["kpi_totals"],
+                }
+            )
+    rows.sort(
+        key=lambda item: (
+            -int(item.get("minutes") or 0),
+            -int(item.get("goals") or 0),
+            -int(item.get("assists") or 0),
+            str(item.get("name") or "").casefold(),
+        )
+    )
+    return rows
+
+
+def _two_pager_style_table(team_style: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Impect style axes, highest league percentile first."""
+    radar = list((team_style or {}).get("radar") or [])
+    radar.sort(key=lambda row: (-float(row.get("value") or 0), str(row.get("label") or "")))
+    return [
+        {
+            "key": row.get("key"),
+            "label": row.get("label"),
+            "hint": row.get("hint"),
+            "coach_meaning": row.get("coach_meaning"),
+            "coach_stats": row.get("coach_stats"),
+            "coach_high": row.get("coach_high"),
+            "coach_low": row.get("coach_low"),
+            "value": row.get("value"),
+            "rank": row.get("rank"),
+            "rank_label": row.get("rank_label"),
+            "league_size": row.get("league_size"),
+        }
+        for row in radar
+    ]
+
+
+def _two_pager_stat_leaders(
+    matches: list[dict[str, Any]],
+    *,
+    top_n: int = 3,
+    club_name: str | None = None,
+    season: str | None = None,
+    season_squad: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Top N players per two-pager metric.
+
+    Goals/assists use full-season squad totals; KPI boards use the brief's matches.
+    """
+    match_count = len(matches)
+    recent_buckets: dict[int, dict[str, Any]] = {}
+    for match in matches:
+        for row in match.get("players") or []:
+            player_id = int(row.get("player_id") or 0)
+            if not player_id:
+                continue
+            bucket = recent_buckets.setdefault(
+                player_id,
+                {
+                    "player_id": player_id,
+                    "name": row.get("name"),
+                    "short_name": row.get("short_name"),
+                    "shirt_number": row.get("shirt_number"),
+                    "minutes": 0.0,
+                    "goals": 0.0,
+                    "assists": 0.0,
+                    "kpi_totals": {spec["kpi_id"]: 0.0 for spec in _TP_LEADER_SPECS},
+                },
+            )
+            bucket["minutes"] += float(row.get("minutes") or 0)
+            bucket["goals"] += float(row.get("goals") or 0)
+            bucket["assists"] += float(row.get("assists") or 0)
+            if row.get("shirt_number") is not None:
+                bucket["shirt_number"] = row.get("shirt_number")
+            if row.get("name"):
+                bucket["name"] = row.get("name")
+            if row.get("short_name"):
+                bucket["short_name"] = row.get("short_name")
+            for kpi_id, value in (row.get("kpi_totals") or {}).items():
+                try:
+                    kid = int(kpi_id)
+                except (TypeError, ValueError):
+                    continue
+                if kid in bucket["kpi_totals"]:
+                    bucket["kpi_totals"][kid] += float(value or 0.0)
+
+    season_buckets: dict[int, dict[str, Any]] = {}
+    for row in season_squad or []:
+        player_id = int(row.get("id") or 0)
+        if not player_id:
+            continue
+        name = str(row.get("name") or f"Player {player_id}")
+        season_buckets[player_id] = {
+            "player_id": player_id,
+            "name": name,
+            "short_name": _player_surname(name),
+            "shirt_number": row.get("shirt_number"),
+            "minutes": float(row.get("minutes") or 0),
+            "goals": float(row.get("goals") or 0),
+            "assists": float(row.get("assists") or 0),
+            "kpi_totals": {},
+        }
+
+    boards: list[dict[str, Any]] = []
+    for spec in _TP_LEADER_SPECS:
+        kpi_id = int(spec["kpi_id"])
+        use_season = spec["key"] in {"goals", "assists"}
+        source_buckets = season_buckets if use_season else recent_buckets
+        scope_label = "Season total" if use_season else (
+            f"Last {match_count} games" if match_count else "Last games"
+        )
+        scored: list[dict[str, Any]] = []
+        for bucket in source_buckets.values():
+            minutes = float(bucket.get("minutes") or 0.0)
+            if spec["key"] == "goals":
+                raw = float(bucket.get("goals") or 0.0)
+            elif spec["key"] == "assists":
+                raw = float(bucket.get("assists") or 0.0)
+            else:
+                raw = float((bucket.get("kpi_totals") or {}).get(kpi_id) or 0.0)
+            if spec.get("per90"):
+                if minutes < TWO_PAGER_MIN_MINUTES_PER90:
+                    continue
+                value = raw * 90.0 / minutes
+            else:
+                value = raw
+            if value <= 0:
+                continue
+            if spec.get("per90"):
+                label = f"{value:.1f}".rstrip("0").rstrip(".")
+            elif abs(value - round(value)) < 0.05:
+                label = str(int(round(value)))
+            else:
+                label = f"{value:.1f}".rstrip("0").rstrip(".")
+            name = str(bucket.get("name") or bucket.get("short_name") or "")
+            shirt = bucket.get("shirt_number")
+            photo = None
+            if club_name and name:
+                source = resolve_opponent_photo_source_url(
+                    name,
+                    club_name=club_name,
+                    season=season,
+                    shirt_number=shirt,
+                )
+                if source:
+                    photo = opponent_photo_api_url(
+                        name,
+                        club_name=club_name,
+                        season=season,
+                        shirt_number=shirt,
+                    )
+            scored.append(
+                {
+                    "player_id": bucket["player_id"],
+                    "name": bucket.get("name") or bucket.get("short_name"),
+                    "short_name": bucket.get("short_name"),
+                    "shirt_number": shirt,
+                    "photo_url": photo,
+                    "value": round(value, 2),
+                    "value_label": label,
+                    "minutes": int(round(minutes)),
+                }
+            )
+        scored.sort(
+            key=lambda item: (
+                -float(item.get("value") or 0),
+                str(item.get("name") or "").casefold(),
+            )
+        )
+        boards.append(
+            {
+                "key": spec["key"],
+                "label": spec["label"],
+                "per90": bool(spec.get("per90")),
+                "scope_label": scope_label,
+                "players": scored[:top_n],
+            }
+        )
+    return boards
+
+
+def _impect_xy_to_pitch_pct(x: float, y: float) -> tuple[float, float]:
+    """Map Impect adjCoordinates (attack +x, left +y) onto marker x_pct / y_pct."""
+    # Screen: attack toward top (low y_pct), left = low x_pct, GK toward bottom.
+    x_pct = 50.0 - (float(y) / 34.0) * 46.0
+    y_pct = 50.0 - (float(x) / 52.5) * 46.0
+    return (
+        round(max(6.0, min(94.0, x_pct)), 1),
+        round(max(6.0, min(94.0, y_pct)), 1),
+    )
+
+
+def _force_average_positions_gk_bottom(
+    pitch_players: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Ensure the goalkeeper / deepest player sits at the BOTTOM of the pitch.
+
+    Only flips the attack axis (y). Left/right (x) stays as Impect left/right.
+    """
+    if len(pitch_players) < 2:
+        return pitch_players
+
+    def _y(row: dict[str, Any]) -> float:
+        return float(row.get("y_pct") or 50.0)
+
+    def _avg_x(row: dict[str, Any]) -> float:
+        try:
+            return float(row.get("avg_x"))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return 0.0
+
+    with_avg = [row for row in pitch_players if row.get("avg_x") is not None]
+    need_flip = False
+
+    if with_avg:
+        deepest = min(with_avg, key=_avg_x)
+        topmost = min(pitch_players, key=_y)
+        bottommost = max(pitch_players, key=_y)
+        # Deepest player must live in the bottom half.
+        if _y(deepest) < 55.0:
+            need_flip = True
+        # Upside-down: more defensive avg_x is higher on screen than a more
+        # attacking teammate.
+        if (
+            topmost.get("avg_x") is not None
+            and bottommost.get("avg_x") is not None
+            and _avg_x(topmost) < _avg_x(bottommost) - 1.0
+        ):
+            need_flip = True
+
+    if need_flip:
+        for row in pitch_players:
+            row["y_pct"] = round(max(6.0, min(94.0, 100.0 - _y(row))), 1)
+
+    for row in pitch_players:
+        row["band"] = "mid"
+
+    gk = max(pitch_players, key=_y)
+    if with_avg:
+        deepest = min(with_avg, key=_avg_x)
+        if abs(_y(deepest) - _y(gk)) <= 10.0:
+            gk = deepest
+    gk["band"] = "gk"
+    return pitch_players
+
+
+def _average_positions_from_events(
+    match_ids: list[int],
+    squad_id: int,
+    *,
+    player_names: dict[int, str],
+    shirts: dict[int, int],
+    starter_ids: list[int] | None = None,
+    club_name: str | None = None,
+    season: str | None = None,
+) -> list[dict[str, Any]]:
+    """Mean event start x/y per player — real average positions, not formation slots."""
+    from app.pre_match_goals import _coords, _fetch_events
+
+    samples: dict[int, dict[str, Any]] = {}
+    for match_id in match_ids:
+        try:
+            events = _fetch_events(int(match_id))
+        except Exception:
+            continue
+        for event in events:
+            try:
+                event_squad = int(event.get("squadId") or 0)
+            except (TypeError, ValueError):
+                continue
+            if event_squad != squad_id:
+                continue
+            player = event.get("player") if isinstance(event.get("player"), dict) else {}
+            try:
+                player_id = int(player.get("id") or event.get("playerId") or 0)
+            except (TypeError, ValueError):
+                player_id = 0
+            if not player_id:
+                continue
+            coords = _coords(event.get("start")) or _coords(event.get("end"))
+            if not coords:
+                continue
+            bucket = samples.setdefault(
+                player_id,
+                {"xs": [], "ys": [], "name": player_names.get(player_id, f"Player {player_id}")},
+            )
+            bucket["xs"].append(float(coords[0]))
+            bucket["ys"].append(float(coords[1]))
+
+    if not samples:
+        return []
+
+    # adjCoordinates are already team-attack oriented (+x attack, +y left).
+    # Do NOT mean-flip / 180° rotate — that mirrors left/right (RB appears as LB).
+
+    preferred = [int(pid) for pid in (starter_ids or []) if int(pid) in samples]
+    ranked = sorted(
+        samples.items(),
+        key=lambda item: (-len(item[1]["xs"]), str(item[1].get("name") or "").casefold()),
+    )
+    ordered_ids = preferred + [pid for pid, _ in ranked if pid not in preferred]
+
+    pitch_players: list[dict[str, Any]] = []
+    for player_id in ordered_ids:
+        bucket = samples.get(player_id)
+        if not bucket or not bucket["xs"]:
+            continue
+        xs = bucket["xs"]
+        ys = bucket["ys"]
+        mean_x = sum(xs) / len(xs)
+        mean_y = sum(ys) / len(ys)
+        x_pct, y_pct = _impect_xy_to_pitch_pct(mean_x, mean_y)
+        name = str(bucket.get("name") or player_names.get(player_id) or f"Player {player_id}")
+        pitch_players.append(
+            {
+                "player_id": player_id,
+                "name": name,
+                "short_name": _player_surname(name),
+                "shirt_number": shirts.get(player_id),
+                "position": "",
+                "band": "mid",
+                "column": "center",
+                "x_pct": x_pct,
+                "y_pct": y_pct,
+                "avg_x": round(mean_x, 2),
+                "avg_y": round(mean_y, 2),
+                "samples": len(xs),
+                "from_events": True,
+            }
+        )
+        if len(pitch_players) >= PITCH_STARTER_LIMIT:
+            break
+
+    pitch_players = _force_average_positions_gk_bottom(pitch_players)
+    return attach_pitch_player_photos(
+        pitch_players,
+        club_name=club_name,
+        season=season,
+    )
+
+
+def _aggregate_two_match_players(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Roll last-two player rows into one table keyed by player_id."""
+    by_id: dict[int, dict[str, Any]] = {}
+    for match_index, match in enumerate(matches):
+        for row in match.get("players") or []:
+            player_id = int(row.get("player_id") or 0)
+            if not player_id:
+                continue
+            bucket = by_id.setdefault(
+                player_id,
+                {
+                    "player_id": player_id,
+                    "name": row.get("name"),
+                    "short_name": row.get("short_name"),
+                    "shirt_number": row.get("shirt_number"),
+                    "position": row.get("position"),
+                    "minutes": 0,
+                    "goals": 0,
+                    "assists": 0,
+                    "starts": 0,
+                    "appearances": 0,
+                    "minutes_by_match": [0] * len(matches),
+                },
+            )
+            minutes = int(row.get("minutes") or 0)
+            bucket["minutes"] += minutes
+            bucket["goals"] += int(row.get("goals") or 0)
+            bucket["assists"] += int(row.get("assists") or 0)
+            bucket["appearances"] += 1
+            if row.get("started"):
+                bucket["starts"] += 1
+            if row.get("shirt_number") is not None:
+                bucket["shirt_number"] = row.get("shirt_number")
+            if row.get("position"):
+                bucket["position"] = row.get("position")
+            if match_index < len(bucket["minutes_by_match"]):
+                bucket["minutes_by_match"][match_index] = minutes
+    players = list(by_id.values())
+    players.sort(
+        key=lambda item: (
+            -int(item.get("minutes") or 0),
+            -int(item.get("goals") or 0),
+            -int(item.get("assists") or 0),
+            str(item.get("name") or "").casefold(),
+        )
+    )
+    return players
+
+
+def _build_two_match_brief(
+    iteration_id: int,
+    squad_id: int,
+    *,
+    player_names: dict[int, str],
+    club_name: str,
+    season: str | None,
+    before: str | datetime | None = None,
+    exclude_match_id: int | None = None,
+    limit: int = TWO_MATCH_LIMIT,
+    team_style: dict[str, Any] | None = None,
+    season_squad: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Last matches for the two-pager: XI, leaders, style table, event avg positions."""
+    squads = _squads_map(iteration_id)
+    matches_out: list[dict[str, Any]] = []
+    # Newest first from helper; reverse so left = older, right = most recent.
+    recent = list(
+        _recent_completed_matches(
+            iteration_id,
+            squad_id,
+            limit=limit,
+            before=before,
+            exclude_match_id=exclude_match_id,
+        )
+    )
+    recent.reverse()
+    for match in recent:
+        match_id = int(match["id"])
+        detail = _fetch_match_detail(match_id)
+        squad = _match_squad_block(detail, squad_id)
+        if not squad:
+            continue
+        players = _lineup_players_from_match_detail(detail, squad_id, player_names)
+        if not players:
+            continue
+        home_id = int(match.get("homeSquadId") or -1)
+        away_id = int(match.get("awaySquadId") or -1)
+        is_home = home_id == squad_id
+        opponent_id = away_id if is_home else home_id
+        opponent_name = str(squads.get(opponent_id, {}).get("name") or "Opponent")
+        result, score, venue = _match_result_score_venue(match, squad_id)
+        raw_formation = str(squad.get("startingFormation") or "").strip() or None
+        players = _beautify_pitch_layout(players)
+        formation = _coach_formation_from_lineup(raw_formation, players)
+        shirts = _shirt_map_from_squad_block(squad)
+        featured = _player_kpis_for_match(
+            match_id,
+            squad_id,
+            player_names=player_names,
+            shirts=shirts,
+        )
+        snapshot = _match_team_snapshot(match_id, squad_id)
+        matches_out.append(
+            {
+                "match_id": match_id,
+                "date": match.get("scheduledDate") or detail.get("dateTime"),
+                "opponent": opponent_name,
+                "venue": venue,
+                "result": result,
+                "score": score,
+                "formation": formation,
+                "xg_for": snapshot.get("xg_for"),
+                "xg_against": snapshot.get("xg_against"),
+                "possession_pct": snapshot.get("possession_pct"),
+                "pitch_players": attach_pitch_player_photos(
+                    players[:PITCH_STARTER_LIMIT],
+                    club_name=club_name,
+                    season=season,
+                ),
+                "players": featured,
+            }
+        )
+
+    last_match = matches_out[-1] if matches_out else None
+    starter_ids = [
+        int(player.get("player_id") or 0)
+        for player in (last_match or {}).get("pitch_players") or []
+        if player.get("player_id")
+    ]
+    shirts_all: dict[int, int] = {}
+    for match in matches_out:
+        for player in match.get("pitch_players") or []:
+            pid = int(player.get("player_id") or 0)
+            shirt = player.get("shirt_number")
+            if pid and shirt is not None:
+                try:
+                    shirts_all[pid] = int(shirt)
+                except (TypeError, ValueError):
+                    pass
+        for player in match.get("players") or []:
+            pid = int(player.get("player_id") or 0)
+            shirt = player.get("shirt_number")
+            if pid and shirt is not None:
+                try:
+                    shirts_all[pid] = int(shirt)
+                except (TypeError, ValueError):
+                    pass
+
+    avg_positions: list[dict[str, Any]] = []
+    try:
+        avg_positions = _average_positions_from_events(
+            [int(match["match_id"]) for match in matches_out if match.get("match_id")],
+            squad_id,
+            player_names=player_names,
+            shirts=shirts_all,
+            starter_ids=starter_ids,
+            club_name=club_name,
+            season=season,
+        )
+    except Exception:
+        avg_positions = []
+
+    goals_snapshot: dict[str, Any] | None = None
+    try:
+        from app.pre_match_goals import build_goals_analysis
+
+        goals_snapshot = build_goals_analysis(
+            iteration_id,
+            squad_id,
+            before=before,
+            exclude_match_id=exclude_match_id,
+            # Page-2 header: full season goals by phase (not last-2 only).
+            match_limit=46,
+            player_names=player_names,
+        )
+    except Exception:
+        goals_snapshot = None
+
+    return {
+        "matches": matches_out,
+        "players": _aggregate_two_match_players(matches_out),
+        "match_count": len(matches_out),
+        "style_table": _two_pager_style_table(team_style),
+        "stat_leaders": _two_pager_stat_leaders(
+            matches_out,
+            top_n=3,
+            club_name=club_name,
+            season=season,
+            season_squad=season_squad,
+        ),
+        "avg_positions": avg_positions,
+        "last_xi": (last_match or {}).get("pitch_players") or [],
+        "last_formation": (last_match or {}).get("formation"),
+        "goals_snapshot": goals_snapshot,
+    }
+
+
 def _build_previous_xi_slides(
     iteration_id: int,
     squad_id: int,
@@ -2890,7 +3864,8 @@ def _build_previous_xi_slides(
         opponent_id = away_id if is_home else home_id
         opponent_name = str(squads.get(opponent_id, {}).get("name") or "Opponent")
         result, score, venue = _match_result_score_venue(match, squad_id)
-        formation = str(squad.get("startingFormation") or "").strip() or None
+        raw_formation = str(squad.get("startingFormation") or "").strip() or None
+        formation = _coach_formation_from_lineup(raw_formation, players)
         players = assign_lineup_formation_slots(players, formation)
         players = _beautify_pitch_layout(players)
         slides.append(
@@ -3177,6 +4152,11 @@ def _build_last_game_detail(
             shirt_number=shirts.get(player_id),
         )
 
+    starting_formation = _coach_formation_from_lineup(
+        starting_formation,
+        list(on_pitch.values()),
+    )
+
     phases: list[dict[str, Any]] = [
         {
             "kind": "start",
@@ -3433,17 +4413,6 @@ def _build_squad_list_slide(
     }
 
 
-def _kickoff_label(scheduled_date: str | None, is_home: bool) -> str:
-    if not scheduled_date:
-        return "vs"
-    try:
-        day = str(scheduled_date)[5:10].replace("-", "/")
-    except (TypeError, IndexError):
-        day = ""
-    prefix = "H" if is_home else "A"
-    return f"{prefix} {day}".strip() if day else prefix
-
-
 def build_pre_match_fixtures(iteration_id: int) -> list[dict[str, Any]]:
     port_vale_id = _resolve_port_vale_squad_id(iteration_id)
     squads = _squads_map(iteration_id)
@@ -3680,16 +4649,11 @@ def _player_match_stats(
                 if player_id is None:
                     continue
                 player_id = int(player_id)
-                minutes = _match_play_minutes(row)
-                match_share = float(row.get("matchShare") or 0.0)
-                existing = per_match_best.get(player_id)
-                if existing is None or minutes > existing["minutes"]:
-                    per_match_best[player_id] = {
-                        "minutes": minutes,
-                        "match_share": match_share,
-                        "position": row.get("position"),
-                        "kpis": row.get("kpis") or [],
-                    }
+                per_match_best[player_id] = _merge_match_player_kpi_row(
+                    per_match_best.get(player_id),
+                    row,
+                    names=names,
+                )
 
             for player_id, match_row in per_match_best.items():
                 bucket = totals.setdefault(
@@ -3710,13 +4674,8 @@ def _player_match_stats(
                     bucket["starts"] += 1
                 if match_row["position"]:
                     bucket["positions"].add(str(match_row["position"]))
-                for kpi in match_row["kpis"]:
-                    label = names.get(int(kpi.get("kpiId") or -1))
-                    value = float(kpi.get("value") or 0.0)
-                    if label == "GOALS":
-                        bucket["goals"] += int(round(value))
-                    elif label == "ASSISTS":
-                        bucket["assists"] += int(round(value))
+                bucket["goals"] += int(match_row.get("goals") or 0)
+                bucket["assists"] += int(match_row.get("assists") or 0)
 
         # Matchday sitters (0 minutes) still belong on the squad list.
         for row in squad_block.get("players") or []:
@@ -4419,6 +5378,30 @@ def build_pre_match_report(body: PreMatchReportRequest) -> dict[str, Any]:
         before=before_date,
         exclude_match_id=exclude_match_id,
     )
+    try:
+        two_match = _build_two_match_brief(
+            iteration_id,
+            squad_id,
+            player_names=player_names,
+            club_name=club_name,
+            season=season,
+            before=before_date,
+            exclude_match_id=exclude_match_id,
+            team_style=team_style,
+            season_squad=squad_rows,
+        )
+    except Exception:
+        # Two-pager enrichment must never block the full report.
+        two_match = {
+            "matches": [],
+            "players": [],
+            "match_count": 0,
+            "style_table": _two_pager_style_table(team_style),
+            "stat_leaders": [],
+            "avg_positions": [],
+            "last_xi": [],
+            "last_formation": None,
+        }
     last_game = _build_last_game_detail(
         iteration_id,
         squad_id,
@@ -4429,6 +5412,9 @@ def build_pre_match_report(body: PreMatchReportRequest) -> dict[str, Any]:
         exclude_match_id=exclude_match_id,
     )
     formations = [squad_list["formation"]] if squad_list.get("formation") else []
+    last_shape = (two_match or {}).get("last_formation")
+    if last_shape:
+        formations = [last_shape]
 
     return {
         "generated_at": datetime.now(UTC).isoformat(),
@@ -4450,6 +5436,7 @@ def build_pre_match_report(body: PreMatchReportRequest) -> dict[str, Any]:
         },
         "squad_list": squad_list,
         "previous_xis": previous_xis,
+        "two_match": two_match,
         "last_game": last_game,
         "squad": squad_rows,
         "team_metrics": {
@@ -4476,25 +5463,14 @@ def build_pre_match_report(body: PreMatchReportRequest) -> dict[str, Any]:
     }
 
 
-def _default_designer_fixture(iteration_id: int) -> dict[str, Any] | None:
+def _next_port_vale_fixture(iteration_id: int) -> dict[str, Any] | None:
+    """Port Vale's next upcoming fixture (soonest future kickoff)."""
     fixtures = build_pre_match_fixtures(iteration_id)
-    if not fixtures:
-        return None
-    for preferred_name in PRE_MATCH_DEFAULT_OPPONENT_NAMES:
-        match = next(
-            (
-                fixture
-                for fixture in fixtures
-                if str(fixture.get("opponent", {}).get("name") or "") == preferred_name
-            ),
-            None,
-        )
-        if match:
-            return match
-    with_match_id = [fixture for fixture in fixtures if fixture.get("match_id")]
-    if with_match_id:
-        return with_match_id[-1]
-    return fixtures[0]
+    return _pick_next_fixture(fixtures)
+
+
+def _default_designer_fixture(iteration_id: int) -> dict[str, Any] | None:
+    return _next_port_vale_fixture(iteration_id)
 
 
 def pre_match_meta(competition_name: str = DEFAULT_COMPETITION) -> dict[str, Any]:
@@ -4580,7 +5556,28 @@ def _safe_png_entry_name(name: str | None, index: int) -> str:
     return f"{index:02d}-{cleaned[:60]}.png"
 
 
-def build_pre_match_png_zip(body: PreMatchPngExportRequest) -> tuple[bytes, list[tuple[str, bytes]]]:
+def _capture_export_pngs(body: PreMatchPngExportRequest) -> list[tuple[str, bytes]]:
+    """Prefer Playwright HTML capture; fall back to client-supplied imageData."""
+    if body.html_pages:
+        from app.wysiwyg_capture import WysiwygCaptureError, capture_html_documents
+
+        try:
+            pngs = capture_html_documents(
+                list(body.html_pages),
+                width=int(body.width or 1920),
+                height=int(body.height or 1080),
+                scale=float(body.scale or 2.0),
+            )
+        except WysiwygCaptureError as exc:
+            raise ValueError(str(exc)) from exc
+        entries: list[tuple[str, bytes]] = []
+        for index, data in enumerate(pngs, start=1):
+            name_hint = None
+            if index - 1 < len(body.html_filenames):
+                name_hint = body.html_filenames[index - 1]
+            entries.append((_safe_png_entry_name(name_hint, index), data))
+        return entries
+
     if not body.pages:
         raise ValueError("No export pages provided.")
     entries: list[tuple[str, bytes]] = []
@@ -4589,7 +5586,11 @@ def build_pre_match_png_zip(body: PreMatchPngExportRequest) -> tuple[bytes, list
         if not png_bytes:
             raise ValueError(f"Page {index} has no image data.")
         entries.append((_safe_png_entry_name(page.filename, index), png_bytes))
+    return entries
 
+
+def build_pre_match_png_zip(body: PreMatchPngExportRequest) -> tuple[bytes, list[tuple[str, bytes]]]:
+    entries = _capture_export_pngs(body)
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, png_bytes in entries:
@@ -4598,11 +5599,16 @@ def build_pre_match_png_zip(body: PreMatchPngExportRequest) -> tuple[bytes, list
 
 
 def build_pre_match_whatsapp_pdf(body: PreMatchPngExportRequest) -> bytes:
-    """One full-bleed 16:9 page per slide — 1920×1080 capture for WhatsApp sharing."""
+    """One full-bleed 16:9 page per slide — Playwright WYSIWYG when html_pages given."""
+    entries = _capture_export_pngs(body)
+    pngs = [data for _, data in entries]
+    if body.html_pages:
+        from app.wysiwyg_capture import pngs_to_pdf
+
+        return pngs_to_pdf(pngs)
+
     from app.pdf_report import SlideDeckPDF
 
-    if not body.pages:
-        raise ValueError("No export pages provided.")
     pdf = SlideDeckPDF()
     for index, page in enumerate(body.pages, start=1):
         if not page.imageData:
@@ -4779,11 +5785,13 @@ def register_pre_match_routes(app: FastAPI) -> None:
         name: str = Query(..., min_length=1),
         club: str | None = Query(None),
         season: str | None = Query(None),
+        shirt: str | None = Query(None),
     ) -> Response:
         image_bytes, content_type = _resolve_player_photo_bytes(
             name,
             club=club,
             season=season,
+            shirt=shirt,
         )
         return Response(
             content=image_bytes,
@@ -4795,7 +5803,7 @@ def register_pre_match_routes(app: FastAPI) -> None:
     def pre_match_export_pngs(body: PreMatchPngExportRequest) -> Response:
         from app.main import _safe_export_filename
 
-        if not body.pages:
+        if not body.html_pages and not body.pages:
             raise HTTPException(status_code=400, detail="No export pages provided.")
         try:
             zip_bytes, entries = build_pre_match_png_zip(body)
@@ -4818,7 +5826,7 @@ def register_pre_match_routes(app: FastAPI) -> None:
     def pre_match_export_whatsapp_pdf(body: PreMatchPngExportRequest) -> Response:
         from app.main import _safe_export_filename, _save_export_to_desktop
 
-        if not body.pages:
+        if not body.html_pages and not body.pages:
             raise HTTPException(status_code=400, detail="No export pages provided.")
         try:
             pdf_bytes = build_pre_match_whatsapp_pdf(body)

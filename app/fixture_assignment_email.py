@@ -245,13 +245,13 @@ def _smtp_reachable() -> bool:
 def _choose_email_transport() -> str:
     mode = _email_transport_mode()
     if mode == "sendgrid":
-        return "sendgrid" if _sendgrid_configured() else "smtp"
+        return "sendgrid"
     if mode == "resend":
-        return "resend" if _resend_configured() else "smtp"
+        return "resend"
     if mode == "graph":
-        return "graph" if _graph_configured() else "smtp"
+        return "graph"
     if mode == "graph_delegated":
-        return "graph_delegated" if _graph_delegated_configured() else "smtp"
+        return "graph_delegated"
     if mode == "smtp":
         return "smtp"
 

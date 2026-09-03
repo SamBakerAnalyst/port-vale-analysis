@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>What Wins Games</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/win-drivers.css?v=6" />
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="header__brand">
+        <img class="header__badge" src="/standalone/port-vale-badge.png?v=2" width="56" height="68" alt="Port Vale FC crest" />
+        <div>
+          <p class="header__eyebrow">Strategy · <a href="/">← All apps</a></p>
+          <h1 class="header__title">What Wins Games</h1>
+          <p class="header__subtitle" id="pageSubtitle">The 15 Impect stats most linked to winning in League Two — and where we sit on each.</p>
+        </div>
+      </div>
+      <div class="header__meta">
+        <div class="season-toggle-wrap">
+          <span class="season-toggle__label">Season</span>
+          <div id="seasonToggle" class="season-toggle" role="group" aria-label="Season"></div>
+        </div>
+        <div class="header__updated" id="lastUpdated" aria-live="polite">Loading…</div>
+        <div class="header__actions">
+          <button type="button" class="btn btn--ghost" id="refreshBtn">Refresh data</button>
+        </div>
+      </div>
+    </header>
+
+    <p id="statusBanner" class="status-banner hidden" role="status"></p>
+
+    <section class="story" id="storyBoard" aria-label="What the data says">
+      <h2 class="story__headline" id="storyHeadline">League Two is won by chance quality both ways.</h2>
+      <ol class="story__bullets" id="storyBullets"></ol>
+      <p class="story__sample" id="storySample"></p>
+    </section>
+
+    <section class="vale-panel" aria-label="The 15 stats and Port Vale on each">
+      <div class="vale-panel__head">
+        <h2 id="valeTitle">The 15 — and where we are</h2>
+        <p id="valeHint" class="vale-panel__hint">Four numbers on every row: our score, our rank in the 24, the average of clubs currently 1st–7th (the play-off pack), and the league average. Click a row to sort the table.</p>
+      </div>
+      <div id="whyList" class="why-list"></div>
+    </section>
+
+    <section class="table-panel card" aria-live="polite">
+      <div class="table-panel__head">
+        <div>
+          <h2 class="table-panel__title">Every club on the same 15</h2>
+          <p id="tableHint" class="table-panel__method"></p>
+        </div>
+        <p class="table-panel__hint">Port Vale stays pinned at the top · also shown in their real place · click a header to sort</p>
+      </div>
+      <div class="table-wrap">
+        <table id="dataTable" class="data-table">
+          <thead id="tableHead"></thead>
+          <tbody id="tableBody"></tbody>
+          <tfoot id="tableFoot"></tfoot>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script defer src="/static/win-drivers.js?v=6"></script>
+  <script defer src="/static/hub-feedback.js?v=1"></script>
+</body>
+</html>

@@ -9,7 +9,7 @@ Naming: [`docs/ENVIRONMENTS.md`](../../docs/ENVIRONMENTS.md). Say **Port Vale Li
 ## Where to build
 
 - **Local Mac** (`~/impect-football-dashboard`) — write code. Default.
-- **Port Vale Staging** — real-server check before promote.
+- **Port Vale Staging** — **always** after local work (`deploy-staging.sh`). Do not wait to be asked.
 - **Port Vale Live** — only when the user explicitly asks to deploy / promote.
 
 ## Repo path
@@ -30,8 +30,8 @@ Naming: [`docs/ENVIRONMENTS.md`](../../docs/ENVIRONMENTS.md). Say **Port Vale Li
 ## Definition of done (Live promote)
 
 1. Edit code in this repo (`~/impect-football-dashboard` only)
-2. **Commit** changes
-3. Prefer Port Vale Staging verify
+2. **Always** `bash ~/impect-football-dashboard/deploy-staging.sh` (do not wait to be asked)
+3. **Commit** changes when asked
 4. Run **`bash ~/impect-football-dashboard/deploy-live.sh`** only when asked (pushes GitHub + syncs droplet)
  - Or user double-clicks **`Deploy to Website.command`**
 5. **`deploy/smoke-live.sh` PASS** (sidebar titles from `/api/apps` + key pages)

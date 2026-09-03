@@ -356,7 +356,7 @@
         paper_bgcolor: "rgba(0,0,0,0)",
         plot_bgcolor: "rgba(0,0,0,0)",
         showlegend: false,
-        font: { family: '"DM Sans", system-ui, sans-serif', color: "#e8edf4", size: 12 },
+        font: { family: '"Manrope", system-ui, sans-serif', color: "#e8edf4", size: 12 },
         polar: {
           bgcolor: "rgba(0,0,0,0)",
           radialaxis: {

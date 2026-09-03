@@ -21,7 +21,7 @@ body {
     radial-gradient(ellipse 60% 40% at 80% 100%, rgba(229, 35, 32, 0.08), transparent 50%),
     var(--bg);
   color: var(--ink);
-  font-family: "DM Sans", system-ui, sans-serif;
+  font-family: "Manrope", system-ui, sans-serif;
 }
 
 body {
@@ -58,7 +58,7 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(0, 0, 0, 0.45);
   color: var(--muted);
-  font: 600 12px/1 "DM Sans", system-ui, sans-serif;
+  font: 600 12px/1 "Manrope", system-ui, sans-serif;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   text-decoration: none;
@@ -79,16 +79,26 @@ body {
 }
 
 .mdc-fullscreen {
-  top: 78px;
+  top: 92px;
   right: 18px;
 }
 
-/* Keep clock + weather sizes as approved */
-.mdc-now {
+.mdc-kickoff-corner {
   position: fixed;
-  top: 12px;
+  top: 10px;
   right: 18px;
   z-index: 5;
+  text-align: right;
+}
+
+.mdc-kickoff-corner .mdc-label {
+  margin: 0 0 2px;
+  font-size: clamp(0.75rem, 1.2vw, 0.95rem);
+  letter-spacing: 0.18em;
+}
+
+.mdc-kickoff-corner__clock {
+  margin: 0;
   font-family: "Bebas Neue", sans-serif;
   font-size: clamp(3.2rem, 7vw, 5.2rem);
   letter-spacing: 0.06em;
@@ -96,6 +106,14 @@ body {
   color: var(--ink);
   font-variant-numeric: tabular-nums;
   text-shadow: 0 2px 16px rgba(0, 0, 0, 0.55);
+}
+
+body.is-mdc-live .mdc-kickoff-corner__clock {
+  color: #ef4444;
+}
+
+body.is-mdc-done .mdc-kickoff-corner__clock {
+  color: var(--muted);
 }
 
 .mdc-motto {
@@ -264,7 +282,7 @@ body {
   border-bottom: 1px solid var(--line);
 }
 
-.mdc-kickoff {
+.mdc-now-block {
   margin-top: 0;
 }
 
@@ -350,11 +368,13 @@ body {
   line-height: 1;
 }
 
-.mdc.is-live .mdc-clock {
+.mdc.is-live .mdc-clock,
+body.is-mdc-live .mdc-kickoff-corner__clock {
   color: #ef4444;
 }
 
-.mdc.is-done .mdc-clock {
+.mdc.is-done .mdc-clock,
+body.is-mdc-done .mdc-kickoff-corner__clock {
   color: var(--muted);
 }
 
@@ -408,7 +428,7 @@ body {
     max-width: 8ch;
   }
 
-  .mdc-now {
+  .mdc-kickoff-corner__clock {
     font-size: 2.4rem;
   }
 

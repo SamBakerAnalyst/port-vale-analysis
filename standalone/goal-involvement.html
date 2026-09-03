@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Goal Involvement</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/goal-involvement.css?v=21" />
+</head>
+<body>
+  <div class="gi-app">
+    <header class="gi-header">
+      <p class="gi-eyebrow">Analysis · <a href="/">← All apps</a></p>
+      <div class="gi-header__row">
+        <div>
+          <h1 class="gi-title">Goal Involvement</h1>
+          <p class="gi-sub" id="pageSub">Split 10 points on every goal we score or concede</p>
+        </div>
+        <div class="gi-header__actions">
+          <select id="coachSelect" class="gi-select" aria-label="Scoring as"></select>
+          <select id="seasonSelect" class="gi-select" aria-label="Season"></select>
+          <button type="button" class="gi-btn gi-btn--ghost" id="refreshBtn">Refresh</button>
+        </div>
+      </div>
+    </header>
+
+    <nav class="gi-tabs" aria-label="Views">
+      <button type="button" class="gi-tab gi-tab--active" data-view="home">Table</button>
+      <button type="button" class="gi-tab" data-view="matrix">Matrix</button>
+      <button type="button" class="gi-tab" data-view="admin" id="adminTab" hidden>Admin</button>
+    </nav>
+
+    <div id="statusBanner" class="gi-status hidden" role="status"></div>
+
+    <main id="homeView" class="gi-view"></main>
+    <main id="matrixView" class="gi-view hidden"></main>
+    <main id="adminView" class="gi-view hidden"></main>
+  </div>
+
+  <div id="sheet" class="gi-sheet" hidden>
+    <div class="gi-sheet__panel" id="sheetPanel"></div>
+  </div>
+
+  <script defer src="/static/goal-involvement.js?v=21"></script>
+  <script defer src="/static/hub-feedback.js?v=1"></script>
+</body>
+</html>

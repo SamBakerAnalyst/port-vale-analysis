@@ -1,0 +1,10 @@
+{
+  "last_broke": "2026-09-03",
+  "note": "Update last_broke (YYYY-MM-DD) whenever Live goes down or a bad ship goes out. The homepage counter is a joke — reset it when we break.",
+  "notice": {
+    "id": "2026-09-03-fixture-planner-apology",
+    "title": "Sorry — we broke Fixture Planner",
+    "message": "Fixture Planner stopped loading fixtures because of a bad deploy on our side. That’s fixed now.\n\nIf anything still looks stuck, hard refresh the page (Cmd+Shift+R on Mac, Ctrl+Shift+R on Windows).\n\nSorry for the hassle — and thanks for bearing with us.",
+    "button": "Got it — thanks"
+  }
+}

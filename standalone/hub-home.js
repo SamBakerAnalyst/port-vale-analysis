@@ -28,6 +28,44 @@
   let standoutsProfile = "";
   let standoutsLastData = null;
   let strategyDetailLoaded = false;
+  /** @type {Map<number, {id: string, stage: string, name: string}>} */
+  let watchByPlayerId = new Map();
+  let watchBusy = new Set();
+  let watchListLoaded = false;
+  let watchBoardCache = null;
+
+  const WATCH_STAGE = "watch_list";
+  const WATCH_TAG = "Watching";
+  /** Already on the pipeline board — unticking removes them from Pipelines. */
+  const PIPELINE_STAGES = new Set([
+    "watched",
+    "data_identified",
+    "scout_identified",
+    "video_scouted",
+    "live_scouted",
+    "gone_elsewhere",
+    "not_the_right_fit",
+  ]);
+  const STAGE_CHIP = {
+    watch_list: { kind: "watch", label: "Watch", title: "On the Watch list" },
+    watched: { kind: "pipe", label: "Watched", title: "On Pipelines · Watched" },
+    data_identified: { kind: "pipe", label: "Data", title: "On Pipelines · Data identified" },
+    scout_identified: { kind: "pipe", label: "Scout", title: "On Pipelines · Scout identified" },
+    video_scouted: { kind: "pipe", label: "Video", title: "On Pipelines · Video scouted" },
+    live_scouted: { kind: "pipe", label: "Live", title: "On Pipelines · Live scouted" },
+    gone_elsewhere: { kind: "closed", label: "Gone", title: "On Pipelines · Gone / turned us down" },
+    not_the_right_fit: { kind: "closed", label: "Out", title: "On Pipelines · Not the right fit" },
+  };
+
+  function stageChipMeta(stage) {
+    return (
+      STAGE_CHIP[stage] || {
+        kind: "pipe",
+        label: "Pipe",
+        title: `On Pipelines · ${String(stage || "").replaceAll("_", " ")}`,
+      }
+    );
+  }
 
   const SCHEDULE_OWNERS = [
     { id: "team", label: "Team" },
@@ -1090,7 +1128,7 @@
 
   function renderChangelog(entries) {
     if (!entries?.length) {
-      setHtml("homeChangelog", `<p class="home-empty">No changelog entries yet.</p>`);
+      setHtml("homeChangelog", `<p class="home-empty">No release notes yet — add entries in standalone/app-changelog.json when you promote Staging → Live.</p>`);
       return;
     }
     const html = entries
@@ -1106,6 +1144,107 @@
       )
       .join("");
     setHtml("homeChangelog", html);
+  }
+
+  async function loadBrokeJoke() {
+    const el = document.getElementById("hubBrokeJoke");
+    if (!el) return;
+    try {
+      const data = await fetchJson("/api/home/days-since-broke");
+      const days = Number(data.days);
+      if (!Number.isFinite(days)) return;
+      const unit = days === 1 ? "day" : "days";
+      el.innerHTML = `<strong>${days}</strong> ${unit} since we last broke`;
+      el.title = data.last_broke
+        ? `Last broke ${data.last_broke}. Edit standalone/hub-uptime-joke.json to reset.`
+        : el.title;
+    } catch (_) {
+      /* keep placeholder */
+    }
+  }
+
+  function ensureHubNoticeCss() {
+    if (document.querySelector('link[data-hub-notice-css]')) return;
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "/static/hub-feedback.css?v=1";
+    link.setAttribute("data-hub-notice-css", "1");
+    document.head.appendChild(link);
+  }
+
+  function showHubNotice(notice) {
+    if (!notice?.id || !notice?.message) return;
+    const storageKey = `hub-notice-seen:${notice.id}`;
+    try {
+      if (localStorage.getItem(storageKey)) return;
+    } catch (_) {
+      /* private mode — still show once per session */
+    }
+
+    ensureHubNoticeCss();
+
+    const escapeHtml = (value) =>
+      String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+
+    let modal = document.getElementById("hubNoticeModal");
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.className = "hub-feedback-modal";
+      modal.id = "hubNoticeModal";
+      modal.setAttribute("role", "dialog");
+      modal.setAttribute("aria-modal", "true");
+      modal.setAttribute("aria-labelledby", "hubNoticeTitle");
+      document.body.appendChild(modal);
+    }
+
+    const title = notice.title || "Quick note from analysis";
+    const button = notice.button || "Got it";
+    modal.innerHTML = `
+      <div class="hub-feedback-modal__panel">
+        <h2 class="hub-feedback-modal__title" id="hubNoticeTitle">${escapeHtml(title)}</h2>
+        <p class="hub-feedback-modal__hint" style="white-space:pre-line">${escapeHtml(notice.message)}</p>
+        <div class="hub-feedback-modal__actions">
+          <button type="button" class="hub-feedback-modal__btn hub-feedback-modal__btn--primary" id="hubNoticeDismissBtn">${escapeHtml(button)}</button>
+        </div>
+      </div>
+    `;
+    modal.hidden = false;
+
+    const dismiss = () => {
+      modal.hidden = true;
+      try {
+        localStorage.setItem(storageKey, "1");
+      } catch (_) {
+        /* ignore */
+      }
+    };
+
+    modal.querySelector("#hubNoticeDismissBtn")?.addEventListener("click", dismiss);
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) dismiss();
+    });
+    document.addEventListener(
+      "keydown",
+      function onEsc(event) {
+        if (event.key !== "Escape" || modal.hidden) return;
+        dismiss();
+        document.removeEventListener("keydown", onEsc);
+      },
+      { once: true },
+    );
+  }
+
+  async function loadHubNotice() {
+    try {
+      const data = await fetchJson("/standalone/hub-uptime-joke.json");
+      showHubNotice(data.notice);
+    } catch (_) {
+      /* optional */
+    }
   }
 
   function ageBandClass(label) {
@@ -1581,6 +1720,295 @@
     return "#";
   }
 
+  function pipelinePlayerId(p) {
+    const raw = p?.playerId ?? p?.player_id ?? null;
+    if (raw != null && raw !== "") {
+      const n = Number(raw);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    }
+    const composite = String(p?.id || "");
+    if (composite.includes(":")) {
+      const parts = composite.split(":");
+      const mid = Number(parts[1]);
+      if (Number.isFinite(mid) && mid > 0) return mid;
+      const tail = Number(parts[parts.length - 1]);
+      return Number.isFinite(tail) && tail > 0 ? tail : null;
+    }
+    return null;
+  }
+
+  async function loadWatchIndex() {
+    try {
+      const data = await fetchJson("/api/player-pipelines");
+      watchBoardCache = data;
+      const next = new Map();
+      for (const target of data.targets || []) {
+        const pid = Number(target.player_id || 0);
+        if (!pid) continue;
+        next.set(pid, {
+          id: String(target.id || ""),
+          stage: String(target.stage || ""),
+          name: String(target.name || ""),
+        });
+      }
+      watchByPlayerId = next;
+    } catch {
+      /* optional */
+    }
+  }
+
+  function standoutsWatchCell(p) {
+    const pid = pipelinePlayerId(p);
+    if (!pid) {
+      return `<td class="col-watch"><span class="home-watch-chip home-watch-chip--disabled">—</span></td>`;
+    }
+    const existing = watchByPlayerId.get(pid);
+    const busy = watchBusy.has(pid);
+    if (!existing) {
+      return `<td class="col-watch">
+        <label class="home-watch-chip home-watch-chip--idle${busy ? " is-busy" : ""}" title="Add to Watch list">
+          <input type="checkbox" class="home-watch-toggle" data-player-id="${pid}" ${busy ? "disabled" : ""} />
+          <span class="home-watch-chip__mark" aria-hidden="true">+</span>
+          <span class="home-watch-chip__label">Add</span>
+        </label>
+      </td>`;
+    }
+    const meta = stageChipMeta(existing.stage);
+    return `<td class="col-watch">
+      <label class="home-watch-chip home-watch-chip--${meta.kind}${busy ? " is-busy" : ""}" title="${meta.title} — uncheck to remove">
+        <input type="checkbox" class="home-watch-toggle" data-player-id="${pid}" checked ${busy ? "disabled" : ""} />
+        <span class="home-watch-chip__mark" aria-hidden="true"></span>
+        <span class="home-watch-chip__label">${meta.label}</span>
+      </label>
+    </td>`;
+  }
+
+  async function toggleHomeWatch(checkbox) {
+    const pid = Number(checkbox.dataset.playerId || 0);
+    if (!pid || watchBusy.has(pid)) return;
+    const wantOn = checkbox.checked;
+    const existing = watchByPlayerId.get(pid);
+    const player =
+      (standoutsLastData?.by_league || [])
+        .flatMap((block) => block.players || [])
+        .find((row) => pipelinePlayerId(row) === pid) ||
+      (watchBoardCache?.targets || []).find((row) => Number(row.player_id) === pid) ||
+      null;
+
+    if (!wantOn && existing && PIPELINE_STAGES.has(existing.stage)) {
+      const ok = window.confirm(
+        `${existing.name || "This player"} is already ${existing.stage.replaceAll("_", " ")} on Pipelines. Remove them?`,
+      );
+      if (!ok) {
+        checkbox.checked = true;
+        return;
+      }
+    }
+
+    watchBusy.add(pid);
+    // Optimistic chip — flip immediately; network must not gate the UI.
+    if (wantOn) {
+      watchByPlayerId.set(pid, {
+        id: existing?.id || `pending-${pid}`,
+        stage: WATCH_STAGE,
+        name: player?.name || existing?.name || `Player ${pid}`,
+      });
+    } else {
+      watchByPlayerId.delete(pid);
+    }
+    checkbox.disabled = true;
+    const label = checkbox.closest(".home-watch-chip");
+    label?.classList.add("is-busy");
+    label?.classList.toggle("home-watch-chip--idle", !wantOn);
+    label?.classList.toggle("home-watch-chip--watch", wantOn);
+
+    try {
+      if (wantOn) {
+        const overall =
+          player?.overall != null && player.overall !== ""
+            ? Number(player.overall)
+            : player?.profile_score != null
+              ? Number(player.profile_score)
+              : null;
+        const res = await fetch("/api/player-pipelines/targets", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            player_id: pid,
+            name: player?.name || existing?.name || `Player ${pid}`,
+            club: player?.club || "",
+            league: player?.league || "",
+            position: player?.position || "",
+            position_label: player?.positionLabel || player?.position_label || "",
+            age: player?.age ?? null,
+            stage: WATCH_STAGE,
+            tags: [WATCH_TAG],
+            overall_score: Number.isFinite(overall) ? overall : null,
+            minutes: player?.minutes ?? null,
+            enrich: false,
+          }),
+        });
+        if (!res.ok) throw new Error(`Could not add to watch list (${res.status}).`);
+        const data = await res.json();
+        const target = data.target || {};
+        watchByPlayerId.set(pid, {
+          id: String(target.id || ""),
+          stage: String(target.stage || WATCH_STAGE),
+          name: String(target.name || player?.name || ""),
+        });
+      } else if (existing?.id && !String(existing.id).startsWith("pending-")) {
+        const res = await fetch(`/api/player-pipelines/targets/${encodeURIComponent(existing.id)}`, {
+          method: "DELETE",
+          credentials: "same-origin",
+        });
+        if (!res.ok && res.status !== 404) {
+          throw new Error(`Could not remove from watch list (${res.status}).`);
+        }
+        watchByPlayerId.delete(pid);
+      } else {
+        watchByPlayerId.delete(pid);
+      }
+      document.querySelectorAll(`.home-watch-toggle[data-player-id="${pid}"]`).forEach((node) => {
+        node.checked = wantOn;
+        const chip = node.closest(".home-watch-chip");
+        if (!chip) return;
+        chip.classList.remove(
+          "home-watch-chip--idle",
+          "home-watch-chip--watch",
+          "home-watch-chip--pipe",
+          "home-watch-chip--closed",
+        );
+        const mark = chip.querySelector(".home-watch-chip__mark");
+        const labelEl = chip.querySelector(".home-watch-chip__label");
+        if (!wantOn) {
+          chip.classList.add("home-watch-chip--idle");
+          if (mark) mark.textContent = "+";
+          if (labelEl) labelEl.textContent = "Add";
+          chip.title = "Add to Watch list";
+        } else {
+          const stage = watchByPlayerId.get(pid)?.stage || WATCH_STAGE;
+          const meta = stageChipMeta(stage);
+          chip.classList.add(`home-watch-chip--${meta.kind}`);
+          if (mark) mark.textContent = "";
+          if (labelEl) labelEl.textContent = meta.label;
+          chip.title = `${meta.title} — uncheck to remove`;
+        }
+      });
+      if (recruitSub === "watchlist") {
+        await loadWatchListTab({ silent: true });
+      }
+    } catch (err) {
+      if (wantOn) {
+        if (existing) watchByPlayerId.set(pid, existing);
+        else watchByPlayerId.delete(pid);
+      } else if (existing) {
+        watchByPlayerId.set(pid, existing);
+      }
+      checkbox.checked = !wantOn;
+      window.alert(err.message || "Watch list update failed.");
+    } finally {
+      watchBusy.delete(pid);
+      checkbox.disabled = false;
+      label?.classList.remove("is-busy");
+    }
+  }
+
+  function renderWatchList(data) {
+    const targets = data?.targets || [];
+    const seasonEl = document.getElementById("homeWatchSeason");
+    if (seasonEl) {
+      seasonEl.textContent = `${targets.length} player${targets.length === 1 ? "" : "s"} on the Watch list`;
+    }
+    if (!targets.length) {
+      setHtml(
+        "homeWatchList",
+        `<p class="home-empty">Nobody on the Watch list yet — tick Watch on Stand outs or Who To Scout. <a href="/who-to-scout">Open Who To Scout →</a></p>`,
+      );
+      return;
+    }
+
+    const body = `<table class="home-watch-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Player</th>
+          <th>Club</th>
+          <th>Pos</th>
+          <th>Age</th>
+          <th>League</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${targets
+          .map((t) => {
+            const pid = Number(t.player_id || 0);
+            const href = pid ? `/player/${encodeURIComponent(pid)}` : "#";
+            const checked = pid && watchByPlayerId.has(pid);
+            const watch =
+              pid > 0
+                ? `<label class="home-watch-chip home-watch-chip--watch" title="Remove from Watch list">
+                    <input type="checkbox" class="home-watch-toggle" data-player-id="${pid}" checked />
+                    <span class="home-watch-chip__mark" aria-hidden="true"></span>
+                    <span class="home-watch-chip__label">Watch</span>
+                  </label>`
+                : "";
+            return `<tr data-target-id="${String(t.id || "").replace(/"/g, "&quot;")}">
+              <td class="col-watch">${watch}</td>
+              <td class="col-player"><a href="${href}">${t.name || "—"}</a></td>
+              <td>${t.club || "—"}</td>
+              <td>${t.position_label || t.position || "—"}</td>
+              <td>${t.age ?? "—"}</td>
+              <td>${t.league || "—"}</td>
+              <td class="col-promote">
+                <button type="button" class="home-promote-btn" data-promote-id="${String(t.id || "").replace(/"/g, "&quot;")}">→ Pipeline</button>
+              </td>
+            </tr>`;
+          })
+          .join("")}
+      </tbody>
+    </table>`;
+
+    setHtml("homeWatchList", `<div class="home-watch-grid">${body}</div>`);
+  }
+
+  async function promoteWatchToPipeline(targetId, button) {
+    if (!targetId) return;
+    button.disabled = true;
+    try {
+      const res = await fetch(`/api/watch-list/promote/${encodeURIComponent(targetId)}`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      if (!res.ok) throw new Error(`Could not promote (${res.status}).`);
+      await loadWatchIndex();
+      await loadWatchListTab({ silent: true });
+    } catch (err) {
+      window.alert(err.message || "Could not promote to Pipelines.");
+      button.disabled = false;
+    }
+  }
+
+  async function loadWatchListTab({ silent = false } = {}) {
+    if (!silent) {
+      setHtml("homeWatchList", `<p class="home-empty">Loading watch list…</p>`);
+    }
+    try {
+      await loadWatchIndex();
+      const data = await fetchJson("/api/watch-list");
+      watchListLoaded = true;
+      renderWatchList(data);
+    } catch (err) {
+      setHtml(
+        "homeWatchList",
+        `<p class="home-empty">Could not load watch list: ${err.message || err}</p>`,
+      );
+    }
+  }
+
   function standoutsPlayerRows(players) {
     return (players || [])
       .map((p, index) => {
@@ -1603,6 +2031,7 @@
         const pos = standoutsPosShort(p.positionLabel, p.position);
         const below = p.above_threshold === false ? " is-below" : "";
         return `<tr class="${scoutTotal ? "has-scout" : ""}${below}">
+          ${standoutsWatchCell(p)}
           <td class="col-rank">${index + 1}</td>
           <td class="col-player"><a href="${href}">${p.name || "—"}</a></td>
           <td class="col-club" title="${p.club || ""}">${p.club || "—"}</td>
@@ -1623,11 +2052,12 @@
     const scoreHeader = standoutsProfile ? "Profile" : "Ovr";
     return `<div class="home-standouts-scroll"><table class="home-table home-standouts-table">
       <colgroup>
-        <col class="col-rank"><col class="col-player"><col class="col-club"><col class="col-pos">
+        <col class="col-watch"><col class="col-rank"><col class="col-player"><col class="col-club"><col class="col-pos">
         <col class="col-age"><col class="col-overall"><col class="col-mins"><col class="col-scout"><col class="col-scout"><col class="col-scout">
       </colgroup>
       <thead>
         <tr>
+          <th class="col-watch" title="Watch list / Pipelines status">Track</th>
           <th class="col-rank">#</th>
           <th class="col-player">Player</th>
           <th class="col-club">Club</th>
@@ -1662,7 +2092,7 @@
     );
     const scoringNote =
       data.scoring?.note ||
-      "Equal-weighted Impect profile overall — same Overall column as Player Search.";
+      "Equal-weighted Impect profile overall — same Overall column as Who To Scout.";
     setText(
       "homeStandoutsNote",
       `${scoringNote} Live / Video / Reports from Fixture Planner. Open Who To Scout for profile weights and filters.`
@@ -1737,27 +2167,48 @@
   }
 
   function setRecruitSub(subId) {
+    if (!subId) return;
     recruitSub = subId;
-    document.querySelectorAll(".home-subtab").forEach((btn) => {
+    document.querySelectorAll(".home-subtab[data-recruit-sub]").forEach((btn) => {
       btn.classList.toggle("is-active", btn.dataset.recruitSub === subId);
     });
     document.querySelectorAll(".home-subpanel").forEach((panel) => {
       panel.hidden = panel.dataset.recruitPanel !== subId;
     });
     if (subId === "standouts") {
-      if (standoutsLastData && standoutsLoaded) {
-        renderStandouts(standoutsLastData);
-      } else {
-        loadStandoutsTab().finally(() => {
-          standoutsLoaded = true;
-        });
-      }
+      void loadWatchIndex().then(() => {
+        if (standoutsLastData && standoutsLoaded) {
+          renderStandouts(standoutsLastData);
+        } else {
+          loadStandoutsTab().finally(() => {
+            standoutsLoaded = true;
+          });
+        }
+      });
+    }
+    if (subId === "watchlist") {
+      void loadWatchListTab();
     }
   }
 
   function bindRecruitSubtabs() {
-    document.querySelectorAll(".home-subtab").forEach((btn) => {
+    document.querySelectorAll(".home-subtab[data-recruit-sub]").forEach((btn) => {
       btn.addEventListener("click", () => setRecruitSub(btn.dataset.recruitSub));
+    });
+    document.getElementById("homeStandoutsList")?.addEventListener("change", (event) => {
+      const checkbox = event.target.closest("input.home-watch-toggle");
+      if (!checkbox) return;
+      void toggleHomeWatch(checkbox);
+    });
+    document.getElementById("homeWatchList")?.addEventListener("change", (event) => {
+      const checkbox = event.target.closest("input.home-watch-toggle");
+      if (!checkbox) return;
+      void toggleHomeWatch(checkbox);
+    });
+    document.getElementById("homeWatchList")?.addEventListener("click", (event) => {
+      const promoteBtn = event.target.closest("[data-promote-id]");
+      if (!promoteBtn) return;
+      void promoteWatchToPipeline(promoteBtn.dataset.promoteId, promoteBtn);
     });
     document.querySelectorAll("#homeStandoutsPeriod .home-filter__btn").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -2090,7 +2541,7 @@
       const changelog = await fetchJson("/api/home/changelog?limit=12");
       renderChangelog(changelog.entries || []);
     } catch (_) {
-      widgetError("homeChangelog", "Could not load app updates.");
+      widgetError("homeChangelog", "Could not load release notes.");
     }
   }
 
@@ -2183,6 +2634,8 @@
     };
 
     const jobs = [
+      loadBrokeJoke(),
+      loadHubNotice(),
       loadFotmobFixtures()
         .then(paintHome)
         .catch((err) => {

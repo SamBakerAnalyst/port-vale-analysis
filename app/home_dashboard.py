@@ -8,7 +8,8 @@ import statistics
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Query
@@ -19,7 +20,8 @@ from app.paths import DATA_ROOT, STANDALONE_DIR, ensure_data_dirs
 logger = logging.getLogger(__name__)
 
 CHANGELOG_PATH = DATA_ROOT / "app-changelog.json"
-LEGACY_CHANGELOG_PATH = STANDALONE_DIR / "app-changelog.json"
+REPO_CHANGELOG_PATH = STANDALONE_DIR / "app-changelog.json"
+UPTIME_JOKE_PATH = STANDALONE_DIR / "hub-uptime-joke.json"
 FEEDBACK_LOG = DATA_ROOT / "feedback.jsonl"
 RECRUITMENT_DISK_CACHE = DATA_ROOT / "home-recruitment-cache.json"
 STANDOUTS_DISK_CACHE = DATA_ROOT / "home-standouts-cache.json"
@@ -485,23 +487,30 @@ def _default_changelog() -> list[dict[str, Any]]:
     ]
 
 
+def _read_changelog_entries(path: Path) -> list[dict[str, Any]]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        raw = payload.get("entries") if isinstance(payload, dict) else payload
+        if isinstance(raw, list):
+            return [row for row in raw if isinstance(row, dict)]
+    except (OSError, json.JSONDecodeError, TypeError):
+        return []
+    return []
+
+
 def load_changelog(*, limit: int = 20) -> dict[str, Any]:
+    """Release notes shipped with the repo (staging → live). Data override optional."""
     ensure_data_dirs()
-    path = CHANGELOG_PATH if CHANGELOG_PATH.exists() else LEGACY_CHANGELOG_PATH
     entries: list[dict[str, Any]] = []
-    if path.exists():
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-            raw = payload.get("entries") if isinstance(payload, dict) else payload
-            if isinstance(raw, list):
-                entries = [row for row in raw if isinstance(row, dict)]
-        except (OSError, json.JSONDecodeError):
-            entries = []
+    # Repo file wins so every Live promote can ship fresh notes with the code.
+    if REPO_CHANGELOG_PATH.exists():
+        entries = _read_changelog_entries(REPO_CHANGELOG_PATH)
+    if not entries and CHANGELOG_PATH.exists():
+        entries = _read_changelog_entries(CHANGELOG_PATH)
     if not entries:
         entries = _default_changelog()
-        CHANGELOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        CHANGELOG_PATH.write_text(
-            json.dumps({"version": 1, "entries": entries}, indent=2),
+        REPO_CHANGELOG_PATH.write_text(
+            json.dumps({"version": 1, "entries": entries}, indent=2) + "\n",
             encoding="utf-8",
         )
 
@@ -513,6 +522,28 @@ def load_changelog(*, limit: int = 20) -> dict[str, Any]:
         "generated_at": datetime.now(UTC).isoformat(),
         "count": len(entries),
         "entries": entries,
+    }
+
+
+def load_days_since_broke() -> dict[str, Any]:
+    """Joke counter for the hub top bar — edit standalone/hub-uptime-joke.json to reset."""
+    last_broke = date(2026, 9, 3)
+    if UPTIME_JOKE_PATH.exists():
+        try:
+            payload = json.loads(UPTIME_JOKE_PATH.read_text(encoding="utf-8"))
+            raw = str(payload.get("last_broke") or "").strip()[:10]
+            if raw:
+                last_broke = date.fromisoformat(raw)
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            pass
+    today = datetime.now(UTC).date()
+    days = max(0, (today - last_broke).days)
+    label = "day" if days == 1 else "days"
+    return {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "last_broke": last_broke.isoformat(),
+        "days": days,
+        "label": f"{days} {label} since we last broke",
     }
 
 
@@ -2593,6 +2624,10 @@ def register_home_dashboard_routes(app: FastAPI) -> None:
     @app.get("/api/home/changelog")
     def home_changelog_route(limit: int = Query(20, ge=1, le=50)) -> dict[str, Any]:
         return load_changelog(limit=limit)
+
+    @app.get("/api/home/days-since-broke")
+    def home_days_since_broke_route() -> dict[str, Any]:
+        return load_days_since_broke()
 
     @app.get("/api/home/recruitment")
     def home_recruitment_route(refresh: bool = Query(False)) -> dict[str, Any]:

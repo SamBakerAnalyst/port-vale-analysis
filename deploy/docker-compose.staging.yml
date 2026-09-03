@@ -16,8 +16,20 @@ services:
       DATA_ROOT: /data
       UVICORN_WORKERS: "1"
       HUB_ENV: staging
+      # Left on the bare IP deliberately. A hostname is what WhatsApp needs to
+      # make the link tappable, but Chrome force-upgrades hostnames to HTTPS and
+      # we serve none here, so nip.io and sslip.io both died on
+      # ERR_SSL_PROTOCOL_ERROR. Bare IPs are exempt from that upgrade, so this
+      # opens even though it will not linkify. Wildcard-DNS hosts cannot be
+      # rescued with a certificate either: neither is on the Public Suffix List,
+      # so they share one Let's Encrypt rate limit with the whole internet.
+      # The fix is a domain we own — then set this to https://that-domain.
+      GI_LINK_BASE_URL: http://178.128.161.215:8080
     volumes:
       - pv-staging-data:/data
+      # Read Live fixture-planner assignments so Scoutable Teams can show
+      # live/video watch counts without sharing the whole staging write volume.
+      - port-vale-analysis_pv-data:/live-data:ro
     ports:
       - "8080:8000"
     restart: unless-stopped
@@ -30,3 +42,6 @@ services:
 
 volumes:
   pv-staging-data:
+  # Existing Live volume (same droplet) — mounted read-only for watch counts.
+  port-vale-analysis_pv-data:
+    external: true

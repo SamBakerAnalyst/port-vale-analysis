@@ -58,17 +58,18 @@ if [[ "${#REQUIRED_APPS[@]}" -eq 0 ]]; then
     "Pre-Match Report"
     "Set Piece Pre-Match"
     "Player Cards"
+    "Match Day Countdown"
     "xG Chance Analysis"
     "Blocks Analysis"
     "Who To Scout"
-    "Player Pipelines"
+    "Watch list"
     "Fixture Planner"
     "Played Fixtures"
     "Scouting Address Tool"
     "Scout Summary"
     "Scouts Calendar"
     "Squad Availability"
-    "Season Progress Report"
+    "Presentations"
   )
 fi
 
@@ -103,10 +104,36 @@ PY
     bad "essential marked comingSoon: $need"
   fi
 done
-if grep -Fq '"comingSoon": true' "$apps_file" || grep -Fq 'comingSoon: true' "$apps_file"; then
-  bad "/api/apps still has comingSoon tools — Progress Report must be live"
+# Recruitment launch shape: Watch list open, Pipelines + Scoutable Teams held back
+# until every scout has a personal login. Assert both halves so neither drifts.
+check_launch_shape() {
+  python3 - "$1" <<'PY'
+import json, sys
+want_open = {"Who To Scout", "Watch list"}
+want_held = {"Player Pipelines", "Scoutable Teams"}
+data = json.load(open("/tmp/pv-smoke-apps.json"))
+by_title = {a.get("title"): a for a in data.get("apps") or []}
+problems = []
+for title in sorted(want_open):
+    app = by_title.get(title)
+    if app is None:
+        problems.append(f"{title} missing from /api/apps")
+    elif app.get("comingSoon"):
+        problems.append(f"{title} is comingSoon but should be open")
+for title in sorted(want_held):
+    app = by_title.get(title)
+    if app is not None and not app.get("comingSoon"):
+        problems.append(f"{title} is open but should be held back")
+if problems:
+    print("; ".join(problems))
+    raise SystemExit(1)
+raise SystemExit(0)
+PY
+}
+if shape_err="$(check_launch_shape "$apps_file")"; then
+  pass "recruitment launch shape (Watch list open, Pipelines held)"
 else
-  pass "no comingSoon stubs in sidebar registry"
+  bad "recruitment launch shape wrong: ${shape_err:-unknown}"
 fi
 
 curl -s --max-time 15 "$BASE_URL/standalone/hub-home.js" -o /tmp/pv-smoke-home.js || true
@@ -157,6 +184,8 @@ for path in \
   "/schedule" \
   "/strategy-tracker" \
   "/players-strategy" \
+  "/who-to-scout" \
+  "/watch-list" \
   "/player-pipelines"
 do
   code="$(curl -s -o /dev/null -w "%{http_code}" -b "$COOKIE_JAR" --max-time 30 "$BASE_URL$path" || echo 000)"

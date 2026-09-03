@@ -30,6 +30,13 @@ window.IMPECT_APP_GROUPS = [
     "subtitle": "Squad reviews, benchmarks, and league context",
     "icon": "📈",
     "accent": "#f5c518"
+  },
+  {
+    "id": "presentations",
+    "title": "Presentations",
+    "subtitle": "Personal decks — off the daily rail",
+    "icon": "🎬",
+    "accent": "#a78bfa"
   }
 ];
 
@@ -176,6 +183,20 @@ window.IMPECT_APPS = [
     ]
   },
   {
+    "id": "goal-involvement",
+    "group": "analysis",
+    "title": "Goal Involvement",
+    "description": "Coaches split 10 points on every goal we score or concede. Averages, disagreement flags, and player season totals.",
+    "href": "/goal-involvement",
+    "icon": "🔟",
+    "accent": "#eab308",
+    "tags": [
+      "Goals",
+      "Coaches",
+      "Match day"
+    ]
+  },
+  {
     "id": "blocks-analysis",
     "group": "analysis",
     "title": "Blocks Analysis",
@@ -235,21 +256,6 @@ window.IMPECT_APPS = [
     ]
   },
   {
-    "id": "player-search",
-    "group": "recruitment",
-    "title": "Player Search Dashboard",
-    "description": "Profile-weighted scouting lists by position and league. Rank, filter, export Excel or PDF.",
-    "href": "/scouting",
-    "icon": "🔍",
-    "accent": "#3d8bfd",
-    "tags": [
-      "Scouting",
-      "Search"
-    ],
-    "comingSoon": true,
-    "note": "Coming soon"
-  },
-  {
     "id": "squad-balance",
     "group": "recruitment",
     "title": "Squad Balance",
@@ -265,18 +271,51 @@ window.IMPECT_APPS = [
     "note": "Coming soon"
   },
   {
+    "id": "watch-list",
+    "group": "recruitment",
+    "title": "Watch list",
+    "description": "Players spotted on Who To Scout / Stand outs — review here, then promote into Player Pipelines when scouts should progress them.",
+    "href": "/watch-list",
+    "icon": "👀",
+    "accent": "#38bdf8",
+    "tags": [
+      "Watch list",
+      "Scouting",
+      "Targets"
+    ]
+  },
+  {
     "id": "player-pipelines",
     "group": "recruitment",
     "title": "Player Pipelines",
-    "description": "Shared recruitment board — add targets, drag between Data identified, Video scouted, Live scouted, Gone / turned us down, and Not the right fit. Notes and tags are visible to the whole team.",
+    "description": "Shared recruitment progression board — promote from the Watch list, then drag between Data identified, Video scouted, Live scouted, Gone / turned us down, and Not the right fit. Notes and tags are visible to the whole team.",
     "href": "/player-pipelines",
     "icon": "📌",
     "accent": "#a78bfa",
     "tags": [
+      "Pipelines",
       "Scouting",
       "Targets",
       "Notes"
-    ]
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
+  },
+  {
+    "id": "scoutable-teams",
+    "group": "recruitment",
+    "title": "Scoutable Teams",
+    "description": "Monday-style league boards — open any club, see player data scores, and move prospects straight onto Player Pipelines.",
+    "href": "/scoutable-teams",
+    "icon": "🏟️",
+    "accent": "#34d399",
+    "tags": [
+      "Scouting",
+      "Clubs",
+      "Pipelines"
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
   },
   {
     "id": "squad-planner",
@@ -406,6 +445,20 @@ window.IMPECT_APPS = [
     ]
   },
   {
+    "id": "win-drivers",
+    "group": "strategy",
+    "title": "What Wins Games",
+    "description": "The 15 Impect stats most linked to winning in League Two history — why each matters, live table, Port Vale highlighted.",
+    "href": "/win-drivers",
+    "icon": "🏆",
+    "accent": "#f5c518",
+    "tags": [
+      "League Two",
+      "Impect",
+      "Table"
+    ]
+  },
+  {
     "id": "club-strategy",
     "group": "strategy",
     "title": "Club Strategy",
@@ -422,80 +475,119 @@ window.IMPECT_APPS = [
     "note": "Coming soon"
   },
   {
+    "id": "presentations",
+    "group": "presentations",
+    "title": "Presentations",
+    "description": "Personal decks — strategy reports, origin story, window review. Off the daily rail; admin only.",
+    "href": "/presentations",
+    "icon": "🎬",
+    "accent": "#a78bfa",
+    "tags": [
+      "Personal",
+      "Decks"
+    ]
+  },
+  {
     "id": "league-two-strategy",
-    "group": "strategy",
+    "group": "presentations",
     "title": "League Two Strategy Report",
     "description": "Season strategy slides — promotion point benchmarks, league context, and targets (21/22–25/26).",
     "href": "/strategy",
     "icon": "📈",
-    "accent": "#f5c518",
+    "accent": "#a78bfa",
     "tags": [
       "League Two",
       "Strategy"
     ],
-    "comingSoon": true,
-    "note": "Coming soon"
+    "sidebar": false
   },
   {
     "id": "players-strategy",
-    "group": "strategy",
+    "group": "presentations",
     "title": "Players Strategy Report",
     "description": "Dressing-room presentation — punchy promotion standards. Build here, then Present or Export PDF.",
     "href": "/players-strategy",
     "icon": "🗣️",
-    "accent": "#f5c518",
+    "accent": "#a78bfa",
     "tags": [
       "League Two",
       "Players",
       "Presentation"
     ],
-    "comingSoon": true,
-    "note": "Coming soon"
+    "sidebar": false
   },
   {
     "id": "players-strategy-staff",
-    "group": "strategy",
+    "group": "presentations",
     "title": "Staff Strategy Report",
     "description": "Staff edition of Project Promotion — same benchmarks, fuller detail.",
     "href": "/players-strategy-staff",
     "icon": "📋",
-    "accent": "#f5c518",
+    "accent": "#a78bfa",
     "tags": [
       "League Two",
       "Staff",
       "Presentation"
     ],
-    "comingSoon": true,
-    "note": "Coming soon"
+    "sidebar": false
   },
   {
     "id": "players-strategy-values",
-    "group": "strategy",
+    "group": "presentations",
     "title": "Values Report",
     "description": "Our values and non-negotiables — culture first, before the numbers.",
     "href": "/players-strategy-values",
     "icon": "🧭",
-    "accent": "#f5c518",
+    "accent": "#a78bfa",
     "tags": [
       "League Two",
       "Values",
       "Presentation"
     ],
-    "comingSoon": true,
-    "note": "Coming soon"
+    "sidebar": false
   },
   {
     "id": "league-two-progress",
-    "group": "strategy",
+    "group": "presentations",
     "title": "Season Progress Report",
     "description": "Live promotion pace, Impect style stats, and a Present / PDF board pack versus auto / play-off / champions.",
     "href": "/strategy-tracker",
     "icon": "📉",
-    "accent": "#fbbf24",
+    "accent": "#a78bfa",
     "tags": [
       "League Two",
       "Progress",
       "Pace"
-    ]
+    ],
+    "sidebar": false
+  },
+  {
+    "id": "hub-origin",
+    "group": "presentations",
+    "title": "Hub Origin Story",
+    "description": "Why we built the Analysis Hub, how it started, and what’s live.",
+    "href": "/hub-origin",
+    "icon": "✦",
+    "accent": "#a78bfa",
+    "tags": [
+      "Story",
+      "Presentation"
+    ],
+    "sidebar": false
+  },
+  {
+    "id": "window-review",
+    "group": "presentations",
+    "title": "Summer Window Review",
+    "description": "End of 26/27 summer window — ins and outs, average age, and primary-position depth.",
+    "href": "/window-review",
+    "icon": "🔁",
+    "accent": "#a78bfa",
+    "tags": [
+      "Squad",
+      "Transfers",
+      "Presentation"
+    ],
+    "sidebar": false
   }
 ];

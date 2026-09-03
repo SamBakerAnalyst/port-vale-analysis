@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Port Vale Analysis Hub · Summer window 26/27</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/window-review.css?v=11" />
+</head>
+<body>
+  <div class="app">
+    <header class="toolbar">
+      <div>
+        <p class="toolbar__eyebrow"><a href="/">← Hub</a> · Strategy</p>
+        <h1 class="toolbar__title">Summer window review 26/27</h1>
+        <p class="toolbar__sub">Finished 25/26 first-team vs 1 Sep 2026. January leavers excluded.</p>
+      </div>
+      <div class="toolbar__right">
+        <p class="toolbar__meta" id="slideMeta"></p>
+        <div class="toolbar__buttons">
+          <button type="button" class="btn" id="notesBtn">Speaker notes</button>
+          <button type="button" class="btn" id="exportPdf">Download PDF</button>
+          <button type="button" class="btn btn--gold" id="presentBtn">Present</button>
+        </div>
+        <p class="toolbar__export-status" id="exportStatus"></p>
+      </div>
+    </header>
+    <nav class="filmstrip" id="filmstrip" aria-label="Slides"></nav>
+
+    <div class="deck" id="deck">
+
+      <section
+        class="slide slide--open is-active"
+        data-label="Title"
+        data-notes="25/26 finishers vs 1 Sep 2026. January out: Cole, Curtis, Plant, Johnson, Faal recall."
+      >
+        <div class="slide__body">
+          <img class="open-badge" src="/standalone/port-vale-badge.png?v=2" width="72" height="82" alt="" />
+          <p class="open-kicker">26/27 summer window</p>
+          <h2 class="open-title">Summer window</h2>
+          <p class="open-sub">25/26 finishers vs 1 Sep 2026. January leavers excluded.</p>
+          <div class="open-stats">
+            <span><b>12</b> in</span>
+            <span><b>19</b> out</span>
+            <span><b>26.3</b> avg age</span>
+          </div>
+        </div>
+      </section>
+
+      <section
+        class="slide"
+        data-label="Glance"
+        data-notes="12 in. 19 summer out. 34 to 26. Age 27.0 to 26.3 with loans, 27.9 to 27.1 owned. DM = Byers, Craig."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker">Window at a glance</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body">
+          <div class="head-row">
+            <h2 class="headline">Totals</h2>
+            <p class="kicker">25/26 finishers vs 1 Sep 2026</p>
+          </div>
+          <div class="glance">
+            <article class="is-in">
+              <em>12</em>
+              <strong>Ins</strong>
+              <p>8 perm 26.4 · 4 loans 21.8 · all ins 24.8</p>
+            </article>
+            <article class="is-out">
+              <em>19</em>
+              <strong>Summer outs</strong>
+              <p>14 sold/released 28.8 · 5 loans expired 21.8</p>
+            </article>
+            <article>
+              <em>26.3</em>
+              <strong>Avg age</strong>
+              <p>With loans 27.0 → 26.3. Owned 27.9 → 27.1</p>
+            </article>
+            <article>
+              <em>34→26</em>
+              <strong>First-team size</strong>
+              <p>Academy omitted. January leavers omitted.</p>
+            </article>
+          </div>
+          <div class="unit-strip unit-strip--fill">
+            <div><em>GK</em><b>28.0</b><span>31.0</span></div>
+            <div><em>RB</em><b>27.3</b><span>26.3</span></div>
+            <div><em>CB</em><b>28.5</b><span>26.6</span></div>
+            <div><em>LB</em><b>25.5</b><span>24.8</span></div>
+            <div><em>DM</em><b>26.5</b><span>30.0</span></div>
+            <div><em>MF</em><b>26.4</b><span>27.1</span></div>
+            <div><em>W</em><b>28.0</b><span>28.0</span></div>
+            <div><em>CF</em><b>23.3</b><span>26.2</span></div>
+          </div>
+          <p class="source">Gold = now. Grey = 25/26 finish. Ages at 1 Sep 2026. DM = Craig, Byers.</p>
+        </div>
+      </section>
+
+      <section
+        class="slide"
+        data-label="Permanent ins"
+        data-notes="Smith GK. Moon CB. Craig DM. Dempsey MF. Watters CF. McGowan RB. Montsma CB. Simpson CF. Perm avg 26.4."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker">Permanent arrivals</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body">
+          <div class="head-row">
+            <h2 class="headline">Permanent ins</h2>
+            <p class="kicker">8 · avg 26.4 · Smith undisclosed, rest free</p>
+          </div>
+          <div class="unit-strip unit-strip--ins">
+            <div><em>All 8</em><b>26.4</b></div>
+            <div><em>GK</em><b>24.0</b></div>
+            <div><em>CB</em><b>26.5</b></div>
+            <div><em>RB</em><b>30.0</b></div>
+            <div><em>DM</em><b>23.0</b></div>
+            <div><em>MF</em><b>30.0</b></div>
+            <div><em>CF</em><b>25.5</b></div>
+          </div>
+          <div class="pcards">
+            <article class="pcard">
+              <div class="pcard__media">
+                <span class="pcard__initials">JS</span>
+                <img src="/api/player-photo?name=Jackson%20Smith" alt="" onerror="this.remove()" />
+              </div>
+              <span class="pcard__pos">GK</span>
+              <div class="pcard__body">
+                <strong>Jackson Smith</strong>
+                <span>Barnsley · 24 · undisclosed</span>
+              </div>
+            </article>
+            <article class="pcard">
+              <div class="pcard__media">
+                <span class="pcard__initials">JM</span>
+                <img src="/api/player-photo?name=Jasper%20Moon" alt="" onerror="this.remove()" />
+              </div>
+              <span class="pcard__pos">CB</span>
+              <div class="pcard__body">
+                <strong>Jasper Moon</strong>
+                <span>Burton Albion · 25 · free</span>
+              </div>
+            </article>
+            <article class="pcard">
+              <div class="pcard__media">
+                <span class="pcard__initials">MC</span>
+                <img src="/api/player-photo?name=Matthew%20Craig" alt="" onerror="this.remove()" />
+              </div>
+              <span class="pcard__pos">DM</span>
+              <div class="pcard__body">
+                <strong>Matthew Craig</strong>
+                <span>Tottenham · 23 · free</span>
+              </div>
+            </article>
+            <article class="pcard">
+              <div class="pcard__media">
+                <span class="pcard__initials">KD</span>
+                <img src="/api/player-photo?name=Kyle%20Dempsey" alt="" onerror="this.remove()" />
+              </div>
+              <span class="pcard__pos">MF</span>
+              <div class="pcard__body">
+                <strong>Kyle Dempsey</strong>
+                <span>Bolton · 30 · free</span>
+              </div>
+            </article>
+            <article class="pcard">
+              <div class="pcard__media">
+                <span class="pcard__initials">MW</span>
+                <img src="/api/player-photo?name=Max%20Watters" alt="" onerror="this.remove()" />
+              </div>
+              <span class="pcard__pos">CF</span>
+              <div class="pcard__body">
+                <strong>Max Watters</strong>
+                <span>Barnsley · 27 · free</span>
+              </div>
+            </article>
+            <article class="pcard">
+              <div class="pcard__media">
+                <span class="pcard__initials">AM</span>
+                <img src="/static/window-review-mcgowan.png" alt="" onerror="this.remove()" />
+              </div>
+              <span class="pcard__pos">RB</span>
+              <div class="pcard__body">
+                <strong>Aaron McGowan</strong>
+                <span>Tranmere · 30 · free</span>
+              </div>
+            </article>
+            <article class="pcard">
+              <div class="pcard__media">
+                <span class="pcard__initials">LM</span>
+                <img src="/api/player-photo?name=Lewis%20Montsma" alt="" onerror="this.remove()" />
+              </div>
+              <span class="pcard__pos">CB</span>
+              <div class="pcard__body">
+                <strong>Lewis Montsma</strong>
+                <span>Dundee · 28 · free</span>
+              </div>
+            </article>
+            <article class="pcard">
+              <div class="pcard__media">
+                <span class="pcard__initials">TS</span>
+                <img src="/api/player-photo?name=Tyreece%20Simpson" alt="" onerror="this.remove()" />
+              </div>
+              <span class="pcard__pos">CF</span>
+              <div class="pcard__body">
+                <strong>Tyreece Simpson</strong>
+                <span>Stevenage · 24 · free</span>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section
+        class="slide"
+        data-label="Loans"
+        data-notes="25/26 finish: Gauci GK, Campbell CB, Archer LW, Brown CF, Sherif CF. Now: Faal CF, Lynch CF, Asamoah RW, Figueroa CF. Avg 21.8 both. Faal recalled Jan, back summer. Terry 6 Jul–1 Sep."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker">Loan players</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body">
+          <div class="head-row">
+            <h2 class="headline">Loans</h2>
+            <p class="kicker">25/26 finish vs now · avg 21.8 both</p>
+          </div>
+          <div class="loan-compare">
+            <div class="loan-col">
+              <h3>25/26 finish · 5</h3>
+              <p class="loan-col__meta">GK, CB, W, CF, CF</p>
+              <div class="loan-list">
+                <div class="loan-row"><b>GK</b> Joe Gauci, 25<span>Aston Villa</span></div>
+                <div class="loan-row"><b>CB</b> Eli Campbell, 21<span>Everton</span></div>
+                <div class="loan-row"><b>W</b> Ethon Archer, 23<span>Luton</span></div>
+                <div class="loan-row"><b>CF</b> Dajaune Brown, 20<span>Derby</span></div>
+                <div class="loan-row"><b>CF</b> Martin Sherif, 20<span>Everton</span></div>
+              </div>
+            </div>
+            <div class="loan-col">
+              <h3>1 Sep 2026 · 4</h3>
+              <p class="loan-col__meta">CF, CF, W, CF</p>
+              <div class="loan-list">
+                <div class="loan-row"><b>CF</b> Mo Faal, 23<span>Wrexham</span></div>
+                <div class="loan-row"><b>CF</b> Oli Lynch, 21<span>Luton</span></div>
+                <div class="loan-row"><b>W</b> Maleace Asamoah, 23<span>Wigan</span></div>
+                <div class="loan-row"><b>CF</b> Keyrol Figueroa, 20<span>Liverpool</span></div>
+              </div>
+            </div>
+          </div>
+          <p class="loan-verdict">Faal recalled Jan 2026, returned summer 2026 (not in the 25/26 five). Mason Terry (West Ham) 6 Jul–1 Sep 2026, loan ended, hand injury.</p>
+        </div>
+      </section>
+
+      <section
+        class="slide"
+        data-label="Outs"
+        data-notes="14 sold/released/mutual. 5 loans expired. Shorrock at Sligo to 30 Oct."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker">Departures</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body">
+          <div class="head-row">
+            <h2 class="headline">Summer outs</h2>
+            <p class="kicker">19 · avg 26.9 · January leavers not listed</p>
+          </div>
+          <div class="out-tiles">
+            <article class="out-tile"><b>GK</b><strong>Ben Amos</strong><span>36 · Burnley · released</span></article>
+            <article class="out-tile"><b>RB</b><strong>Mitch Clark</strong><span>27 · Swindon · released</span></article>
+            <article class="out-tile"><b>CB</b><strong>Jesse Debrah</strong><span>25 · released</span></article>
+            <article class="out-tile"><b>CB</b><strong>Ben Heneghan</strong><span>32 · released</span></article>
+            <article class="out-tile"><b>CB</b><strong>Tyler Magloire</strong><span>27 · released</span></article>
+            <article class="out-tile"><b>CB</b><strong>Ben Lomax</strong><span>20 · Chester · released</span></article>
+            <article class="out-tile"><b>LB</b><strong>Sam Hart</strong><span>29 · released</span></article>
+            <article class="out-tile"><b>MF</b><strong>Funso Ojo</strong><span>34 · released</span></article>
+            <article class="out-tile"><b>MF</b><strong>Grant Ward</strong><span>31 · released</span></article>
+            <article class="out-tile"><b>MF</b><strong>Jordan Shipley</strong><span>28 · Cheltenham · mutual</span></article>
+            <article class="out-tile"><b>MF</b><strong>Rico Richards</strong><span>22 · Southend · fee</span></article>
+            <article class="out-tile"><b>CF</b><strong>Ruari Paton</strong><span>25 · St Johnstone · fee</span></article>
+            <article class="out-tile"><b>CF</b><strong>Jayden Stockley</strong><span>32 · AFC Wimbledon · fee</span></article>
+            <article class="out-tile"><b>CF</b><strong>Andre Gray</strong><span>35 · released</span></article>
+            <article class="out-tile is-loan"><b>GK</b><strong>Joe Gauci</strong><span>25 · Villa · loan ended</span></article>
+            <article class="out-tile is-loan"><b>CB</b><strong>Eli Campbell</strong><span>21 · Everton · loan ended</span></article>
+            <article class="out-tile is-loan"><b>W</b><strong>Ethon Archer</strong><span>23 · Luton · loan ended</span></article>
+            <article class="out-tile is-loan"><b>CF</b><strong>Dajaune Brown</strong><span>20 · Derby · loan ended</span></article>
+            <article class="out-tile is-loan"><b>CF</b><strong>Martin Sherif</strong><span>20 · Everton · loan ended</span></article>
+            <article class="out-tile is-keep"><b>LWB</b><strong>Jack Shorrock</strong><span>19 · Sligo · to 30 Oct</span></article>
+          </div>
+          <div class="unit-strip">
+            <div><em>All 19</em><b>26.9</b></div>
+            <div><em>Sold 14</em><b>28.8</b></div>
+            <div><em>Loans 5</em><b>21.8</b></div>
+            <div><em>GK</em><b>30.5</b></div>
+            <div><em>CB</em><b>25.0</b></div>
+            <div><em>MF</em><b>28.8</b></div>
+            <div><em>W</em><b>23.0</b></div>
+            <div><em>CF</em><b>26.4</b></div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        class="slide"
+        data-label="Average age"
+        data-notes="With loans 27.0 → 26.3. Owned 27.9 → 27.1. DM Byers+Craig 26.5. CF 26.2 → 23.3. CB 26.6 → 28.5."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker">Average age</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body">
+          <div class="head-row">
+            <h2 class="headline">Average age</h2>
+            <p class="kicker">1 Sep 2026 · DM = Craig, Byers · rest of midfield = MF</p>
+          </div>
+          <div class="age-split">
+            <article class="age-panel">
+              <em>With loans</em>
+              <b>26.3</b>
+              <strong>27.0 → 26.3 · −0.7</strong>
+            </article>
+            <article class="age-panel">
+              <em>Without loans</em>
+              <b>27.1</b>
+              <strong>27.9 → 27.1 · −0.8</strong>
+            </article>
+          </div>
+          <div class="age-table" role="table">
+            <div class="age-table__head" role="row">
+              <span>Unit</span><span>n</span><span>Then</span><span>Now</span><span>Δ</span><span>Now</span>
+            </div>
+            <div class="age-table__row" role="row">
+              <span>GK</span><span>3→2</span><span>31.0</span><span>28.0</span><span class="down">−3.0</span><span>Smith, Marosi</span>
+            </div>
+            <div class="age-table__row" role="row">
+              <span>RB</span><span>3→3</span><span>26.3</span><span>27.3</span><span class="up">+1.0</span><span>Gabriel, John, McGowan</span>
+            </div>
+            <div class="age-table__row" role="row">
+              <span>CB</span><span>7→4</span><span>26.6</span><span>28.5</span><span class="up">+1.9</span><span>Humphreys, Moon, Hall, Montsma</span>
+            </div>
+            <div class="age-table__row" role="row">
+              <span>LB</span><span>4→2</span><span>24.8</span><span>25.5</span><span class="up">+0.7</span><span>Headley, Gordon</span>
+            </div>
+            <div class="age-table__row" role="row">
+              <span>DM</span><span>1→2</span><span>30.0</span><span>26.5</span><span class="down">−3.5</span><span>Byers, Craig</span>
+            </div>
+            <div class="age-table__row" role="row">
+              <span>MF</span><span>8→5</span><span>27.1</span><span>26.4</span><span class="down">−0.7</span><span>Croasdale, Garrity, Dempsey, G. Hall, Walters</span>
+            </div>
+            <div class="age-table__row" role="row">
+              <span>W</span><span>2→2</span><span>28.0</span><span>28.0</span><span class="flat">0.0</span><span>Hernandez, Asamoah (L)</span>
+            </div>
+            <div class="age-table__row" role="row">
+              <span>CF</span><span>6→6</span><span>26.2</span><span>23.3</span><span class="down">−2.9</span><span>Waine, Watters, Simpson, Faal (L), Lynch (L), Figueroa (L)</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        class="slide"
+        data-label="Depth"
+        data-notes="Grey 25/26 finish. Gold now. DM = Byers, Craig. MF = everyone else in midfield. No AM."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker">Primary-position depth</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body">
+          <div class="head-row">
+            <h2 class="headline">Primary-position depth</h2>
+            <p class="kicker">Grey 25/26 · gold now · (L) loan · DM = Craig, Byers</p>
+          </div>
+          <p class="legend"><span><i></i>25/26 finish</span><span><i class="after"></i>Now</span></p>
+          <div class="depth">
+            <div class="depth-head"><span>Pos</span><span>Count</span><span>Δ</span><span>Available now</span></div>
+            <div class="depth-row">
+              <span class="depth-row__pos">GK</span>
+              <div class="depth-row__bars">
+                <div class="bar" style="--n:3"><i></i><b>3</b></div>
+                <div class="bar bar--after" style="--n:2"><i></i><b>2</b></div>
+              </div>
+              <span class="depth-row__delta is-down">−1</span>
+              <p class="depth-row__names">Smith · Marosi</p>
+            </div>
+            <div class="depth-row">
+              <span class="depth-row__pos">RB</span>
+              <div class="depth-row__bars">
+                <div class="bar" style="--n:3"><i></i><b>3</b></div>
+                <div class="bar bar--after" style="--n:3"><i></i><b>3</b></div>
+              </div>
+              <span class="depth-row__delta is-flat">0</span>
+              <p class="depth-row__names">Gabriel · John · McGowan</p>
+            </div>
+            <div class="depth-row">
+              <span class="depth-row__pos">CB</span>
+              <div class="depth-row__bars">
+                <div class="bar" style="--n:7"><i></i><b>7</b></div>
+                <div class="bar bar--after" style="--n:4"><i></i><b>4</b></div>
+              </div>
+              <span class="depth-row__delta is-down">−3</span>
+              <p class="depth-row__names">Humphreys · Moon · Hall · Montsma</p>
+            </div>
+            <div class="depth-row">
+              <span class="depth-row__pos">LB</span>
+              <div class="depth-row__bars">
+                <div class="bar" style="--n:4"><i></i><b>4</b></div>
+                <div class="bar bar--after" style="--n:2"><i></i><b>2</b></div>
+              </div>
+              <span class="depth-row__delta is-down">−2</span>
+              <p class="depth-row__names">Headley · Gordon · Shorrock at Sligo</p>
+            </div>
+            <div class="depth-row">
+              <span class="depth-row__pos">DM</span>
+              <div class="depth-row__bars">
+                <div class="bar" style="--n:1"><i></i><b>1</b></div>
+                <div class="bar bar--after" style="--n:2"><i></i><b>2</b></div>
+              </div>
+              <span class="depth-row__delta is-up">+1</span>
+              <p class="depth-row__names">Byers · Craig</p>
+            </div>
+            <div class="depth-row">
+              <span class="depth-row__pos">MF</span>
+              <div class="depth-row__bars">
+                <div class="bar" style="--n:8"><i></i><b>8</b></div>
+                <div class="bar bar--after" style="--n:5"><i></i><b>5</b></div>
+              </div>
+              <span class="depth-row__delta is-down">−3</span>
+              <p class="depth-row__names">Croasdale · Garrity · Dempsey · G. Hall · Walters</p>
+            </div>
+            <div class="depth-row">
+              <span class="depth-row__pos">W</span>
+              <div class="depth-row__bars">
+                <div class="bar" style="--n:2"><i></i><b>2</b></div>
+                <div class="bar bar--after" style="--n:2"><i></i><b>2</b></div>
+              </div>
+              <span class="depth-row__delta is-flat">0</span>
+              <p class="depth-row__names">Hernandez · Asamoah (L)</p>
+            </div>
+            <div class="depth-row">
+              <span class="depth-row__pos">CF</span>
+              <div class="depth-row__bars">
+                <div class="bar" style="--n:6"><i></i><b>6</b></div>
+                <div class="bar bar--after" style="--n:6"><i></i><b>6</b></div>
+              </div>
+              <span class="depth-row__delta is-flat">0</span>
+              <p class="depth-row__names">Waine · Watters · Simpson · Faal (L) · Lynch (L) · Figueroa (L)</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        class="slide"
+        data-label="Summary"
+        data-notes="12 in. 19 out. 34 to 26. Age 27.0 to 26.3. DM Byers, Craig."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker">Summary</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body">
+          <div class="sum-kpis">
+            <article class="is-in"><em>12</em><strong>In</strong></article>
+            <article class="is-out"><em>19</em><strong>Out</strong></article>
+            <article><em>34→26</em><strong>Size</strong></article>
+            <article><em>26.3</em><strong>Age · was 27.0</strong></article>
+          </div>
+          <div class="sum-table sum-units" role="table">
+            <div class="sum-table__head" role="row">
+              <span>Unit</span><span>n</span><span>Age</span><span>Now</span>
+            </div>
+            <div class="sum-table__row" role="row">
+              <span>GK</span><span>3→2</span><span>31.0 → 28.0</span><span>Smith · Marosi</span>
+            </div>
+            <div class="sum-table__row" role="row">
+              <span>RB</span><span>3→3</span><span>26.3 → 27.3</span><span>Gabriel · John · McGowan</span>
+            </div>
+            <div class="sum-table__row" role="row">
+              <span>CB</span><span>7→4</span><span>26.6 → 28.5</span><span>Humphreys · Moon · Hall · Montsma</span>
+            </div>
+            <div class="sum-table__row" role="row">
+              <span>LB</span><span>4→2</span><span>24.8 → 25.5</span><span>Headley · Gordon</span>
+            </div>
+            <div class="sum-table__row" role="row">
+              <span>DM</span><span>1→2</span><span>30.0 → 26.5</span><span>Byers · Craig</span>
+            </div>
+            <div class="sum-table__row" role="row">
+              <span>MF</span><span>8→5</span><span>27.1 → 26.4</span><span>Croasdale · Garrity · Dempsey · G. Hall · Walters</span>
+            </div>
+            <div class="sum-table__row" role="row">
+              <span>W</span><span>2→2</span><span>28.0 → 28.0</span><span>Hernandez · Asamoah (L)</span>
+            </div>
+            <div class="sum-table__row" role="row">
+              <span>CF</span><span>6→6</span><span>26.2 → 23.3</span><span>Waine · Watters · Simpson · Faal (L) · Lynch (L) · Figueroa (L)</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <aside class="notes-panel" id="notesPanel">
+      <h2 id="notesTitle">Speaker notes</h2>
+      <p id="notesBody"></p>
+    </aside>
+  </div>
+
+  <div class="present-ui" aria-hidden="true">
+    <button type="button" id="presentPrev" aria-label="Previous slide">‹</button>
+    <div id="presentProgress"></div>
+    <span id="presentCount">01 / 08</span>
+    <button type="button" id="presentNext" aria-label="Next slide">›</button>
+  </div>
+  <div id="export-overlay"></div>
+
+  <script src="/static/wysiwyg-export.js"></script>
+  <script src="/static/window-review.js?v=1"></script>
+  <script defer src="/static/hub-feedback.js?v=1"></script>
+</body>
+</html>

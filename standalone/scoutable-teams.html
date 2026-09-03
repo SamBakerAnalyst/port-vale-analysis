@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scoutable Teams</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/scoutable-teams.css?v=18" />
+</head>
+<body>
+  <div class="st">
+    <header class="st-toolbar card">
+      <div class="st-brand">
+        <p class="st-eyebrow">Recruitment · <a href="/">← All apps</a> · <a href="/player-pipelines">Player Pipelines</a></p>
+        <h1 id="stTitle">Scoutable Teams</h1>
+        <p class="st-sub" id="stSub">Every club by league — comment + Enter → Watched (lowest stage). Scout identified = touted to progress.</p>
+      </div>
+      <div class="st-toolbar__right">
+        <button type="button" class="btn btn--ghost hidden" id="stBackBtn">← All leagues</button>
+        <div class="st-view-toggle hidden" id="stClubViewToggle" role="group" aria-label="Club view">
+          <button type="button" class="st-view-toggle__btn" data-view="board" id="stViewBoard">Board</button>
+          <button type="button" class="st-view-toggle__btn is-active" data-view="table" id="stViewTable">Table</button>
+        </div>
+        <label class="st-search" id="stFilterWrap">
+          Filter
+          <input id="stFilter" type="search" placeholder="Club or player" autocomplete="off" />
+        </label>
+      </div>
+    </header>
+
+    <p id="stStatus" class="st-status hidden" role="status"></p>
+    <div id="stLeagues" class="st-leagues" aria-label="Leagues board"></div>
+    <div id="stClub" class="st-club hidden" aria-label="Club squad board"></div>
+  </div>
+
+  <aside class="st-drawer" id="stReasonModal" hidden>
+    <div class="st-drawer__backdrop" data-close-reason></div>
+    <div class="st-reason-panel" role="dialog" aria-modal="true">
+      <h2>Why is this player not the right fit?</h2>
+      <p class="st-hint">Saved on Player Pipelines for the whole team.</p>
+      <form id="stReasonForm" class="st-note-form">
+        <textarea id="stReasonText" rows="4" required placeholder="e.g. Too raw for League Two right now"></textarea>
+        <p class="st-status is-error" id="stReasonError" hidden>Write a short reason.</p>
+        <div class="st-drawer__actions">
+          <button type="button" class="btn btn--ghost" data-close-reason>Cancel</button>
+          <button type="submit" class="btn btn--primary">Save &amp; move</button>
+        </div>
+      </form>
+    </div>
+  </aside>
+
+  <script defer src="/static/scoutable-teams.js?v=19"></script>
+  <script defer src="/static/hub-feedback.js"></script>
+</body>
+</html>

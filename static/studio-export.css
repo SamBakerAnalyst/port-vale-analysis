@@ -24,7 +24,6 @@
   box-shadow: none;
 }
 
-.h2c-capture .keynote-comparison__overall,
 .h2c-capture .keynote-gap__dot {
   background: rgba(255, 255, 255, 0.06);
   border-color: var(--band);
@@ -224,28 +223,6 @@
   font-size: 17px;
 }
 
-.keynote-comparison[data-players="4"] .keynote-comparison__overall,
-.keynote-comparison[data-players="5"] .keynote-comparison__overall {
-  gap: 9px;
-  padding: 7px 14px;
-}
-
-.keynote-comparison[data-players="4"] .keynote-comparison__overall-value,
-.keynote-comparison[data-players="5"] .keynote-comparison__overall-value {
-  font-size: 34px;
-}
-
-.keynote-comparison[data-players="4"] .keynote-comparison__overall-label,
-.keynote-comparison[data-players="5"] .keynote-comparison__overall-label {
-  font-size: 13px;
-  letter-spacing: 0.12em;
-}
-
-.keynote-comparison[data-players="4"] .keynote-comparison__overall-band,
-.keynote-comparison[data-players="5"] .keynote-comparison__overall-band {
-  font-size: 16px;
-}
-
 .keynote-comparison__photo img {
   width: 100%;
   height: 100%;
@@ -303,48 +280,6 @@
   color: var(--gold, #f5c518);
   text-align: center;
   line-height: 1.15;
-}
-
-/* Headline mean of the profiles on this slide — the first number a manager
-   reads. Kept on one line so the portrait band stays short and the bars below
-   keep their height. */
-.keynote-comparison__overall {
-  margin-top: 6px;
-  display: inline-flex;
-  align-items: baseline;
-  gap: 12px;
-  padding: 8px 20px;
-  border-radius: 12px;
-  border: 2px solid color-mix(in srgb, var(--band) 60%, transparent);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--band) 24%, transparent) 0%,
-    color-mix(in srgb, var(--band) 10%, transparent) 100%
-  );
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
-}
-
-.keynote-comparison__overall-label {
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: #9aa3af;
-}
-
-.keynote-comparison__overall-value {
-  font-family: var(--mono, monospace);
-  font-size: 40px;
-  font-weight: 800;
-  line-height: 1;
-  color: #ffffff;
-}
-
-.keynote-comparison__overall-band {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--band-text);
-  white-space: nowrap;
 }
 
 .keynote-comparison__row {
@@ -1221,15 +1156,6 @@
 }
 
 /* Where the compared players average out on this factor. */
-.keynote-factor__avg {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  margin-left: -1px;
-  background: rgba(248, 250, 252, 0.72);
-}
-
 .keynote-factor__value {
   font-family: var(--mono, monospace);
   font-size: 38px;
@@ -1237,6 +1163,15 @@
   line-height: 1;
   text-align: right;
   color: var(--band-text);
+}
+
+.keynote-factor__value small {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: rgba(226, 232, 240, 0.55);
 }
 
 /* Three and four players mean 12–16 bars in the same fixed slide height.
@@ -1273,6 +1208,11 @@
 
 .keynote-factors[data-players="3"] .keynote-factor__value {
   font-size: 31px;
+}
+
+.keynote-factors[data-players="3"] .keynote-factor__value small {
+  font-size: 11px;
+  margin-top: 2px;
 }
 
 .keynote-factors[data-players="4"] {
@@ -1313,4 +1253,9 @@
 
 .keynote-factors[data-players="4"] .keynote-factor__value {
   font-size: 26px;
+}
+
+.keynote-factors[data-players="4"] .keynote-factor__value small {
+  font-size: 10px;
+  margin-top: 1px;
 }

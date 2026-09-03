@@ -7,8 +7,8 @@
   <title>Set Piece Pre-Match</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/set-piece-pre-match/assets/app.css?v=20260806-modes" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/set-piece-pre-match/assets/app.css?v=20260826-cfk" />
 </head>
 <body>
   <div class="sp-app" id="spApp">
@@ -19,6 +19,10 @@
       </div>
       <div class="sp-toolbar__right">
         <p class="sp-toolbar__export-status" id="exportStatus" role="status" aria-live="polite"></p>
+        <div class="sp-deck-mode" role="group" aria-label="Report mode">
+          <button type="button" class="sp-deck-mode__btn" id="deckModeFullBtn" data-deck-mode="full">Full deck</button>
+          <button type="button" class="sp-deck-mode__btn sp-deck-mode__btn--active" id="deckModeTwoBtn" data-deck-mode="two_pager">Two pager</button>
+        </div>
         <div class="sp-slide-nav sp-btn--deck-mode">
           <button type="button" class="sp-btn sp-btn--ghost" id="prevSlideBtn" aria-label="Previous slide" disabled>←</button>
           <span class="sp-slide-nav__count" id="slideCounter">—</span>
@@ -61,8 +65,9 @@
   <input type="hidden" id="opponentId" value="" />
   <input type="hidden" id="matchId" value="" />
 
+  <script defer src="/static/wysiwyg-export.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-  <script defer src="/set-piece-pre-match/assets/app.js?v=20260806-modes"></script>
+  <script defer src="/set-piece-pre-match/assets/app.js?v=20260826-cfk"></script>
   <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>

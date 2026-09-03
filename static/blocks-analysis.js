@@ -223,6 +223,25 @@ function latestPlayedMatchId(block) {
   return rows.length ? String(rows[rows.length - 1].matchId) : null;
 }
 
+function fixtureSortKey(fixture) {
+  const season = Number(fixture?.seasonNumber);
+  if (Number.isFinite(season) && season > 0) return season;
+  const stamp = Date.parse(fixture?.scheduledDate || "");
+  return Number.isFinite(stamp) ? stamp : 0;
+}
+
+function shouldAdvanceFilter(block, currentId, latestId) {
+  if (!latestId) return false;
+  if (!currentId || currentId === "all") return true;
+  if (String(currentId) === String(latestId)) return false;
+  const rows = playedFixtures(block);
+  const current = rows.find((row) => String(row.matchId) === String(currentId));
+  const latest = rows.find((row) => String(row.matchId) === String(latestId));
+  if (!current) return true;
+  if (!latest) return false;
+  return fixtureSortKey(latest) > fixtureSortKey(current);
+}
+
 function ensurePlayedGameFilter(blockId) {
   const block = (state.payload?.blocks || []).find((row) => row.id === Number(blockId));
   if (!block) return;
@@ -366,11 +385,49 @@ function unitSubText(metricKey, row) {
   return "";
 }
 
-function unitBenchValues(metricKey, unit, single, played, unitRow) {
+function formationParts(formation) {
+  const text = String(formation || "").trim();
+  if (!text) return [];
+  const dashed = [...text.matchAll(/\d+/g)].map((match) => Number(match[0]));
+  if (dashed.length >= 2) return dashed;
+  const digits = text.replace(/\D/g, "");
+  if (digits.length >= 3 && digits.length <= 4) return [...digits].map(Number);
+  return dashed;
+}
+
+function unitBaselinesForFormation(formation) {
+  const parts = formationParts(formation);
+  if (parts.length === 3 && parts[0] === 4 && parts[1] === 4 && parts[2] === 2) {
+    return { DEF: 4, MID: 2, ATT: 4 };
+  }
+  if (parts.length === 3 && parts[0] === 4 && parts[1] === 3 && parts[2] === 3) {
+    return { DEF: 4, MID: 3, ATT: 3 };
+  }
+  if (parts.length === 3) {
+    return { DEF: parts[0], MID: parts[1], ATT: parts[2] };
+  }
+  if (parts.length === 4) {
+    if (parts[1] === 2 && parts[2] === 3) {
+      return { DEF: parts[0], MID: 2, ATT: parts[2] + parts[3] };
+    }
+    if (parts[1] === 1 && parts[2] >= 4) {
+      return { DEF: parts[0], MID: parts[1] + parts[2], ATT: parts[3] };
+    }
+  }
+  return { DEF: 4, MID: 3, ATT: 3 };
+}
+
+function unitBenchValues(metricKey, unit, single, played, unitRow, stats) {
   const spec = state.payload?.benchmarks?.units?.[unit]?.[metricKey];
   if (!spec) return { team: null, top7: null, spec: null };
   const games = spec.rate ? 1 : (single ? 1 : Math.max(Number(played) || 0, 5));
-  const baseline = Number(spec.baselineStarters || { DEF: 4, MID: 3, ATT: 3 }[unit] || 3);
+  const baselines = stats?.unitBaselines || unitBaselinesForFormation(stats?.formation);
+  const baseline = Number(
+    baselines?.[unit]
+    || spec.baselineStarters
+    || { DEF: 4, MID: 3, ATT: 3 }[unit]
+    || 3,
+  );
   const starters = Number(unitRow?.starters || 0) || baseline;
   const scale = spec.rate ? 1 : (baseline > 0 ? starters / baseline : 1);
   return {
@@ -388,7 +445,7 @@ function unitPanelHtml(title, metricKey, hint, stats, single) {
   const digits = rate ? 1 : 1;
   const rows = ["DEF", "MID", "ATT"].map((unit) => {
     const row = units[unit] || {};
-    const bench = unitBenchValues(metricKey, unit, single, stats.played, units[unit]);
+    const bench = unitBenchValues(metricKey, unit, single, stats.played, units[unit], stats);
     const value = rate ? row.duelRate : row.defendersBypassed;
     const extra = unitSubText(metricKey, row);
     const tone = meterTone(value, bench.top7, true);
@@ -462,8 +519,8 @@ const UNIT_SLIDES = [
   {
     id: "MID",
     title: "Midfield",
-    who: "Holding & central midfielders",
-    note: "Only midfielders in the standout.",
+    who: "Central & wide midfielders",
+    note: "Wide mids count here in 4-4-2 / 4-5-1.",
     groups: [
       {
         label: "Out of possession",
@@ -492,7 +549,7 @@ const UNIT_SLIDES = [
     id: "ATT",
     title: "Attack",
     who: "Forwards & wingers",
-    note: "Forwards and wingers. Shots and xG exclude pens and DFKs.",
+    note: "Forwards in two-striker shapes; 4-4-2 wide mids sit in MID. Shots/xG excl. pens & DFKs.",
     groups: [
       {
         label: "Chance",
@@ -609,7 +666,7 @@ function unitPulse(slide, stats, single) {
   let hit = 0;
   const dots = specs.map((spec) => {
     const row = (stats.units || {})[slide.id] || {};
-    const bench = unitBenchValues(spec.key, slide.id, single, stats.played, row);
+    const bench = unitBenchValues(spec.key, slide.id, single, stats.played, row, stats);
     const higherBetter = bench?.spec?.higherBetter !== false;
     const tone = meterTone(row[spec.key], bench?.top7, higherBetter) || "mute";
     if (tone === "hot") hit += 1;
@@ -622,7 +679,7 @@ function unitMetricRowHtml(unit, spec, stats, single) {
   const row = (stats.units || {})[unit] || {};
   const value = row[spec.key];
   const extra = unitSubText(spec.key, row);
-  const bench = unitBenchValues(spec.key, unit, single, stats.played, row);
+  const bench = unitBenchValues(spec.key, unit, single, stats.played, row, stats);
   const higherBetter = bench?.spec?.higherBetter !== false;
   const tone = meterTone(value, bench?.top7, higherBetter);
   const delta = vsReqText(value, bench?.top7, spec, higherBetter);
@@ -648,7 +705,7 @@ function groupVerdictHtml(group, unit, stats, single) {
   let hit = 0;
   (group.metrics || []).forEach((spec) => {
     const row = (stats.units || {})[unit] || {};
-    const bench = unitBenchValues(spec.key, unit, single, stats.played, row);
+    const bench = unitBenchValues(spec.key, unit, single, stats.played, row, stats);
     if (meterTone(row[spec.key], bench?.top7, bench?.spec?.higherBetter !== false) === "hot") hit += 1;
   });
   const total = (group.metrics || []).length;
@@ -678,6 +735,7 @@ function unitWhoCopy(slide, stats) {
     ? `${countWord || starters}-man ${unitWord}`
     : slide.who;
   const bits = [];
+  if (stats?.formation) bits.push(String(stats.formation));
   if (starterNames.length) bits.push(`${starterNames.join(", ")} started`);
   if (benchNames.length) bits.push(`${benchNames.join(", ")} off the bench`);
   const note = bits.length ? bits.join(" · ") : (slide.note || "");
@@ -722,14 +780,14 @@ function isPlayerDeckTab(tab) {
 
 function metricAtReq(spec, unit, stats, single) {
   const row = (stats.units || {})[unit] || {};
-  const bench = unitBenchValues(spec.key, unit, single, stats.played, row);
+  const bench = unitBenchValues(spec.key, unit, single, stats.played, row, stats);
   const higherBetter = bench?.spec?.higherBetter !== false;
   return meterTone(row[spec.key], bench?.top7, higherBetter) === "hot";
 }
 
 function playerExportTargetRow(spec, unit, stats, single, index, { reqOnly = false } = {}) {
   const row = (stats.units || {})[unit] || {};
-  const bench = unitBenchValues(spec.key, unit, single, stats.played, row);
+  const bench = unitBenchValues(spec.key, unit, single, stats.played, row, stats);
   const req = bench?.top7 == null
     ? "—"
     : formatBench(bench.top7, { rate: spec.rate, digits: spec.digits });
@@ -1979,14 +2037,18 @@ async function load(refresh = false) {
     const payload = await fetchJson(`/api/blocks-analysis${refresh ? "?refresh=true" : ""}`);
     state.payload = payload;
     (payload.blocks || []).forEach((block) => {
-      if (state.filters[block.id]) return;
       const latest = latestPlayedMatchId(block);
-      if (latest) {
-        state.filters[block.id] = latest;
-        return;
+      const current = state.filters[block.id];
+      // Prefer the latest played game when nothing is selected, after Refresh, or when
+      // a newer result has landed (desktop tabs often stay stuck on the previous opponent).
+      if (refresh || shouldAdvanceFilter(block, current, latest)) {
+        if (latest) {
+          state.filters[block.id] = latest;
+          return;
+        }
+        const demo = (block.demoFixtures || []).find((row) => row.played && row.matchId);
+        state.filters[block.id] = demo ? String(demo.matchId) : "all";
       }
-      const demo = (block.demoFixtures || []).find((row) => row.played && row.matchId);
-      state.filters[block.id] = demo ? String(demo.matchId) : "all";
     });
     render();
     setStatus("");

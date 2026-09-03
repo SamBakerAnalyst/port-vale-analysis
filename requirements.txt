@@ -11,3 +11,5 @@ python-multipart>=0.0.9
 itsdangerous>=2.2.0
 gspread==6.2.1
 google-auth==2.40.3
+playwright==1.52.0
+img2pdf==0.6.1

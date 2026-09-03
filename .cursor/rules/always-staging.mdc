@@ -1,0 +1,19 @@
+---
+description: Always ship web changes to Port Vale Staging after local work
+alwaysApply: true
+---
+
+# Always deploy to Staging
+
+After implementing or fixing anything in this hub, run:
+
+```bash
+bash ~/impect-football-dashboard/deploy-staging.sh
+```
+
+from `~/impect-football-dashboard` only. Do not wait to be asked.
+
+- Staging: http://178.128.161.215:8080/ — safe verify. Does not touch Live.
+- Live: only when the user explicitly asks (`deploy-live.sh`).
+- Do not mark the task complete after local-only changes.
+- Staging is not “done for staff.”

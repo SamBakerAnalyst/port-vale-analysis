@@ -15,7 +15,7 @@
   --success: #34d399;
   --danger: #fb7185;
   --radius: 12px;
-  --font: "DM Sans", system-ui, sans-serif;
+  --font: "Manrope", system-ui, sans-serif;
   --mono: "JetBrains Mono", monospace;
   --shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
 }
@@ -1556,6 +1556,10 @@ select:disabled {
   justify-content: center;
 }
 
+.profile-drilldown-radar .drilldown-chart {
+  min-height: 420px;
+}
+
 .profile-drilldown-bars {
   min-width: 0;
   display: flex;
@@ -1686,13 +1690,13 @@ select:disabled {
 
 .factor__row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 46px;
+  grid-template-columns: minmax(0, 1fr) 58px;
   align-items: center;
   gap: 12px;
 }
 
 .factor__row:has(.factor__who) {
-  grid-template-columns: 30px minmax(0, 1fr) 46px;
+  grid-template-columns: 30px minmax(0, 1fr) 58px;
 }
 
 .factor__who {
@@ -1735,17 +1739,6 @@ select:disabled {
   transition: width 0.25s ease;
 }
 
-/* Where these players average out on this factor. */
-.factor__avg {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 0;
-  border-left: 2px dashed rgba(248, 250, 252, 0.75);
-  transform: translateX(-1px);
-  z-index: 2;
-}
-
 .factor__value {
   font-family: var(--mono);
   font-size: 16px;
@@ -1753,6 +1746,23 @@ select:disabled {
   line-height: 1;
   text-align: right;
   color: var(--band-text);
+}
+
+.factor__figures {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 0;
+}
+
+.factor__impect {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--muted);
+  white-space: nowrap;
 }
 
 .factor-list--export {

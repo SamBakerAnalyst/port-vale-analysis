@@ -443,12 +443,7 @@ def _merge_player_season_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 def _impect_profile_score(raw_value: float | None) -> float | None:
     """Impect profile ratings are 0–1; expose as 0–100 without cohort re-ranking."""
-    if raw_value is None:
-        return None
-    value = float(raw_value)
-    if value <= 1.0:
-        return round(value * 100.0, 1)
-    return round(value, 1)
+    return _impect()._impect_score_0_100(raw_value)
 
 
 def _cohort_values_from_combined_rows(

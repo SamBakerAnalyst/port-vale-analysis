@@ -267,6 +267,106 @@ function primaryStaff(value) {
   return staffNames(value)[0] || "";
 }
 
+function assignmentSummaryText(id) {
+  const assignment = assignmentFor(id);
+  const assigned = staffNames(assignment.staff);
+  const summaryBits = [];
+  if (assigned.length) summaryBits.push(staffLabel(assigned));
+  if (assignment.watch_type) summaryBits.push(assignment.watch_type);
+  return summaryBits.length ? summaryBits.join(" · ") : "Click to assign staff";
+}
+
+function fixtureCardElement(id) {
+  if (!els.listRoot || !id) return null;
+  return els.listRoot.querySelector(`[data-fixture-card="${CSS.escape(id)}"]`);
+}
+
+function toggleAssignmentPanel(card, open) {
+  if (!card) return;
+  card.classList.toggle("fp-list-fixture--expanded", open);
+  const assignment = card.querySelector(".fp-assignment");
+  assignment?.classList.toggle("fp-assignment--open", open);
+  const toggle = card.querySelector("[data-assign-toggle]");
+  if (toggle) {
+    toggle.classList.toggle("fp-assign-toggle--open", open);
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    const label = toggle.querySelector(".fp-assign-toggle__label");
+    if (label) {
+      label.textContent = open ? "Hide assign options" : assignmentSummaryText(card.dataset.fixtureCard);
+    }
+    const chevron = toggle.querySelector(".fp-assign-toggle__chevron");
+    if (chevron) chevron.textContent = open ? "▴" : "▾";
+  }
+  card.querySelector(".fp-assignment__panel")?.classList.toggle("fp-assignment__panel--hidden", !open);
+}
+
+function refreshFixtureAssignmentCard(id) {
+  const card = fixtureCardElement(id);
+  const fixture = fixtureFromState(id);
+  if (!card || !fixture) {
+    renderView({ preserveScroll: true, scrollAnchorId: id });
+    return;
+  }
+
+  const assignment = assignmentFor(id);
+  const assigned = staffNames(assignment.staff);
+  const hasCoverage = assigned.length > 0 || Boolean(assignment.watch_type);
+  const expanded = Boolean(state.expandedFixtureIds[id]);
+
+  const head = card.querySelector(".fp-list-fixture__head");
+  if (head) head.innerHTML = assignmentBadge(fixture);
+
+  const toggle = card.querySelector("[data-assign-toggle]");
+  if (toggle) {
+    toggle.classList.toggle("fp-assign-toggle--set", hasCoverage);
+    if (!expanded) {
+      const label = toggle.querySelector(".fp-assign-toggle__label");
+      if (label) label.textContent = assignmentSummaryText(id);
+    }
+  }
+
+  card.querySelectorAll(".fp-staff-select").forEach((select) => {
+    const teamMembers = [...select.options].map((opt) => opt.value).filter(Boolean);
+    const selected = teamMembers.find((name) => assigned.includes(name)) || "";
+    select.value = selected;
+  });
+
+  card.querySelectorAll(".fp-watch-btn").forEach((btn) => {
+    btn.classList.toggle("fp-watch-btn--active", assignment.watch_type === btn.dataset.watch);
+  });
+
+  const panel = card.querySelector(".fp-assignment__panel");
+  if (panel) {
+    let editBtn = panel.querySelector(".fp-assign-edit");
+    if (assigned.length) {
+      if (!editBtn) {
+        const watchToggle = panel.querySelector(".fp-watch-toggle");
+        watchToggle?.insertAdjacentHTML(
+          "afterend",
+          `<button type="button" class="fp-btn fp-btn--ghost fp-assign-edit" data-fixture-id="${escapeHtml(id)}" data-staff="${escapeHtml(primaryStaff(assigned))}">Players</button>`,
+        );
+        editBtn = panel.querySelector(".fp-assign-edit");
+        editBtn?.addEventListener("click", () => {
+          const current = assignmentFor(id);
+          openAssignModal(id, editBtn.dataset.staff || primaryStaff(current.staff), staffNames(current.staff));
+        });
+      } else {
+        editBtn.dataset.staff = primaryStaff(assigned);
+      }
+    } else {
+      editBtn?.remove();
+    }
+  }
+
+  if (!card.querySelector(".fp-assignment")) {
+    const slot = card.querySelector("[data-assignment-slot]");
+    if (slot) {
+      slot.innerHTML = assignmentControls(fixture, { expanded });
+      bindAssignmentEvents(slot);
+    }
+  }
+}
+
 function setAssignment(id, patch) {
   const current = assignmentFor(id);
   const next = {
@@ -282,7 +382,7 @@ function setAssignment(id, patch) {
   }
   saveAssignments();
   renderSummary();
-  renderView({ preserveScroll: true });
+  refreshFixtureAssignmentCard(id);
   persistAssignment(id);
 }
 
@@ -321,17 +421,8 @@ async function persistAssignment(id) {
     if (data.email?.sent) {
       setStatus(`Assignment saved · email sent to ${data.email.to}`, "ok");
     } else if (data.email && !data.email.sent) {
-      const failed = (data.email.results || []).find((row) => row?.eml_base64) || data.email;
-      const downloaded = downloadEmlFile(failed);
-      const reason = data.email.reason || failed.reason || "Email not sent";
-      if (downloaded) {
-        setStatus(
-          "Assignment saved · website can't send mail from the server. Open the downloaded email in Outlook or Mail and click Send.",
-          "ok",
-        );
-      } else {
-        setStatus(`Assignment saved · email not sent: ${reason}`, "error");
-      }
+      const reason = data.email.reason || "Email not sent";
+      setStatus(`Assignment saved · email not sent: ${reason}`, "error");
     }
   } catch (error) {
     console.warn("Could not persist assignment", error);
@@ -561,12 +652,9 @@ async function confirmTicketRequest() {
       setStatus(message, "ok");
       closeTicketRequestModal();
     } else {
-      const downloaded = downloadEmlFile(data);
-      const reason = downloaded
-        ? "Website can't send mail from the server. Open the downloaded email in Outlook or Mail and click Send."
-        : data.reason || "Email not sent";
-      setTicketModalStatus(reason, downloaded ? "ok" : "error");
-      setStatus(reason, downloaded ? "ok" : "error");
+      const reason = data.reason || "Email not sent";
+      setTicketModalStatus(reason, "error");
+      setStatus(reason, "error");
     }
   } catch (error) {
     const message = error.message || "Could not send email";
@@ -1280,6 +1368,8 @@ const MAX_UNFILTERED_FIXTURES = 320;
 function isCupCompetition(league) {
   const name = String(league || "").trim();
   if (!name) return false;
+  // PDL is a league competition, even when the label looks development-ish.
+  if (/professional development league|^pdl$/i.test(name)) return false;
   if (cupUis().includes(name)) return true;
   const lower = name.toLowerCase();
   return (
@@ -1287,9 +1377,7 @@ function isCupCompetition(league) {
     lower.includes("trophy") ||
     lower.includes("carabao") ||
     lower.includes("papa john") ||
-    lower.includes("vertu") ||
-    lower.includes("professional development league") ||
-    lower === "pdl"
+    lower.includes("vertu")
   );
 }
 
@@ -1304,7 +1392,6 @@ function fixturesForLeagues(all = state.payload?.fixtures || []) {
       const league = String(fixture.league || "").trim();
       if (active.includes(league)) return true;
       if (active.includes("Vertu Trophy") && /efl trophy|vertu trophy/i.test(league)) return true;
-      if (active.includes("Professional Development League") && /^pdl$/i.test(league)) return true;
       return false;
     });
   }
@@ -1330,7 +1417,10 @@ function fixturesForLeagues(all = state.payload?.fixtures || []) {
   return all.filter((fixture) => {
     if (fixture.manual) return true;
     if (isCupCompetition(fixture.league) || fixture.cup) return false;
-    return leagues.includes(fixture.league);
+    const league = String(fixture.league || "").trim();
+    if (leagues.includes(league)) return true;
+    if (leagues.includes("Professional Development League") && /^pdl$/i.test(league)) return true;
+    return false;
   });
 }
 
@@ -1480,27 +1570,7 @@ function assignmentControls(fixture, { expanded = false } = {}) {
   const watchTypes = state.meta?.watch_types || ["LIVE", "VIDEO"];
   const teams = staffTeams();
   const hasCoverage = assigned.length > 0 || Boolean(assignment.watch_type);
-
-  const summaryBits = [];
-  if (assigned.length) summaryBits.push(staffLabel(assigned));
-  if (assignment.watch_type) summaryBits.push(assignment.watch_type);
-  const summaryText = summaryBits.length
-    ? summaryBits.join(" · ")
-    : "Click to assign staff";
-
-  if (!expanded) {
-    return `
-      <button
-        type="button"
-        class="fp-assign-toggle${hasCoverage ? " fp-assign-toggle--set" : ""}"
-        data-assign-toggle="${id}"
-        aria-expanded="false"
-      >
-        <span class="fp-assign-toggle__label">${escapeHtml(summaryText)}</span>
-        <span class="fp-assign-toggle__chevron" aria-hidden="true">▾</span>
-      </button>
-    `;
-  }
+  const summaryText = assignmentSummaryText(id);
 
   const teamSelects = teams
     .map((team) => {
@@ -1551,22 +1621,24 @@ function assignmentControls(fixture, { expanded = false } = {}) {
       : "";
 
   return `
-    <div class="fp-assignment fp-assignment--open" data-fixture-id="${id}">
+    <div class="fp-assignment${expanded ? " fp-assignment--open" : ""}" data-fixture-id="${id}">
       <button
         type="button"
-        class="fp-assign-toggle fp-assign-toggle--open${hasCoverage ? " fp-assign-toggle--set" : ""}"
+        class="fp-assign-toggle${expanded ? " fp-assign-toggle--open" : ""}${hasCoverage ? " fp-assign-toggle--set" : ""}"
         data-assign-toggle="${id}"
-        aria-expanded="true"
+        aria-expanded="${expanded ? "true" : "false"}"
       >
-        <span class="fp-assign-toggle__label">Hide assign options</span>
-        <span class="fp-assign-toggle__chevron" aria-hidden="true">▴</span>
+        <span class="fp-assign-toggle__label">${escapeHtml(expanded ? "Hide assign options" : summaryText)}</span>
+        <span class="fp-assign-toggle__chevron" aria-hidden="true">${expanded ? "▴" : "▾"}</span>
       </button>
       ${coverageNote}
-      <div class="fp-team-assigns">${teamSelects}</div>
-      <div class="fp-watch-toggle">${watchButtons}</div>
-      ${editPlayers}
-      ${reportsLink}
-      ${postponeControl}
+      <div class="fp-assignment__panel${expanded ? "" : " fp-assignment__panel--hidden"}">
+        <div class="fp-team-assigns">${teamSelects}</div>
+        <div class="fp-watch-toggle">${watchButtons}</div>
+        ${editPlayers}
+        ${reportsLink}
+        ${postponeControl}
+      </div>
     </div>
   `;
 }
@@ -1738,12 +1810,14 @@ function bindAssignmentEvents(root) {
       event.stopPropagation();
       const id = btn.dataset.assignToggle;
       if (!id) return;
-      if (state.expandedFixtureIds[id]) {
-        delete state.expandedFixtureIds[id];
-      } else {
+      const card = fixtureCardElement(id);
+      const opening = !state.expandedFixtureIds[id];
+      if (opening) {
         state.expandedFixtureIds[id] = true;
+      } else {
+        delete state.expandedFixtureIds[id];
       }
-      renderView({ preserveScroll: true });
+      toggleAssignmentPanel(card, opening);
     });
   });
 
@@ -1757,6 +1831,7 @@ function bindAssignmentEvents(root) {
         .map((opt) => opt.value)
         .filter(Boolean);
       const withoutTeam = currentList.filter((name) => !teamMembers.includes(name));
+      const previous = (teamMembers || []).find((name) => currentList.includes(name)) || "";
 
       if (!next) {
         setAssignment(id, {
@@ -1766,9 +1841,8 @@ function bindAssignmentEvents(root) {
         return;
       }
 
+      select.value = previous;
       openAssignModal(id, next, [...withoutTeam, next]);
-      // Keep showing the previous assignees until modal confirms
-      renderView({ preserveScroll: true });
     });
   });
 
@@ -1860,7 +1934,6 @@ function cupUis() {
     "Vertu Trophy",
     "National League Cup",
     "Premier League Cup",
-    "Professional Development League",
     "Scottish Cup",
   ];
 }
@@ -2183,11 +2256,24 @@ function scrollListToUpcoming() {
   });
 }
 
-function restoreScrollPosition(scrollY) {
+function restoreScrollPosition(scrollY, anchorId = null) {
   if (scrollY == null || Number.isNaN(scrollY)) return;
-  const apply = () => window.scrollTo(0, scrollY);
+  const apply = () => {
+    window.scrollTo(0, scrollY);
+    if (anchorId) {
+      const card = fixtureCardElement(anchorId);
+      if (card) {
+        const rect = card.getBoundingClientRect();
+        const nextTop = window.scrollY + rect.top;
+        if (Math.abs(nextTop - scrollY) > 4) {
+          window.scrollTo(0, scrollY);
+        }
+      }
+    }
+  };
   apply();
   requestAnimationFrame(apply);
+  window.setTimeout(apply, 0);
 }
 function renderSummary() {
   const fixtures = visibleFixtures();
@@ -2475,7 +2561,9 @@ function renderFixtureCard(fixture, { showDate = false } = {}) {
         </div>
         <div class="fp-list-fixture__teams">${fixtureTeams(fixture)}</div>
         ${renderCompletedExtras(fixture)}
-        ${assignmentControls(fixture, { expanded })}
+        <div class="fp-assignment-slot" data-assignment-slot="${escapeHtml(id)}">
+          ${assignmentControls(fixture, { expanded })}
+        </div>
       </div>
     </article>
   `;
@@ -2570,7 +2658,7 @@ function renderList({ scrollToUpcoming = false } = {}) {
   }
 }
 
-function renderView({ preserveScroll = false, scrollToUpcoming = false } = {}) {
+function renderView({ preserveScroll = false, scrollToUpcoming = false, scrollAnchorId = null } = {}) {
   const scrollY = preserveScroll ? window.scrollY : null;
   const isMonth = state.view === "month";
   els.calendarRoot.classList.toggle("hidden", !isMonth);
@@ -2578,7 +2666,7 @@ function renderView({ preserveScroll = false, scrollToUpcoming = false } = {}) {
   if (isMonth) renderCalendar();
   else renderList({ scrollToUpcoming: scrollToUpcoming && !preserveScroll });
   if (preserveScroll) {
-    restoreScrollPosition(scrollY);
+    restoreScrollPosition(scrollY, scrollAnchorId);
   }
 }
 

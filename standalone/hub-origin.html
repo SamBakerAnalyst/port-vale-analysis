@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Port Vale Analysis Hub · Origin story</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/hub-origin.css?v=19" />
+</head>
+<body>
+  <div class="app">
+    <header class="toolbar">
+      <div>
+        <p class="toolbar__eyebrow"><a href="/">← Hub</a> · Origin story</p>
+        <h1 class="toolbar__title">Why the Analysis Hub exists</h1>
+        <p class="toolbar__sub">Click any slide text to edit. Saves in this browser. Present for the room.</p>
+      </div>
+      <div class="toolbar__right">
+        <p class="toolbar__meta" id="slideMeta"></p>
+        <div class="toolbar__buttons">
+          <button type="button" class="btn" id="notesBtn">Speaker notes</button>
+          <button type="button" class="btn btn--gold" id="presentBtn">Present</button>
+        </div>
+      </div>
+    </header>
+
+    <nav class="filmstrip" id="filmstrip" aria-label="Slides"></nav>
+
+    <div class="deck" id="deck">
+
+      <!-- 1. Open — badge only -->
+      <section
+        class="slide slide--open is-active"
+        data-label="Open"
+        data-notes="Hold on this. Badge and name. Then straight into how it started."
+      >
+        <div class="slide__body slide__body--open">
+          <img
+            class="open-badge"
+            src="/standalone/port-vale-badge.png?v=2"
+            width="160"
+            height="184"
+            alt="Port Vale"
+          />
+          <h2 class="open-title" contenteditable="true" spellcheck="true">Port Vale Hub</h2>
+        </div>
+      </section>
+
+      <!-- 2. How it came about -->
+      <section
+        class="slide slide--story"
+        data-label="Origin"
+        data-notes="Reports were manual — screenshots, no Impect pull. Built Player Comparison on leave. That turned into pre-match, scouts, recruitment, strategy."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker" contenteditable="true" spellcheck="true">How it started</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body slide__body--story">
+          <div class="story">
+            <p class="story__badge" contenteditable="true" spellcheck="true">Annual leave</p>
+            <h2 class="story__hero" contenteditable="true" spellcheck="true">First app was built on holiday.</h2>
+            <p class="story__lead" contenteditable="true" spellcheck="true">
+              Reports took hours. Screenshots every week. Slides rebuilt from scratch.
+              Nothing from Impect on its own. Comparing players was the worst bit.
+              On leave I built <strong>Player Comparison</strong> — profiles, radars,
+              a deck you can send to staff.
+            </p>
+            <p class="story__body" contenteditable="true" spellcheck="true">
+              That was the first tool. Pre-match, set pieces, scouts, recruitment,
+              strategy — all because I got sick of rebuilding the same report every week.
+            </p>
+            <p class="story__close">
+              <span contenteditable="true" spellcheck="true">One comparison tool</span>
+              <span class="story__arrow" aria-hidden="true">→</span>
+              <span contenteditable="true" spellcheck="true">The hub staff use now</span>
+            </p>
+          </div>
+          <aside class="story-side" aria-label="How it grew">
+            <ol class="story-steps">
+              <li>
+                <span class="story-steps__n" contenteditable="true" spellcheck="true">01</span>
+                <div>
+                  <strong contenteditable="true" spellcheck="true">Before</strong>
+                  <p contenteditable="true" spellcheck="true">Screenshots into PowerPoint. Stats copied by hand. Deck rebuilt every week. No automatic pull.</p>
+                </div>
+              </li>
+              <li>
+                <span class="story-steps__n" contenteditable="true" spellcheck="true">02</span>
+                <div>
+                  <strong contenteditable="true" spellcheck="true">On leave</strong>
+                  <p contenteditable="true" spellcheck="true">Built Player Comparison — profiles, radars, a sendable deck. One tool that actually worked.</p>
+                </div>
+              </li>
+              <li>
+                <span class="story-steps__n" contenteditable="true" spellcheck="true">03</span>
+                <div>
+                  <strong contenteditable="true" spellcheck="true">Then the hub</strong>
+                  <p contenteditable="true" spellcheck="true">Pre-match, set pieces, scouts, recruitment, strategy — same login, same left rail.</p>
+                </div>
+              </li>
+            </ol>
+          </aside>
+        </div>
+      </section>
+
+      <!-- 3. Reason for the hub -->
+      <section
+        class="slide slide--reason"
+        data-label="Reason"
+        data-notes="Manual work first. Screenshots and PowerPoint every week. No Impect pull. Files scattered. Hub pulls data in and saves the hours."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker" contenteditable="true" spellcheck="true">Why we built it</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body slide__body--reason">
+          <h2 class="headline headline--reason" contenteditable="true" spellcheck="true">Everything was manual. Hours every week. Nothing pulled in on its own.</h2>
+          <div class="reasons">
+            <article class="reason">
+              <span class="reason__n" contenteditable="true" spellcheck="true">01</span>
+              <strong contenteditable="true" spellcheck="true">Reports ate the week</strong>
+              <p contenteditable="true" spellcheck="true">Pre-match decks, player slides, staff presentations — built by hand every time. Crop a screenshot, copy stats into PowerPoint, fix the layout. Same job, week after week.</p>
+              <ul class="reason__list">
+                <li contenteditable="true" spellcheck="true">No automatic pull from Impect</li>
+                <li contenteditable="true" spellcheck="true">Hours before anything reached the room</li>
+              </ul>
+            </article>
+            <article class="reason">
+              <span class="reason__n" contenteditable="true" spellcheck="true">02</span>
+              <strong contenteditable="true" spellcheck="true">Comparing players was a mess</strong>
+              <p contenteditable="true" spellcheck="true">Screenshots in group chats. Stats in different tabs. No clean way to put two players side by side and send it on.</p>
+              <ul class="reason__list">
+                <li contenteditable="true" spellcheck="true">Profiles and radars in one view</li>
+                <li contenteditable="true" spellcheck="true">A deck you can actually send</li>
+              </ul>
+            </article>
+            <article class="reason">
+              <span class="reason__n" contenteditable="true" spellcheck="true">03</span>
+              <strong contenteditable="true" spellcheck="true">Work lived all over the place</strong>
+              <p contenteditable="true" spellcheck="true">Pre-match here, scout list there, recruitment on another drive. Half the job was finding the latest file. The other half was rebuilding slides.</p>
+              <ul class="reason__list">
+                <li contenteditable="true" spellcheck="true">Match prep, scouts, recruitment, strategy</li>
+                <li contenteditable="true" spellcheck="true">Same login, same left rail</li>
+              </ul>
+            </article>
+          </div>
+          <p class="reason__close" contenteditable="true" spellcheck="true">One site. Data comes in. You don't start from a blank slide every time.</p>
+        </div>
+      </section>
+
+      <!-- 4. Contents — split intro → tabs -->
+      <section
+        class="slide slide--contents"
+        data-label="Contents"
+        data-notes="Walk the five lines in order: analysis, scouting, recruitment, strategy, then future."
+      >
+        <div class="slide__body slide__body--contents">
+          <img
+            class="open-badge open-badge--sm"
+            src="/standalone/port-vale-badge.png?v=2"
+            width="120"
+            height="138"
+            alt="Port Vale"
+          />
+          <h2 class="open-title open-title--sm" contenteditable="true" spellcheck="true">Port Vale Hub</h2>
+          <p class="contents-kicker" contenteditable="true" spellcheck="true">What's in this deck</p>
+          <ol class="contents-list">
+            <li class="is-next"><span contenteditable="true" spellcheck="true">01</span> <span contenteditable="true" spellcheck="true">Performance analysis</span></li>
+            <li><span contenteditable="true" spellcheck="true">02</span> <span contenteditable="true" spellcheck="true">Scouting</span></li>
+            <li><span contenteditable="true" spellcheck="true">03</span> <span contenteditable="true" spellcheck="true">Recruitment</span></li>
+            <li><span contenteditable="true" spellcheck="true">04</span> <span contenteditable="true" spellcheck="true">Strategy</span></li>
+            <li><span contenteditable="true" spellcheck="true">05</span> <span contenteditable="true" spellcheck="true">Future developments</span></li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- Performance Analysis — overview -->
+      <section
+        class="slide slide--pa"
+        data-label="Analysis"
+        data-notes="Analysis tab. Impect API pulls the numbers. Reports build themselves. About 20 hours a week back. Targets sit next to live numbers so coaches see where we are."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker" contenteditable="true" spellcheck="true">Performance analysis</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body slide__body--pa">
+          <div class="pa-copy">
+            <p class="kicker" contenteditable="true" spellcheck="true">Analysis tab</p>
+            <h2 class="headline headline--pa" contenteditable="true" spellcheck="true">Impect data in. Reports build themselves. Roughly 20 hours a week back.</h2>
+            <ul class="pa-points">
+              <li>
+                <strong contenteditable="true" spellcheck="true">API, not screenshots</strong>
+                <p contenteditable="true" spellcheck="true">Match numbers come straight from Impect. No copying stats into PowerPoint every Monday.</p>
+              </li>
+              <li>
+                <strong contenteditable="true" spellcheck="true">Automated packs</strong>
+                <p contenteditable="true" spellcheck="true">Pre-match, post-match, set pieces, blocks — pick the game, the report fills. Same numbers the coaches see in the room.</p>
+              </li>
+              <li>
+                <strong contenteditable="true" spellcheck="true">Clear targets</strong>
+                <p contenteditable="true" spellcheck="true">Gold / silver / bronze aims on the board. Live progress next to them, so we know what to fix before the next block.</p>
+              </li>
+            </ul>
+            <p class="pa-hours"><b contenteditable="true" spellcheck="true">20+</b> <span contenteditable="true" spellcheck="true">hours a week saved on analysis reports alone</span></p>
+          </div>
+          <div class="pa-shots pa-shots--2">
+            <figure class="pa-shot">
+              <img src="/static/hub-origin/pre-match.png" alt="Pre-match report" />
+              <figcaption contenteditable="true" spellcheck="true">Pre-match · auto-built from the API</figcaption>
+            </figure>
+            <figure class="pa-shot">
+              <img src="/static/hub-origin/post-match.png" alt="Post-match dashboard" />
+              <figcaption contenteditable="true" spellcheck="true">Post-match · live Impect pull</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. Blocks Analysis -->
+      <section
+        class="slide slide--pa slide--blocks"
+        data-label="Blocks"
+        data-notes="Nine blocks of five league games. Points and clean-sheet targets. Results colour in as games finish. How we track the season in chunks coaches can act on."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker" contenteditable="true" spellcheck="true">Blocks analysis</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body slide__body--pa slide__body--blocks">
+          <div class="pa-copy">
+            <p class="kicker" contenteditable="true" spellcheck="true">Season in nine blocks</p>
+            <h2 class="headline headline--pa" contenteditable="true" spellcheck="true">Five games at a time. Targets on the board. Results fill in live.</h2>
+            <ul class="pa-points pa-points--fill">
+              <li>
+                <strong contenteditable="true" spellcheck="true">Block 1–9</strong>
+                <p contenteditable="true" spellcheck="true">Every league game sits in a five-game block. Results colour win / draw / loss as soon as the data lands.</p>
+              </li>
+              <li>
+                <strong contenteditable="true" spellcheck="true">Gold · silver · bronze</strong>
+                <p contenteditable="true" spellcheck="true">Set the points and clean-sheet aim for the block. Progress bars update from the API — no manual scoreboard.</p>
+              </li>
+              <li>
+                <strong contenteditable="true" spellcheck="true">What to fix next</strong>
+                <p contenteditable="true" spellcheck="true">Coaches see where the block sits against target before the next five. Clear number, clear ask.</p>
+              </li>
+            </ul>
+            <p class="pa-hours pa-hours--blocks">
+              <b contenteditable="true" spellcheck="true">9</b>
+              <span contenteditable="true" spellcheck="true">blocks · live points &amp; clean sheets vs target — no spreadsheet rebuild</span>
+            </p>
+          </div>
+          <div class="pa-shots pa-shots--1">
+            <figure class="pa-shot pa-shot--fill">
+              <img src="/static/hub-origin/blocks-analysis.png?v=2" alt="Blocks Analysis tool" />
+              <figcaption contenteditable="true" spellcheck="true">Blocks Analysis · live targets vs results</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. Match breakdowns -->
+      <section
+        class="slide slide--breakdown"
+        data-label="Breakdowns"
+        data-notes="Four columns. Each is a live post-match slide from Impect — nobody cropping screenshots. Pressing and duels are the densest."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker" contenteditable="true" spellcheck="true">Post-match breakdowns</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body slide__body--breakdown">
+          <div class="bd-head">
+            <p class="kicker" contenteditable="true" spellcheck="true">Shots · crosses · pressing · duels</p>
+            <h2 class="headline headline--bd" contenteditable="true" spellcheck="true">Match picture from the API. Not a folder of cropped screenshots.</h2>
+          </div>
+          <div class="bd-panels">
+            <article class="bd-panel">
+              <header class="bd-panel__head">
+                <strong contenteditable="true" spellcheck="true">Shots</strong>
+                <p contenteditable="true" spellcheck="true">Where we shot, xG, who took them. Against us as well.</p>
+              </header>
+              <figure class="bd-panel__shot">
+                <img src="/static/hub-origin/post-match-zones.png" alt="Attacking zones" />
+                <figcaption contenteditable="true" spellcheck="true">Attacking zones</figcaption>
+              </figure>
+            </article>
+            <article class="bd-panel">
+              <header class="bd-panel__head">
+                <strong contenteditable="true" spellcheck="true">Crosses</strong>
+                <p contenteditable="true" spellcheck="true">Volume and delivery — same pack every match, no rebuild.</p>
+              </header>
+              <figure class="bd-panel__shot">
+                <img src="/static/hub-origin/post-match-field-tilt.png" alt="Field tilt" />
+                <figcaption contenteditable="true" spellcheck="true">Field tilt</figcaption>
+              </figure>
+            </article>
+            <article class="bd-panel">
+              <header class="bd-panel__head">
+                <strong contenteditable="true" spellcheck="true">Pressing</strong>
+                <p contenteditable="true" spellcheck="true">Pressure height, densest zones, top pressers on a map.</p>
+              </header>
+              <figure class="bd-panel__shot">
+                <img src="/static/hub-origin/post-match-press.png" alt="Pressure map" />
+                <figcaption contenteditable="true" spellcheck="true">Pressure map</figcaption>
+              </figure>
+            </article>
+            <article class="bd-panel">
+              <header class="bd-panel__head">
+                <strong contenteditable="true" spellcheck="true">Duels</strong>
+                <p contenteditable="true" spellcheck="true">Ground / aerial wins, second balls, player table vs opponent.</p>
+              </header>
+              <figure class="bd-panel__shot">
+                <img src="/static/hub-origin/post-match-duels.png" alt="Duels and pressing" />
+                <figcaption contenteditable="true" spellcheck="true">Duels &amp; pressing</figcaption>
+              </figure>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scouting section divider -->
+      <section
+        class="slide slide--contents"
+        data-label="Scouting"
+        data-notes="Section break. Analysis done. Scouting is coverage — who goes where, what's been reported, the map for travel, and the calendar."
+      >
+        <div class="slide__body slide__body--contents">
+          <img
+            class="open-badge open-badge--sm"
+            src="/standalone/port-vale-badge.png?v=2"
+            width="120"
+            height="138"
+            alt="Port Vale"
+          />
+          <h2 class="open-title open-title--sm" contenteditable="true" spellcheck="true">Port Vale Hub</h2>
+          <p class="contents-kicker" contenteditable="true" spellcheck="true">What's in this deck</p>
+          <ol class="contents-list">
+            <li class="is-done"><span contenteditable="true" spellcheck="true">01</span> <span contenteditable="true" spellcheck="true">Performance analysis</span></li>
+            <li class="is-next"><span contenteditable="true" spellcheck="true">02</span> <span contenteditable="true" spellcheck="true">Scouting</span></li>
+            <li><span contenteditable="true" spellcheck="true">03</span> <span contenteditable="true" spellcheck="true">Recruitment</span></li>
+            <li><span contenteditable="true" spellcheck="true">04</span> <span contenteditable="true" spellcheck="true">Strategy</span></li>
+            <li><span contenteditable="true" spellcheck="true">05</span> <span contenteditable="true" spellcheck="true">Future developments</span></li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- Scouting overview -->
+      <section
+        class="slide slide--pa"
+        data-label="Coverage"
+        data-notes="Scouting tab. Fixture planner assigns live or video. Played fixtures and scout summary keep the record. Address tool is the map. Calendar shows what's coming."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker" contenteditable="true" spellcheck="true">Scouting</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body slide__body--pa">
+          <div class="pa-copy">
+            <p class="kicker" contenteditable="true" spellcheck="true">Scouting tab</p>
+            <h2 class="headline headline--pa" contenteditable="true" spellcheck="true">Who goes where. What's been covered. How far the drive is.</h2>
+            <ul class="pa-points pa-points--fill">
+              <li>
+                <strong contenteditable="true" spellcheck="true">Fixture planner</strong>
+                <p contenteditable="true" spellcheck="true">Upcoming games in one place. Assign live or video. Hundreds of fixtures loaded for the season.</p>
+              </li>
+              <li>
+                <strong contenteditable="true" spellcheck="true">Reports &amp; coverage</strong>
+                <p contenteditable="true" spellcheck="true">Played fixtures keep the record — who went, live or video, reports in. Scout summary shows the picture.</p>
+              </li>
+              <li>
+                <strong contenteditable="true" spellcheck="true">Map &amp; calendar</strong>
+                <p contenteditable="true" spellcheck="true">Postcode in, grounds within reach. Calendar shows the live assignments coming up.</p>
+              </li>
+            </ul>
+            <p class="pa-hours">
+              <b contenteditable="true" spellcheck="true">1</b>
+              <span contenteditable="true" spellcheck="true">place for coverage — not a spreadsheet chase every Monday</span>
+            </p>
+          </div>
+          <div class="pa-shots pa-shots--2">
+            <figure class="pa-shot">
+              <img src="/static/hub-origin/fixture-planner.png" alt="Fixture planner" />
+              <figcaption contenteditable="true" spellcheck="true">Fixture planner · assign live / video</figcaption>
+            </figure>
+            <figure class="pa-shot">
+              <img src="/static/hub-origin/scouting-address.png" alt="Scouting address map" />
+              <figcaption contenteditable="true" spellcheck="true">Scouting map · travel from a postcode</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <!-- Fixture planner deep dive -->
+      <section
+        class="slide slide--pa slide--blocks"
+        data-label="Planner"
+        data-notes="Fixture planner is the weekly board. Upcoming only. Assign scouts live or video. Feeds scout summary and the calendar."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker" contenteditable="true" spellcheck="true">Fixture planner</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body slide__body--pa slide__body--blocks">
+          <div class="pa-copy">
+            <p class="kicker" contenteditable="true" spellcheck="true">Upcoming coverage</p>
+            <h2 class="headline headline--pa" contenteditable="true" spellcheck="true">Assign live or video before the weekend. One board for every league.</h2>
+            <ul class="pa-points pa-points--fill">
+              <li>
+                <strong contenteditable="true" spellcheck="true">All the games</strong>
+                <p contenteditable="true" spellcheck="true">Upcoming fixtures loaded across the leagues we cover. Filter and find the ones that matter.</p>
+              </li>
+              <li>
+                <strong contenteditable="true" spellcheck="true">Live or video</strong>
+                <p contenteditable="true" spellcheck="true">Put a name against the game. Everyone sees who's going — no WhatsApp chase.</p>
+              </li>
+              <li>
+                <strong contenteditable="true" spellcheck="true">Feeds the rest</strong>
+                <p contenteditable="true" spellcheck="true">Planner pushes into played fixtures, scout summary, and the scouts calendar.</p>
+              </li>
+            </ul>
+          </div>
+          <div class="pa-shots pa-shots--1">
+            <figure class="pa-shot pa-shot--fill">
+              <img src="/static/hub-origin/fixture-planner.png" alt="Fixture planner" />
+              <figcaption contenteditable="true" spellcheck="true">Fixture planner · season coverage board</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <!-- Reports, map, calendar -->
+      <section
+        class="slide slide--breakdown"
+        data-label="Reports &amp; map"
+        data-notes="Four tools. Played fixtures is the record. Scout summary is who covered what. Address tool is the map. Calendar is what's coming for each scout."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker" contenteditable="true" spellcheck="true">Reports · map · calendar</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body slide__body--breakdown">
+          <div class="bd-head">
+            <p class="kicker" contenteditable="true" spellcheck="true">Played · summary · map · calendar</p>
+            <h2 class="headline headline--bd" contenteditable="true" spellcheck="true">A record of the games. A map for the drive. A calendar for who's out.</h2>
+          </div>
+          <div class="bd-panels">
+            <article class="bd-panel">
+              <header class="bd-panel__head">
+                <strong contenteditable="true" spellcheck="true">Played fixtures</strong>
+                <p contenteditable="true" spellcheck="true">Games that have gone — live ownership, video pick-up, reports in.</p>
+              </header>
+              <figure class="bd-panel__shot">
+                <img src="/static/hub-origin/played-fixtures.png" alt="Played fixtures" />
+                <figcaption contenteditable="true" spellcheck="true">Played fixtures</figcaption>
+              </figure>
+            </article>
+            <article class="bd-panel">
+              <header class="bd-panel__head">
+                <strong contenteditable="true" spellcheck="true">Scout summary</strong>
+                <p contenteditable="true" spellcheck="true">Who covered what — live vs video, by scout and league.</p>
+              </header>
+              <figure class="bd-panel__shot">
+                <img src="/static/hub-origin/scout-summary.png" alt="Scout summary" />
+                <figcaption contenteditable="true" spellcheck="true">Coverage report</figcaption>
+              </figure>
+            </article>
+            <article class="bd-panel">
+              <header class="bd-panel__head">
+                <strong contenteditable="true" spellcheck="true">Scouting map</strong>
+                <p contenteditable="true" spellcheck="true">Put in a postcode. See which grounds are within reach.</p>
+              </header>
+              <figure class="bd-panel__shot">
+                <img src="/static/hub-origin/scouting-address.png" alt="Scouting address map" />
+                <figcaption contenteditable="true" spellcheck="true">Travel map</figcaption>
+              </figure>
+            </article>
+            <article class="bd-panel">
+              <header class="bd-panel__head">
+                <strong contenteditable="true" spellcheck="true">Calendar</strong>
+                <p contenteditable="true" spellcheck="true">Live assignments coming up — scouts see their games in one view.</p>
+              </header>
+              <figure class="bd-panel__shot">
+                <img src="/static/hub-origin/scouts-calendar.png" alt="Scouts calendar" />
+                <figcaption contenteditable="true" spellcheck="true">Scouts calendar</figcaption>
+              </figure>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- Recruitment section divider -->
+      <section
+        class="slide slide--contents"
+        data-label="Recruitment"
+        data-notes="Section break. Scouting done. Recruitment next — find players from the API, track them on one board, plan the squad. Player Comparison started all of this."
+      >
+        <div class="slide__body slide__body--contents">
+          <img
+            class="open-badge open-badge--sm"
+            src="/standalone/port-vale-badge.png?v=2"
+            width="120"
+            height="138"
+            alt="Port Vale"
+          />
+          <h2 class="open-title open-title--sm" contenteditable="true" spellcheck="true">Port Vale Hub</h2>
+          <p class="contents-kicker" contenteditable="true" spellcheck="true">What's in this deck</p>
+          <ol class="contents-list">
+            <li class="is-done"><span contenteditable="true" spellcheck="true">01</span> <span contenteditable="true" spellcheck="true">Performance analysis</span></li>
+            <li class="is-done"><span contenteditable="true" spellcheck="true">02</span> <span contenteditable="true" spellcheck="true">Scouting</span></li>
+            <li class="is-next"><span contenteditable="true" spellcheck="true">03</span> <span contenteditable="true" spellcheck="true">Recruitment</span></li>
+            <li><span contenteditable="true" spellcheck="true">04</span> <span contenteditable="true" spellcheck="true">Strategy</span></li>
+            <li><span contenteditable="true" spellcheck="true">05</span> <span contenteditable="true" spellcheck="true">Future developments</span></li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- Recruitment overview -->
+      <section
+        class="slide slide--pa"
+        data-label="Find &amp; track"
+        data-notes="Recruitment tab. Who To Scout pulls ranked lists from Impect. Pipelines is the shared board. Scoutable teams is club by club. Squad planner is current and future XI. Player Comparison was the first app."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker" contenteditable="true" spellcheck="true">Recruitment</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body slide__body--pa">
+          <div class="pa-copy">
+            <p class="kicker" contenteditable="true" spellcheck="true">Recruitment tab</p>
+            <h2 class="headline headline--pa" contenteditable="true" spellcheck="true">Find players from the data. Track them on one board. Plan the squad.</h2>
+            <ul class="pa-points pa-points--fill">
+              <li>
+                <strong contenteditable="true" spellcheck="true">API finds the names</strong>
+                <p contenteditable="true" spellcheck="true">Who To Scout ranks players by league and position from Impect — how we play, not a gut-feel shortlist.</p>
+              </li>
+              <li>
+                <strong contenteditable="true" spellcheck="true">One tracking board</strong>
+                <p contenteditable="true" spellcheck="true">Pipelines: data → video → live. The whole group sees the same cards, notes, and status.</p>
+              </li>
+              <li>
+                <strong contenteditable="true" spellcheck="true">Squad design</strong>
+                <p contenteditable="true" spellcheck="true">Scoutable teams by club. Squad planner for current and shadow XIs. Gaps by position, clear.</p>
+              </li>
+            </ul>
+            <p class="pa-hours">
+              <b contenteditable="true" spellcheck="true">1st</b>
+              <span contenteditable="true" spellcheck="true">app on leave was Player Comparison — recruitment still starts there</span>
+            </p>
+          </div>
+          <div class="pa-shots pa-shots--2">
+            <figure class="pa-shot">
+              <img src="/static/hub-origin/who-to-scout.png" alt="Who To Scout" />
+              <figcaption contenteditable="true" spellcheck="true">Who To Scout · ranked from Impect</figcaption>
+            </figure>
+            <figure class="pa-shot">
+              <img src="/static/hub-origin/player-pipelines.png" alt="Player Pipelines" />
+              <figcaption contenteditable="true" spellcheck="true">Pipelines · shared tracking board</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <!-- Who To Scout deep dive -->
+      <section
+        class="slide slide--pa slide--blocks"
+        data-label="Who to scout"
+        data-notes="Who To Scout is the API list. Filter league and position. Top names per league. Shows who's already in Fixture Planner. Replaces hunting through spreadsheets."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker" contenteditable="true" spellcheck="true">Who to scout</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body slide__body--pa slide__body--blocks">
+          <div class="pa-copy">
+            <p class="kicker" contenteditable="true" spellcheck="true">From the Impect API</p>
+            <h2 class="headline headline--pa" contenteditable="true" spellcheck="true">Ranked lists by league and position. Not a folder of screenshots.</h2>
+            <ul class="pa-points pa-points--fill">
+              <li>
+                <strong contenteditable="true" spellcheck="true">Pick the filter</strong>
+                <p contenteditable="true" spellcheck="true">League, position, age, minutes, height. Weights for how we want that role to play.</p>
+              </li>
+              <li>
+                <strong contenteditable="true" spellcheck="true">Top of the pool</strong>
+                <p contenteditable="true" spellcheck="true">Best profile scores sit at the top. See club, age, and where they sit in the pool.</p>
+              </li>
+              <li>
+                <strong contenteditable="true" spellcheck="true">Link to coverage</strong>
+                <p contenteditable="true" spellcheck="true">Names already live / video / reported from Fixture Planner show up — so you know who's left to watch.</p>
+              </li>
+            </ul>
+          </div>
+          <div class="pa-shots pa-shots--1">
+            <figure class="pa-shot pa-shot--fill">
+              <img src="/static/hub-origin/who-to-scout.png" alt="Who To Scout tool" />
+              <figcaption contenteditable="true" spellcheck="true">Who To Scout · live ranked lists</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <!-- Track & plan breakdown -->
+      <section
+        class="slide slide--breakdown"
+        data-label="Track &amp; plan"
+        data-notes="Three tools. Pipelines is the shared board. Scoutable teams is club by club. Squad planner is current and future squad. Comparison is still how we send a deck on a name."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker" contenteditable="true" spellcheck="true">Track &amp; plan</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body slide__body--breakdown">
+          <div class="bd-head">
+            <p class="kicker" contenteditable="true" spellcheck="true">Pipelines · clubs · squad · comparison</p>
+            <h2 class="headline headline--bd" contenteditable="true" spellcheck="true">Same board for the whole group. Club lists. Current and shadow squad.</h2>
+          </div>
+          <div class="bd-panels bd-panels--rec">
+            <article class="bd-panel">
+              <header class="bd-panel__head">
+                <strong contenteditable="true" spellcheck="true">Pipelines</strong>
+                <p contenteditable="true" spellcheck="true">Data → video → live. Notes and tags the whole team can see.</p>
+              </header>
+              <figure class="bd-panel__shot">
+                <img src="/static/hub-origin/player-pipelines.png" alt="Player Pipelines" />
+                <figcaption contenteditable="true" spellcheck="true">Player tracking</figcaption>
+              </figure>
+            </article>
+            <article class="bd-panel">
+              <header class="bd-panel__head">
+                <strong contenteditable="true" spellcheck="true">Scoutable teams</strong>
+                <p contenteditable="true" spellcheck="true">Open any club. See scores. Move prospects onto the board.</p>
+              </header>
+              <figure class="bd-panel__shot">
+                <img src="/static/hub-origin/scoutable-teams.png" alt="Scoutable teams" />
+                <figcaption contenteditable="true" spellcheck="true">Club boards</figcaption>
+              </figure>
+            </article>
+            <article class="bd-panel">
+              <header class="bd-panel__head">
+                <strong contenteditable="true" spellcheck="true">Squad planner</strong>
+                <p contenteditable="true" spellcheck="true">Current XI and shadow team by formation. Gaps by position.</p>
+              </header>
+              <figure class="bd-panel__shot">
+                <img src="/static/hub-origin/squad-planner.png" alt="Squad planner" />
+                <figcaption contenteditable="true" spellcheck="true">Squad design</figcaption>
+              </figure>
+            </article>
+            <article class="bd-panel">
+              <header class="bd-panel__head">
+                <strong contenteditable="true" spellcheck="true">Comparison</strong>
+                <p contenteditable="true" spellcheck="true">The first app — profiles, radars, a deck you can send.</p>
+              </header>
+              <figure class="bd-panel__shot">
+                <img src="/static/hub-origin/player-comparison.png" alt="Player Comparison" />
+                <figcaption contenteditable="true" spellcheck="true">Player Comparison</figcaption>
+              </figure>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- Strategy section divider -->
+      <section
+        class="slide slide--contents"
+        data-label="Strategy"
+        data-notes="Section break. Two tools here: Season Progress tracker and Squad Availability."
+      >
+        <div class="slide__body slide__body--contents">
+          <img
+            class="open-badge open-badge--sm"
+            src="/standalone/port-vale-badge.png?v=2"
+            width="120"
+            height="138"
+            alt="Port Vale"
+          />
+          <h2 class="open-title open-title--sm" contenteditable="true" spellcheck="true">Port Vale Hub</h2>
+          <p class="contents-kicker" contenteditable="true" spellcheck="true">What's in this deck</p>
+          <ol class="contents-list">
+            <li class="is-done"><span contenteditable="true" spellcheck="true">01</span> <span contenteditable="true" spellcheck="true">Performance analysis</span></li>
+            <li class="is-done"><span contenteditable="true" spellcheck="true">02</span> <span contenteditable="true" spellcheck="true">Scouting</span></li>
+            <li class="is-done"><span contenteditable="true" spellcheck="true">03</span> <span contenteditable="true" spellcheck="true">Recruitment</span></li>
+            <li class="is-next"><span contenteditable="true" spellcheck="true">04</span> <span contenteditable="true" spellcheck="true">Strategy</span></li>
+            <li><span contenteditable="true" spellcheck="true">05</span> <span contenteditable="true" spellcheck="true">Future developments</span></li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- Strategy overview -->
+      <section
+        class="slide slide--pa"
+        data-label="Season"
+        data-notes="Strategy tab has two key tools. Season Progress is the live tracker vs auto / play-offs / champions. Availability is who's in for training and matches."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker" contenteditable="true" spellcheck="true">Strategy</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body slide__body--pa">
+          <div class="pa-copy">
+            <p class="kicker" contenteditable="true" spellcheck="true">Strategy tab</p>
+            <h2 class="headline headline--pa" contenteditable="true" spellcheck="true">Season pace on one board. Who's available on the other.</h2>
+            <ul class="pa-points pa-points--fill">
+              <li>
+                <strong contenteditable="true" spellcheck="true">Season Progress</strong>
+                <p contenteditable="true" spellcheck="true">Live points and projection against automatic, play-offs and champions — updated as games are played.</p>
+              </li>
+              <li>
+                <strong contenteditable="true" spellcheck="true">On track / behind</strong>
+                <p contenteditable="true" spellcheck="true">Same tracker flags the gaps so the next ask for the room is clear.</p>
+              </li>
+              <li>
+                <strong contenteditable="true" spellcheck="true">Squad Availability</strong>
+                <p contenteditable="true" spellcheck="true">Match availability and injuries in one place — minutes from Impect, not a separate sheet.</p>
+              </li>
+            </ul>
+            <p class="pa-hours">
+              <b contenteditable="true" spellcheck="true">2</b>
+              <span contenteditable="true" spellcheck="true">key tools — tracker for the season, availability for the squad</span>
+            </p>
+          </div>
+          <div class="pa-shots pa-shots--2">
+            <figure class="pa-shot">
+              <img src="/static/hub-origin/strategy-tracker.png" alt="Season Progress Report" />
+              <figcaption contenteditable="true" spellcheck="true">Season Progress · strategy tracker</figcaption>
+            </figure>
+            <figure class="pa-shot">
+              <img src="/static/hub-origin/availability-tracker.png?v=2" alt="Squad Availability summary" />
+              <figcaption contenteditable="true" spellcheck="true">Squad Availability · Summary</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <!-- Strategy tracker deep dive -->
+      <section
+        class="slide slide--pa slide--blocks"
+        data-label="Tracker"
+        data-notes="Season Progress is the strategy tracker. Auto / play-offs / champions. Impect style stats. Present and PDF for staff. This is the live season picture."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker" contenteditable="true" spellcheck="true">Season progress report</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body slide__body--pa slide__body--blocks">
+          <div class="pa-copy">
+            <p class="kicker" contenteditable="true" spellcheck="true">Strategy tracker</p>
+            <h2 class="headline headline--pa" contenteditable="true" spellcheck="true">One live board: pace vs automatic, play-offs and champions.</h2>
+            <ul class="pa-points pa-points--fill">
+              <li>
+                <strong contenteditable="true" spellcheck="true">Where we sit</strong>
+                <p contenteditable="true" spellcheck="true">Points, position, projection — updated from the season as games land. No manual rebuild.</p>
+              </li>
+              <li>
+                <strong contenteditable="true" spellcheck="true">Clear targets</strong>
+                <p contenteditable="true" spellcheck="true">Auto / play-offs / champions stacked so the room can see the gap — not a wall of numbers.</p>
+              </li>
+              <li>
+                <strong contenteditable="true" spellcheck="true">Style stats from Impect</strong>
+                <p contenteditable="true" spellcheck="true">How we play sits next to the table picture — same tool, Present mode for staff.</p>
+              </li>
+            </ul>
+          </div>
+          <div class="pa-shots pa-shots--1">
+            <figure class="pa-shot pa-shot--fill">
+              <img src="/static/hub-origin/strategy-tracker.png" alt="Strategy tracker" />
+              <figcaption contenteditable="true" spellcheck="true">Season Progress Report · live tracker</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <!-- Availability deep dive -->
+      <section
+        class="slide slide--pa slide--blocks"
+        data-label="Availability"
+        data-notes="Squad Availability is the other key Strategy tool. Summary shows minutes, who's available, who's unused — Present for the room."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker" contenteditable="true" spellcheck="true">Squad availability</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body slide__body--pa slide__body--blocks">
+          <div class="pa-copy">
+            <p class="kicker" contenteditable="true" spellcheck="true">Who's in</p>
+            <h2 class="headline headline--pa" contenteditable="true" spellcheck="true">Minutes and availability in one summary. Who's fit, who's been used.</h2>
+            <ul class="pa-points pa-points--fill">
+              <li>
+                <strong contenteditable="true" spellcheck="true">Summary board</strong>
+                <p contenteditable="true" spellcheck="true">Played, available, unused minutes by player — clear bars, not a chase through sheets.</p>
+              </li>
+              <li>
+                <strong contenteditable="true" spellcheck="true">Status at a glance</strong>
+                <p contenteditable="true" spellcheck="true">Fit, injured, managed — the whole squad on one Present slide for the room.</p>
+              </li>
+              <li>
+                <strong contenteditable="true" spellcheck="true">Tied to Impect minutes</strong>
+                <p contenteditable="true" spellcheck="true">Apps and minutes pull from the API so availability sits next to real playing time.</p>
+              </li>
+            </ul>
+          </div>
+          <div class="pa-shots pa-shots--1">
+            <figure class="pa-shot pa-shot--fill">
+              <img src="/static/hub-origin/availability-tracker.png?v=2" alt="Squad Availability summary" />
+              <figcaption contenteditable="true" spellcheck="true">Squad Availability · Summary</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <!-- Future — divider -->
+      <section
+        class="slide slide--contents"
+        data-label="Future"
+        data-notes="Close the tour of what's live. Now where the hub goes next — medical, sports science, GPS, targets we can track, and the next few years."
+      >
+        <div class="slide__body slide__body--contents">
+          <img
+            class="open-badge open-badge--sm"
+            src="/standalone/port-vale-badge.png?v=2"
+            width="120"
+            height="138"
+            alt="Port Vale"
+          />
+          <h2 class="open-title open-title--sm" contenteditable="true" spellcheck="true">Port Vale Hub</h2>
+          <p class="contents-kicker" contenteditable="true" spellcheck="true">What's in this deck</p>
+          <ol class="contents-list">
+            <li class="is-done"><span contenteditable="true" spellcheck="true">01</span> <span contenteditable="true" spellcheck="true">Performance analysis</span></li>
+            <li class="is-done"><span contenteditable="true" spellcheck="true">02</span> <span contenteditable="true" spellcheck="true">Scouting</span></li>
+            <li class="is-done"><span contenteditable="true" spellcheck="true">03</span> <span contenteditable="true" spellcheck="true">Recruitment</span></li>
+            <li class="is-done"><span contenteditable="true" spellcheck="true">04</span> <span contenteditable="true" spellcheck="true">Strategy</span></li>
+            <li class="is-next"><span contenteditable="true" spellcheck="true">05</span> <span contenteditable="true" spellcheck="true">Future developments</span></li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- Future — data into the hub -->
+      <section
+        class="slide slide--reason"
+        data-label="More data"
+        data-notes="Same idea as analysis: stop living in separate systems. Bring medical, sports science and GPS into the hub so staff see availability, load and risk next to the football work."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker" contenteditable="true" spellcheck="true">Future developments</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body slide__body--reason">
+          <h2 class="headline headline--reason" contenteditable="true" spellcheck="true">Medical, sports science and GPS in the same hub.</h2>
+          <div class="reasons">
+            <article class="reason">
+              <span class="reason__n" contenteditable="true" spellcheck="true">01</span>
+              <strong contenteditable="true" spellcheck="true">Medical</strong>
+              <p contenteditable="true" spellcheck="true">Injury status, return-to-play and notes next to availability — not a separate folder staff have to chase.</p>
+              <ul class="reason__list">
+                <li contenteditable="true" spellcheck="true">One view for who's fit</li>
+                <li contenteditable="true" spellcheck="true">History that stays with the player</li>
+              </ul>
+            </article>
+            <article class="reason">
+              <span class="reason__n" contenteditable="true" spellcheck="true">02</span>
+              <strong contenteditable="true" spellcheck="true">Sports science</strong>
+              <p contenteditable="true" spellcheck="true">Load, recovery and readiness in the same login as match and recruitment work.</p>
+              <ul class="reason__list">
+                <li contenteditable="true" spellcheck="true">Same language across staff</li>
+                <li contenteditable="true" spellcheck="true">Less double entry</li>
+              </ul>
+            </article>
+            <article class="reason">
+              <span class="reason__n" contenteditable="true" spellcheck="true">03</span>
+              <strong contenteditable="true" spellcheck="true">GPS data</strong>
+              <p contenteditable="true" spellcheck="true">Training and match GPS pulled in so distance, intensity and session load sit beside the football picture.</p>
+              <ul class="reason__list">
+                <li contenteditable="true" spellcheck="true">Automatic where we can</li>
+                <li contenteditable="true" spellcheck="true">Usable in the room, not only on a laptop</li>
+              </ul>
+            </article>
+          </div>
+          <p class="reason__close" contenteditable="true" spellcheck="true">Same login. Same rail. Performance staff see what the football staff see.</p>
+        </div>
+      </section>
+
+      <!-- Future — targets -->
+      <section
+        class="slide slide--pa"
+        data-label="Targets"
+        data-notes="We started this with blocks and season progress. Next: more targets we set once and track live — football, physical, availability — so everyone knows the number and the gap."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker" contenteditable="true" spellcheck="true">Targets we can track</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body slide__body--pa">
+          <div class="pa-copy">
+            <p class="kicker" contenteditable="true" spellcheck="true">Clear numbers</p>
+            <h2 class="headline headline--pa" contenteditable="true" spellcheck="true">Set the aim once. Watch progress live. Not a spreadsheet rebuild every Monday.</h2>
+            <ul class="pa-points pa-points--fill">
+              <li>
+                <strong contenteditable="true" spellcheck="true">Football targets</strong>
+                <p contenteditable="true" spellcheck="true">Build on blocks and season progress — points, clean sheets, style metrics we care about, with gold / silver / bronze where it helps.</p>
+              </li>
+              <li>
+                <strong contenteditable="true" spellcheck="true">Physical &amp; availability targets</strong>
+                <p contenteditable="true" spellcheck="true">Once GPS and medical sit in the hub, set load and availability aims the same way — visible to coaching and performance.</p>
+              </li>
+              <li>
+                <strong contenteditable="true" spellcheck="true">Same way every time</strong>
+                <p contenteditable="true" spellcheck="true">Target on screen, live number next to it, gap clear. That's how we stay on top of the week.</p>
+              </li>
+            </ul>
+            <p class="pa-hours">
+              <b contenteditable="true" spellcheck="true">Track</b>
+              <span contenteditable="true" spellcheck="true">the plan — don't rebuild it every time</span>
+            </p>
+          </div>
+          <div class="pa-shots pa-shots--1">
+            <figure class="pa-shot pa-shot--fill">
+              <img src="/static/hub-origin/strategy-tracker.png" alt="Season progress tracker" />
+              <figcaption contenteditable="true" spellcheck="true">Already live · season targets on the tracker</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <!-- Future — club plans -->
+      <section
+        class="slide slide--breakdown"
+        data-label="Club plans"
+        data-notes="Close on the bigger picture. Next few years: hub is how we run the football department — match prep, recruitment, scouting and performance in one place."
+      >
+        <div class="slide__bar">
+          <div class="slide__bar-left">
+            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
+            <span class="slide__bar-kicker" contenteditable="true" spellcheck="true">Next few years</span>
+          </div>
+          <span class="slide__bar-num"></span>
+        </div>
+        <div class="slide__body slide__body--breakdown">
+          <div class="bd-head">
+            <p class="kicker" contenteditable="true" spellcheck="true">Football club · plan</p>
+            <h2 class="headline headline--bd" contenteditable="true" spellcheck="true">Use the hub to run the department. Not just store reports.</h2>
+          </div>
+          <div class="bd-panels bd-panels--3">
+            <article class="bd-panel">
+              <header class="bd-panel__head">
+                <strong contenteditable="true" spellcheck="true">One place</strong>
+                <p contenteditable="true" spellcheck="true">One login for analysis, recruitment, scouts, strategy — and, next, medical and sports science.</p>
+              </header>
+              <div class="bd-panel__body">
+                <p contenteditable="true" spellcheck="true">Staff know where to look. Work doesn't live in five drives and a WhatsApp thread.</p>
+              </div>
+            </article>
+            <article class="bd-panel">
+              <header class="bd-panel__head">
+                <strong contenteditable="true" spellcheck="true">Track the plan</strong>
+                <p contenteditable="true" spellcheck="true">Season aims, block targets, availability, and later load / medical — all visible.</p>
+              </header>
+              <div class="bd-panel__body">
+                <p contenteditable="true" spellcheck="true">The board and the coaching room see the same numbers. Gaps show up early.</p>
+              </div>
+            </article>
+            <article class="bd-panel">
+              <header class="bd-panel__head">
+                <strong contenteditable="true" spellcheck="true">Be ready</strong>
+                <p contenteditable="true" spellcheck="true">Match packs, coverage, squad picture and targets ready before the week hits.</p>
+              </header>
+              <div class="bd-panel__body">
+                <p contenteditable="true" spellcheck="true">Less scrambling. More time on decisions — this season and the next few years.</p>
+              </div>
+            </article>
+          </div>
+          <p class="reason__close" style="margin-top:0.75rem" contenteditable="true" spellcheck="true">Keep the work in one place so the club is ready for what’s next.</p>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <aside class="notes" id="notesPanel" hidden>
+    <div class="notes__head">
+      <h2 id="notesTitle">Speaker notes</h2>
+      <button type="button" class="btn" id="notesClose">Close</button>
+    </div>
+    <p class="notes__body" id="notesBody"></p>
+  </aside>
+
+  <div class="present-chrome" id="presentChrome" hidden>
+    <button type="button" class="present-chrome__nav" id="presentPrev" aria-label="Previous">‹</button>
+    <div class="present-chrome__mid">
+      <span id="presentCount">01 / 23</span>
+      <div class="present-chrome__dots" id="presentProgress"></div>
+    </div>
+    <button type="button" class="present-chrome__nav" id="presentNext" aria-label="Next">›</button>
+  </div>
+
+  <script defer src="/static/hub-origin.js?v=19"></script>
+  <script defer src="/static/hub-feedback.js?v=1"></script>
+</body>
+</html>
