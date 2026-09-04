@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Port Vale Analysis Hub · EFL Transfer Report</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/efl-transfer-report.css?v=9" />
+</head>
+<body>
+  <div class="app">
+    <header class="toolbar">
+      <div>
+        <p class="toolbar__eyebrow"><a href="/presentations">← Presentations</a> · Personal</p>
+        <h1 class="toolbar__title">EFL Transfer Report</h1>
+        <p class="toolbar__sub">Summer 2026 window — who each club signed and released.</p>
+      </div>
+      <div class="toolbar__right">
+        <label class="jump">
+          <span>Jump to</span>
+          <select id="jumpSelect" aria-label="Jump to club">
+            <option value="0">Title</option>
+          </select>
+        </label>
+        <p class="toolbar__meta" id="slideMeta"></p>
+        <div class="toolbar__buttons">
+          <button type="button" class="btn" id="notesBtn">Speaker notes</button>
+          <div class="pdf-split" id="pdfSplit">
+            <button type="button" class="btn" id="exportPdf">Download PDF</button>
+            <button type="button" class="btn pdf-split__caret" id="exportPdfMenuBtn" aria-expanded="false" aria-haspopup="true" aria-controls="exportPdfMenu" title="Download one league">▾</button>
+            <div class="pdf-split__menu" id="exportPdfMenu" hidden>
+              <p class="pdf-split__label">One league</p>
+              <button type="button" data-league-pdf="league-one">League One</button>
+              <button type="button" data-league-pdf="league-two">League Two</button>
+              <button type="button" data-league-pdf="national-league">National League</button>
+              <button type="button" data-league-pdf="scottish-prem">Scottish Premiership</button>
+            </div>
+          </div>
+          <button type="button" class="btn btn--gold" id="presentBtn">Present</button>
+        </div>
+        <p class="toolbar__export-status" id="exportStatus"></p>
+      </div>
+    </header>
+    <nav class="filmstrip" id="filmstrip" aria-label="Slides"></nav>
+    <div class="deck" id="deck">
+      <section class="slide slide--open is-active" data-label="Title">
+        <div class="slide__body">
+          <p class="lede">Loading summer 2026 window…</p>
+        </div>
+      </section>
+    </div>
+    <aside class="notes-panel" id="notesPanel">
+      <h2 id="notesTitle">Speaker notes</h2>
+      <p id="notesBody"></p>
+    </aside>
+  </div>
+
+  <div class="present-ui" aria-hidden="true">
+    <button type="button" id="presentPrev" aria-label="Previous slide">‹</button>
+    <div class="present-bar" id="presentBar"><i></i></div>
+    <span id="presentCount">01 / 01</span>
+    <button type="button" id="presentNext" aria-label="Next slide">›</button>
+  </div>
+  <div id="export-overlay"></div>
+
+  <script src="/static/wysiwyg-export.js"></script>
+  <script src="/static/efl-transfer-report.js?v=9"></script>
+  <script defer src="/static/hub-feedback.js?v=1"></script>
+</body>
+</html>

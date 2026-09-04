@@ -44,6 +44,7 @@ RSYNC_EXCLUDES=(
   --include 'data/home-recruitment-cache.json'
   --include 'data/home-strategy-cache.json'
   --include 'data/squad-planner.json'
+  --include 'data/efl-transfer-report-2026.json'
   --include 'data/'
   --exclude 'data/*'
   --exclude '.env'

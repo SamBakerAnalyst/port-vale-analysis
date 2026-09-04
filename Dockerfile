@@ -33,6 +33,7 @@ COPY static ./static
 COPY standalone ./standalone
 COPY templates ./templates
 COPY strategy-reports ./strategy-reports
+COPY data/efl-transfer-report-2026.json ./data/efl-transfer-report-2026.json
 
 ENV HUB_ROOT=/app
 ENV DATA_ROOT=/data

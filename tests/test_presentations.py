@@ -17,6 +17,7 @@ DECK_TITLES = {
     "Values Report",
     "Hub Origin Story",
     "Summer Window Review",
+    "EFL Transfer Report",
 }
 
 

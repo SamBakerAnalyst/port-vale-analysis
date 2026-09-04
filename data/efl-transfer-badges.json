@@ -1,0 +1,422 @@
+{
+  "afc-wimbledon": {
+    "name": "AFC Wimbledon",
+    "fotmob_id": 158319,
+    "league": "league-one"
+  },
+  "barnsley": {
+    "name": "Barnsley",
+    "fotmob_id": 8283,
+    "league": "league-one"
+  },
+  "blackpool": {
+    "name": "Blackpool",
+    "fotmob_id": 8483,
+    "league": "league-one"
+  },
+  "bradford-city": {
+    "name": "Bradford City",
+    "fotmob_id": 8484,
+    "league": "league-one"
+  },
+  "bromley": {
+    "name": "Bromley",
+    "fotmob_id": 45729,
+    "league": "league-one"
+  },
+  "burton-albion": {
+    "name": "Burton Albion",
+    "fotmob_id": 9792,
+    "league": "league-one"
+  },
+  "cambridge-united": {
+    "name": "Cambridge United",
+    "fotmob_id": 9834,
+    "league": "league-one"
+  },
+  "doncaster-rovers": {
+    "name": "Doncaster Rovers",
+    "fotmob_id": 9903,
+    "league": "league-one"
+  },
+  "huddersfield-town": {
+    "name": "Huddersfield Town",
+    "fotmob_id": 9796,
+    "league": "league-one"
+  },
+  "leicester-city": {
+    "name": "Leicester City",
+    "fotmob_id": 8197,
+    "league": "league-one"
+  },
+  "leyton-orient": {
+    "name": "Leyton Orient",
+    "fotmob_id": 8351,
+    "league": "league-one"
+  },
+  "luton-town": {
+    "name": "Luton Town",
+    "fotmob_id": 8346,
+    "league": "league-one"
+  },
+  "mk-dons": {
+    "name": "MK Dons",
+    "fotmob_id": 8645,
+    "league": "league-one"
+  },
+  "mansfield-town": {
+    "name": "Mansfield Town",
+    "fotmob_id": 9818,
+    "league": "league-one"
+  },
+  "notts-county": {
+    "name": "Notts County",
+    "fotmob_id": 9819,
+    "league": "league-one"
+  },
+  "oxford-united": {
+    "name": "Oxford United",
+    "fotmob_id": 8653,
+    "league": "league-one"
+  },
+  "peterborough-united": {
+    "name": "Peterborough United",
+    "fotmob_id": 8677,
+    "league": "league-one"
+  },
+  "plymouth-argyle": {
+    "name": "Plymouth Argyle",
+    "fotmob_id": 8401,
+    "league": "league-one"
+  },
+  "reading": {
+    "name": "Reading",
+    "fotmob_id": 9798,
+    "league": "league-one"
+  },
+  "sheffield-wednesday": {
+    "name": "Sheffield Wednesday",
+    "fotmob_id": 10163,
+    "league": "league-one"
+  },
+  "stevenage": {
+    "name": "Stevenage",
+    "fotmob_id": 10253,
+    "league": "league-one"
+  },
+  "stockport-county": {
+    "name": "Stockport County",
+    "fotmob_id": 10007,
+    "league": "league-one"
+  },
+  "wigan-athletic": {
+    "name": "Wigan Athletic",
+    "fotmob_id": 8528,
+    "league": "league-one"
+  },
+  "wycombe-wanderers": {
+    "name": "Wycombe Wanderers",
+    "fotmob_id": 8676,
+    "league": "league-one"
+  },
+  "accrington-stanley": {
+    "name": "Accrington Stanley",
+    "fotmob_id": 8671,
+    "league": "league-two"
+  },
+  "barnet": {
+    "name": "Barnet",
+    "fotmob_id": 8175,
+    "league": "league-two"
+  },
+  "bristol-rovers": {
+    "name": "Bristol Rovers",
+    "fotmob_id": 10104,
+    "league": "league-two"
+  },
+  "cheltenham-town": {
+    "name": "Cheltenham Town",
+    "fotmob_id": 8680,
+    "league": "league-two"
+  },
+  "chesterfield": {
+    "name": "Chesterfield",
+    "fotmob_id": 9786,
+    "league": "league-two"
+  },
+  "colchester-united": {
+    "name": "Colchester United",
+    "fotmob_id": 8416,
+    "league": "league-two"
+  },
+  "crawley-town": {
+    "name": "Crawley Town",
+    "fotmob_id": 8647,
+    "league": "league-two"
+  },
+  "crewe-alexandra": {
+    "name": "Crewe Alexandra",
+    "fotmob_id": 9784,
+    "league": "league-two"
+  },
+  "exeter-city": {
+    "name": "Exeter City",
+    "fotmob_id": 9833,
+    "league": "league-two"
+  },
+  "fleetwood-town": {
+    "name": "Fleetwood Town",
+    "fotmob_id": 45723,
+    "league": "league-two"
+  },
+  "gillingham": {
+    "name": "Gillingham",
+    "fotmob_id": 10173,
+    "league": "league-two"
+  },
+  "grimsby-town": {
+    "name": "Grimsby Town",
+    "fotmob_id": 10005,
+    "league": "league-two"
+  },
+  "newport-county": {
+    "name": "Newport County",
+    "fotmob_id": 10262,
+    "league": "league-two"
+  },
+  "northampton-town": {
+    "name": "Northampton Town",
+    "fotmob_id": 8651,
+    "league": "league-two"
+  },
+  "oldham-athletic": {
+    "name": "Oldham Athletic",
+    "fotmob_id": 9785,
+    "league": "league-two"
+  },
+  "port-vale": {
+    "name": "Port Vale",
+    "fotmob_id": 9799,
+    "league": "league-two"
+  },
+  "rochdale": {
+    "name": "Rochdale",
+    "fotmob_id": 8493,
+    "league": "league-two"
+  },
+  "rotherham-united": {
+    "name": "Rotherham United",
+    "fotmob_id": 8119,
+    "league": "league-two"
+  },
+  "salford-city": {
+    "name": "Salford City",
+    "fotmob_id": 282326,
+    "league": "league-two"
+  },
+  "shrewsbury-town": {
+    "name": "Shrewsbury Town",
+    "fotmob_id": 9896,
+    "league": "league-two"
+  },
+  "swindon-town": {
+    "name": "Swindon Town",
+    "fotmob_id": 9795,
+    "league": "league-two"
+  },
+  "tranmere-rovers": {
+    "name": "Tranmere Rovers",
+    "fotmob_id": 8313,
+    "league": "league-two"
+  },
+  "walsall": {
+    "name": "Walsall",
+    "fotmob_id": 10006,
+    "league": "league-two"
+  },
+  "york-city": {
+    "name": "York City",
+    "fotmob_id": 9916,
+    "league": "league-two"
+  },
+  "afc-fylde": {
+    "name": "AFC Fylde",
+    "fotmob_id": 282396,
+    "league": "national-league"
+  },
+  "aldershot-town": {
+    "name": "Aldershot Town",
+    "fotmob_id": 8465,
+    "league": "national-league"
+  },
+  "altrincham": {
+    "name": "Altrincham",
+    "fotmob_id": 9915,
+    "league": "national-league"
+  },
+  "barrow": {
+    "name": "Barrow",
+    "fotmob_id": 6350,
+    "league": "national-league"
+  },
+  "boreham-wood": {
+    "name": "Boreham Wood",
+    "fotmob_id": 2488,
+    "league": "national-league"
+  },
+  "boston-united": {
+    "name": "Boston United",
+    "fotmob_id": 8646,
+    "league": "national-league"
+  },
+  "carlisle-united": {
+    "name": "Carlisle United",
+    "fotmob_id": 10196,
+    "league": "national-league"
+  },
+  "eastleigh": {
+    "name": "Eastleigh",
+    "fotmob_id": 161803,
+    "league": "national-league"
+  },
+  "fc-halifax-town": {
+    "name": "FC Halifax Town",
+    "fotmob_id": 10195,
+    "league": "national-league"
+  },
+  "forest-green-rovers": {
+    "name": "Forest Green Rovers",
+    "fotmob_id": 9828,
+    "league": "national-league"
+  },
+  "harrogate-town": {
+    "name": "Harrogate Town",
+    "fotmob_id": 7946,
+    "league": "national-league"
+  },
+  "hartlepool-united": {
+    "name": "Hartlepool United",
+    "fotmob_id": 8488,
+    "league": "national-league"
+  },
+  "hornchurch": {
+    "name": "Hornchurch",
+    "fotmob_id": 4047,
+    "league": "national-league"
+  },
+  "kidderminster-harriers": {
+    "name": "Kidderminster Harriers",
+    "fotmob_id": 10284,
+    "league": "national-league"
+  },
+  "scunthorpe-united": {
+    "name": "Scunthorpe United",
+    "fotmob_id": 8412,
+    "league": "national-league"
+  },
+  "solihull-moors": {
+    "name": "Solihull Moors",
+    "fotmob_id": 161801,
+    "league": "national-league"
+  },
+  "southend-united": {
+    "name": "Southend United",
+    "fotmob_id": 8652,
+    "league": "national-league"
+  },
+  "sutton-united": {
+    "name": "Sutton United",
+    "fotmob_id": 158316,
+    "league": "national-league"
+  },
+  "tamworth": {
+    "name": "Tamworth",
+    "fotmob_id": 10254,
+    "league": "national-league"
+  },
+  "wealdstone": {
+    "name": "Wealdstone",
+    "fotmob_id": 161812,
+    "league": "national-league"
+  },
+  "woking": {
+    "name": "Woking",
+    "fotmob_id": 8345,
+    "league": "national-league"
+  },
+  "worthing": {
+    "name": "Worthing",
+    "fotmob_id": 282351,
+    "league": "national-league"
+  },
+  "yeovil-town": {
+    "name": "Yeovil Town",
+    "fotmob_id": 10198,
+    "league": "national-league"
+  },
+  "aberdeen": {
+    "name": "Aberdeen",
+    "fotmob_id": 8485,
+    "league": "scottish-prem"
+  },
+  "celtic": {
+    "name": "Celtic",
+    "fotmob_id": 9925,
+    "league": "scottish-prem"
+  },
+  "dundee-united": {
+    "name": "Dundee United",
+    "fotmob_id": 9938,
+    "league": "scottish-prem"
+  },
+  "falkirk": {
+    "name": "Falkirk",
+    "fotmob_id": 8596,
+    "league": "scottish-prem"
+  },
+  "hearts": {
+    "name": "Heart of Midlothian",
+    "fotmob_id": 9860,
+    "league": "scottish-prem"
+  },
+  "hibernian": {
+    "name": "Hibernian",
+    "fotmob_id": 10251,
+    "league": "scottish-prem"
+  },
+  "kilmarnock": {
+    "name": "Kilmarnock",
+    "fotmob_id": 8597,
+    "league": "scottish-prem"
+  },
+  "motherwell": {
+    "name": "Motherwell",
+    "fotmob_id": 9927,
+    "league": "scottish-prem"
+  },
+  "rangers": {
+    "name": "Rangers",
+    "fotmob_id": 8548,
+    "league": "scottish-prem"
+  },
+  "st-johnstone": {
+    "name": "St Johnstone",
+    "fotmob_id": 8467,
+    "league": "scottish-prem"
+  },
+  "st-mirren": {
+    "name": "St Mirren",
+    "fotmob_id": 9800,
+    "league": "scottish-prem"
+  },
+  "gateshead": {
+    "name": "Gateshead",
+    "fotmob_id": 6189,
+    "league": "national-league"
+  },
+  "dundee": {
+    "name": "Dundee",
+    "fotmob_id": 8284,
+    "league": "scottish-prem"
+  }
+}

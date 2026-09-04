@@ -713,6 +713,23 @@ APPS: list[dict[str, Any]] = [
         "router": "window_review",
         "sidebar": False,
     },
+    {
+        "id": "efl-transfer-report",
+        "group": "presentations",
+        "title": "EFL Transfer Report",
+        "description": (
+            "Summer 2026 window — every League One, League Two, National League "
+            "and Scottish Prem club: who they signed and who they released. Present or PDF."
+        ),
+        "href": "/efl-transfer-report",
+        "icon": "🔁",
+        "accent": "#a78bfa",
+        "tags": ["Transfers", "EFL", "Presentation"],
+        "roles": ("admin",),
+        "api_prefixes": ("/efl-transfer-report", "/api/efl-transfer-report", "/api/wysiwyg-export-pdf"),
+        "router": "efl_transfer_report",
+        "sidebar": False,
+    },
 ]
 
 

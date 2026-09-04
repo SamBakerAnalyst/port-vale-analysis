@@ -625,5 +625,16 @@ window.IMPECT_APPS = [
     "comingSoon": true,
     "note": "Coming soon",
     "sidebar": false
+  },
+  {
+    "id": "efl-transfer-report",
+    "group": "presentations",
+    "title": "EFL Transfer Report",
+    "description": "Summer 2026 window — every League One, League Two, National League and Scottish Prem club: who they signed and who they released. Present or PDF.",
+    "href": "/efl-transfer-report",
+    "icon": "🔁",
+    "accent": "#a78bfa",
+    "tags": ["Transfers", "EFL", "Presentation"],
+    "sidebar": false
   }
 ];
