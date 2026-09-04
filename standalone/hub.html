@@ -2215,6 +2215,7 @@
           <button type="button" class="hub__restart-btn" id="forceRefreshDataBtn" title="Pull fresh match data from Impect after games upload (~10am). Use a couple of times a week.">Force refresh data</button>
           <button type="button" class="hub__restart-btn" id="restartServerBtn">Restart</button>
           <a class="hub__restart-btn" id="startServerLink" href="/standalone/restart.command" hidden>Start server</a>
+          <button type="button" class="hub__restart-btn" id="signOutBtn" hidden>Sign out</button>
           <div class="hub__clock" aria-live="polite">
             <div class="hub__clock-time" id="clockTime">--:--</div>
             <div class="hub__clock-date" id="clockDate">Loading…</div>
@@ -2650,6 +2651,7 @@
       groups: [],
       home_tabs: [],
       allow_all: false,
+      auth_enabled: false,
       username: "",
       display_name: "",
     };
@@ -2725,6 +2727,16 @@
       const startLink = document.getElementById("startServerLink");
       if (restartBtn) restartBtn.hidden = !isAdmin;
       if (startLink && !isAdmin) startLink.hidden = true;
+
+      // Everyone needs a way out now logins are personal — but there is nothing
+      // to sign out of on a local server with no password set.
+      const signOut = document.getElementById("signOutBtn");
+      if (signOut) {
+        signOut.hidden = !window.HubAuth.auth_enabled;
+        signOut.title = window.HubAuth.display_name
+          ? `Signed in as ${window.HubAuth.display_name}`
+          : "Sign out";
+      }
 
       // Player search reads the dossier, so anyone with Recruitment gets it.
       const search = document.getElementById("hubPlayerSearchWrap");
@@ -2887,6 +2899,22 @@
     setInterval(updateClock, 30_000);
     document.getElementById("restartServerBtn").addEventListener("click", restartServer);
 
+    async function signOut() {
+      const btn = document.getElementById("signOutBtn");
+      if (btn) btn.disabled = true;
+      try {
+        await fetch(`${BASE}/api/auth/logout`, {
+          method: "POST",
+          credentials: "same-origin",
+          signal: AbortSignal.timeout(8000),
+        });
+      } catch (_) {
+        // Session may already be gone — the login page is still the right place.
+      }
+      window.location.href = "/login";
+    }
+    document.getElementById("signOutBtn").addEventListener("click", signOut);
+
     async function forceRefreshAnalysisData() {
       const btn = document.getElementById("forceRefreshDataBtn");
       const statusText = document.getElementById("serverStatusText");
@@ -2945,6 +2973,7 @@
             groups: me.groups || ["analysis"],
             home_tabs: me.home_tabs || ["home"],
             allow_all: !!me.allow_all,
+            auth_enabled: !!me.auth_enabled,
             username: me.username || "",
             display_name: me.display_name || me.username || "",
           };

@@ -136,3 +136,30 @@ def test_role_prefixes_never_contain_a_bare_slash():
 
 def test_recruitment_groups_match_the_manifest_groups():
     assert RECRUITMENT_GROUPS == {"recruitment", "scouts"}
+
+
+def test_logout_is_reachable_by_every_role():
+    """Personal logins are useless without a way back out."""
+    from app.auth import _is_public_path
+
+    for role in ROLE_GROUPS:
+        assert _path_allowed_for_role("/api/auth/logout", role)
+    # The login page itself must stay reachable without a session.
+    assert _is_public_path("/login")
+
+
+def test_user_payload_reports_whether_login_is_enabled():
+    """The Sign out button hides itself on a no-password local server."""
+    from app.auth import current_user_payload
+
+    class Req:
+        session = {
+            "authenticated": True,
+            "username": "SamBaker",
+            "display_name": "Sam Baker",
+            "role": "admin",
+        }
+
+    payload = current_user_payload(Req())
+    assert payload["auth_enabled"] is True
+    assert payload["display_name"] == "Sam Baker"

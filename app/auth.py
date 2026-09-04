@@ -207,6 +207,8 @@ def current_user_payload(request: Request) -> dict[str, Any]:
     role = current_role(request)
     return {
         "authenticated": is_authenticated(request) if auth_enabled() else True,
+        # Drives the Sign out button — pointless on a local server with no login.
+        "auth_enabled": auth_enabled(),
         "username": str(request.session.get("username") or team_username()),
         "display_name": str(request.session.get("display_name") or request.session.get("username") or team_username()),
         "role": role,
