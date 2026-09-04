@@ -22,6 +22,7 @@ from fastapi import FastAPI
 
 from app.paths import (
     ANALYSIS_CACHE_DIR,
+    BLOCKS_ANALYSIS_DATA_DIR,
     CLUB_STRATEGY_CACHE_DIR,
     DATA_ROOT,
     FIXTURE_PLANNER_DATA_DIR,
@@ -101,6 +102,17 @@ CHECKS: tuple[CacheCheck, ...] = (
         path=FIXTURE_PLANNER_DATA_DIR,
         max_age_hours=24 * 14,  # only changes when staff edit it
         min_bytes=100,
+        is_dir=True,
+    ),
+    CacheCheck(
+        id="blocks_analysis",
+        label="Match KPIs and unit form",
+        tool="Blocks Analysis",
+        path=BLOCKS_ANALYSIS_DATA_DIR,
+        # The match-KPI file inside lapses at 6h; 18 allows for a quiet evening
+        # without crying wolf, while still catching a warm job that has stopped.
+        max_age_hours=18,
+        min_bytes=5_000,
         is_dir=True,
     ),
     CacheCheck(

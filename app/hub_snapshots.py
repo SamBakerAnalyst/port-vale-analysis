@@ -431,6 +431,24 @@ def refresh_analysis() -> dict[str, Any]:
     return payload
 
 
+def warm_blocks_analysis() -> dict[str, Any]:
+    """Assemble the Blocks payload before a coach opens the page.
+
+    Its match-KPI cache expires after six hours, so the first person in after
+    that rebuilt it themselves and watched "Loading…" for about a minute — which
+    is exactly what happened at 14:28 on 4 Sep, three minutes after a deploy.
+    Unforced: if the disk cache is still inside its TTL this is nearly free.
+    """
+    from app.blocks_analysis import build_blocks_analysis_payload
+
+    try:
+        payload = build_blocks_analysis_payload(force_refresh=False)
+        return {"ok": True, "blocks": len(payload.get("blocks") or [])}
+    except Exception as exc:  # noqa: BLE001 - never let a warm take the app down
+        logger.exception("Blocks Analysis warm failed")
+        return {"ok": False, "error": str(exc)}
+
+
 def _rebuild_standouts_with_retry(load, *, attempts: int, wait: float) -> str:
     """Rebuild the standouts cache, backing off if Impect rate-limits us.
 
@@ -544,6 +562,10 @@ def refresh_snapshots(scope: str = "all") -> dict[str, Any]:
             result["win_drivers"] = refresh_win_drivers()
         if scope_key in {"all", "scouting"}:
             result["scouting"] = refresh_scouting()
+        if scope_key in {"all", "analysis"}:
+            # The match-KPI cache lapses every six hours, so the daily job takes
+            # that hit instead of the first coach through the door.
+            result["blocks_analysis"] = warm_blocks_analysis()
         if scope_key == "all":
             from app.home_dashboard import build_port_vale_fixtures
 
@@ -745,6 +767,10 @@ def start_daily_scheduler() -> None:
         # inside the same rate-limit window and they knocked each other over.
         time.sleep(90)
         warm_scouting_from_disk()
+        # Blocks Analysis last: it is usually a cheap disk read, and if its KPI
+        # cache has aged out the rebuild should land on this thread rather than
+        # on whoever opens the page first.
+        warm_blocks_analysis()
 
     threading.Thread(
         target=_scouting_boot_warm, name="hub-scouting-boot-warm", daemon=True
