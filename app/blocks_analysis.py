@@ -2979,8 +2979,25 @@ def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, A
     now = time.time()
     if not force_refresh:
         cached = _payload_cache.get(cache_key)
-        if cached and now - cached[0] < PAYLOAD_CACHE_TTL:
+        if cached:
             return cached[1]
+        from app.analysis_cache import REPORT_TTL_SECONDS, read_json
+
+        disk = read_json("blocks", "default", ttl=REPORT_TTL_SECONDS, allow_stale=True)
+        if disk:
+            _payload_cache[cache_key] = (now, disk)
+            return disk
+        return {
+            "building": True,
+            "generatedAt": "",
+            "season": BLOCKS_SEASON_LABEL,
+            "competition": LEAGUE_LABEL,
+            "blocks": [],
+            "benchmarks": {},
+            "matchCount": 0,
+            "playedCount": 0,
+            "currentBlockId": 1,
+        }
 
     matches = build_season_matches(
         BLOCKS_ITERATION_ID,
@@ -3088,6 +3105,9 @@ def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, A
         "playedCount": sum(1 for match in matches if match.get("outcome")),
     }
     _payload_cache[cache_key] = (now, payload)
+    from app.analysis_cache import write_json
+
+    write_json("blocks", "default", payload)
     return payload
 
 
@@ -3104,7 +3124,7 @@ def register_blocks_analysis_routes(app: FastAPI) -> None:
         refresh: bool = Query(False),
     ) -> JSONResponse:
         try:
-            payload = build_blocks_analysis_payload(force_refresh=refresh)
+            payload = build_blocks_analysis_payload(force_refresh=False)
         except HTTPException:
             raise
         except Exception as exc:  # noqa: BLE001

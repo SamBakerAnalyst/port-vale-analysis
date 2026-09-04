@@ -4424,9 +4424,12 @@ def build_pre_match_fixtures(
 
     cache_key = f"fixtures_{int(iteration_id)}"
     if not refresh:
-        cached = read_json("pre-match-fixtures", cache_key, ttl=REPORT_TTL_SECONDS)
+        cached = read_json(
+            "pre-match-fixtures", cache_key, ttl=REPORT_TTL_SECONDS, allow_stale=True
+        )
         if cached and isinstance(cached.get("fixtures"), list):
             return list(cached["fixtures"])
+        return []
 
     fixtures = _build_pre_match_fixtures_uncached(int(iteration_id))
     write_json("pre-match-fixtures", cache_key, {"fixtures": fixtures})
@@ -5208,11 +5211,21 @@ def build_pre_match_report(body: PreMatchReportRequest) -> dict[str, Any]:
         f"report_{int(body.iteration_id)}_{int(body.squad_id)}_{int(body.match_id or 0)}"
     )
     if not refresh:
-        cached = read_json("pre-match", cache_key, ttl=REPORT_TTL_SECONDS)
+        cached = read_json(
+            "pre-match", cache_key, ttl=REPORT_TTL_SECONDS, allow_stale=True
+        )
         if cached:
             cached = dict(cached)
             cached["cache"] = {"hit": True, "refreshed": False}
             return cached
+        return {
+            "building": True,
+            "iteration_id": int(body.iteration_id),
+            "squad_id": int(body.squad_id),
+            "match_id": body.match_id,
+            "opponent": {"id": int(body.squad_id), "name": ""},
+            "cache": {"hit": False, "refreshed": False},
+        }
 
     if refresh:
         try:
@@ -5534,9 +5547,17 @@ def pre_match_meta(
 
     cache_key = f"meta_{(competition_name or DEFAULT_COMPETITION).replace(' ', '_')}"
     if not refresh:
-        cached = read_json("pre-match-meta", cache_key, ttl=REPORT_TTL_SECONDS)
+        cached = read_json(
+            "pre-match-meta", cache_key, ttl=REPORT_TTL_SECONDS, allow_stale=True
+        )
         if cached:
             return cached
+        return {
+            "building": True,
+            "competition": competition_name or DEFAULT_COMPETITION,
+            "seasons": [],
+            "default_iteration_id": 0,
+        }
 
     meta = _pre_match_meta_uncached(competition_name)
     write_json("pre-match-meta", cache_key, meta)
@@ -5828,33 +5849,30 @@ def register_pre_match_routes(app: FastAPI) -> None:
         competition: str = Query(DEFAULT_COMPETITION, min_length=1),
         refresh: bool = Query(False),
     ) -> dict[str, Any]:
-        return pre_match_meta(competition, refresh=refresh)
+        return pre_match_meta(competition, refresh=False)
 
     @app.get("/api/pre-match/opponents")
     def pre_match_opponents(iteration_id: int = Query(..., ge=1)) -> dict[str, Any]:
-        impect = _impect()
-        squads = _unwrap_items(impect._impect_get(impect._squads_path(iteration_id))["data"])
-        opponents = [
-            {
-                "id": int(item["id"]),
-                "name": str(item.get("name") or ""),
-                "is_port_vale": _is_port_vale(str(item.get("name") or "")),
-            }
-            for item in squads
-            if item.get("id") is not None and item.get("access", True)
-        ]
-        opponents.sort(key=lambda row: row["name"].casefold())
-        return {"opponents": opponents}
+        from app.analysis_cache import REPORT_TTL_SECONDS, read_json
+
+        cache_key = f"opponents_{int(iteration_id)}"
+        cached = read_json(
+            "pre-match-opponents", cache_key, ttl=REPORT_TTL_SECONDS, allow_stale=True
+        )
+        if cached and isinstance(cached.get("opponents"), list):
+            return cached
+        return {"opponents": []}
 
     @app.get("/api/pre-match/fixtures")
     def pre_match_fixtures(
         iteration_id: int = Query(..., ge=1),
         refresh: bool = Query(False),
     ) -> dict[str, Any]:
-        return {"fixtures": build_pre_match_fixtures(iteration_id, refresh=refresh)}
+        return {"fixtures": build_pre_match_fixtures(iteration_id, refresh=False)}
 
     @app.post("/api/pre-match/report")
     def pre_match_report(body: PreMatchReportRequest) -> dict[str, Any]:
+        body.refresh = False
         return build_pre_match_report(body)
 
     @app.get("/api/pre-match/player-photo")

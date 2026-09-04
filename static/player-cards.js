@@ -1148,13 +1148,17 @@
       if (opponent && opponent.squad_id) params.set("squadId", String(opponent.squad_id));
       if (opponent && opponent.iteration_id) params.set("iterationId", String(opponent.iteration_id));
       if (opponent && opponent.fotmob_id) params.set("fotmobId", String(opponent.fotmob_id));
-      if (opts && opts.refresh) params.set("refresh", "true");
       const payload = await fetchJson(`/api/player-cards/squad?${params.toString()}`);
       if (token !== loadToken) return;
       currentPlayers = payload.players || [];
       renderBoard();
       updateClubMeta(opponent, payload);
-      setStatus("", false);
+      setStatus(
+        payload.building
+          ? "Snapshot not ready yet — pulls when the next match lands."
+          : "",
+        Boolean(payload.building),
+      );
     } catch (error) {
       if (token !== loadToken) return;
       currentPlayers = [];
@@ -1199,8 +1203,40 @@
   clubSelect.addEventListener("change", function () {
     loadSquad({ force: true });
   });
-  refreshBtn.addEventListener("click", function () {
-    loadSquad({ force: true, refresh: true });
+  refreshBtn.addEventListener("click", async function () {
+    refreshBtn.disabled = true;
+    setStatus("Pulling latest match data in the background…", false);
+    try {
+      const startedRefresh = await fetch("/api/hub-snapshots/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "analysis" }),
+      });
+      if (!startedRefresh.ok) {
+        throw new Error("Could not start refresh.");
+      }
+      const started = Date.now();
+      const poll = async () => {
+        try {
+          const status = await fetchJson("/api/hub-snapshots/status");
+          if (status.refreshing || status.last_refresh_status === "running") {
+            if (Date.now() - started < 180000) {
+              window.setTimeout(poll, 2500);
+              return;
+            }
+          }
+          await loadSquad({ force: true });
+        } catch (error) {
+          setStatus(error.message || "Refresh failed", true);
+        } finally {
+          refreshBtn.disabled = false;
+        }
+      };
+      window.setTimeout(poll, 800);
+    } catch (error) {
+      setStatus(error.message || "Could not start refresh.", true);
+      refreshBtn.disabled = false;
+    }
   });
   if (exportPdfBtn) {
     exportPdfBtn.addEventListener("click", exportPdf);

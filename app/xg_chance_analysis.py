@@ -150,12 +150,13 @@ def _fetch_match_events(match_id: int, *, refresh: bool = False) -> list[dict[st
     if not refresh:
         cached = _match_events_cache.get(mid)
         now = time.time()
-        if cached and now - cached[0] < 3600:
+        if cached:
             return cached[1]
-        disk = read_list("xg-events", str(mid), ttl=PACKET_TTL_SECONDS)
+        disk = read_list("xg-events", str(mid), ttl=PACKET_TTL_SECONDS, allow_stale=True)
         if disk is not None:
             _match_events_cache[mid] = (now, disk)
             return disk
+        return []
 
     impect = _impect()
     raw = impect._impect_get(
@@ -178,13 +179,14 @@ def _fetch_shot_xg_by_event(match_id: int, *, refresh: bool = False) -> dict[int
     if not refresh:
         cached = _ekpi_cache.get(mid)
         now = time.time()
-        if cached and now - cached[0] < 3600:
+        if cached:
             return cached[1]
-        disk = read_json("xg-ekpi", str(mid), ttl=PACKET_TTL_SECONDS)
+        disk = read_json("xg-ekpi", str(mid), ttl=PACKET_TTL_SECONDS, allow_stale=True)
         if disk is not None:
             mapped = {int(k): float(v) for k, v in disk.items()}
             _ekpi_cache[mid] = (now, mapped)
             return mapped
+        return {}
 
     impect = _impect()
     raw = impect._impect_get(
@@ -653,7 +655,20 @@ def _match_meta(match: dict[str, Any], port_vale_id: int, squads: dict[int, dict
     }
 
 
-def build_xg_chance_fixtures(season: str | None) -> list[dict[str, Any]]:
+def build_xg_chance_fixtures(
+    season: str | None, *, refresh: bool = False
+) -> list[dict[str, Any]]:
+    from app.analysis_cache import REPORT_TTL_SECONDS, read_json, write_json
+
+    cache_key = (season or "default").replace("/", "-")
+    if not refresh:
+        cached = read_json(
+            "xg-fixtures", cache_key, ttl=REPORT_TTL_SECONDS, allow_stale=True
+        )
+        if cached and isinstance(cached.get("fixtures"), list):
+            return list(cached["fixtures"])
+        return []
+
     iteration = _resolve_port_vale_iteration(season)
     iteration_id = int(iteration["id"])
     port_vale_id = _resolve_port_vale_squad_id(iteration_id)
@@ -688,6 +703,7 @@ def build_xg_chance_fixtures(season: str | None) -> list[dict[str, Any]]:
                 "score": row.get("kickoff_label") if "-" in str(row.get("kickoff_label") or "") else "",
             }
         )
+    write_json("xg-fixtures", cache_key, {"fixtures": rows})
     return rows
 
 
@@ -886,11 +902,21 @@ def build_xg_chance_report(
     ids_token = ",".join(str(i) for i in (match_ids or [])) or str(match_id or "auto")
     cache_key = f"report_{(season or 'default').replace('/', '-')}_{scope_token}_{ids_token}"
     if not refresh:
-        cached = read_json("xg-report", cache_key, ttl=REPORT_TTL_SECONDS)
+        cached = read_json(
+            "xg-report", cache_key, ttl=REPORT_TTL_SECONDS, allow_stale=True
+        )
         if cached:
             cached = dict(cached)
             cached["cache"] = {"hit": True, "refreshed": False}
             return cached
+        return {
+            "building": True,
+            "season": season,
+            "scope": scope_token,
+            "shots": [],
+            "shotCount": 0,
+            "cache": {"hit": False, "refreshed": False},
+        }
 
     report = _build_xg_chance_report_uncached(
         season=season,
@@ -1107,11 +1133,30 @@ def _xg_chance_default_season() -> str:
     return seasons[0]["value"] if seasons else _default_port_vale_season()
 
 
-def xg_chance_meta() -> dict[str, Any]:
+def xg_chance_meta(*, refresh: bool = False) -> dict[str, Any]:
+    from app.analysis_cache import REPORT_TTL_SECONDS, read_json, write_json
+
+    if not refresh:
+        cached = read_json("xg-meta", "default", ttl=REPORT_TTL_SECONDS, allow_stale=True)
+        if cached:
+            return cached
+        return {
+            "building": True,
+            "seasons": [],
+            "defaultSeason": "",
+            "season": "",
+            "competition": "",
+            "chanceBuckets": list(CHANCE_BUCKETS),
+            "gameStates": [
+                {"id": key, "label": label}
+                for key, label in GAME_STATE_LABELS.items()
+            ],
+        }
+
     seasons = _xg_chance_seasons()
     default_season = _xg_chance_default_season()
     iteration = _resolve_port_vale_iteration(default_season or None)
-    return {
+    meta = {
         "seasons": seasons,
         "defaultSeason": default_season,
         "season": str(iteration.get("season") or ""),
@@ -1122,6 +1167,8 @@ def xg_chance_meta() -> dict[str, Any]:
             for key, label in GAME_STATE_LABELS.items()
         ],
     }
+    write_json("xg-meta", "default", meta)
+    return meta
 
 
 def register_xg_chance_analysis_routes(app: FastAPI) -> None:
@@ -1137,7 +1184,7 @@ def register_xg_chance_analysis_routes(app: FastAPI) -> None:
     def xg_chance_fixtures_route(
         season: str | None = Query(None),
     ) -> dict[str, Any]:
-        fixtures = build_xg_chance_fixtures(season)
+        fixtures = build_xg_chance_fixtures(season, refresh=False)
         return {
             "fixtures": fixtures,
             "defaultMatchId": _default_fixture_match_id(fixtures),
@@ -1155,7 +1202,7 @@ def register_xg_chance_analysis_routes(app: FastAPI) -> None:
                 season=season,
                 match_id=match_id,
                 scope=scope,
-                refresh=refresh,
+                refresh=False,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1169,7 +1216,7 @@ def register_xg_chance_analysis_routes(app: FastAPI) -> None:
                 match_id=body.match_id,
                 match_ids=body.match_ids,
                 scope=body.scope,
-                refresh=bool(body.refresh),
+                refresh=False,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

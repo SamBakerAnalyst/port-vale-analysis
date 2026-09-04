@@ -1581,11 +1581,20 @@ def _fetch_team_fixtures_fotmob(team_id: str = PORT_VALE_FOTMOB_ID) -> list[dict
 
 def build_port_vale_fixtures(*, force_refresh: bool = False) -> dict[str, Any]:
     """Port Vale played + upcoming fixtures from FotMob (league seasons + team cups)."""
+    from app.analysis_cache import REPORT_TTL_SECONDS, read_json, write_json
+
     cache_key = "pv-fotmob"
     cached = _fixtures_cache.get(cache_key)
     now = time.time()
-    if not force_refresh and cached and now - cached[0] < FIXTURES_CACHE_TTL:
-        return cached[1]
+    if not force_refresh:
+        if cached:
+            return cached[1]
+        disk = read_json(
+            "countdown-fixtures", "port-vale", ttl=REPORT_TTL_SECONDS, allow_stale=True
+        )
+        if disk:
+            _fixtures_cache[cache_key] = (now, disk)
+            return disk
 
     from app.fixture_planner import FIXTURE_LEAGUE_BY_UI, _fetch_fotmob_fixtures
 
@@ -1736,6 +1745,7 @@ def build_port_vale_fixtures(*, force_refresh: bool = False) -> dict[str, Any]:
         "matches": matches,
     }
     _fixtures_cache[cache_key] = (now, payload)
+    write_json("countdown-fixtures", "port-vale", payload)
     return payload
 
 

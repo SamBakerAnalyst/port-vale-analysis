@@ -1,7 +1,8 @@
-"""Durable Analysis-tool cache: disk first, Impect only on miss or Force refresh.
+"""Durable Analysis-tool cache: click serves disk; Impect only in the background.
 
-Used by Pre-Match, xG Chance, and the hub ``analysis`` refresh scope.
-Set Piece / Blocks keep their own disk dirs; Force refresh warms those too.
+Used by Pre-Match, xG Chance, Player Cards, Blocks, and countdown fixtures.
+The hub ``analysis`` scope rebuilds once Impect has published the match.
+Set Piece keeps its own disk dir; that refresh warms it too.
 """
 
 from __future__ import annotations
@@ -42,13 +43,15 @@ def _path(kind: str, key: str) -> Path:
     return _ensure_dir() / kind / f"{_safe_key(key)}.json"
 
 
-def read_json(kind: str, key: str, *, ttl: float) -> dict[str, Any] | None:
+def read_json(
+    kind: str, key: str, *, ttl: float, allow_stale: bool = False
+) -> dict[str, Any] | None:
     path = _path(kind, key)
     try:
         if not path.exists():
             return None
         age = time.time() - path.stat().st_mtime
-        if age > ttl:
+        if not allow_stale and age > ttl:
             return None
         payload = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(payload, dict):
@@ -77,13 +80,15 @@ def write_json(kind: str, key: str, data: dict[str, Any]) -> None:
         logger.exception("Failed to write analysis cache %s/%s", kind, key)
 
 
-def read_list(kind: str, key: str, *, ttl: float) -> list[Any] | None:
+def read_list(
+    kind: str, key: str, *, ttl: float, allow_stale: bool = False
+) -> list[Any] | None:
     path = _path(kind, key)
     try:
         if not path.exists():
             return None
         age = time.time() - path.stat().st_mtime
-        if age > ttl:
+        if not allow_stale and age > ttl:
             return None
         payload = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(payload, dict):
@@ -94,6 +99,16 @@ def read_list(kind: str, key: str, *, ttl: float) -> list[Any] | None:
         return body if isinstance(body, list) else None
     except (OSError, json.JSONDecodeError, TypeError, ValueError):
         return None
+
+
+def click_json(kind: str, key: str) -> dict[str, Any] | None:
+    """Click-path: serve disk forever. Rebuilds only via hub-snapshots."""
+    return read_json(kind, key, ttl=REPORT_TTL_SECONDS, allow_stale=True)
+
+
+def click_list(kind: str, key: str) -> list[Any] | None:
+    """Click-path: serve disk forever. Rebuilds only via hub-snapshots."""
+    return read_list(kind, key, ttl=PACKET_TTL_SECONDS, allow_stale=True)
 
 
 def write_list(kind: str, key: str, data: list[Any]) -> None:
@@ -198,7 +213,7 @@ def _probe_newest_match_events() -> tuple[int | None, list[Any]]:
         build_xg_chance_fixtures,
     )
 
-    match_id = _default_fixture_match_id(build_xg_chance_fixtures(None))
+    match_id = _default_fixture_match_id(build_xg_chance_fixtures(None, refresh=True))
     if match_id is None:
         return None, []
 
@@ -337,8 +352,14 @@ def refresh_analysis_data(*, force: bool = True) -> dict[str, Any]:
 
     # xG chance — last completed Vale match + last6.
     try:
-        from app.xg_chance_analysis import build_xg_chance_report
+        from app.xg_chance_analysis import (
+            build_xg_chance_fixtures,
+            build_xg_chance_report,
+            xg_chance_meta,
+        )
 
+        xg_chance_meta(refresh=True)
+        build_xg_chance_fixtures(None, refresh=True)
         last = build_xg_chance_report(scope="match", refresh=True)
         last6 = build_xg_chance_report(scope="last6", refresh=True)
         result["steps"]["xg_chance"] = {

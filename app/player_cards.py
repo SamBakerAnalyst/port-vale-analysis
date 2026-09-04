@@ -766,13 +766,31 @@ def build_player_cards_squad(
         f"v2feet|{season}|{league_ui or ''}|{_normalize_name_key(club)}|"
         f"{squad_id or ''}|{iteration_id or ''}|{fotmob_id or ''}"
     )
+    from app.analysis_cache import REPORT_TTL_SECONDS, read_json, write_json
+
+    disk_key = cache_key.replace("|", "_")
     if refresh:
         _squad_cache.pop(cache_key, None)
         _clubs_cache.clear()
     cached = _squad_cache.get(cache_key)
     now = time.time()
-    if cached and now - cached[0] < _SQUAD_CACHE_TTL:
+    if cached:
         return cached[1]
+    if not refresh:
+        disk = read_json(
+            "player-cards", disk_key, ttl=REPORT_TTL_SECONDS, allow_stale=True
+        )
+        if disk:
+            _squad_cache[cache_key] = (now, disk)
+            return disk
+        return {
+            "building": True,
+            "club": club,
+            "season": season,
+            "league": league_ui or "",
+            "players": [],
+            "player_count": 0,
+        }
 
     club_row = _find_club_row(club, season=season, league=league_ui)
     if club_row is None and league_ui:
@@ -1028,6 +1046,7 @@ def build_player_cards_squad(
         "player_count": len(cards),
     }
     _squad_cache[cache_key] = (now, payload)
+    write_json("player-cards", disk_key, payload)
     return payload
 
 
@@ -1137,7 +1156,7 @@ def register_player_cards_routes(app: FastAPI) -> None:
                 squad_id=squad_id,
                 iteration_id=iteration_id,
                 fotmob_id=fotmob_id,
-                refresh=refresh,
+                refresh=False,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

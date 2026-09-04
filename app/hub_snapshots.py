@@ -415,7 +415,15 @@ def refresh_snapshots(scope: str = "all") -> dict[str, Any]:
             result["strategy_tracker"] = refresh_strategy_tracker()
         if scope_key in {"all", "win_drivers"}:
             result["win_drivers"] = refresh_win_drivers()
-        # Analysis is heavy (Impect match packets) — only on explicit scope / 10:30 job.
+        if scope_key == "all":
+            from app.home_dashboard import build_port_vale_fixtures
+
+            fixtures = build_port_vale_fixtures(force_refresh=True)
+            result["fixtures"] = {
+                "ok": True,
+                "upcoming": len(fixtures.get("upcoming") or []),
+            }
+        # Analysis is heavy (Impect match packets) — only on explicit scope / daytime job.
         if scope_key == "analysis":
             result["analysis"] = refresh_analysis()
         _write_meta(

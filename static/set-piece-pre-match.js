@@ -2098,24 +2098,22 @@ async function loadReport({ refresh = false } = {}) {
   els.refreshBtn.disabled = true;
   els.prevSlideBtn.disabled = true;
   els.nextSlideBtn.disabled = true;
-  setStatus(
-    refresh
-      ? "Refreshing set-piece data from Impect…"
-      : "Building set-piece slides from Impect…",
-    "loading"
-  );
-  els.statusBar.textContent = refresh
-    ? "Rebuilding last-8 + season (bypassing cache)…"
-    : "Loading set-piece prep (uses cache when available)…";
+  setStatus("Opening local snapshot…", "loading");
+  els.statusBar.textContent = "Loading set-piece snapshot…";
 
   try {
     const body = {
       iteration_id: iterationId,
       squad_id: squadId,
-      refresh: Boolean(refresh),
     };
     if (els.matchId.value) body.match_id = Number(els.matchId.value);
     const report = await apiPost("/api/set-piece-pre-match/report", body);
+    if (report?.building) {
+      renderEmptyDeck("Snapshot not ready yet — pulls when Impect publishes the match.");
+      setStatus("Waiting for the next match snapshot…", "loading");
+      els.statusBar.textContent = "Waiting for snapshot…";
+      return;
+    }
     renderDeck(report);
     const cache = report.cache || {};
     if (cache.stale) {
@@ -2142,7 +2140,35 @@ async function boot() {
   restoreDeckMode();
   els.deckModeFullBtn?.addEventListener("click", () => setDeckMode("full"));
   els.deckModeTwoBtn?.addEventListener("click", () => setDeckMode("two_pager"));
-  els.refreshBtn.addEventListener("click", () => loadReport({ refresh: true }));
+  els.refreshBtn.addEventListener("click", async () => {
+    els.refreshBtn.disabled = true;
+    setStatus("Pulling latest match data in the background…", "loading");
+    try {
+      await apiPost("/api/hub-snapshots/refresh", { scope: "analysis" });
+      const started = Date.now();
+      const poll = async () => {
+        try {
+          const status = await fetch("/api/hub-snapshots/status").then((r) => r.json());
+          if (status.refreshing || status.last_refresh_status === "running") {
+            if (Date.now() - started < 180000) {
+              window.setTimeout(poll, 2500);
+              return;
+            }
+          }
+          await loadReport();
+          setStatus("Snapshot updated.", "");
+        } catch (err) {
+          setStatus(err.message || "Refresh failed", "error");
+        } finally {
+          els.refreshBtn.disabled = false;
+        }
+      };
+      window.setTimeout(poll, 800);
+    } catch (err) {
+      setStatus(err.message || "Could not start refresh.", "error");
+      els.refreshBtn.disabled = false;
+    }
+  });
   if (els.exportWhatsappPdfBtn) els.exportWhatsappPdfBtn.addEventListener("click", exportWhatsappPdf);
   if (els.pdfViewBtn) els.pdfViewBtn.addEventListener("click", () => setPdfView(true));
   if (els.pdfBackBtn) els.pdfBackBtn.addEventListener("click", () => setPdfView(false));
@@ -2238,7 +2264,9 @@ async function boot() {
       iterations.find((item) => String(item.season || "").includes("26/27")) ||
       iterations[0];
     if (!preferred) {
-      setStatus("No Impect seasons available.", "error");
+      setStatus("Snapshot not ready yet — pulls when Impect publishes the match.", "loading");
+      els.statusBar.textContent = "Waiting for snapshot…";
+      els.deck.innerHTML = `<div class="sp-placeholder">Waiting for the next match snapshot…</div>`;
       return;
     }
     els.iterationId.value = preferred.id;

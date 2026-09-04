@@ -5134,12 +5134,7 @@ async function loadReport({ refresh = false } = {}) {
   els.refreshBtn.disabled = true;
   renderSeasonToggle();
   updateSlideNav();
-  setStatus(
-    refresh
-      ? "Force refreshing pre-match from Impect…"
-      : "Loading pre-match report…",
-    "loading",
-  );
+  setStatus("Opening local snapshot…", "loading");
 
   try {
     const report = await fetchJson("/api/pre-match/report", {
@@ -5148,9 +5143,13 @@ async function loadReport({ refresh = false } = {}) {
         iteration_id: iterationId,
         squad_id: squadId,
         match_id: matchId,
-        refresh: Boolean(refresh),
       }),
     });
+    if (report?.building) {
+      renderEmptyDeck("Snapshot not ready yet — pulls when Impect publishes the match.");
+      setStatus("Waiting for the next match snapshot…", "loading");
+      return;
+    }
     renderMatchBar();
     renderDeck(report);
     const cacheHit = report?.cache?.hit;
@@ -5172,6 +5171,11 @@ async function init() {
   renderEmptyDeck("Loading fixtures…");
   try {
     state.meta = await fetchJson("/api/pre-match/meta");
+    if (state.meta?.building || !state.meta?.default_iteration_id) {
+      renderEmptyDeck("Snapshot not ready yet — pulls when Impect publishes the match.");
+      setStatus("Waiting for the next match snapshot…", "loading");
+      return;
+    }
     els.iterationId.value = String(state.meta.default_iteration_id);
     renderSeasonToggle();
     const hasFixtures = await loadFixtures();
@@ -5185,16 +5189,37 @@ async function init() {
 }
 
 els.refreshBtn.addEventListener("click", async () => {
+  els.refreshBtn.disabled = true;
+  setStatus("Pulling latest match data in the background…", "loading");
   try {
-    state.meta = await fetchJson("/api/pre-match/meta?refresh=true");
-    els.iterationId.value = String(state.meta.default_iteration_id);
-    renderSeasonToggle();
-    const hasFixtures = await loadFixtures({ refresh: true });
-    if (hasFixtures) {
-      await loadReport({ refresh: true });
-    }
+    await fetchJson("/api/hub-snapshots/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope: "analysis" }),
+    });
+    const started = Date.now();
+    const poll = async () => {
+      try {
+        const status = await fetchJson("/api/hub-snapshots/status");
+        if (status.refreshing || status.last_refresh_status === "running") {
+          if (Date.now() - started < 180000) {
+            window.setTimeout(poll, 2500);
+            return;
+          }
+        }
+        const hasFixtures = await loadFixtures();
+        if (hasFixtures) await loadReport();
+        setStatus("Snapshot updated.", "");
+      } catch (error) {
+        setStatus(error.message, "error");
+      } finally {
+        els.refreshBtn.disabled = false;
+      }
+    };
+    window.setTimeout(poll, 800);
   } catch (error) {
     setStatus(error.message, "error");
+    els.refreshBtn.disabled = false;
   }
 });
 if (els.exportPngsBtn) els.exportPngsBtn.addEventListener("click", exportPreMatchPngs);

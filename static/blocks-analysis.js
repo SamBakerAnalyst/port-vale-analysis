@@ -2031,10 +2031,15 @@ async function load(refresh = false) {
   if (state.loading) return;
   state.loading = true;
   els.refreshBtn.disabled = true;
-  setStatus(refresh ? "Refreshing live block data…" : "Loading blocks…", "loading");
+  setStatus("Opening local snapshot…", "loading");
   els.statusBar.textContent = "Loading…";
   try {
-    const payload = await fetchJson(`/api/blocks-analysis${refresh ? "?refresh=true" : ""}`);
+    const payload = await fetchJson("/api/blocks-analysis");
+    if (payload?.building) {
+      setStatus("Snapshot not ready yet — pulls when Impect publishes the match.", "loading");
+      els.statusBar.textContent = "Waiting for snapshot…";
+      return;
+    }
     state.payload = payload;
     (payload.blocks || []).forEach((block) => {
       const latest = latestPlayedMatchId(block);
@@ -2440,7 +2445,39 @@ async function exportPoster(blockId) {
   }
 }
 
-els.refreshBtn.addEventListener("click", () => load(true));
+els.refreshBtn.addEventListener("click", async () => {
+  els.refreshBtn.disabled = true;
+  setStatus("Pulling latest match data in the background…", "loading");
+  try {
+    await fetchJson("/api/hub-snapshots/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope: "analysis" }),
+    });
+    const started = Date.now();
+    const poll = async () => {
+      try {
+        const status = await fetchJson("/api/hub-snapshots/status");
+        if (status.refreshing || status.last_refresh_status === "running") {
+          if (Date.now() - started < 180000) {
+            window.setTimeout(poll, 2500);
+            return;
+          }
+        }
+        await load();
+        setStatus("Snapshot updated.", "");
+      } catch (err) {
+        setStatus(err.message || "Refresh failed", "error");
+      } finally {
+        els.refreshBtn.disabled = false;
+      }
+    };
+    window.setTimeout(poll, 800);
+  } catch (err) {
+    setStatus(err.message || "Could not start refresh.", "error");
+    els.refreshBtn.disabled = false;
+  }
+});
 els.exportAllBtn.addEventListener("click", async () => {
   if (!state.payload?.blocks?.length) return;
   els.exportAllBtn.disabled = true;

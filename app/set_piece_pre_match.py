@@ -177,12 +177,14 @@ def _ensure_set_piece_cache_dir() -> Path:
     return SET_PIECE_CACHE_DIR
 
 
-def _read_json_cache(path: Path, *, ttl: float) -> dict[str, Any] | None:
+def _read_json_cache(
+    path: Path, *, ttl: float, allow_stale: bool = False
+) -> dict[str, Any] | None:
     try:
         if not path.exists():
             return None
         age = time.time() - path.stat().st_mtime
-        if age > ttl:
+        if not allow_stale and age > ttl:
             return None
         payload = json.loads(path.read_text(encoding="utf-8"))
         return payload if isinstance(payload, dict) else None
@@ -224,13 +226,34 @@ def _match_view_cache_path(match_id: int, squad_id: int) -> Path:
 def _load_cached_report(cache_key: str) -> dict[str, Any] | None:
     cached = _REPORT_MEM_CACHE.get(cache_key)
     now = time.time()
-    if cached and now - cached[0] < _REPORT_TTL:
+    if cached:
         return cached[1]
-    disk = _read_json_cache(_report_cache_path(cache_key), ttl=_REPORT_TTL)
+    disk = _read_json_cache(
+        _report_cache_path(cache_key), ttl=_REPORT_TTL, allow_stale=True
+    )
     if disk:
         _REPORT_MEM_CACHE[cache_key] = (now, disk)
         return disk
     return None
+
+
+def _newest_cached_report_for_squad(iteration_id: int, squad_id: int) -> dict[str, Any] | None:
+    prefix = f"report_{int(iteration_id)}_{int(squad_id)}_"
+    folder = _ensure_set_piece_cache_dir()
+    newest: dict[str, Any] | None = None
+    newest_mtime = -1.0
+    for path in folder.glob(f"{prefix}*.json"):
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            continue
+        if mtime <= newest_mtime:
+            continue
+        disk = _read_json_cache(path, ttl=_REPORT_TTL, allow_stale=True)
+        if disk:
+            newest = disk
+            newest_mtime = mtime
+    return newest
 
 
 def _store_cached_report(cache_key: str, report: dict[str, Any]) -> None:
@@ -2390,9 +2413,17 @@ def build_set_piece_pre_match_report(body: SetPiecePreMatchRequest | PreMatchRep
     squad_id = int(body.squad_id)
     match_limit = SET_PIECE_MATCH_LIMIT
     refresh = bool(getattr(body, "refresh", False))
+
+    if not refresh:
+        newest = _newest_cached_report_for_squad(iteration_id, squad_id)
+        if newest:
+            newest = dict(newest)
+            newest["cache"] = {"hit": True, "refreshed": False}
+            return newest
+
     impect = _impect()
 
-    fixtures = build_pre_match_fixtures(iteration_id)
+    fixtures = build_pre_match_fixtures(iteration_id, refresh=refresh)
     fixture = next(
         (
             row
@@ -2412,6 +2443,14 @@ def build_set_piece_pre_match_report(body: SetPiecePreMatchRequest | PreMatchRep
             None,
         )
     if fixture is None:
+        if not refresh:
+            return {
+                "building": True,
+                "iteration_id": iteration_id,
+                "squad_id": squad_id,
+                "opponent": {"id": squad_id, "name": ""},
+                "cache": {"hit": False, "refreshed": False},
+            }
         from app.pre_match import _squads_map
 
         squads = _squads_map(iteration_id)
@@ -2433,10 +2472,19 @@ def build_set_piece_pre_match_report(body: SetPiecePreMatchRequest | PreMatchRep
     )
     if not refresh:
         cached_report = _load_cached_report(report_key)
-        if cached_report and not _height_chart_incomplete(cached_report) and not _for_slide_incomplete(cached_report) and not _against_slide_incomplete(cached_report):
+        if not cached_report:
+            cached_report = _newest_cached_report_for_squad(iteration_id, squad_id)
+        if cached_report:
             cached_report = dict(cached_report)
             cached_report["cache"] = {"hit": True, "refreshed": False}
             return cached_report
+        return {
+            "building": True,
+            "iteration_id": iteration_id,
+            "squad_id": squad_id,
+            "opponent": (fixture or {}).get("opponent") or {"id": squad_id, "name": ""},
+            "cache": {"hit": False, "refreshed": False},
+        }
 
     try:
         return _build_set_piece_pre_match_report_uncached(
@@ -2689,6 +2737,7 @@ def register_set_piece_pre_match_routes(app: FastAPI) -> None:
 
     @app.post("/api/set-piece-pre-match/report")
     def set_piece_pre_match_report(body: SetPiecePreMatchRequest) -> dict[str, Any]:
+        body.refresh = False
         return build_set_piece_pre_match_report(body)
 
     @app.post("/api/set-piece-pre-match/export-whatsapp-pdf")

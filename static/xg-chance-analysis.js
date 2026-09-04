@@ -803,12 +803,14 @@ async function loadReport() {
     if (state.scope === "match" && state.matchId) {
       params.set("matchId", state.matchId);
     }
-    if (state.forceRefresh) {
-      params.set("refresh", "true");
-      state.forceRefresh = false;
-    }
     const report = await fetchJson(`/api/xg-chance-analysis/report?${params}`, { signal });
     if (token !== state.loadToken) return;
+    if (report?.building) {
+      setStatus("Snapshot not ready yet — pulls when Impect publishes the match.", "loading");
+      els.statusBar.textContent = "Waiting for snapshot…";
+      showLoadingPanels("Waiting for the next match snapshot…");
+      return;
+    }
     state.report = report;
     setStatus("");
     renderAll();
@@ -889,6 +891,12 @@ async function init() {
   showLoadingPanels("Loading match data…");
   try {
     state.meta = await fetchJson("/api/xg-chance-analysis/meta");
+    if (state.meta?.building || !(state.meta.seasons || []).length) {
+      setStatus("Snapshot not ready yet — pulls when Impect publishes the match.", "loading");
+      els.statusBar.textContent = "Waiting for snapshot…";
+      showLoadingPanels("Waiting for the next match snapshot…");
+      return;
+    }
     const seasons = filteredSeasons();
     state.season = ALLOWED_SEASONS.find((s) => seasons.some((row) => row.value === s))
       || state.meta.defaultSeason
@@ -923,21 +931,39 @@ els.matchSelect.addEventListener("change", async () => {
 });
 
 els.refreshBtn.addEventListener("click", async () => {
-  setStatus("Force refreshing from Impect…", "loading");
-  els.statusBar.textContent = "Force refreshing…";
-  state.forceRefresh = true;
-  const { token, signal } = beginLoad();
+  setStatus("Pulling latest match data in the background…", "loading");
+  els.statusBar.textContent = "Refreshing snapshot…";
+  els.refreshBtn.disabled = true;
   try {
-    await loadFixtures(signal);
-    if (token !== state.loadToken) return;
-    endLoad(token);
-    await loadReport();
+    await fetchJson("/api/hub-snapshots/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope: "analysis" }),
+    });
+    const started = Date.now();
+    const poll = async () => {
+      try {
+        const status = await fetchJson("/api/hub-snapshots/status");
+        if (status.refreshing || status.last_refresh_status === "running") {
+          if (Date.now() - started < 180000) {
+            window.setTimeout(poll, 2500);
+            return;
+          }
+        }
+        await loadFixtures();
+        await loadReport();
+        setStatus("Snapshot updated.", "");
+      } catch (err) {
+        setStatus(err.message || "Refresh failed", "error");
+        els.statusBar.textContent = "Refresh failed";
+      } finally {
+        els.refreshBtn.disabled = false;
+      }
+    };
+    window.setTimeout(poll, 800);
   } catch (err) {
-    if (token !== state.loadToken) return;
-    endLoad(token);
-    setStatus(err.message || "Refresh failed", "error");
-    els.statusBar.textContent = "Refresh failed";
-    showLoadingPanels(err.message || "Refresh failed");
+    setStatus(err.message || "Could not start refresh.", "error");
+    els.refreshBtn.disabled = false;
   }
 });
 
