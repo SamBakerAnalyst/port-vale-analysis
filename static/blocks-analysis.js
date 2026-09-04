@@ -2035,9 +2035,9 @@ async function load(refresh = false) {
   els.statusBar.textContent = "Loading…";
   try {
     const payload = await fetchJson("/api/blocks-analysis");
-    if (payload?.building) {
-      setStatus("Snapshot not ready yet — pulls when Impect publishes the match.", "loading");
-      els.statusBar.textContent = "Waiting for snapshot…";
+    if (payload?.building && !(payload.blocks || []).length) {
+      setStatus("Loading saved blocks…", "loading");
+      els.statusBar.textContent = "Loading…";
       return;
     }
     state.payload = payload;

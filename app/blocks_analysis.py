@@ -174,6 +174,7 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 TARGETS_PATH = DATA_DIR / "targets.json"
 KPI_CACHE_PATH = DATA_DIR / "match-kpis.json"
 UNIT_TOP7_PATH = DATA_DIR / "unit-top7.json"
+SEASON_MATCHES_PATH = DATA_DIR / "season-matches.json"
 
 _store_lock = threading.Lock()
 _payload_cache: dict[str, tuple[float, dict[str, Any]]] = {}
@@ -404,6 +405,30 @@ def _save_unit_top7_disk(payload: dict[str, Any]) -> None:
     with _store_lock:
         temp_path.write_text(json.dumps(payload), encoding="utf-8")
         temp_path.replace(UNIT_TOP7_PATH)
+
+
+def _load_season_matches_disk() -> list[dict[str, Any]]:
+    if not SEASON_MATCHES_PATH.exists():
+        return []
+    try:
+        payload = json.loads(SEASON_MATCHES_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if isinstance(payload, list):
+        return payload
+    matches = payload.get("matches") if isinstance(payload, dict) else None
+    return matches if isinstance(matches, list) else []
+
+
+def _save_season_matches_disk(matches: list[dict[str, Any]]) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    temp_path = SEASON_MATCHES_PATH.with_suffix(".json.tmp")
+    with _store_lock:
+        temp_path.write_text(
+            json.dumps({"matches": matches}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        temp_path.replace(SEASON_MATCHES_PATH)
 
 
 def _normalize_position(position: Any) -> str:
@@ -2242,6 +2267,8 @@ def _load_match_kpis(
     matches: list[dict[str, Any]],
     *,
     force_refresh: bool = False,
+    fetch_missing: bool = True,
+    allow_stale: bool = False,
 ) -> dict[int, dict[str, Any]]:
     disk = {} if force_refresh else _load_kpi_disk_cache()
     now = time.time()
@@ -2257,52 +2284,60 @@ def _load_match_kpis(
             continue
         fingerprint = _score_fingerprint(match)
         cached = disk.get(str(match_id))
-        if (
+        cache_ok = (
             isinstance(cached, dict)
             and cached.get("v") == MATCH_STATS_CACHE_VERSION
-            and cached.get("fingerprint") == fingerprint
-            and now - float(cached.get("fetchedAt") or 0) < MATCH_KPI_CACHE_TTL
             and cached.get("stats")
             and isinstance((cached.get("stats") or {}).get("units"), dict)
             and isinstance((cached.get("stats") or {}).get("players"), list)
-        ):
+        )
+        ttl_ok = allow_stale or (
+            now - float((cached or {}).get("fetchedAt") or 0) < MATCH_KPI_CACHE_TTL
+        )
+        fingerprint_ok = bool(cached) and cached.get("fingerprint") == fingerprint
+        if cache_ok and ttl_ok and (fingerprint_ok or allow_stale):
             stats = cached["stats"]
             before = int(((stats.get("units") or {}).get("ATT") or {}).get("shots") or 0)
             formation_dirty = False
-            if not stats.get("formation"):
+            if not stats.get("formation") and fetch_missing:
                 formation = _match_starting_formation(match_id, PORT_VALE_SQUAD_ID)
                 if formation:
                     stats["formation"] = formation
                     stats["unitBaselines"] = _unit_baselines_for_formation(formation)
                     formation_dirty = True
-            lineup = _hydrate_lineup_units(stats, match_id, PORT_VALE_SQUAD_ID)
-            shot_changed = _hydrate_open_play_shots(
-                stats, PORT_VALE_SQUAD_ID, match_id, fetch_remote=False
-            )
+            lineup = False
+            shot_changed = False
+            if fetch_missing:
+                lineup = _hydrate_lineup_units(stats, match_id, PORT_VALE_SQUAD_ID)
+                shot_changed = _hydrate_open_play_shots(
+                    stats, PORT_VALE_SQUAD_ID, match_id, fetch_remote=False
+                )
             after = int(((stats.get("units") or {}).get("ATT") or {}).get("shots") or 0)
             if lineup or shot_changed or formation_dirty or after != before:
                 cached["stats"] = stats
                 dirty = True
             result[match_id] = stats
             continue
-        to_fetch.append(match)
+        if fetch_missing:
+            to_fetch.append(match)
 
     # One Impect pass for the latest cached game — never N matches on the request thread.
     latest_id = 0
-    for match in matches:
-        match_id = int(match.get("matchId") or 0)
-        stats = result.get(match_id)
-        if stats and match.get("outcome") is not None:
-            latest_id = match_id
-    if latest_id and _cross_pxt_stale(result.get(latest_id)):
-        if _hydrate_open_play_shots(
-            result[latest_id], PORT_VALE_SQUAD_ID, latest_id, fetch_remote=True
-        ):
-            dirty = True
-            cached = disk.get(str(latest_id))
-            if isinstance(cached, dict):
-                cached["stats"] = result[latest_id]
+    if fetch_missing:
+        for match in matches:
+            match_id = int(match.get("matchId") or 0)
+            stats = result.get(match_id)
+            if stats and match.get("outcome") is not None:
+                latest_id = match_id
+        if latest_id and _cross_pxt_stale(result.get(latest_id)):
+            if _hydrate_open_play_shots(
+                result[latest_id], PORT_VALE_SQUAD_ID, latest_id, fetch_remote=True
+            ):
                 dirty = True
+                cached = disk.get(str(latest_id))
+                if isinstance(cached, dict):
+                    cached["stats"] = result[latest_id]
+                    dirty = True
 
     if to_fetch:
         names = _merged_player_names()
@@ -2974,45 +3009,30 @@ def _load_demo_fixture(*, force_refresh: bool = False) -> dict[str, Any] | None:
     return fixture
 
 
-def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, Any]:
-    cache_key = "default"
-    now = time.time()
-    if not force_refresh:
-        cached = _payload_cache.get(cache_key)
-        if cached:
-            return cached[1]
-        from app.analysis_cache import REPORT_TTL_SECONDS, read_json
-
-        disk = read_json("blocks", "default", ttl=REPORT_TTL_SECONDS, allow_stale=True)
-        if disk:
-            _payload_cache[cache_key] = (now, disk)
-            return disk
-        return {
-            "building": True,
-            "generatedAt": "",
-            "season": BLOCKS_SEASON_LABEL,
-            "competition": LEAGUE_LABEL,
-            "blocks": [],
-            "benchmarks": {},
-            "matchCount": 0,
-            "playedCount": 0,
-            "currentBlockId": 1,
-        }
-
-    matches = build_season_matches(
-        BLOCKS_ITERATION_ID,
-        PORT_VALE_SQUAD_ID,
-        include_upcoming=True,
-        competition_label=LEAGUE_LABEL,
-        competition_short=LEAGUE_SHORT,
-        season_label=BLOCKS_SEASON_LABEL,
-    )
-    kpi_by_match = _load_match_kpis(matches, force_refresh=force_refresh)
-    benchmarks = build_block_benchmarks(BLOCKS_ITERATION_ID, force_refresh=force_refresh)
+def _assemble_blocks_payload(
+    matches: list[dict[str, Any]],
+    kpi_by_match: dict[int, dict[str, Any]],
+    *,
+    include_demo: bool = False,
+    force_refresh: bool = False,
+) -> dict[str, Any]:
+    benchmarks: dict[str, Any] = {}
+    if not force_refresh and _benchmark_cache:
+        benchmarks = dict(_benchmark_cache[1])
+    else:
+        try:
+            benchmarks = build_block_benchmarks(
+                BLOCKS_ITERATION_ID, force_refresh=force_refresh
+            )
+        except Exception:  # noqa: BLE001
+            benchmarks = {}
     try:
-        benchmarks["units"] = build_unit_benchmarks(
-            kpi_by_match, force_refresh=force_refresh
-        )
+        if force_refresh:
+            benchmarks["units"] = build_unit_benchmarks(
+                kpi_by_match, force_refresh=force_refresh
+            )
+        elif not benchmarks.get("units"):
+            benchmarks["units"] = _empty_unit_benchmarks()
     except Exception:  # noqa: BLE001
         benchmarks["units"] = _empty_unit_benchmarks()
     saved = _load_targets()
@@ -3075,14 +3095,15 @@ def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, A
             break
         current_block_id = int(block["id"])
 
-    demo = _load_demo_fixture(force_refresh=force_refresh)
-    if demo:
-        for block in blocks:
-            if int(block["id"]) == current_block_id:
-                block["demoFixtures"] = [demo]
-                break
+    if include_demo:
+        demo = _load_demo_fixture(force_refresh=force_refresh)
+        if demo:
+            for block in blocks:
+                if int(block["id"]) == current_block_id:
+                    block["demoFixtures"] = [demo]
+                    break
 
-    payload = {
+    return {
         "generatedAt": datetime.now(UTC).isoformat(),
         "season": BLOCKS_SEASON_LABEL,
         "competition": LEAGUE_LABEL,
@@ -3104,11 +3125,66 @@ def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, A
         "matchCount": len(matches),
         "playedCount": sum(1 for match in matches if match.get("outcome")),
     }
-    _payload_cache[cache_key] = (now, payload)
+
+
+def _store_blocks_payload(payload: dict[str, Any]) -> dict[str, Any]:
     from app.analysis_cache import write_json
 
+    _payload_cache["default"] = (time.time(), payload)
     write_json("blocks", "default", payload)
     return payload
+
+
+def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, Any]:
+    cache_key = "default"
+    now = time.time()
+    if not force_refresh:
+        cached = _payload_cache.get(cache_key)
+        if cached and (cached[1].get("blocks") or cached[1].get("playedCount")):
+            return cached[1]
+        from app.analysis_cache import REPORT_TTL_SECONDS, read_json
+
+        disk = read_json("blocks", "default", ttl=REPORT_TTL_SECONDS, allow_stale=True)
+        if disk and (disk.get("blocks") or disk.get("playedCount")):
+            _payload_cache[cache_key] = (now, disk)
+            return disk
+        matches = _load_season_matches_disk()
+        if not matches:
+            matches = build_season_matches(
+                BLOCKS_ITERATION_ID,
+                PORT_VALE_SQUAD_ID,
+                include_upcoming=True,
+                competition_label=LEAGUE_LABEL,
+                competition_short=LEAGUE_SHORT,
+                season_label=BLOCKS_SEASON_LABEL,
+            )
+            if matches:
+                _save_season_matches_disk(matches)
+        kpi_by_match = _load_match_kpis(
+            matches, force_refresh=False, fetch_missing=False, allow_stale=True
+        )
+        return _store_blocks_payload(
+            _assemble_blocks_payload(
+                matches, kpi_by_match, include_demo=False, force_refresh=False
+            )
+        )
+
+    matches = build_season_matches(
+        BLOCKS_ITERATION_ID,
+        PORT_VALE_SQUAD_ID,
+        include_upcoming=True,
+        competition_label=LEAGUE_LABEL,
+        competition_short=LEAGUE_SHORT,
+        season_label=BLOCKS_SEASON_LABEL,
+    )
+    if matches:
+        _save_season_matches_disk(matches)
+    kpi_by_match = _load_match_kpis(matches, force_refresh=True)
+    return _store_blocks_payload(
+        _assemble_blocks_payload(
+            matches, kpi_by_match, include_demo=True, force_refresh=True
+        )
+    )
 
 
 def register_blocks_analysis_routes(app: FastAPI) -> None:

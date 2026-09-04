@@ -7,7 +7,7 @@ import time
 
 import app.analysis_cache as analysis_cache
 from app.analysis_cache import write_json
-from app.blocks_analysis import build_blocks_analysis_payload
+from app.blocks_analysis import MATCH_STATS_CACHE_VERSION, build_blocks_analysis_payload
 from app.home_dashboard import build_port_vale_fixtures
 from app.player_cards import build_player_cards_squad
 from app.pre_match import PreMatchReportRequest, build_pre_match_fixtures, build_pre_match_report
@@ -95,6 +95,52 @@ def test_player_cards_click_serves_stale_disk(tmp_path, monkeypatch):
     )
     assert payload["player_count"] == 1
     assert payload["players"][0]["name"] == "Ben Heneghan"
+
+
+def test_blocks_click_assembles_played_games_from_local_disks(tmp_path, monkeypatch):
+    monkeypatch.setattr(analysis_cache, "ANALYSIS_CACHE_DIR", tmp_path)
+    monkeypatch.setattr("app.blocks_analysis._payload_cache", {})
+    monkeypatch.setattr("app.blocks_analysis.DATA_DIR", tmp_path)
+    monkeypatch.setattr(
+        "app.blocks_analysis.SEASON_MATCHES_PATH", tmp_path / "season-matches.json"
+    )
+    monkeypatch.setattr(
+        "app.blocks_analysis.KPI_CACHE_PATH", tmp_path / "match-kpis.json"
+    )
+    monkeypatch.setattr("app.blocks_analysis.TARGETS_PATH", tmp_path / "targets.json")
+    (tmp_path / "season-matches.json").write_text(
+        json.dumps(
+            {
+                "matches": [
+                    {
+                        "matchId": 101,
+                        "outcome": "win",
+                        "available": True,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "match-kpis.json").write_text(
+        json.dumps(
+            {
+                "101": {
+                    "v": MATCH_STATS_CACHE_VERSION,
+                    "fingerprint": "x",
+                    "fetchedAt": 1,
+                    "stats": {"units": {"ATT": {"shots": 8}}, "players": []},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("app.blocks_analysis.build_season_matches", _boom)
+    monkeypatch.setattr("app.blocks_analysis.build_block_benchmarks", _boom)
+    payload = build_blocks_analysis_payload(force_refresh=False)
+    assert payload.get("building") is not True
+    assert payload["playedCount"] == 1
+    assert payload["blocks"]
 
 
 def test_blocks_click_serves_stale_disk(tmp_path, monkeypatch):
