@@ -222,6 +222,7 @@ def test_blocks_click_assembles_played_games_from_local_disks(tmp_path, monkeypa
     assert payload.get("building") is not True
     assert payload["playedCount"] == 1
     assert payload["blocks"]
+    assert payload["blocks"][0]["fixtures"][0]["stats"]["units"]["ATT"]["shots"] == 8
 
 
 def test_blocks_click_serves_stale_disk(tmp_path, monkeypatch):
@@ -232,15 +233,82 @@ def test_blocks_click_serves_stale_disk(tmp_path, monkeypatch):
         "default",
         {
             "season": "26/27",
-            "blocks": [{"id": 1}],
+            "blocks": [
+                {
+                    "id": 1,
+                    "fixtures": [
+                        {
+                            "played": True,
+                            "opponentName": "Tranmere Rovers",
+                            "stats": {"xg": 1.2, "xgRace": {"points": []}, "units": {"ATT": {"shots": 9}}},
+                        }
+                    ],
+                }
+            ],
             "currentBlockId": 1,
             "matchCount": 4,
         },
     )
     monkeypatch.setattr("app.blocks_analysis.build_season_matches", _boom)
+    monkeypatch.setattr("app.blocks_analysis._load_match_kpis", _boom)
     payload = build_blocks_analysis_payload(force_refresh=False)
     assert payload["matchCount"] == 4
-    assert payload["blocks"][0]["id"] == 1
+    assert payload["blocks"][0]["fixtures"][0]["opponentName"] == "Tranmere Rovers"
+
+
+def test_blocks_ignores_hollow_cache_and_uses_saved_kpis(tmp_path, monkeypatch):
+    monkeypatch.setattr(analysis_cache, "ANALYSIS_CACHE_DIR", tmp_path)
+    monkeypatch.setattr("app.blocks_analysis._payload_cache", {})
+    monkeypatch.setattr("app.blocks_analysis.DATA_DIR", tmp_path)
+    monkeypatch.setattr(
+        "app.blocks_analysis.SEASON_MATCHES_PATH", tmp_path / "season-matches.json"
+    )
+    monkeypatch.setattr(
+        "app.blocks_analysis.KPI_CACHE_PATH", tmp_path / "match-kpis.json"
+    )
+    monkeypatch.setattr("app.blocks_analysis.TARGETS_PATH", tmp_path / "targets.json")
+    write_json(
+        "blocks",
+        "default",
+        {
+            "playedCount": 1,
+            "blocks": [
+                {
+                    "id": 1,
+                    "fixtures": [
+                        {"played": True, "opponentName": "Tranmere Rovers", "stats": {"points": 1}}
+                    ],
+                }
+            ],
+        },
+    )
+    (tmp_path / "season-matches.json").write_text(
+        json.dumps({"matches": [{"matchId": 101, "outcome": "draw", "available": True}]}),
+        encoding="utf-8",
+    )
+    (tmp_path / "match-kpis.json").write_text(
+        json.dumps(
+            {
+                "101": {
+                    "v": MATCH_STATS_CACHE_VERSION,
+                    "fingerprint": "x",
+                    "fetchedAt": 1,
+                    "stats": {
+                        "xg": 1.4,
+                        "xgRace": {"points": [0.1]},
+                        "units": {"ATT": {"shots": 7}},
+                        "players": [],
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("app.blocks_analysis.build_season_matches", _boom)
+    monkeypatch.setattr("app.blocks_analysis._fetch_match_stats", _boom)
+    payload = build_blocks_analysis_payload(force_refresh=False)
+    assert payload["blocks"][0]["fixtures"][0]["stats"]["xg"] == 1.4
+    assert payload["blocks"][0]["fixtures"][0]["stats"]["xgRace"]["points"] == [0.1]
 
 
 def test_countdown_fixtures_click_serves_stale_disk(tmp_path, monkeypatch):

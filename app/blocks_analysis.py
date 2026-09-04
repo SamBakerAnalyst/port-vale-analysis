@@ -2286,10 +2286,15 @@ def _load_match_kpis(
         cached = disk.get(str(match_id))
         cache_ok = (
             isinstance(cached, dict)
-            and cached.get("v") == MATCH_STATS_CACHE_VERSION
             and cached.get("stats")
             and isinstance((cached.get("stats") or {}).get("units"), dict)
-            and isinstance((cached.get("stats") or {}).get("players"), list)
+            and (
+                allow_stale
+                or (
+                    cached.get("v") == MATCH_STATS_CACHE_VERSION
+                    and isinstance((cached.get("stats") or {}).get("players"), list)
+                )
+            )
         )
         ttl_ok = allow_stale or (
             now - float((cached or {}).get("fetchedAt") or 0) < MATCH_KPI_CACHE_TTL
@@ -2341,9 +2346,13 @@ def _load_match_kpis(
 
     if to_fetch:
         names = _merged_player_names()
-        form_phases, form_tilt = _vale_form_baselines(
-            PORT_VALE_SQUAD_ID, force=force_refresh
-        )
+        form_phases = form_tilt = None
+        if force_refresh:
+            form_phases, form_tilt = _vale_form_baselines(
+                PORT_VALE_SQUAD_ID, force=True
+            )
+        elif _FORM_CACHE:
+            form_phases, form_tilt = _FORM_CACHE[1], _FORM_CACHE[2]
         workers = min(8, len(to_fetch))
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = {
@@ -3017,15 +3026,15 @@ def _assemble_blocks_payload(
     force_refresh: bool = False,
 ) -> dict[str, Any]:
     benchmarks: dict[str, Any] = {}
-    if not force_refresh and _benchmark_cache:
-        benchmarks = dict(_benchmark_cache[1])
-    else:
+    if force_refresh:
         try:
             benchmarks = build_block_benchmarks(
-                BLOCKS_ITERATION_ID, force_refresh=force_refresh
+                BLOCKS_ITERATION_ID, force_refresh=True
             )
         except Exception:  # noqa: BLE001
             benchmarks = {}
+    elif _benchmark_cache:
+        benchmarks = dict(_benchmark_cache[1])
     try:
         if force_refresh:
             benchmarks["units"] = build_unit_benchmarks(
@@ -3135,17 +3144,37 @@ def _store_blocks_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+def _fixture_has_kpis(fixture: dict[str, Any]) -> bool:
+    stats = fixture.get("stats") or {}
+    if stats.get("xgRace") or stats.get("fieldTilt") or stats.get("inBehind"):
+        return True
+    if stats.get("xg") is not None or stats.get("duelWon") is not None:
+        return True
+    att = (stats.get("units") or {}).get("ATT") or {}
+    return bool(att.get("shots"))
+
+
+def _payload_has_kpis(payload: dict[str, Any] | None) -> bool:
+    if not payload:
+        return False
+    for block in payload.get("blocks") or []:
+        for fixture in block.get("fixtures") or []:
+            if fixture.get("played") and _fixture_has_kpis(fixture):
+                return True
+    return False
+
+
 def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, Any]:
     cache_key = "default"
     now = time.time()
     if not force_refresh:
         cached = _payload_cache.get(cache_key)
-        if cached and (cached[1].get("blocks") or cached[1].get("playedCount")):
+        if cached and _payload_has_kpis(cached[1]):
             return cached[1]
         from app.analysis_cache import REPORT_TTL_SECONDS, read_json
 
         disk = read_json("blocks", "default", ttl=REPORT_TTL_SECONDS, allow_stale=True)
-        if disk and (disk.get("blocks") or disk.get("playedCount")):
+        if disk and _payload_has_kpis(disk):
             _payload_cache[cache_key] = (now, disk)
             return disk
         matches = _load_season_matches_disk()
@@ -3160,14 +3189,21 @@ def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, A
             )
             if matches:
                 _save_season_matches_disk(matches)
+        played = [match for match in matches if match.get("outcome")]
         kpi_by_match = _load_match_kpis(
-            matches, force_refresh=False, fetch_missing=False, allow_stale=True
+            played or matches,
+            force_refresh=False,
+            fetch_missing=True,
+            allow_stale=True,
         )
-        return _store_blocks_payload(
-            _assemble_blocks_payload(
-                matches, kpi_by_match, include_demo=False, force_refresh=False
-            )
+        payload = _assemble_blocks_payload(
+            matches, kpi_by_match, include_demo=False, force_refresh=False
         )
+        if disk and disk.get("benchmarks") and not (payload.get("benchmarks") or {}).get(
+            "goalsAgainst"
+        ):
+            payload["benchmarks"] = disk["benchmarks"]
+        return _store_blocks_payload(payload)
 
     matches = build_season_matches(
         BLOCKS_ITERATION_ID,

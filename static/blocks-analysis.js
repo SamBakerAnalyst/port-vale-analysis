@@ -2036,8 +2036,8 @@ async function load(refresh = false) {
   try {
     const payload = await fetchJson("/api/blocks-analysis");
     if (payload?.building && !(payload.blocks || []).length) {
-      setStatus("Loading saved blocks…", "loading");
-      els.statusBar.textContent = "Loading…";
+      setStatus("No saved Blocks snapshot yet. Refresh pulls the played games.", "");
+      els.statusBar.textContent = "No saved snapshot yet.";
       return;
     }
     state.payload = payload;
