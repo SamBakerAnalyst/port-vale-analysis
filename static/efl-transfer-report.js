@@ -161,12 +161,12 @@
     const { perms, loans: loansIn } = splitSigned(team.signed);
     const colCounts = [perms.length, loansIn.length, team.released.length, transferred.length, loansOut.length];
     const maxCol = Math.max(...colCounts);
-    const total = colCounts.reduce((sum, n) => sum + n, 0);
     let sizeClass = "";
-    if (maxCol > 14 || total > 28) sizeClass = " slide--dense";
+    if (maxCol > 16) sizeClass = " slide--tight";
+    else if (maxCol > 13) sizeClass = " slide--dense";
+    else if (maxCol >= 11) sizeClass = " slide--pack";
     else if (maxCol <= 5) sizeClass = " slide--huge";
     else if (maxCol <= 8) sizeClass = " slide--roomy";
-    else if (maxCol >= 12) sizeClass = " slide--pack";
     const vale = team.id === "port-vale";
     const notes = `${team.name}: ${perms.length} permanents, ${loansIn.length} loans, ${team.released.length} released, ${transferred.length} transferred, ${loansOut.length} end of loan.`;
     return `

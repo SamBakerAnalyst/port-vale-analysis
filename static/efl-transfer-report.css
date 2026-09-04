@@ -877,6 +877,7 @@ select {
 
 .kind {
   display: inline-block;
+  flex-shrink: 0;
   margin-left: 0.32rem;
   padding: 0.06rem 0.3rem;
   border-radius: 2px;
@@ -910,39 +911,43 @@ select {
 }
 
 .slide--huge .names li {
-  padding: 0.4rem 0.04rem 0.36rem;
+  padding: 0.55rem 0.04rem 0.48rem;
 }
 
 .slide--huge .names b {
-  font-size: 1.85rem;
+  font-size: 2.45rem;
 }
 
 .slide--huge .names span {
-  font-size: 1.05rem;
+  font-size: 1.2rem;
 }
 
 .slide--huge .col h3 {
-  font-size: 1.42rem;
-}
-
-.slide--huge .col h3 i {
-  font-size: 1.5rem;
-}
-
-.slide--roomy .names li {
-  padding: 0.3rem 0.04rem 0.26rem;
-}
-
-.slide--roomy .names b {
   font-size: 1.55rem;
 }
 
+.slide--huge .col h3 i {
+  font-size: 1.65rem;
+}
+
+.slide--huge .kind {
+  font-size: 0.7rem;
+}
+
+.slide--roomy .names li {
+  padding: 0.38rem 0.04rem 0.32rem;
+}
+
+.slide--roomy .names b {
+  font-size: 1.85rem;
+}
+
 .slide--roomy .names span {
-  font-size: 0.94rem;
+  font-size: 1.05rem;
 }
 
 .slide--roomy .col h3 {
-  font-size: 1.28rem;
+  font-size: 1.38rem;
 }
 
 .slide--pack .names li {
@@ -977,6 +982,28 @@ select {
   font-size: 1.02rem;
   margin-bottom: 0.16rem;
   padding-bottom: 0.14rem;
+}
+
+.slide--tight .names li {
+  padding: 0.02rem 0.04rem 0.01rem;
+}
+
+.slide--tight .names b {
+  font-size: 0.86rem;
+}
+
+.slide--tight .names span {
+  font-size: 0.56rem;
+}
+
+.slide--tight .col {
+  padding: 0.36rem 0.4rem 0.28rem;
+}
+
+.slide--tight .col h3 {
+  font-size: 0.92rem;
+  margin-bottom: 0.12rem;
+  padding-bottom: 0.1rem;
 }
 
 .notes-slide {
@@ -1192,11 +1219,11 @@ body.is-present .names span {
 }
 
 body.is-present .slide--huge .names b {
-  font-size: 2.05rem;
+  font-size: 2.7rem;
 }
 
 body.is-present .slide--roomy .names b {
-  font-size: 1.7rem;
+  font-size: 2.05rem;
 }
 
 body.is-present .slide--pack .names b {
@@ -1205,6 +1232,10 @@ body.is-present .slide--pack .names b {
 
 body.is-present .slide--dense .names b {
   font-size: 1.18rem;
+}
+
+body.is-present .slide--tight .names b {
+  font-size: 1.02rem;
 }
 
 body.is-present .hub-feedback-fab,
