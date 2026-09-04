@@ -806,9 +806,9 @@ async function loadReport() {
     const report = await fetchJson(`/api/xg-chance-analysis/report?${params}`, { signal });
     if (token !== state.loadToken) return;
     if (report?.building) {
-      setStatus("Snapshot not ready yet — pulls when Impect publishes the match.", "loading");
-      els.statusBar.textContent = "Waiting for snapshot…";
-      showLoadingPanels("Waiting for the next match snapshot…");
+      setStatus("No saved xG report for this view yet — Refresh pulls it when Impect has the match.", "");
+      els.statusBar.textContent = "No saved report for this view.";
+      showLoadingPanels("No saved xG report in the cache yet.");
       return;
     }
     state.report = report;
@@ -891,11 +891,9 @@ async function init() {
   showLoadingPanels("Loading match data…");
   try {
     state.meta = await fetchJson("/api/xg-chance-analysis/meta");
-    if (state.meta?.building || !(state.meta.seasons || []).length) {
-      setStatus("Snapshot not ready yet — pulls when Impect publishes the match.", "loading");
-      els.statusBar.textContent = "Waiting for snapshot…";
-      showLoadingPanels("Waiting for the next match snapshot…");
-      return;
+    if (!(state.meta.seasons || []).length) {
+      state.meta.seasons = ALLOWED_SEASONS.map((value) => ({ value, label: value }));
+      state.meta.defaultSeason = state.meta.defaultSeason || ALLOWED_SEASONS[0];
     }
     const seasons = filteredSeasons();
     state.season = ALLOWED_SEASONS.find((s) => seasons.some((row) => row.value === s))

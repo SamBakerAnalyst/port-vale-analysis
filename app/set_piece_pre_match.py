@@ -237,6 +237,103 @@ def _load_cached_report(cache_key: str) -> dict[str, Any] | None:
     return None
 
 
+def all_cached_reports() -> list[dict[str, Any]]:
+    folder = _ensure_set_piece_cache_dir()
+    rows: list[tuple[float, dict[str, Any]]] = []
+    for path in folder.glob("report_*.json"):
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            continue
+        disk = _read_json_cache(path, ttl=_REPORT_TTL, allow_stale=True)
+        if disk:
+            rows.append((mtime, disk))
+    rows.sort(key=lambda item: item[0], reverse=True)
+    return [body for _mtime, body in rows]
+
+
+def _fixture_from_cached_report(report: dict[str, Any]) -> dict[str, Any] | None:
+    opponent = report.get("opponent") or {}
+    fixture = report.get("fixture") or {}
+    if not opponent.get("id") and not opponent.get("name"):
+        return None
+    return {
+        "match_id": fixture.get("match_id") or report.get("match_id") or 0,
+        "match_day": fixture.get("match_day"),
+        "scheduled_date": fixture.get("scheduled_date"),
+        "kickoff_label": fixture.get("kickoff_label") or "Saved",
+        "is_home": fixture.get("is_home"),
+        "opponent": opponent,
+    }
+
+
+def fixtures_from_cached_reports(iteration_id: int | None = None) -> list[dict[str, Any]]:
+    fixtures: list[dict[str, Any]] = []
+    seen: set[tuple[Any, Any]] = set()
+    for report in all_cached_reports():
+        if iteration_id and int(report.get("iteration_id") or 0) not in {0, int(iteration_id)}:
+            continue
+        row = _fixture_from_cached_report(report)
+        if not row:
+            continue
+        key = (row.get("match_id"), (row.get("opponent") or {}).get("id"))
+        if key in seen:
+            continue
+        seen.add(key)
+        fixtures.append(row)
+    return fixtures
+
+
+def meta_from_cached_reports(competition: str) -> dict[str, Any] | None:
+    reports = all_cached_reports()
+    if not reports:
+        return None
+    iterations: dict[int, dict[str, Any]] = {}
+    default_fixture = None
+    opponents: dict[int, dict[str, Any]] = {}
+    for report in reports:
+        try:
+            iteration_id = int(report.get("iteration_id") or 0)
+        except (TypeError, ValueError):
+            iteration_id = 0
+        season = str(report.get("season") or "").strip()
+        if iteration_id:
+            iterations[iteration_id] = {
+                "id": iteration_id,
+                "season": season,
+                "label": season or str(iteration_id),
+            }
+        opponent = report.get("opponent") or {}
+        try:
+            opponent_id = int(opponent.get("id") or 0)
+        except (TypeError, ValueError):
+            opponent_id = 0
+        if opponent_id:
+            opponents[opponent_id] = {
+                "id": opponent_id,
+                "name": str(opponent.get("name") or ""),
+                "is_port_vale": False,
+            }
+        if default_fixture is None and opponent_id:
+            fixture = report.get("fixture") or {}
+            default_fixture = {
+                "match_id": fixture.get("match_id") or report.get("match_id"),
+                "opponent_id": opponent_id,
+                "opponent_name": opponent.get("name"),
+            }
+    if not iterations:
+        return None
+    default_iteration_id = next(iter(iterations))
+    return {
+        "competition": competition,
+        "default_iteration_id": default_iteration_id,
+        "default_fixture": default_fixture,
+        "default_opponent_names": [],
+        "iterations": list(iterations.values()),
+        "opponents": list(opponents.values()),
+    }
+
+
 def _newest_cached_report_for_squad(iteration_id: int, squad_id: int) -> dict[str, Any] | None:
     prefix = f"report_{int(iteration_id)}_{int(squad_id)}_"
     folder = _ensure_set_piece_cache_dir()
@@ -2416,6 +2513,15 @@ def build_set_piece_pre_match_report(body: SetPiecePreMatchRequest | PreMatchRep
 
     if not refresh:
         newest = _newest_cached_report_for_squad(iteration_id, squad_id)
+        if not newest:
+            for report in all_cached_reports():
+                try:
+                    opponent_id = int((report.get("opponent") or {}).get("id") or 0)
+                except (TypeError, ValueError):
+                    opponent_id = 0
+                if opponent_id == squad_id:
+                    newest = report
+                    break
         if newest:
             newest = dict(newest)
             newest["cache"] = {"hit": True, "refreshed": False}
@@ -2424,6 +2530,8 @@ def build_set_piece_pre_match_report(body: SetPiecePreMatchRequest | PreMatchRep
     impect = _impect()
 
     fixtures = build_pre_match_fixtures(iteration_id, refresh=refresh)
+    if not fixtures:
+        fixtures = fixtures_from_cached_reports(iteration_id)
     fixture = next(
         (
             row
@@ -2444,6 +2552,11 @@ def build_set_piece_pre_match_report(body: SetPiecePreMatchRequest | PreMatchRep
         )
     if fixture is None:
         if not refresh:
+            any_report = next(iter(all_cached_reports()), None)
+            if any_report:
+                any_report = dict(any_report)
+                any_report["cache"] = {"hit": True, "refreshed": False}
+                return any_report
             return {
                 "building": True,
                 "iteration_id": iteration_id,
@@ -2478,6 +2591,11 @@ def build_set_piece_pre_match_report(body: SetPiecePreMatchRequest | PreMatchRep
             cached_report = dict(cached_report)
             cached_report["cache"] = {"hit": True, "refreshed": False}
             return cached_report
+        any_report = next(iter(all_cached_reports()), None)
+        if any_report:
+            any_report = dict(any_report)
+            any_report["cache"] = {"hit": True, "refreshed": False}
+            return any_report
         return {
             "building": True,
             "iteration_id": iteration_id,
@@ -2729,11 +2847,42 @@ def register_set_piece_pre_match_routes(app: FastAPI) -> None:
     def set_piece_pre_match_meta_route(
         competition: str = Query(DEFAULT_COMPETITION, min_length=1),
     ) -> dict[str, Any]:
-        return pre_match_meta(competition)
+        meta = pre_match_meta(competition)
+        recovered = meta_from_cached_reports(competition)
+        if recovered and (
+            meta.get("building") or not int(meta.get("default_iteration_id") or 0)
+        ):
+            return recovered
+        if recovered:
+            iterations = {
+                int(item["id"]): item
+                for item in (meta.get("iterations") or [])
+                if item.get("id") is not None
+            }
+            for item in recovered.get("iterations") or []:
+                try:
+                    iterations[int(item["id"])] = item
+                except (TypeError, ValueError, KeyError):
+                    continue
+            if iterations:
+                meta = dict(meta)
+                meta["iterations"] = list(iterations.values())
+                if not meta.get("default_iteration_id"):
+                    meta["default_iteration_id"] = next(iter(iterations))
+                if not meta.get("default_fixture"):
+                    meta["default_fixture"] = recovered.get("default_fixture")
+        return meta
 
     @app.get("/api/set-piece-pre-match/fixtures")
     def set_piece_pre_match_fixtures(iteration_id: int = Query(..., ge=1)) -> dict[str, Any]:
-        return {"fixtures": build_pre_match_fixtures(iteration_id)}
+        from app.pre_match import _merge_fixture_rows
+
+        return {
+            "fixtures": _merge_fixture_rows(
+                build_pre_match_fixtures(iteration_id),
+                fixtures_from_cached_reports(iteration_id),
+            )
+        }
 
     @app.post("/api/set-piece-pre-match/report")
     def set_piece_pre_match_report(body: SetPiecePreMatchRequest) -> dict[str, Any]:

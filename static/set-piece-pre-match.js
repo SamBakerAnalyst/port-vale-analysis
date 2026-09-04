@@ -2109,9 +2109,10 @@ async function loadReport({ refresh = false } = {}) {
     if (els.matchId.value) body.match_id = Number(els.matchId.value);
     const report = await apiPost("/api/set-piece-pre-match/report", body);
     if (report?.building) {
-      renderEmptyDeck("Snapshot not ready yet — pulls when Impect publishes the match.");
-      setStatus("Waiting for the next match snapshot…", "loading");
-      els.statusBar.textContent = "Waiting for snapshot…";
+      renderFixtures();
+      renderEmptyDeck("No saved report for this opponent yet — Refresh pulls it when Impect has the match.");
+      setStatus("No saved report for this opponent yet.", "");
+      els.statusBar.textContent = "No saved report for this opponent.";
       return;
     }
     renderDeck(report);
@@ -2264,9 +2265,9 @@ async function boot() {
       iterations.find((item) => String(item.season || "").includes("26/27")) ||
       iterations[0];
     if (!preferred) {
-      setStatus("Snapshot not ready yet — pulls when Impect publishes the match.", "loading");
-      els.statusBar.textContent = "Waiting for snapshot…";
-      els.deck.innerHTML = `<div class="sp-placeholder">Waiting for the next match snapshot…</div>`;
+      setStatus("No saved set-piece reports yet. Refresh once Impect has published the match.", "");
+      els.statusBar.textContent = "No saved reports in the cache yet.";
+      els.deck.innerHTML = `<div class="sp-placeholder">No saved set-piece reports in the cache yet.</div>`;
       return;
     }
     els.iterationId.value = preferred.id;

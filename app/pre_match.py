@@ -4415,21 +4415,185 @@ def _build_squad_list_slide(
     }
 
 
+# Known League Two seasons so the top bar still fills from disk after a cache-key change.
+_FALLBACK_ITERATIONS = (
+    {"id": 2120, "season": "26/27", "label": "26/27"},
+    {"id": 1464, "season": "25/26", "label": "25/26"},
+)
+
+
+def _merge_fixture_rows(*groups: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    seen: set[tuple[Any, Any]] = set()
+    merged: list[dict[str, Any]] = []
+    for group in groups:
+        for row in group or []:
+            opponent = row.get("opponent") or {}
+            key = (row.get("match_id"), opponent.get("id"))
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(row)
+    merged.sort(
+        key=lambda row: (
+            int(row.get("match_day") or 0),
+            str(row.get("scheduled_date") or ""),
+        )
+    )
+    return merged
+
+
+def _fixture_from_pre_match_report(report: dict[str, Any]) -> dict[str, Any] | None:
+    opponent = report.get("opponent") or (report.get("fixture") or {}).get("opponent") or {}
+    if not opponent.get("id") and not opponent.get("name"):
+        return None
+    fixture = report.get("fixture") or {}
+    return {
+        "match_id": fixture.get("match_id") or report.get("match_id") or 0,
+        "match_day": fixture.get("match_day"),
+        "scheduled_date": fixture.get("scheduled_date"),
+        "kickoff_label": fixture.get("kickoff_label")
+        or fixture.get("date_label")
+        or "Saved",
+        "is_home": fixture.get("is_home"),
+        "opponent": opponent,
+    }
+
+
+def fixtures_from_saved_pre_match_reports(
+    iteration_id: int | None = None,
+) -> list[dict[str, Any]]:
+    from app.analysis_cache import all_json
+
+    fixtures: list[dict[str, Any]] = []
+    for report in all_json("pre-match"):
+        if iteration_id and int(report.get("iteration_id") or 0) not in {0, int(iteration_id)}:
+            continue
+        row = _fixture_from_pre_match_report(report)
+        if row:
+            fixtures.append(row)
+    return fixtures
+
+
+def _meta_from_saved_disks(competition: str) -> dict[str, Any] | None:
+    from app.analysis_cache import all_json, newest_json
+
+    newest = newest_json("pre-match-meta")
+    if newest and int(newest.get("default_iteration_id") or 0):
+        return newest
+
+    iterations: dict[int, dict[str, Any]] = {}
+    opponents: dict[int, dict[str, Any]] = {}
+    default_fixture = None
+    for report in all_json("pre-match"):
+        try:
+            iteration_id = int(report.get("iteration_id") or 0)
+        except (TypeError, ValueError):
+            iteration_id = 0
+        season = str(report.get("season") or "").strip()
+        if iteration_id:
+            iterations[iteration_id] = {
+                "id": iteration_id,
+                "season": season,
+                "label": season or str(iteration_id),
+            }
+        opponent = report.get("opponent") or {}
+        try:
+            opponent_id = int(opponent.get("id") or 0)
+        except (TypeError, ValueError):
+            opponent_id = 0
+        if opponent_id:
+            opponents[opponent_id] = {
+                "id": opponent_id,
+                "name": str(opponent.get("name") or ""),
+                "is_port_vale": False,
+            }
+        if default_fixture is None and opponent_id:
+            fixture = report.get("fixture") or {}
+            default_fixture = {
+                "match_id": fixture.get("match_id") or report.get("match_id"),
+                "opponent_id": opponent_id,
+                "opponent_name": opponent.get("name"),
+            }
+
+    try:
+        from app.set_piece_pre_match import meta_from_cached_reports
+
+        extra = meta_from_cached_reports(competition)
+    except Exception:
+        extra = None
+    if extra:
+        for item in extra.get("iterations") or []:
+            try:
+                iterations[int(item["id"])] = item
+            except (TypeError, ValueError, KeyError):
+                continue
+        if default_fixture is None:
+            default_fixture = extra.get("default_fixture")
+        for opponent in extra.get("opponents") or []:
+            try:
+                opponents[int(opponent["id"])] = opponent
+            except (TypeError, ValueError, KeyError):
+                continue
+
+    if not iterations:
+        return None
+    default_iteration_id = next(iter(iterations))
+    return {
+        "competition": competition,
+        "default_iteration_id": default_iteration_id,
+        "default_fixture": default_fixture,
+        "default_opponent_names": [],
+        "iterations": list(iterations.values()),
+        "opponents": list(opponents.values()),
+    }
+
+
+def _fallback_pre_match_meta(competition: str) -> dict[str, Any]:
+    return {
+        "competition": competition,
+        "default_iteration_id": int(_FALLBACK_ITERATIONS[0]["id"]),
+        "default_fixture": None,
+        "default_opponent_names": [],
+        "iterations": [dict(item) for item in _FALLBACK_ITERATIONS],
+        "opponents": [],
+    }
+
+
 def build_pre_match_fixtures(
     iteration_id: int,
     *,
     refresh: bool = False,
 ) -> list[dict[str, Any]]:
-    from app.analysis_cache import REPORT_TTL_SECONDS, read_json, write_json
+    from app.analysis_cache import REPORT_TTL_SECONDS, all_json, read_json, write_json
 
     cache_key = f"fixtures_{int(iteration_id)}"
     if not refresh:
         cached = read_json(
             "pre-match-fixtures", cache_key, ttl=REPORT_TTL_SECONDS, allow_stale=True
         )
-        if cached and isinstance(cached.get("fixtures"), list):
-            return list(cached["fixtures"])
-        return []
+        cached_rows = (
+            list(cached["fixtures"])
+            if cached and isinstance(cached.get("fixtures"), list)
+            else []
+        )
+        if not cached_rows:
+            for body in all_json("pre-match-fixtures"):
+                rows = body.get("fixtures")
+                if isinstance(rows, list) and rows:
+                    cached_rows = list(rows)
+                    break
+        recovered = fixtures_from_saved_pre_match_reports(iteration_id)
+        try:
+            from app.set_piece_pre_match import fixtures_from_cached_reports
+
+            recovered = _merge_fixture_rows(
+                recovered, fixtures_from_cached_reports(iteration_id)
+            )
+        except Exception:
+            pass
+        merged = _merge_fixture_rows(cached_rows, recovered)
+        if merged:
+            return merged
 
     fixtures = _build_pre_match_fixtures_uncached(int(iteration_id))
     write_json("pre-match-fixtures", cache_key, {"fixtures": fixtures})
@@ -5203,6 +5367,39 @@ def _recent_form(
     return list(reversed(form))
 
 
+def _pre_match_report_from_disk(
+    iteration_id: int, squad_id: int, match_id: int | None
+) -> dict[str, Any] | None:
+    from app.analysis_cache import all_json
+
+    same_match: dict[str, Any] | None = None
+    same_squad: dict[str, Any] | None = None
+    same_iteration: dict[str, Any] | None = None
+    for report in all_json("pre-match"):
+        try:
+            report_iteration = int(report.get("iteration_id") or 0)
+        except (TypeError, ValueError):
+            report_iteration = 0
+        opponent = report.get("opponent") or {}
+        try:
+            report_squad = int(opponent.get("id") or report.get("squad_id") or 0)
+        except (TypeError, ValueError):
+            report_squad = 0
+        fixture = report.get("fixture") or {}
+        try:
+            report_match = int(fixture.get("match_id") or report.get("match_id") or 0)
+        except (TypeError, ValueError):
+            report_match = 0
+        if match_id and report_match == int(match_id) and report_squad in {0, squad_id}:
+            same_match = report
+            break
+        if report_squad == squad_id and report_iteration in {0, iteration_id} and same_squad is None:
+            same_squad = report
+        if report_squad == squad_id and same_iteration is None:
+            same_iteration = report
+    return same_match or same_squad or same_iteration
+
+
 def build_pre_match_report(body: PreMatchReportRequest) -> dict[str, Any]:
     from app.analysis_cache import REPORT_TTL_SECONDS, read_json, write_json
 
@@ -5214,18 +5411,14 @@ def build_pre_match_report(body: PreMatchReportRequest) -> dict[str, Any]:
         cached = read_json(
             "pre-match", cache_key, ttl=REPORT_TTL_SECONDS, allow_stale=True
         )
+        if not cached:
+            cached = _pre_match_report_from_disk(
+                int(body.iteration_id), int(body.squad_id), body.match_id
+            )
         if cached:
             cached = dict(cached)
             cached["cache"] = {"hit": True, "refreshed": False}
             return cached
-        return {
-            "building": True,
-            "iteration_id": int(body.iteration_id),
-            "squad_id": int(body.squad_id),
-            "match_id": body.match_id,
-            "opponent": {"id": int(body.squad_id), "name": ""},
-            "cache": {"hit": False, "refreshed": False},
-        }
 
     if refresh:
         try:
@@ -5550,14 +5743,11 @@ def pre_match_meta(
         cached = read_json(
             "pre-match-meta", cache_key, ttl=REPORT_TTL_SECONDS, allow_stale=True
         )
-        if cached:
+        if cached and int(cached.get("default_iteration_id") or 0):
             return cached
-        return {
-            "building": True,
-            "competition": competition_name or DEFAULT_COMPETITION,
-            "seasons": [],
-            "default_iteration_id": 0,
-        }
+        recovered = _meta_from_saved_disks(competition_name or DEFAULT_COMPETITION)
+        if recovered:
+            return recovered
 
     meta = _pre_match_meta_uncached(competition_name)
     write_json("pre-match-meta", cache_key, meta)

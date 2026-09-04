@@ -111,6 +111,34 @@ def click_list(kind: str, key: str) -> list[Any] | None:
     return read_list(kind, key, ttl=PACKET_TTL_SECONDS, allow_stale=True)
 
 
+def all_json(kind: str) -> list[dict[str, Any]]:
+    """Every valid payload in a kind folder, newest first. Ignores TTL."""
+    folder = _ensure_dir() / kind
+    if not folder.is_dir():
+        return []
+    rows: list[tuple[float, dict[str, Any]]] = []
+    for path in folder.glob("*.json"):
+        try:
+            mtime = path.stat().st_mtime
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                continue
+            if int(payload.get("_cache_version") or 0) != ANALYSIS_CACHE_VERSION:
+                continue
+            body = payload.get("data")
+            if isinstance(body, dict):
+                rows.append((mtime, body))
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            continue
+    rows.sort(key=lambda item: item[0], reverse=True)
+    return [body for _mtime, body in rows]
+
+
+def newest_json(kind: str) -> dict[str, Any] | None:
+    rows = all_json(kind)
+    return rows[0] if rows else None
+
+
 def write_list(kind: str, key: str, data: list[Any]) -> None:
     path = _path(kind, key)
     try:

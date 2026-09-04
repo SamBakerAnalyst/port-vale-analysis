@@ -1155,7 +1155,7 @@
       updateClubMeta(opponent, payload);
       setStatus(
         payload.building
-          ? "Snapshot not ready yet — pulls when the next match lands."
+          ? "No saved squad cards yet — Refresh pulls them when the data is ready."
           : "",
         Boolean(payload.building),
       );

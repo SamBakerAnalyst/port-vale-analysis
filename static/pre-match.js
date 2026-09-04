@@ -5146,8 +5146,9 @@ async function loadReport({ refresh = false } = {}) {
       }),
     });
     if (report?.building) {
-      renderEmptyDeck("Snapshot not ready yet — pulls when Impect publishes the match.");
-      setStatus("Waiting for the next match snapshot…", "loading");
+      renderMatchBar();
+      renderEmptyDeck("No saved report for this opponent yet — Refresh pulls it when Impect has the match.");
+      setStatus("No saved report for this opponent yet.", "");
       return;
     }
     renderMatchBar();
@@ -5171,9 +5172,12 @@ async function init() {
   renderEmptyDeck("Loading fixtures…");
   try {
     state.meta = await fetchJson("/api/pre-match/meta");
-    if (state.meta?.building || !state.meta?.default_iteration_id) {
-      renderEmptyDeck("Snapshot not ready yet — pulls when Impect publishes the match.");
-      setStatus("Waiting for the next match snapshot…", "loading");
+    if (!state.meta?.default_iteration_id && (state.meta?.iterations || []).length) {
+      state.meta.default_iteration_id = state.meta.iterations[0].id;
+    }
+    if (!state.meta?.default_iteration_id) {
+      renderEmptyDeck("No saved pre-match reports yet. Refresh once Impect has published the match.");
+      setStatus("No saved reports in the cache yet.", "");
       return;
     }
     els.iterationId.value = String(state.meta.default_iteration_id);

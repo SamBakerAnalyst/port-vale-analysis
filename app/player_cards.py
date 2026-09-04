@@ -780,17 +780,25 @@ def build_player_cards_squad(
         disk = read_json(
             "player-cards", disk_key, ttl=REPORT_TTL_SECONDS, allow_stale=True
         )
+        if not disk:
+            from app.analysis_cache import all_json
+
+            club_key = _normalize_name_key(club)
+            for row in all_json("player-cards"):
+                if _normalize_name_key(str(row.get("club") or "")) != club_key:
+                    continue
+                if season and str(row.get("season") or "") not in {"", season}:
+                    continue
+                disk = row
+                break
+            if not disk:
+                for row in all_json("player-cards"):
+                    if _normalize_name_key(str(row.get("club") or "")) == club_key:
+                        disk = row
+                        break
         if disk:
             _squad_cache[cache_key] = (now, disk)
             return disk
-        return {
-            "building": True,
-            "club": club,
-            "season": season,
-            "league": league_ui or "",
-            "players": [],
-            "player_count": 0,
-        }
 
     club_row = _find_club_row(club, season=season, league=league_ui)
     if club_row is None and league_ui:

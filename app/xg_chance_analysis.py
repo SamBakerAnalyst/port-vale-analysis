@@ -655,19 +655,54 @@ def _match_meta(match: dict[str, Any], port_vale_id: int, squads: dict[int, dict
     }
 
 
+def _fixtures_from_xg_reports(season: str | None = None) -> list[dict[str, Any]]:
+    from app.analysis_cache import all_json
+
+    rows: list[dict[str, Any]] = []
+    seen: set[Any] = set()
+    for report in all_json("xg-report"):
+        if season and str(report.get("season") or "") not in {"", str(season)}:
+            continue
+        for summary in report.get("matches") or []:
+            match_id = summary.get("matchId")
+            if match_id in seen:
+                continue
+            seen.add(match_id)
+            opponent = summary.get("opponent") or {"name": summary.get("opponentName")}
+            rows.append(
+                {
+                    "matchId": match_id,
+                    "matchDay": summary.get("matchDay"),
+                    "dateLabel": summary.get("dateLabel") or summary.get("kickoffLabel"),
+                    "kickoffLabel": summary.get("kickoffLabel"),
+                    "isHome": summary.get("isHome"),
+                    "venue": summary.get("venue") or ("Home" if summary.get("isHome") else "Away"),
+                    "opponent": opponent,
+                    "score": summary.get("score") or "",
+                }
+            )
+    return rows
+
+
 def build_xg_chance_fixtures(
     season: str | None, *, refresh: bool = False
 ) -> list[dict[str, Any]]:
-    from app.analysis_cache import REPORT_TTL_SECONDS, read_json, write_json
+    from app.analysis_cache import REPORT_TTL_SECONDS, all_json, read_json, write_json
 
     cache_key = (season or "default").replace("/", "-")
     if not refresh:
         cached = read_json(
             "xg-fixtures", cache_key, ttl=REPORT_TTL_SECONDS, allow_stale=True
         )
-        if cached and isinstance(cached.get("fixtures"), list):
+        if cached and isinstance(cached.get("fixtures"), list) and cached["fixtures"]:
             return list(cached["fixtures"])
-        return []
+        for body in all_json("xg-fixtures"):
+            rows = body.get("fixtures")
+            if isinstance(rows, list) and rows:
+                return list(rows)
+        recovered = _fixtures_from_xg_reports(season)
+        if recovered:
+            return recovered
 
     iteration = _resolve_port_vale_iteration(season)
     iteration_id = int(iteration["id"])
@@ -905,18 +940,24 @@ def build_xg_chance_report(
         cached = read_json(
             "xg-report", cache_key, ttl=REPORT_TTL_SECONDS, allow_stale=True
         )
+        if not cached:
+            from app.analysis_cache import all_json, newest_json
+
+            wanted_season = str(season or "")
+            for report in all_json("xg-report"):
+                if wanted_season and str(report.get("season") or "") not in {"", wanted_season}:
+                    continue
+                if scope_token and str(report.get("scope") or "") not in {"", scope_token}:
+                    continue
+                cached = report
+                break
+            if not cached:
+                cached = newest_json("xg-report")
         if cached:
             cached = dict(cached)
             cached["cache"] = {"hit": True, "refreshed": False}
+            cached["shotCount"] = cached.get("shotCount") or len(cached.get("shots") or [])
             return cached
-        return {
-            "building": True,
-            "season": season,
-            "scope": scope_token,
-            "shots": [],
-            "shotCount": 0,
-            "cache": {"hit": False, "refreshed": False},
-        }
 
     report = _build_xg_chance_report_uncached(
         season=season,
@@ -1138,13 +1179,31 @@ def xg_chance_meta(*, refresh: bool = False) -> dict[str, Any]:
 
     if not refresh:
         cached = read_json("xg-meta", "default", ttl=REPORT_TTL_SECONDS, allow_stale=True)
-        if cached:
+        if cached and (cached.get("seasons") or cached.get("defaultSeason")):
             return cached
+        from app.analysis_cache import all_json, newest_json
+
+        newest = newest_json("xg-meta")
+        if newest and (newest.get("seasons") or newest.get("defaultSeason")):
+            return newest
+        seasons: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for report in all_json("xg-report"):
+            value = str(report.get("season") or "").strip()
+            if value and value not in seen:
+                seen.add(value)
+                seasons.append({"value": value, "label": value})
+        for value in ALLOWED_SEASONS:
+            if value not in seen:
+                seasons.append({"value": value, "label": value})
+        default_season = next(
+            (value for value in ALLOWED_SEASONS if value in {row["value"] for row in seasons}),
+            seasons[0]["value"] if seasons else "",
+        )
         return {
-            "building": True,
-            "seasons": [],
-            "defaultSeason": "",
-            "season": "",
+            "seasons": seasons,
+            "defaultSeason": default_season,
+            "season": default_season,
             "competition": "",
             "chanceBuckets": list(CHANCE_BUCKETS),
             "gameStates": [
