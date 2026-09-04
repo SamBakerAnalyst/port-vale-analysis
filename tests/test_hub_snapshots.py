@@ -232,3 +232,64 @@ def test_refresh_scouting_reports_one_tool_failing_without_losing_the_other(monk
     assert result["who_to_scout"]["ok"] is False
     assert "impect down" in result["who_to_scout"]["error"]
     assert result["scoutable_teams"]["ok"] is True
+
+
+def test_boot_warm_rebuilds_when_the_disk_cache_is_unusable(monkeypatch):
+    """Live sat on an unusable 3-byte standouts file, so every visit rebuilt."""
+    import app.main  # noqa: F401
+
+    calls: list[bool] = []
+    monkeypatch.setattr("app.home_dashboard._load_standouts_disk", lambda key: None)
+    monkeypatch.setattr(
+        "app.who_to_scout._load_standouts_raw_payload",
+        lambda *, period, force_refresh=False, **kw: calls.append(force_refresh) or {},
+    )
+    monkeypatch.setattr("app.scoutable_teams.build_leagues_board", lambda **kw: {})
+
+    result = hub_snapshots.warm_scouting_from_disk()
+
+    assert calls == [True], "an unusable cache must force a rebuild, not just schedule one"
+    assert result["who_to_scout"] == "rebuilt"
+
+
+def test_boot_warm_reads_disk_without_touching_impect_when_cache_is_good(monkeypatch):
+    calls: list[bool] = []
+    monkeypatch.setattr(
+        "app.home_dashboard._load_standouts_disk", lambda key: (1.0, {"players": []})
+    )
+    monkeypatch.setattr(
+        "app.who_to_scout._load_standouts_raw_payload",
+        lambda *, period, force_refresh=False, **kw: calls.append(force_refresh) or {},
+    )
+    monkeypatch.setattr("app.scoutable_teams.build_leagues_board", lambda **kw: {})
+
+    result = hub_snapshots.warm_scouting_from_disk()
+
+    assert calls == [False], "a good cache must not trigger an Impect rebuild"
+    assert result == {"scoutable_teams": "warm", "who_to_scout": "warm"}
+
+
+def test_boot_warm_survives_one_tool_failing(monkeypatch):
+    monkeypatch.setattr(
+        "app.scoutable_teams.build_leagues_board",
+        lambda **kw: (_ for _ in ()).throw(RuntimeError("impect down")),
+    )
+    monkeypatch.setattr(
+        "app.home_dashboard._load_standouts_disk", lambda key: (1.0, {"players": []})
+    )
+    monkeypatch.setattr(
+        "app.who_to_scout._load_standouts_raw_payload",
+        lambda *, period, force_refresh=False, **kw: {},
+    )
+
+    result = hub_snapshots.warm_scouting_from_disk()
+    assert "failed" in result["scoutable_teams"]
+    assert result["who_to_scout"] == "warm"
+
+
+def test_boot_warm_is_wired_into_the_scheduler():
+    import inspect
+
+    src = inspect.getsource(hub_snapshots.start_daily_scheduler)
+    assert "warm_scouting_from_disk" in src
+    assert "hub-scouting-boot-warm" in src

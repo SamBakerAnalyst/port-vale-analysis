@@ -431,6 +431,47 @@ def refresh_analysis() -> dict[str, Any]:
     return payload
 
 
+def warm_scouting_from_disk() -> dict[str, Any]:
+    """Get the scouting caches back into memory after a restart.
+
+    A deploy empties the in-process caches even though the saved data is still
+    good, and both tools build lazily — so without this the first person to open
+    Who To Scout or Scoutable Teams pays for the rebuild.
+
+    Normally this is the cheap path: read the disk cache, no Impect. But Live was
+    sitting on an unusable 3-byte standouts file from 20 August, and the unforced
+    path only *schedules* a background rebuild, which was not landing. So when
+    there is nothing usable on disk we rebuild here instead of leaving the next
+    person to trigger it and wait four minutes.
+    """
+    from app.home_dashboard import _load_standouts_disk
+    from app.scoutable_teams import build_leagues_board
+    from app.who_to_scout import _load_standouts_raw_payload, _standouts_raw_cache_key
+
+    result: dict[str, Any] = {}
+
+    try:
+        build_leagues_board()
+        result["scoutable_teams"] = "warm"
+    except Exception as exc:  # noqa: BLE001 - one tool must not stop the other
+        logger.exception("Boot warm of Scoutable Teams failed")
+        result["scoutable_teams"] = f"failed: {exc}"
+
+    try:
+        if _load_standouts_disk(_standouts_raw_cache_key("season")) is None:
+            logger.info("No usable standouts cache — rebuilding at boot")
+            _load_standouts_raw_payload(period="season", force_refresh=True)
+            result["who_to_scout"] = "rebuilt"
+        else:
+            _load_standouts_raw_payload(period="season")
+            result["who_to_scout"] = "warm"
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Boot warm of Who To Scout failed")
+        result["who_to_scout"] = f"failed: {exc}"
+
+    return result
+
+
 def refresh_snapshots(scope: str = "all") -> dict[str, Any]:
     global _refreshing
     scope_key = str(scope or "all").strip().lower()
@@ -591,31 +632,6 @@ def start_daily_scheduler() -> None:
     _scheduler_started = True
     _ensure_dir()
 
-    def _boot_warm_scouting() -> None:
-        """Pull the scouting caches from disk into memory after a restart.
-
-        A deploy wipes the in-process caches even though the saved data is still
-        good, and both tools build lazily — so without this the first person to
-        open Who To Scout or Scoutable Teams pays for the rebuild. These are the
-        unforced paths on purpose: they read the disk cache when it is there, and
-        only fall back to Impect when it genuinely is not.
-        """
-        time.sleep(15)
-        try:
-            from app.scoutable_teams import build_leagues_board
-
-            build_leagues_board()
-            logger.info("Scoutable Teams board warmed at boot")
-        except Exception:
-            logger.exception("Boot warm of Scoutable Teams failed")
-        try:
-            from app.who_to_scout import _load_standouts_raw_payload
-
-            _load_standouts_raw_payload(period="season")
-            logger.info("Who To Scout standouts warmed at boot")
-        except Exception:
-            logger.exception("Boot warm of Who To Scout failed")
-
     def _loop() -> None:
         # If never refreshed (or very stale), warm shortly after boot.
         if _meta_is_stale():
@@ -686,8 +702,12 @@ def start_daily_scheduler() -> None:
     threading.Thread(
         target=_analysis_loop, name="hub-analysis-provider-poll", daemon=True
     ).start()
+    def _scouting_boot_warm() -> None:
+        time.sleep(15)  # let the app finish coming up first
+        warm_scouting_from_disk()
+
     threading.Thread(
-        target=_boot_warm_scouting, name="hub-scouting-boot-warm", daemon=True
+        target=_scouting_boot_warm, name="hub-scouting-boot-warm", daemon=True
     ).start()
 
 
