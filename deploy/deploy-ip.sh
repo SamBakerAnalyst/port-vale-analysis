@@ -56,13 +56,34 @@ for _ in $(seq 1 30); do
   if docker compose --project-directory "$ROOT" -f deploy/docker-compose.ip.yml exec -T hub curl -sf http://localhost:8000/health >/dev/null 2>&1; then
     # Prebuilt home-tab caches live in repo data/ (rsynced from Mac) — seed into the
     # persistent volume so Stand outs / Recruitment tabs work immediately on cold deploy.
-    for cache in home-standouts-cache.json home-recruitment-cache.json home-strategy-cache.json squad-planner.json; do
-      if [[ -f "$ROOT/data/$cache" ]]; then
+      # Seed ONLY what is missing. This used to copy unconditionally, and that
+      # is what kept Who To Scout slow for a fortnight: $ROOT/data is rsynced
+      # from a laptop and never pruned, so a 3-byte home-standouts-cache.json
+      # left there on 20 Aug was copied over the good 1.7 MB volume copy on
+      # every single deploy. The tool then rebuilt from Impect for whoever
+      # opened it first, and the rebuild kept failing on a rate limit.
+      #
+      # The live copy always wins. squad-planner.json is staff-entered data, so
+      # overwriting that from a dev machine would lose real work.
+      compose_ip() {
+        docker compose --project-directory "$ROOT" -f deploy/docker-compose.ip.yml "$@"
+      }
+      for cache in home-standouts-cache.json home-recruitment-cache.json home-strategy-cache.json squad-planner.json; do
+        src="$ROOT/data/$cache"
+        [[ -f "$src" ]] || continue
+        # -s: exists and is larger than zero. An empty or stub source is worse
+        # than no source at all.
+        if [[ ! -s "$src" ]]; then
+          echo "Skipping /data/$cache — repo copy is empty"
+          continue
+        fi
+        if compose_ip exec -T hub test -s "/data/$cache" >/dev/null 2>&1; then
+          echo "Keeping /data/$cache already in the volume"
+          continue
+        fi
         echo "Seeding /data/$cache into hub volume…"
-        docker compose --project-directory "$ROOT" -f deploy/docker-compose.ip.yml \
-          cp "$ROOT/data/$cache" "hub:/data/$cache" 2>/dev/null || true
-      fi
-    done
+        compose_ip cp "$src" "hub:/data/$cache" 2>/dev/null || true
+      done
     PUBLIC_IP=$(curl -s ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')
     echo ""
     echo "✓ Hub is live at: http://${PUBLIC_IP}/"
