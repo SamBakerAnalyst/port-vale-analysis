@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 
 from app.auth import register_auth
 from app.label_utils import humanize_metric_label, humanize_profile_name
+from app.logging_config import configure_logging
 from app.profile_resolve import (
     FACTOR_SCORE_ALIASES,
     profile_match_tokens,
@@ -45,7 +46,10 @@ from app.squad_photos import (
 
 load_dotenv()
 
+_LOG_LEVEL = configure_logging()
+
 logger = logging.getLogger("impect.dashboard")
+logger.info("Port Vale hub starting — log level %s", _LOG_LEVEL)
 
 # Ignore HTTP_PROXY/HTTPS_PROXY — Cursor/shell proxies often point at a dead local forwarder.
 _http = requests.Session()
@@ -4902,7 +4906,9 @@ def export_chart_slides(body: PdfExportRequest) -> Response:
     )
 
 
+from app.cache_health import register_cache_health_routes
 from app.register_apps import register_all_app_routes
 from app.scouting import SCOUTING_DIR
 
 register_all_app_routes(app)
+register_cache_health_routes(app)

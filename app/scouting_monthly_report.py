@@ -46,10 +46,17 @@ class ScoutingMonthlyReportRequest(BaseModel):
 
 
 def _overall_score(profile_scores: dict[str, Any]) -> float | None:
-    values = [float(v) for v in profile_scores.values() if v is not None]
-    if not values:
-        return None
-    return sum(values) / len(values)
+    """Overall, defined once for the whole hub.
+
+    This used to be a second copy of the same average. Two definitions of
+    "Overall" is how Who To Scout and Watch list ended up disagreeing about the
+    same player, so it now delegates rather than re-deriving.
+    """
+    # Imported here, not at module scope, to stay clear of the home_dashboard
+    # import cycle — same pattern as who_to_scout.
+    from app.home_dashboard import _overall_from_profile_scores
+
+    return _overall_from_profile_scores(profile_scores)
 
 
 def _player_id_key(player: dict[str, Any]) -> str | None:

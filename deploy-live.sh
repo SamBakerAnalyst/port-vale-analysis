@@ -66,8 +66,31 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     echo "Commit + push these first. GitHub Actions deploys main and will overwrite live."
     exit 1
   fi
-  if ! git diff --quiet || ! git diff --cached --quiet; then
-    echo "NOTE: other uncommitted files will rsync now, but GitHub Actions may overwrite them later."
+  # The rsync below copies the working tree, not the commit — so anything sitting
+  # unfinished in the tree goes to Live too. On 4 Sep that shipped a half-built
+  # transfer report that nobody had asked for. A warning was not enough; refuse.
+  #
+  # Staging deliberately does not do this: shipping work in progress there is the
+  # whole point of it.
+  dirty="$(git status --porcelain --untracked-files=all)"
+  if [[ -n "$dirty" ]]; then
+    if [[ "${ALLOW_DIRTY_DEPLOY:-}" == "1" ]]; then
+      echo "WARNING: ALLOW_DIRTY_DEPLOY=1 — shipping an uncommitted tree to LIVE:"
+      echo "$dirty" | sed 's/^/    /'
+      echo ""
+    else
+      echo "ERROR: refusing to deploy Live from an uncommitted tree."
+      echo ""
+      echo "$dirty" | sed 's/^/    /'
+      echo ""
+      echo "Live rsyncs these files as they are, so unfinished work reaches staff."
+      echo "Then the next GitHub Actions run deploys main and silently reverts it."
+      echo ""
+      echo "  Ship it:     git add -A && git commit -m '…' && git push"
+      echo "  Shelve it:   git stash push -u -m 'wip'"
+      echo "  Override:    ALLOW_DIRTY_DEPLOY=1 bash deploy-live.sh"
+      exit 1
+    fi
   fi
   echo ""
   echo "1/3 Pushing main to GitHub…"
