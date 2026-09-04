@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
 from typing import Any
@@ -43,6 +44,8 @@ from app.scouting import (
     _scouting_position_label,
 )
 from app.season_defaults import CURRENT_SEASON
+
+logger = logging.getLogger(__name__)
 
 _squad_sheet_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 _SQUAD_SHEET_TTL = 6 * 3600
@@ -371,6 +374,24 @@ def _load_standouts_raw_payload(
             saved_at, payload = disk
             _standouts_cache[cache_key] = (saved_at, payload)
             raw_payload = payload
+            # The disk copy carries no expiry of its own, so an old one used to be
+            # served forever: the memory check above rejects it, we land back here,
+            # and accept it again unchanged. Staging was handing out scores built
+            # 28 hours earlier with nothing to say so.
+            #
+            # Still serve it — stale scores beat making someone watch a four-minute
+            # rebuild — but get a fresh copy building behind them. The scheduler
+            # ignores a second call while one is already running.
+            age = now - saved_at
+            if age >= STANDOUTS_CACHE_TTL and not _from_background:
+                logger.info(
+                    "Standouts disk cache for %s is %.1f hours old (limit %.0fh) — "
+                    "serving it and refreshing in the background",
+                    cache_key,
+                    age / 3600.0,
+                    STANDOUTS_CACHE_TTL / 3600.0,
+                )
+                _schedule_standouts_refresh(period_key, year=month_year, month=month_num)
 
     if raw_payload is None:
         month_extra: dict[str, Any] = {}
