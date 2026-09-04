@@ -143,33 +143,52 @@ def _event_seconds(event: dict[str, Any]) -> float:
         return 0.0
 
 
-def _fetch_match_events(match_id: int) -> list[dict[str, Any]]:
-    cached = _match_events_cache.get(match_id)
-    now = time.time()
-    if cached and now - cached[0] < 3600:
-        return cached[1]
+def _fetch_match_events(match_id: int, *, refresh: bool = False) -> list[dict[str, Any]]:
+    from app.analysis_cache import PACKET_TTL_SECONDS, read_list, write_list
+
+    mid = int(match_id)
+    if not refresh:
+        cached = _match_events_cache.get(mid)
+        now = time.time()
+        if cached and now - cached[0] < 3600:
+            return cached[1]
+        disk = read_list("xg-events", str(mid), ttl=PACKET_TTL_SECONDS)
+        if disk is not None:
+            _match_events_cache[mid] = (now, disk)
+            return disk
 
     impect = _impect()
     raw = impect._impect_get(
-        f"/v5/{impect._api_prefix()}/matches/{match_id}/events"
+        f"/v5/{impect._api_prefix()}/matches/{mid}/events"
     )["data"]
     if isinstance(raw, dict) and isinstance(raw.get("data"), list):
         raw = raw["data"]
     events = [item for item in (raw if isinstance(raw, list) else _unwrap_items(raw)) if isinstance(item, dict)]
     events.sort(key=lambda row: (_event_seconds(row), int(row.get("id") or 0)))
-    _match_events_cache[match_id] = (now, events)
+    now = time.time()
+    _match_events_cache[mid] = (now, events)
+    write_list("xg-events", str(mid), events)
     return events
 
 
-def _fetch_shot_xg_by_event(match_id: int) -> dict[int, float]:
-    cached = _ekpi_cache.get(match_id)
-    now = time.time()
-    if cached and now - cached[0] < 3600:
-        return cached[1]
+def _fetch_shot_xg_by_event(match_id: int, *, refresh: bool = False) -> dict[int, float]:
+    from app.analysis_cache import PACKET_TTL_SECONDS, read_json, write_json
+
+    mid = int(match_id)
+    if not refresh:
+        cached = _ekpi_cache.get(mid)
+        now = time.time()
+        if cached and now - cached[0] < 3600:
+            return cached[1]
+        disk = read_json("xg-ekpi", str(mid), ttl=PACKET_TTL_SECONDS)
+        if disk is not None:
+            mapped = {int(k): float(v) for k, v in disk.items()}
+            _ekpi_cache[mid] = (now, mapped)
+            return mapped
 
     impect = _impect()
     raw = impect._impect_get(
-        f"/v5/{impect._api_prefix()}/matches/{match_id}/event-kpis"
+        f"/v5/{impect._api_prefix()}/matches/{mid}/event-kpis"
     )["data"]
     rows = raw.get("data") if isinstance(raw, dict) else raw
     xg_by_event: dict[int, float] = defaultdict(float)
@@ -181,8 +200,11 @@ def _fetch_shot_xg_by_event(match_id: int) -> dict[int, float]:
             if event_id:
                 xg_by_event[event_id] += float(row.get("value") or 0)
 
-    _ekpi_cache[match_id] = (now, dict(xg_by_event))
-    return dict(xg_by_event)
+    mapped = dict(xg_by_event)
+    now = time.time()
+    _ekpi_cache[mid] = (now, mapped)
+    write_json("xg-ekpi", str(mid), {str(k): v for k, v in mapped.items()})
+    return mapped
 
 
 def _classify_chance(xg: float) -> dict[str, Any]:
@@ -475,9 +497,11 @@ def _build_match_shots(
     home_id: int,
     away_id: int,
     player_names: dict[int, str],
+    *,
+    refresh: bool = False,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    events = _fetch_match_events(match_id)
-    xg_by_event = _fetch_shot_xg_by_event(match_id)
+    events = _fetch_match_events(match_id, refresh=refresh)
+    xg_by_event = _fetch_shot_xg_by_event(match_id, refresh=refresh)
 
     home_goals = 0
     away_goals = 0
@@ -854,6 +878,41 @@ def build_xg_chance_report(
     match_id: int | None = None,
     match_ids: list[int] | None = None,
     scope: str | None = None,
+    refresh: bool = False,
+) -> dict[str, Any]:
+    from app.analysis_cache import REPORT_TTL_SECONDS, read_json, write_json
+
+    scope_token = (scope or "").strip().lower() or ("match" if match_id or not match_ids else "custom")
+    ids_token = ",".join(str(i) for i in (match_ids or [])) or str(match_id or "auto")
+    cache_key = f"report_{(season or 'default').replace('/', '-')}_{scope_token}_{ids_token}"
+    if not refresh:
+        cached = read_json("xg-report", cache_key, ttl=REPORT_TTL_SECONDS)
+        if cached:
+            cached = dict(cached)
+            cached["cache"] = {"hit": True, "refreshed": False}
+            return cached
+
+    report = _build_xg_chance_report_uncached(
+        season=season,
+        match_id=match_id,
+        match_ids=match_ids,
+        scope=scope,
+        refresh=refresh,
+    )
+    write_json("xg-report", cache_key, report)
+    report = dict(report)
+    report["cache"] = {"hit": False, "refreshed": bool(refresh)}
+    report["shotCount"] = len(report.get("shots") or [])
+    return report
+
+
+def _build_xg_chance_report_uncached(
+    *,
+    season: str | None = None,
+    match_id: int | None = None,
+    match_ids: list[int] | None = None,
+    scope: str | None = None,
+    refresh: bool = False,
 ) -> dict[str, Any]:
     iteration = _resolve_port_vale_iteration(season)
     iteration_id = int(iteration["id"])
@@ -900,7 +959,13 @@ def build_xg_chance_report(
         away_id = int(match.get("awaySquadId") or -1)
         meta = _match_meta(match, port_vale_id, squads)
         shots, dismissals = _build_match_shots(
-            mid, match_iteration_id, port_vale_id, home_id, away_id, player_names
+            mid,
+            match_iteration_id,
+            port_vale_id,
+            home_id,
+            away_id,
+            player_names,
+            refresh=refresh,
         )
         for shot in shots:
             shot["matchId"] = mid
@@ -1022,6 +1087,7 @@ class XgChanceReportRequest(BaseModel):
     match_id: int | None = Field(default=None, alias="matchId")
     match_ids: list[int] | None = Field(default=None, alias="matchIds")
     scope: str | None = None
+    refresh: bool = False
 
     model_config = {"populate_by_name": True}
 
@@ -1082,9 +1148,15 @@ def register_xg_chance_analysis_routes(app: FastAPI) -> None:
         season: str | None = Query(None),
         match_id: int | None = Query(None, alias="matchId"),
         scope: str | None = Query(None),
+        refresh: bool = Query(False),
     ) -> JSONResponse:
         try:
-            payload = build_xg_chance_report(season=season, match_id=match_id, scope=scope)
+            payload = build_xg_chance_report(
+                season=season,
+                match_id=match_id,
+                scope=scope,
+                refresh=refresh,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return JSONResponse(payload, headers={"Cache-Control": "no-store"})
@@ -1097,6 +1169,7 @@ def register_xg_chance_analysis_routes(app: FastAPI) -> None:
                 match_id=body.match_id,
                 match_ids=body.match_ids,
                 scope=body.scope,
+                refresh=bool(body.refresh),
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

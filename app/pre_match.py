@@ -495,6 +495,8 @@ class PreMatchReportRequest(BaseModel):
     iteration_id: int
     squad_id: int
     match_id: int | None = None
+    # Force rebuild past disk/memory caches (Refresh data / hub Force refresh).
+    refresh: bool = False
 
 
 class PreMatchPngExportPage(BaseModel):
@@ -4413,7 +4415,25 @@ def _build_squad_list_slide(
     }
 
 
-def build_pre_match_fixtures(iteration_id: int) -> list[dict[str, Any]]:
+def build_pre_match_fixtures(
+    iteration_id: int,
+    *,
+    refresh: bool = False,
+) -> list[dict[str, Any]]:
+    from app.analysis_cache import REPORT_TTL_SECONDS, read_json, write_json
+
+    cache_key = f"fixtures_{int(iteration_id)}"
+    if not refresh:
+        cached = read_json("pre-match-fixtures", cache_key, ttl=REPORT_TTL_SECONDS)
+        if cached and isinstance(cached.get("fixtures"), list):
+            return list(cached["fixtures"])
+
+    fixtures = _build_pre_match_fixtures_uncached(int(iteration_id))
+    write_json("pre-match-fixtures", cache_key, {"fixtures": fixtures})
+    return fixtures
+
+
+def _build_pre_match_fixtures_uncached(iteration_id: int) -> list[dict[str, Any]]:
     port_vale_id = _resolve_port_vale_squad_id(iteration_id)
     squads = _squads_map(iteration_id)
 
@@ -5181,6 +5201,38 @@ def _recent_form(
 
 
 def build_pre_match_report(body: PreMatchReportRequest) -> dict[str, Any]:
+    from app.analysis_cache import REPORT_TTL_SECONDS, read_json, write_json
+
+    refresh = bool(getattr(body, "refresh", False))
+    cache_key = (
+        f"report_{int(body.iteration_id)}_{int(body.squad_id)}_{int(body.match_id or 0)}"
+    )
+    if not refresh:
+        cached = read_json("pre-match", cache_key, ttl=REPORT_TTL_SECONDS)
+        if cached:
+            cached = dict(cached)
+            cached["cache"] = {"hit": True, "refreshed": False}
+            return cached
+
+    if refresh:
+        try:
+            from app.analysis_cache import clear_tool_memory_caches
+
+            clear_tool_memory_caches()
+        except Exception:
+            pass
+
+    report = _build_pre_match_report_uncached(body)
+    try:
+        write_json("pre-match", cache_key, report)
+    except Exception:
+        pass
+    report = dict(report)
+    report["cache"] = {"hit": False, "refreshed": refresh}
+    return report
+
+
+def _build_pre_match_report_uncached(body: PreMatchReportRequest) -> dict[str, Any]:
     impect = _impect()
     iteration_id = int(body.iteration_id)
     squad_id = int(body.squad_id)
@@ -5473,7 +5525,25 @@ def _default_designer_fixture(iteration_id: int) -> dict[str, Any] | None:
     return _next_port_vale_fixture(iteration_id)
 
 
-def pre_match_meta(competition_name: str = DEFAULT_COMPETITION) -> dict[str, Any]:
+def pre_match_meta(
+    competition_name: str = DEFAULT_COMPETITION,
+    *,
+    refresh: bool = False,
+) -> dict[str, Any]:
+    from app.analysis_cache import REPORT_TTL_SECONDS, read_json, write_json
+
+    cache_key = f"meta_{(competition_name or DEFAULT_COMPETITION).replace(' ', '_')}"
+    if not refresh:
+        cached = read_json("pre-match-meta", cache_key, ttl=REPORT_TTL_SECONDS)
+        if cached:
+            return cached
+
+    meta = _pre_match_meta_uncached(competition_name)
+    write_json("pre-match-meta", cache_key, meta)
+    return meta
+
+
+def _pre_match_meta_uncached(competition_name: str = DEFAULT_COMPETITION) -> dict[str, Any]:
     impect = _impect()
     iterations = impect._fetch_iterations()
     competition_iterations = [
@@ -5496,7 +5566,10 @@ def pre_match_meta(competition_name: str = DEFAULT_COMPETITION) -> dict[str, Any
         min(PRE_MATCH_DEFAULT_SEASON_INDEX, len(competition_iterations) - 1)
     ]
     iteration_id = int(default_iteration["id"])
-    default_fixture = _default_designer_fixture(iteration_id)
+    # Fresh fixtures while building meta so default fixture isn't stale.
+    default_fixture = _pick_next_fixture(
+        build_pre_match_fixtures(iteration_id, refresh=True)
+    )
     squads = _unwrap_items(impect._impect_get(impect._squads_path(iteration_id))["data"])
     opponents = [
         {
@@ -5753,8 +5826,9 @@ def register_pre_match_routes(app: FastAPI) -> None:
     @app.get("/api/pre-match/meta")
     def pre_match_meta_route(
         competition: str = Query(DEFAULT_COMPETITION, min_length=1),
+        refresh: bool = Query(False),
     ) -> dict[str, Any]:
-        return pre_match_meta(competition)
+        return pre_match_meta(competition, refresh=refresh)
 
     @app.get("/api/pre-match/opponents")
     def pre_match_opponents(iteration_id: int = Query(..., ge=1)) -> dict[str, Any]:
@@ -5773,8 +5847,11 @@ def register_pre_match_routes(app: FastAPI) -> None:
         return {"opponents": opponents}
 
     @app.get("/api/pre-match/fixtures")
-    def pre_match_fixtures(iteration_id: int = Query(..., ge=1)) -> dict[str, Any]:
-        return {"fixtures": build_pre_match_fixtures(iteration_id)}
+    def pre_match_fixtures(
+        iteration_id: int = Query(..., ge=1),
+        refresh: bool = Query(False),
+    ) -> dict[str, Any]:
+        return {"fixtures": build_pre_match_fixtures(iteration_id, refresh=refresh)}
 
     @app.post("/api/pre-match/report")
     def pre_match_report(body: PreMatchReportRequest) -> dict[str, Any]:

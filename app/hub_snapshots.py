@@ -54,11 +54,13 @@ PLAYER_STAT_KEYS = (
 class RefreshBody(BaseModel):
     scope: str = Field(
         default="all",
-        description="all | players | standings | win_drivers",
+        description="all | players | standings | win_drivers | analysis",
     )
 
 
-VALID_SCOPES = frozenset({"all", "players", "standings", "win_drivers"})
+VALID_SCOPES = frozenset({"all", "players", "standings", "win_drivers", "analysis"})
+DAILY_ANALYSIS_REFRESH_HOUR = 10
+DAILY_ANALYSIS_REFRESH_MINUTE = 30  # After typical Impect ~10am uploads
 
 
 def _now_iso() -> str:
@@ -98,6 +100,7 @@ def load_meta() -> dict[str, Any]:
         "standings_updated_at": str(meta.get("standings_updated_at") or ""),
         "win_drivers_updated_at": str(meta.get("win_drivers_updated_at") or ""),
         "strategy_tracker_updated_at": str(meta.get("strategy_tracker_updated_at") or ""),
+        "analysis_updated_at": str(meta.get("analysis_updated_at") or ""),
         "last_refresh_started_at": str(meta.get("last_refresh_started_at") or ""),
         "last_refresh_finished_at": str(meta.get("last_refresh_finished_at") or ""),
         "last_refresh_status": str(meta.get("last_refresh_status") or "never"),
@@ -359,11 +362,21 @@ def refresh_strategy_tracker() -> dict[str, Any]:
     }
 
 
+def refresh_analysis() -> dict[str, Any]:
+    from app.analysis_cache import refresh_analysis_data
+
+    payload = refresh_analysis_data(force=True)
+    _write_meta({"analysis_updated_at": _now_iso()})
+    return payload
+
+
 def refresh_snapshots(scope: str = "all") -> dict[str, Any]:
     global _refreshing
     scope_key = str(scope or "all").strip().lower()
     if scope_key not in VALID_SCOPES:
-        raise ValueError("scope must be all, players, standings, or win_drivers")
+        raise ValueError(
+            "scope must be all, players, standings, win_drivers, or analysis"
+        )
 
     with _refresh_lock:
         if _refreshing:
@@ -389,6 +402,9 @@ def refresh_snapshots(scope: str = "all") -> dict[str, Any]:
             result["strategy_tracker"] = refresh_strategy_tracker()
         if scope_key in {"all", "win_drivers"}:
             result["win_drivers"] = refresh_win_drivers()
+        # Analysis is heavy (Impect match packets) — only on explicit scope / 10:30 job.
+        if scope_key == "analysis":
+            result["analysis"] = refresh_analysis()
         _write_meta(
             {
                 "last_refresh_finished_at": _now_iso(),
@@ -453,6 +469,19 @@ def _seconds_until_daily_refresh() -> float:
     return max(60.0, (target - now).total_seconds())
 
 
+def _seconds_until_analysis_refresh() -> float:
+    now = datetime.now(LONDON)
+    target = now.replace(
+        hour=DAILY_ANALYSIS_REFRESH_HOUR,
+        minute=DAILY_ANALYSIS_REFRESH_MINUTE,
+        second=0,
+        microsecond=0,
+    )
+    if now >= target:
+        target += timedelta(days=1)
+    return max(60.0, (target - now).total_seconds())
+
+
 def _meta_is_stale(max_age_hours: float = 36.0) -> bool:
     meta = load_meta()
     keys = [
@@ -507,7 +536,25 @@ def start_daily_scheduler() -> None:
             except Exception:
                 logger.exception("Daily hub snapshot refresh failed")
 
+    def _analysis_loop() -> None:
+        while True:
+            delay = _seconds_until_analysis_refresh()
+            logger.info(
+                "Next Analysis cache refresh in %.0f minutes (daily %02d:%02d London)",
+                delay / 60.0,
+                DAILY_ANALYSIS_REFRESH_HOUR,
+                DAILY_ANALYSIS_REFRESH_MINUTE,
+            )
+            time.sleep(delay)
+            try:
+                refresh_snapshots("analysis")
+            except Exception:
+                logger.exception("Daily Analysis cache refresh failed")
+
     threading.Thread(target=_loop, name="hub-snapshot-daily", daemon=True).start()
+    threading.Thread(
+        target=_analysis_loop, name="hub-analysis-daily-1030", daemon=True
+    ).start()
 
 
 def register_hub_snapshots_routes(app: FastAPI) -> None:
@@ -525,7 +572,7 @@ def register_hub_snapshots_routes(app: FastAPI) -> None:
         if chosen not in VALID_SCOPES:
             raise HTTPException(
                 status_code=400,
-                detail="scope must be all, players, standings, or win_drivers",
+                detail="scope must be all, players, standings, win_drivers, or analysis",
             )
         return schedule_refresh(chosen)
 

@@ -12,6 +12,7 @@ const state = {
   loading: false,
   loadToken: 0,
   abort: null,
+  forceRefresh: false,
 };
 
 const els = {
@@ -802,6 +803,10 @@ async function loadReport() {
     if (state.scope === "match" && state.matchId) {
       params.set("matchId", state.matchId);
     }
+    if (state.forceRefresh) {
+      params.set("refresh", "true");
+      state.forceRefresh = false;
+    }
     const report = await fetchJson(`/api/xg-chance-analysis/report?${params}`, { signal });
     if (token !== state.loadToken) return;
     state.report = report;
@@ -918,8 +923,9 @@ els.matchSelect.addEventListener("change", async () => {
 });
 
 els.refreshBtn.addEventListener("click", async () => {
-  setStatus("Refreshing…", "loading");
-  els.statusBar.textContent = "Refreshing…";
+  setStatus("Force refreshing from Impect…", "loading");
+  els.statusBar.textContent = "Force refreshing…";
+  state.forceRefresh = true;
   const { token, signal } = beginLoad();
   try {
     await loadFixtures(signal);

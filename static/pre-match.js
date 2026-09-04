@@ -5109,9 +5109,11 @@ function renderEmptyDeck(message) {
   updateSlideNav();
 }
 
-async function loadFixtures() {
+async function loadFixtures({ refresh = false } = {}) {
   const iterationId = Number(els.iterationId.value);
-  const data = await fetchJson(`/api/pre-match/fixtures?iteration_id=${iterationId}`);
+  const qs = new URLSearchParams({ iteration_id: String(iterationId) });
+  if (refresh) qs.set("refresh", "true");
+  const data = await fetchJson(`/api/pre-match/fixtures?${qs}`);
   state.fixtures = data.fixtures || [];
   if (!state.fixtures.length) {
     renderEmptyDeck("No opponents found for this season.");
@@ -5122,7 +5124,7 @@ async function loadFixtures() {
   return true;
 }
 
-async function loadReport() {
+async function loadReport({ refresh = false } = {}) {
   const iterationId = Number(els.iterationId.value);
   const squadId = Number(els.opponentId.value);
   const matchId = Number(els.matchId.value || 0) || null;
@@ -5132,7 +5134,12 @@ async function loadReport() {
   els.refreshBtn.disabled = true;
   renderSeasonToggle();
   updateSlideNav();
-  setStatus("Loading pre-match report from Impect… first load can take 20–40 seconds.", "loading");
+  setStatus(
+    refresh
+      ? "Force refreshing pre-match from Impect…"
+      : "Loading pre-match report…",
+    "loading",
+  );
 
   try {
     const report = await fetchJson("/api/pre-match/report", {
@@ -5141,12 +5148,16 @@ async function loadReport() {
         iteration_id: iterationId,
         squad_id: squadId,
         match_id: matchId,
+        refresh: Boolean(refresh),
       }),
     });
     renderMatchBar();
     renderDeck(report);
+    const cacheHit = report?.cache?.hit;
     setStatus("");
-    els.statusBar.textContent = `Loaded ${report.opponent?.name || "opponent"} · build ${PRE_MATCH_BUILD.slice(0, 8) || "—"} · slide 1 is the match intro`;
+    els.statusBar.textContent = cacheHit
+      ? `Loaded ${report.opponent?.name || "opponent"} from local cache · build ${PRE_MATCH_BUILD.slice(0, 8) || "—"}`
+      : `Loaded ${report.opponent?.name || "opponent"} · build ${PRE_MATCH_BUILD.slice(0, 8) || "—"} · slide 1 is the match intro`;
   } catch (error) {
     setStatus(error.message, "error");
     renderEmptyDeck("Could not load report.");
@@ -5173,7 +5184,19 @@ async function init() {
   }
 }
 
-els.refreshBtn.addEventListener("click", loadReport);
+els.refreshBtn.addEventListener("click", async () => {
+  try {
+    state.meta = await fetchJson("/api/pre-match/meta?refresh=true");
+    els.iterationId.value = String(state.meta.default_iteration_id);
+    renderSeasonToggle();
+    const hasFixtures = await loadFixtures({ refresh: true });
+    if (hasFixtures) {
+      await loadReport({ refresh: true });
+    }
+  } catch (error) {
+    setStatus(error.message, "error");
+  }
+});
 if (els.exportPngsBtn) els.exportPngsBtn.addEventListener("click", exportPreMatchPngs);
 if (els.exportWhatsappPdfBtn) els.exportWhatsappPdfBtn.addEventListener("click", exportWhatsappPdf);
 if (els.pdfViewBtn) els.pdfViewBtn.addEventListener("click", () => setPdfView(true));

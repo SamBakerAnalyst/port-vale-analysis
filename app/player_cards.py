@@ -752,6 +752,7 @@ def build_player_cards_squad(
     squad_id: int | None = None,
     iteration_id: int | None = None,
     fotmob_id: str | int | None = None,
+    refresh: bool = False,
 ) -> dict[str, Any]:
     if season not in ALLOWED_FIXTURE_SEASONS:
         raise ValueError(f"Season must be one of: {', '.join(ALLOWED_FIXTURE_SEASONS)}")
@@ -765,6 +766,9 @@ def build_player_cards_squad(
         f"v2feet|{season}|{league_ui or ''}|{_normalize_name_key(club)}|"
         f"{squad_id or ''}|{iteration_id or ''}|{fotmob_id or ''}"
     )
+    if refresh:
+        _squad_cache.pop(cache_key, None)
+        _clubs_cache.clear()
     cached = _squad_cache.get(cache_key)
     now = time.time()
     if cached and now - cached[0] < _SQUAD_CACHE_TTL:
@@ -1123,6 +1127,7 @@ def register_player_cards_routes(app: FastAPI) -> None:
         squad_id: int | None = Query(None, alias="squadId"),
         iteration_id: int | None = Query(None, alias="iterationId"),
         fotmob_id: str | None = Query(None, alias="fotmobId"),
+        refresh: bool = Query(False),
     ) -> JSONResponse:
         try:
             payload = build_player_cards_squad(
@@ -1132,6 +1137,7 @@ def register_player_cards_routes(app: FastAPI) -> None:
                 squad_id=squad_id,
                 iteration_id=iteration_id,
                 fotmob_id=fotmob_id,
+                refresh=refresh,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -1148,6 +1148,7 @@
       if (opponent && opponent.squad_id) params.set("squadId", String(opponent.squad_id));
       if (opponent && opponent.iteration_id) params.set("iterationId", String(opponent.iteration_id));
       if (opponent && opponent.fotmob_id) params.set("fotmobId", String(opponent.fotmob_id));
+      if (opts && opts.refresh) params.set("refresh", "true");
       const payload = await fetchJson(`/api/player-cards/squad?${params.toString()}`);
       if (token !== loadToken) return;
       currentPlayers = payload.players || [];
@@ -1199,7 +1200,7 @@
     loadSquad({ force: true });
   });
   refreshBtn.addEventListener("click", function () {
-    loadSquad({ force: true });
+    loadSquad({ force: true, refresh: true });
   });
   if (exportPdfBtn) {
     exportPdfBtn.addEventListener("click", exportPdf);
