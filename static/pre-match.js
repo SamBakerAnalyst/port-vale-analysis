@@ -27,6 +27,7 @@ const state = {
   fixtures: [],
   report: null,
   loading: false,
+  reportLoadToken: 0,
   slideIndex: 0,
   slides: [],
   deckMode: "two_pager",
@@ -730,6 +731,7 @@ function renderMatchBar() {
     btn.addEventListener("click", () => {
       els.matchId.value = btn.dataset.matchId;
       els.opponentId.value = btn.dataset.opponentId;
+      renderMatchBar();
       loadReport();
     });
   });
@@ -5129,10 +5131,12 @@ async function loadReport({ refresh = false } = {}) {
   const squadId = Number(els.opponentId.value);
   const matchId = Number(els.matchId.value || 0) || null;
   if (!squadId) return;
+  const token = ++state.reportLoadToken;
 
   state.loading = true;
   els.refreshBtn.disabled = true;
   renderSeasonToggle();
+  renderMatchBar();
   updateSlideNav();
   setStatus("Opening local snapshot…", "loading");
 
@@ -5145,6 +5149,7 @@ async function loadReport({ refresh = false } = {}) {
         match_id: matchId,
       }),
     });
+    if (token !== state.reportLoadToken) return;
     if (report?.building) {
       renderMatchBar();
       renderEmptyDeck("No saved report for this opponent yet — Refresh pulls it when Impect has the match.");
@@ -5159,12 +5164,15 @@ async function loadReport({ refresh = false } = {}) {
       ? `Loaded ${report.opponent?.name || "opponent"} from local cache · build ${PRE_MATCH_BUILD.slice(0, 8) || "—"}`
       : `Loaded ${report.opponent?.name || "opponent"} · build ${PRE_MATCH_BUILD.slice(0, 8) || "—"} · slide 1 is the match intro`;
   } catch (error) {
+    if (token !== state.reportLoadToken) return;
     setStatus(error.message, "error");
     renderEmptyDeck("Could not load report.");
   } finally {
-    state.loading = false;
-    renderSeasonToggle();
-    updateSlideNav();
+    if (token === state.reportLoadToken) {
+      state.loading = false;
+      renderSeasonToggle();
+      updateSlideNav();
+    }
   }
 }
 

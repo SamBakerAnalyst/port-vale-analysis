@@ -66,29 +66,41 @@ def test_pre_match_click_serves_stale_disk(tmp_path, monkeypatch):
     assert report["cache"]["hit"] is True
 
 
-def test_pre_match_click_miss_builds_once_then_cache(tmp_path, monkeypatch):
+def test_pre_match_click_miss_does_not_hit_impect(tmp_path, monkeypatch):
     monkeypatch.setattr(analysis_cache, "ANALYSIS_CACHE_DIR", tmp_path)
     monkeypatch.setattr("app.set_piece_pre_match.SET_PIECE_CACHE_DIR", tmp_path / "sp")
-
-    def _built(body):
-        return {"opponent": {"id": int(body.squad_id), "name": "Built"}, "iteration_id": int(body.iteration_id)}
-
-    monkeypatch.setattr("app.pre_match._build_pre_match_report_uncached", _built)
-    monkeypatch.setattr(
-        "app.pre_match._build_pre_match_fixtures_uncached",
-        lambda *_args, **_kwargs: [{"match_id": 3, "opponent": {"id": 2, "name": "Built"}}],
-    )
+    monkeypatch.setattr("app.pre_match._build_pre_match_report_uncached", _boom)
+    monkeypatch.setattr("app.pre_match._build_pre_match_fixtures_uncached", lambda *_a, **_k: [])
     report = build_pre_match_report(
         PreMatchReportRequest(iteration_id=1, squad_id=2, match_id=3, refresh=False)
     )
-    assert report["opponent"]["name"] == "Built"
-    assert report["cache"]["hit"] is False
-    monkeypatch.setattr("app.pre_match._build_pre_match_report_uncached", _boom)
-    cached = build_pre_match_report(
-        PreMatchReportRequest(iteration_id=1, squad_id=2, match_id=3, refresh=False)
+    assert report["building"] is True
+    assert build_pre_match_fixtures(99, refresh=False) == []
+
+
+def test_pre_match_fixture_bar_drops_duplicate_opponent(tmp_path, monkeypatch):
+    from app.pre_match import _merge_fixture_rows
+
+    merged = _merge_fixture_rows(
+        [
+            {
+                "match_id": 270725,
+                "match_day": 4,
+                "kickoff_label": "A Sat 5 Sep · 12:30",
+                "opponent": {"id": 2157, "name": "Salford City"},
+            }
+        ],
+        [
+            {
+                "match_id": 0,
+                "match_day": 5,
+                "kickoff_label": "Saturday 05 September 2026",
+                "opponent": {"id": 2157, "name": "Salford City"},
+            }
+        ],
     )
-    assert cached["cache"]["hit"] is True
-    assert build_pre_match_fixtures(99, refresh=False)[0]["opponent"]["name"] == "Built"
+    assert len(merged) == 1
+    assert merged[0]["kickoff_label"] == "A Sat 5 Sep · 12:30"
 
 
 def test_pre_match_recovers_old_reports_into_bar(tmp_path, monkeypatch):

@@ -4422,17 +4422,45 @@ _FALLBACK_ITERATIONS = (
 )
 
 
+def _fixture_row_quality(row: dict[str, Any]) -> int:
+    label = str(row.get("kickoff_label") or "")
+    score = 0
+    try:
+        if int(row.get("match_id") or 0):
+            score += 10
+    except (TypeError, ValueError):
+        pass
+    if "·" in label or ":" in label:
+        score += 5
+    return score
+
+
 def _merge_fixture_rows(*groups: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
-    seen: set[tuple[Any, Any]] = set()
-    merged: list[dict[str, Any]] = []
+    by_match: dict[tuple[Any, Any], dict[str, Any]] = {}
+    without_match: list[dict[str, Any]] = []
     for group in groups:
         for row in group or []:
-            opponent = row.get("opponent") or {}
-            key = (row.get("match_id"), opponent.get("id"))
-            if key in seen:
-                continue
-            seen.add(key)
-            merged.append(row)
+            opponent_id = (row.get("opponent") or {}).get("id")
+            try:
+                match_id = int(row.get("match_id") or 0)
+            except (TypeError, ValueError):
+                match_id = 0
+            if match_id:
+                key = (match_id, opponent_id)
+                current = by_match.get(key)
+                if current is None or _fixture_row_quality(row) > _fixture_row_quality(current):
+                    by_match[key] = row
+            else:
+                without_match.append(row)
+    used_opponents = {opponent_id for _match_id, opponent_id in by_match}
+    extras: list[dict[str, Any]] = []
+    for row in without_match:
+        opponent_id = (row.get("opponent") or {}).get("id")
+        if opponent_id in used_opponents:
+            continue
+        extras.append(row)
+        used_opponents.add(opponent_id)
+    merged = list(by_match.values()) + extras
     merged.sort(
         key=lambda row: (
             int(row.get("match_day") or 0),
@@ -5419,6 +5447,14 @@ def build_pre_match_report(body: PreMatchReportRequest) -> dict[str, Any]:
             cached = dict(cached)
             cached["cache"] = {"hit": True, "refreshed": False}
             return cached
+        return {
+            "building": True,
+            "iteration_id": int(body.iteration_id),
+            "squad_id": int(body.squad_id),
+            "match_id": body.match_id,
+            "opponent": {"id": int(body.squad_id), "name": ""},
+            "cache": {"hit": False, "refreshed": False},
+        }
 
     if refresh:
         try:
