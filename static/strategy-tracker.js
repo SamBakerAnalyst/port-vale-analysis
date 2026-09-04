@@ -686,14 +686,16 @@
     }
   }
 
-  async function load(refresh = false) {
+  async function load() {
     els.refresh.disabled = true;
-    const label = state.competition || "current season";
-    setStatus(refresh ? `Refreshing ${label}…` : "");
+    setStatus("Opening local snapshot…");
     try {
-      const params = new URLSearchParams({ refresh: refresh ? "true" : "false" });
+      const params = new URLSearchParams({ refresh: "false" });
       if (state.competition) params.set("competition", state.competition);
-      const res = await fetch(`${API}/api/strategy-tracker?${params}`);
+      const res = await fetch(`${API}/api/strategy-tracker?${params}`, {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
       const raw = await res.text();
       let data;
       try {
@@ -703,10 +705,88 @@
       }
       if (!res.ok) throw new Error(data.detail || `Failed to load tracker (${res.status})`);
       renderAll(data);
+      try {
+        const snapRes = await fetch(`${API}/api/hub-snapshots/status`, {
+          credentials: "same-origin",
+          cache: "no-store",
+        });
+        const snap = snapRes.ok ? await snapRes.json() : {};
+        if (snap.strategy_tracker_updated_at && els.updated) {
+          const stamp = new Date(snap.strategy_tracker_updated_at);
+          if (!Number.isNaN(stamp.getTime())) {
+            els.updated.textContent = `Updated ${stamp.toLocaleString("en-GB", {
+              day: "numeric",
+              month: "short",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}`;
+          }
+        }
+      } catch {
+        /* ignore status fetch */
+      }
       setStatus("");
     } catch (err) {
       setStatus(err.message || "Could not load strategy tracker.", "error");
     } finally {
+      els.refresh.disabled = false;
+    }
+  }
+
+  let refreshPollTimer = null;
+
+  async function pollRefreshStatus() {
+    try {
+      const res = await fetch(`${API}/api/hub-snapshots/status`, {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      const status = res.ok ? await res.json() : {};
+      if (status.refreshing || status.last_refresh_status === "running") {
+        if (els.updated) els.updated.textContent = "Refreshing…";
+        return;
+      }
+      if (refreshPollTimer) {
+        window.clearInterval(refreshPollTimer);
+        refreshPollTimer = null;
+      }
+      if (status.last_refresh_status === "error") {
+        setStatus(status.last_refresh_error || "Data refresh failed.", "error");
+        els.refresh.disabled = false;
+        return;
+      }
+      setStatus("Data refresh finished.");
+      await load();
+    } catch (err) {
+      setStatus(err.message || "Could not check refresh status.", "error");
+      els.refresh.disabled = false;
+    }
+  }
+
+  async function refreshData() {
+    els.refresh.disabled = true;
+    if (els.updated) els.updated.textContent = "Refreshing…";
+    setStatus("Pulling latest Impect data in the background…");
+    try {
+      const res = await fetch(`${API}/api/hub-snapshots/refresh`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "strategy_tracker" }),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload.detail || `Refresh failed (${res.status})`);
+      }
+      if (refreshPollTimer) window.clearInterval(refreshPollTimer);
+      refreshPollTimer = window.setInterval(() => {
+        void pollRefreshStatus();
+      }, 2500);
+      window.setTimeout(() => {
+        void pollRefreshStatus();
+      }, 800);
+    } catch (err) {
+      setStatus(err.message || "Could not start refresh.", "error");
       els.refresh.disabled = false;
     }
   }
@@ -1027,7 +1107,9 @@
   window.stTogglePresent = () => setPresent(!state.presenting);
   window.stExportPdf = exportPdf;
 
-  els.refresh.addEventListener("click", () => load(true));
+  els.refresh.addEventListener("click", () => {
+    void refreshData();
+  });
   function onMetricClick(event) {
     const btn = event.target.closest("[data-metric]");
     if (!btn) return;
@@ -1057,7 +1139,7 @@
     if (!btn) return;
     state.competition = btn.getAttribute("data-competition") || "";
     syncUrl();
-    load(false);
+    load();
   });
   window.addEventListener("hashchange", () => {
     selectMetric(hashMetric(), { skipUrl: true });
@@ -1125,5 +1207,5 @@
   });
 
   syncUrl();
-  load(false);
+  load();
 })();

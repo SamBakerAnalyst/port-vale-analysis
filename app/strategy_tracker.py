@@ -402,16 +402,25 @@ def _report_has_vale(report: dict[str, Any]) -> bool:
     )
 
 
+REPORT_DISK_NAMES = (
+    "report-v4",
+    "report-full-v4",
+    "report-v3",
+    "report-full-v3",
+    "report-v2",
+    "report-full-v2",
+)
+
+
 def _read_report_cheap(iteration_id: int) -> dict[str, Any] | None:
-    """Prefer memory/fresh disk, then stale disk — never call Impect."""
-    path = _disk_cache_path("report-v2", iteration_id)
-    fresh = _read_disk_cache(path)
-    if fresh is not None:
-        return {key: value for key, value in fresh.items() if key != "cached_at_epoch"}
-    stale = _read_disk_cache(path, allow_stale=True)
-    if stale is None:
-        return None
-    return {key: value for key, value in stale.items() if key != "cached_at_epoch"}
+    """Prefer current club-strategy disk cache, then older versions — never call Impect."""
+    for name in REPORT_DISK_NAMES:
+        path = _disk_cache_path(name, iteration_id)
+        payload = _read_disk_cache(path, allow_stale=True)
+        if payload is None:
+            continue
+        return {key: value for key, value in payload.items() if key != "cached_at_epoch"}
+    return None
 
 
 def _benchmarks_for(competition: str) -> dict[str, dict[str, float]]:
@@ -1072,11 +1081,15 @@ def _pick_from_disk_reports(competition: str | None) -> tuple[int, str, str | No
     wanted = (competition,) if competition in COMPETITIONS else COMPETITIONS
     candidates: list[tuple[str, int, str, str | None]] = []
     cache_dir = CLUB_STRATEGY_CACHE_DIR
-    for path in cache_dir.glob("report-v2-*.json"):
+    seen: set[int] = set()
+    for path in cache_dir.glob("report-*.json"):
         try:
             iteration_id = int(path.stem.rsplit("-", 1)[-1])
         except ValueError:
             continue
+        if iteration_id in seen:
+            continue
+        seen.add(iteration_id)
         report = _read_report_cheap(iteration_id)
         if report is None:
             continue
@@ -1121,20 +1134,56 @@ def _live_season_candidates(competition: str | None) -> list[tuple[str, int, str
     return rows
 
 
-def _pick_vale_iteration(competition: str | None) -> tuple[int, str, str | None]:
-    """Newest campaign that includes Port Vale — live iterations first, disk only as fallback."""
+def _pick_vale_iteration(
+    competition: str | None,
+    *,
+    prefer_live: bool = False,
+) -> tuple[int, str, str | None]:
+    """Newest Vale campaign. Click paths prefer the saved 5am disk; daily refresh uses live."""
+    disk_pick = _pick_from_disk_reports(competition)
+    if disk_pick is not None and not prefer_live:
+        return disk_pick
+
     last_seen: tuple[int, str, str | None] | None = None
-    for _season_key, iteration_id, comp, label in _live_season_candidates(competition):
+    try:
+        live_rows = _live_season_candidates(competition)
+    except HTTPException:
+        live_rows = []
+    for _season_key, iteration_id, comp, label in live_rows:
         last_seen = (iteration_id, comp, label)
         if _find_vale_squad(iteration_id) is not None:
             return iteration_id, comp, label
 
-    disk_pick = _pick_from_disk_reports(competition)
     if disk_pick is not None:
         return disk_pick
     if last_seen:
         return last_seen
     return 0, competition or "League Two", None
+
+
+def _newest_cached_tracker(competition: str | None) -> dict[str, Any] | None:
+    """Newest Season Progress snapshot on disk — no Impect."""
+    wanted = competition.strip() if isinstance(competition, str) else None
+    if wanted in {"", "auto", "current"}:
+        wanted = None
+    candidates: list[tuple[str, str, dict[str, Any]]] = []
+    for path in TRACKER_CACHE_DIR.glob(f"tracker-v{TRACKER_CACHE_VERSION}-*.json"):
+        try:
+            iteration_id = int(path.stem.rsplit("-", 1)[-1])
+        except ValueError:
+            continue
+        body = _read_tracker_cache(iteration_id, allow_stale=True)
+        if body is None:
+            continue
+        if wanted and str(body.get("competition") or "").strip() != wanted:
+            continue
+        candidates.append(
+            (str(body.get("season") or ""), str(body.get("generated_at") or ""), body)
+        )
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    return candidates[0][2]
 
 
 def _assemble_tracker(
@@ -1145,7 +1194,7 @@ def _assemble_tracker(
     force_refresh: bool,
 ) -> dict[str, Any]:
     try:
-        report = build_club_strategy_report(iteration_id, force_refresh=force_refresh)
+        report = build_club_strategy_report(iteration_id, force_refresh=False)
     except HTTPException as exc:
         if exc.status_code not in {404, 429}:
             raise
@@ -1302,26 +1351,30 @@ def build_strategy_tracker(
     if wanted and wanted not in COMPETITIONS:
         raise HTTPException(status_code=400, detail=f"Unsupported competition: {wanted}")
 
+    if not force_refresh:
+        cached = _newest_cached_tracker(wanted)
+        if cached is not None:
+            return cached
+
     try:
-        iteration_id, resolved_comp, season_label = _pick_vale_iteration(wanted)
+        iteration_id, resolved_comp, season_label = _pick_vale_iteration(
+            wanted, prefer_live=force_refresh
+        )
     except HTTPException as exc:
         if exc.status_code == 429:
-            for path in sorted(TRACKER_CACHE_DIR.glob(f"tracker-v{TRACKER_CACHE_VERSION}-*.json"), reverse=True):
-                try:
-                    iid = int(path.stem.split("-")[-1])
-                except ValueError:
-                    continue
-                stale = _read_tracker_cache(iid, allow_stale=True)
-                if stale is not None:
-                    stale = {**stale, "source_note": (stale.get("source_note") or "") + " · cached (rate limited)"}
-                    return stale
+            stale = _newest_cached_tracker(wanted)
+            if stale is not None:
+                note = stale.get("source_note") or ""
+                if "rate limited" not in note:
+                    stale = {**stale, "source_note": f"{note} · cached (rate limited)".strip(" ·")}
+                return stale
         raise
 
     if not iteration_id:
         raise HTTPException(status_code=404, detail="No season found for Port Vale.")
 
     if not force_refresh:
-        cached = _read_tracker_cache(iteration_id)
+        cached = _read_tracker_cache(iteration_id, allow_stale=True)
         if cached is not None:
             return cached
 
@@ -1359,7 +1412,9 @@ def register_strategy_tracker_routes(app: FastAPI) -> None:
         refresh: bool = Query(False),
         competition: str = Query(""),
     ) -> dict[str, Any]:
-        return build_strategy_tracker(competition=competition, force_refresh=refresh)
+        # Click paths always serve the 5am snapshot. Rebuild via hub-snapshots.
+        _ = refresh
+        return build_strategy_tracker(competition=competition, force_refresh=False)
 
     @app.get("/api/strategy-tracker/export-pdf")
     def strategy_tracker_export_pdf(competition: str = Query("")) -> Response:

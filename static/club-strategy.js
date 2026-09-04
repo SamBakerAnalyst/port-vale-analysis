@@ -128,7 +128,7 @@ const TIMING_BUCKET_LABELS = {
   unknown: "Unknown",
 };
 
-async function api(path, { timeoutMs = 0 } = {}) {
+async function api(path, { timeoutMs = 0, ...options } = {}) {
   let res;
   const controller = timeoutMs > 0 ? new AbortController() : null;
   const timer =
@@ -136,7 +136,12 @@ async function api(path, { timeoutMs = 0 } = {}) {
     setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    res = await fetch(path, controller ? { signal: controller.signal } : undefined);
+    res = await fetch(path, {
+      credentials: "same-origin",
+      cache: "no-store",
+      ...options,
+      ...(controller ? { signal: controller.signal } : {}),
+    });
   } catch (error) {
     if (error?.name === "AbortError") {
       throw new Error(
@@ -144,7 +149,7 @@ async function api(path, { timeoutMs = 0 } = {}) {
       );
     }
     throw new Error(
-      "Could not reach the server — first-goal data can take up to 2 minutes on first load. Keep this tab open and try Refresh.",
+      "Could not reach the server. Keep this tab open and try Refresh.",
     );
   } finally {
     if (timer) clearTimeout(timer);
@@ -617,24 +622,21 @@ function escapeHtml(text) {
     .replaceAll('"', "&quot;");
 }
 
-async function loadFirstGoal({ force = false } = {}) {
+async function loadFirstGoal() {
   if (state.firstGoalLoading) return;
-  if (state.report?.first_goal && !force) {
+  if (state.report?.first_goal) {
     renderTable();
     return;
   }
 
   state.firstGoalLoading = true;
   els.refreshBtn.disabled = true;
-  setStatus(
-    "Loading first-goal data from match events — first load can take up to 2 minutes. Please wait…",
-  );
+  setStatus("Opening first-goal snapshot…");
 
   try {
     const params = new URLSearchParams({
       iteration_id: String(state.iterationId),
     });
-    if (force) params.set("refresh", "1");
     const firstGoal = await api(`/api/club-strategy/first-goal?${params}`, {
       timeoutMs: 180000,
     });
@@ -674,33 +676,96 @@ function prefetchFirstGoal() {
   loadFirstGoal().catch(() => {});
 }
 
-async function loadReport({ force = false } = {}) {
+async function loadReport() {
   if (state.loading) return;
   state.loading = true;
   els.refreshBtn.disabled = true;
-  setStatus("Refreshing league data…");
+  setStatus("Opening local snapshot…");
 
   try {
     const params = new URLSearchParams({
       iteration_id: String(state.iterationId),
     });
-    if (force) params.set("refresh", "1");
     const report = await api(`/api/club-strategy/report?${params}`);
     const cachedFirstGoal = state.report?.first_goal;
     state.report = report;
-    if (cachedFirstGoal && !force) {
+    if (cachedFirstGoal) {
       state.report.first_goal = cachedFirstGoal;
     }
     renderSeasonToggle();
     renderTable();
     const when = new Date(report.generated_at);
     els.lastUpdated.textContent = `${report.season} · updated ${when.toLocaleString()}`;
+    try {
+      const snap = await api("/api/hub-snapshots/status");
+      if (snap.standings_updated_at) {
+        const stamp = new Date(snap.standings_updated_at);
+        if (!Number.isNaN(stamp.getTime())) {
+          els.lastUpdated.textContent = `${report.season} · updated ${stamp.toLocaleString()}`;
+        }
+      }
+    } catch {
+      /* ignore status fetch */
+    }
     setStatus("");
     prefetchFirstGoal();
   } catch (error) {
     setStatus(error.message, true);
   } finally {
     state.loading = false;
+    els.refreshBtn.disabled = false;
+  }
+}
+
+let refreshPollTimer = null;
+
+async function pollRefreshStatus() {
+  try {
+    const status = await api("/api/hub-snapshots/status");
+    if (status.refreshing || status.last_refresh_status === "running") {
+      if (els.lastUpdated) els.lastUpdated.textContent = "Refreshing…";
+      return;
+    }
+    if (refreshPollTimer) {
+      window.clearInterval(refreshPollTimer);
+      refreshPollTimer = null;
+    }
+    if (status.last_refresh_status === "error") {
+      setStatus(status.last_refresh_error || "Data refresh failed.", true);
+      els.refreshBtn.disabled = false;
+      return;
+    }
+    setStatus("Data refresh finished.", false);
+    state.report = { ...(state.report || {}), first_goal: null };
+    await loadReport();
+    if (needsFirstGoal()) {
+      await loadFirstGoal();
+    }
+  } catch (error) {
+    setStatus(error.message || "Could not check refresh status.", true);
+    els.refreshBtn.disabled = false;
+  }
+}
+
+async function refreshData() {
+  els.refreshBtn.disabled = true;
+  if (els.lastUpdated) els.lastUpdated.textContent = "Refreshing…";
+  setStatus("Pulling latest Impect data in the background…");
+  try {
+    await api("/api/hub-snapshots/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope: "standings" }),
+    });
+    if (refreshPollTimer) window.clearInterval(refreshPollTimer);
+    refreshPollTimer = window.setInterval(() => {
+      void pollRefreshStatus();
+    }, 2500);
+    window.setTimeout(() => {
+      void pollRefreshStatus();
+    }, 800);
+  } catch (error) {
+    setStatus(error.message || "Could not start refresh.", true);
     els.refreshBtn.disabled = false;
   }
 }
@@ -772,11 +837,7 @@ async function init() {
 }
 
 els.refreshBtn.addEventListener("click", () => {
-  if (needsFirstGoal()) {
-    loadFirstGoal({ force: true });
-  } else {
-    loadReport({ force: true });
-  }
+  void refreshData();
 });
 
 if (els.exportBtn) {

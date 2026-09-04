@@ -1,4 +1,4 @@
-from app.apps_manifest import APPS
+from app.apps_manifest import APPS, LIVE_ESSENTIAL_IDS
 from app.win_drivers import (
     CANDIDATES,
     WHY_BY_KEY,
@@ -68,6 +68,9 @@ def test_win_drivers_is_on_strategy_sidebar():
     assert row["router"] == "win_drivers"
     assert "What Wins Games" == row["title"]
     assert "15" in row["description"]
+    assert "win-drivers" in LIVE_ESSENTIAL_IDS
+    assert "club-strategy" in LIVE_ESSENTIAL_IDS
+    assert "league-two-progress" in LIVE_ESSENTIAL_IDS
 
 
 def test_every_candidate_has_owner_why_copy():

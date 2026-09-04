@@ -743,8 +743,11 @@ LIVE_ESSENTIAL_IDS = frozenset(
         "scouts-calendar",
         # Strategy
         "availability-tracker",
+        "win-drivers",
+        "club-strategy",
         # Presentations (one rail link; decks live on the gallery page)
         "presentations",
+        "league-two-progress",
     }
 )
 

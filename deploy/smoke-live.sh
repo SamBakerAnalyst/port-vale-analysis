@@ -111,8 +111,15 @@ done
 check_launch_shape() {
   python3 - "$1" <<'PY'
 import json, sys
-want_open = {"Who To Scout", "Watch list", "Player Pipelines", "Scoutable Teams"}
-want_held = {"Club Strategy", "What Wins Games"}
+want_open = {
+    "Who To Scout",
+    "Watch list",
+    "Player Pipelines",
+    "Scoutable Teams",
+    "Club Strategy",
+    "What Wins Games",
+}
+want_held = set()
 data = json.load(open("/tmp/pv-smoke-apps.json"))
 by_title = {a.get("title"): a for a in data.get("apps") or []}
 problems = []
@@ -136,7 +143,7 @@ raise SystemExit(0)
 PY
 }
 if shape_err="$(check_launch_shape "$apps_file")"; then
-  pass "recruitment launch shape (full funnel open, strategy held)"
+  pass "recruitment launch shape (full funnel + strategy reports open)"
 else
   bad "recruitment launch shape wrong: ${shape_err:-unknown}"
 fi

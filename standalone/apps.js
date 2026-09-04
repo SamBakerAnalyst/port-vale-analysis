@@ -483,9 +483,7 @@ window.IMPECT_APPS = [
       "League Two",
       "Impect",
       "Table"
-    ],
-    "comingSoon": true,
-    "note": "Coming soon"
+    ]
   },
   {
     "id": "club-strategy",
@@ -499,9 +497,7 @@ window.IMPECT_APPS = [
       "League Two",
       "FGS",
       "xG"
-    ],
-    "comingSoon": true,
-    "note": "Coming soon"
+    ]
   },
   {
     "id": "presentations",
@@ -596,8 +592,6 @@ window.IMPECT_APPS = [
       "Progress",
       "Pace"
     ],
-    "comingSoon": true,
-    "note": "Coming soon",
     "sidebar": false
   },
   {

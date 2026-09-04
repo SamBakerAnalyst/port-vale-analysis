@@ -27,7 +27,7 @@ These are the only tools staff should treat as “ready.” Everything else is C
 | Analysis | Pre-Match Report, Set Piece Pre-Match, Player Cards, xG Chance Analysis, Blocks Analysis |
 | Recruitment | Who To Scout, Player Pipelines |
 | Scouts | Fixture Planner, Played Fixtures, Scouting Address Tool, Scout Summary, Scouts Calendar |
-| Strategy | Squad Availability, Season Progress Report |
+| Strategy | Squad Availability, What Wins Games, Club Strategy, Season Progress Report |
 
 Plus hub home (fixtures, schedule widgets, League Two season).
 
@@ -86,7 +86,7 @@ Once B1 is quiet on a tool:
 
 Improve on staging. **Do not put on live** until you would bet your job they will not break the hub or look unfinished.
 
-Examples (Coming soon today): Post-Match, Match Story, Ball Progression, Crosses, Shots & xG, Duels & Pressing, Schedule, Player Comparison, Player Search, Squad Balance / Planner, Generate Scout Summary, Squad Comparison, Club Strategy, strategy decks, match dashboards WIP.
+Examples (Coming soon today): Post-Match, Match Story, Ball Progression, Crosses, Shots & xG, Duels & Pressing, Schedule, Player Comparison, Player Search, Squad Balance / Planner, Generate Scout Summary, Squad Comparison, strategy decks, match dashboards WIP.
 
 Promote rule for spare-time tools:
 

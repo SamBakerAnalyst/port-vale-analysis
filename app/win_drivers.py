@@ -949,15 +949,35 @@ def build_table(iteration_id: int, *, force_refresh: bool = False) -> dict[str, 
     return payload
 
 
-def win_drivers_meta() -> dict[str, Any]:
-    seasons = _season_rows()[:6]
-    return {
+def _meta_disk_path() -> Path:
+    WIN_DRIVERS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    return WIN_DRIVERS_CACHE_DIR / "meta.json"
+
+
+def win_drivers_meta(*, force_refresh: bool = False) -> dict[str, Any]:
+    path = _meta_disk_path()
+    if not force_refresh:
+        disk = _read_json(path)
+        if disk and disk.get("seasons"):
+            return disk
+
+    try:
+        seasons = _season_rows()[:6]
+    except HTTPException:
+        disk = _read_json(path)
+        if disk and disk.get("seasons"):
+            return disk
+        raise
+    payload = {
         "competition": COMPETITION,
         "focus_club": "Port Vale",
         "default_iteration_id": seasons[0]["iteration_id"] if seasons else None,
         "seasons": seasons,
         "top_n": TOP_N,
     }
+    if seasons:
+        _write_json(path, payload)
+    return payload
 
 
 def register_win_drivers_routes(app: FastAPI) -> None:
@@ -979,4 +999,6 @@ def register_win_drivers_routes(app: FastAPI) -> None:
         iteration_id: int = Query(..., ge=1),
         refresh: bool = Query(False),
     ) -> dict[str, Any]:
-        return build_table(iteration_id, force_refresh=refresh)
+        # Click paths always serve the 5am snapshot. Rebuild via hub-snapshots.
+        _ = refresh
+        return build_table(iteration_id, force_refresh=False)

@@ -1037,6 +1037,15 @@ def _write_disk_cache(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+def _cache_body(payload: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in payload.items() if key != "cached_at_epoch"}
+
+
+def _meta_disk_path(competition: str) -> Path:
+    slug = competition.casefold().replace(" ", "-")
+    return DISK_CACHE_DIR / f"meta-{slug}.json"
+
+
 def build_club_strategy_report(
     iteration_id: int,
     *,
@@ -1064,14 +1073,16 @@ def build_club_strategy_report(
 
     cached = _report_cache.get(memory_key)
     now = time.time()
-    if cached and now - cached[0] < CACHE_TTL_SECONDS:
+    # Serve the 5am snapshot forever until Refresh / daily job rebuilds.
+    if cached:
         return cached[1]
 
     disk_path = _disk_cache_path(disk_name, iteration_id)
-    disk_payload = _read_disk_cache(disk_path)
+    disk_payload = _read_disk_cache(disk_path, allow_stale=True)
     if disk_payload is not None:
-        _report_cache[memory_key] = (now, disk_payload)
-        return disk_payload
+        payload = _cache_body(disk_payload)
+        _report_cache[memory_key] = (now, payload)
+        return payload
 
     iteration = _resolve_iteration(iteration_id)
 
@@ -1127,13 +1138,13 @@ def build_first_goal_report(iteration_id: int, *, force_refresh: bool = False) -
 
     cached = _first_goal_cache.get(iteration_id)
     now = time.time()
-    if cached and now - cached[0] < CACHE_TTL_SECONDS:
+    if cached:
         return cached[1]
 
     disk_path = _disk_cache_path("first-goal", iteration_id)
-    disk_payload = _read_disk_cache(disk_path)
+    disk_payload = _read_disk_cache(disk_path, allow_stale=True)
     if disk_payload is not None:
-        payload = {key: value for key, value in disk_payload.items() if key != "cached_at_epoch"}
+        payload = _cache_body(disk_payload)
         _first_goal_cache[iteration_id] = (now, payload)
         return payload
 
@@ -1162,23 +1173,39 @@ def build_first_goal_report(iteration_id: int, *, force_refresh: bool = False) -
     return payload
 
 
-def club_strategy_meta(competition: str = DEFAULT_COMPETITION) -> dict[str, Any]:
+def club_strategy_meta(
+    competition: str = DEFAULT_COMPETITION,
+    *,
+    force_refresh: bool = False,
+) -> dict[str, Any]:
     if competition not in COMPETITIONS:
         raise HTTPException(status_code=400, detail=f"Unsupported competition: {competition}")
 
-    seasons = [
-        {
-            "iteration_id": int(item["id"]),
-            "season": str(item.get("season") or ""),
-            "label": _season_label(str(item.get("season") or "")),
-            "competition": competition,
-        }
-        for item in _competition_iterations(competition)[:4]
-    ]
+    disk_path = _meta_disk_path(competition)
+    if not force_refresh:
+        disk = _read_disk_cache(disk_path, allow_stale=True)
+        if disk and disk.get("seasons"):
+            return _cache_body(disk)
+
+    try:
+        seasons = [
+            {
+                "iteration_id": int(item["id"]),
+                "season": str(item.get("season") or ""),
+                "label": _season_label(str(item.get("season") or "")),
+                "competition": competition,
+            }
+            for item in _competition_iterations(competition)[:4]
+        ]
+    except HTTPException:
+        disk = _read_disk_cache(disk_path, allow_stale=True)
+        if disk and disk.get("seasons"):
+            return _cache_body(disk)
+        raise
     # Always prefer the newest listed season (e.g. 26/27). Falling back to the
     # last season with matches made the hub show stale League One / wrong-league KPIs.
     default_iteration_id = seasons[0]["iteration_id"] if seasons else None
-    return {
+    payload = {
         "competition": competition,
         "competitions": [{"id": name, "label": name} for name in COMPETITIONS],
         "focus_club": "Port Vale",
@@ -1192,6 +1219,9 @@ def club_strategy_meta(competition: str = DEFAULT_COMPETITION) -> dict[str, Any]
             {"id": "fg_conceded_times", "label": "Conceded First — Times"},
         ],
     }
+    if seasons:
+        _write_disk_cache(disk_path, {"cached_at_epoch": time.time(), **payload})
+    return payload
 
 
 def _season_label(season: str) -> str:
@@ -1227,14 +1257,17 @@ def register_club_strategy_routes(app: FastAPI) -> None:
         iteration_id: int = Query(..., ge=1),
         refresh: bool = Query(False),
     ) -> dict[str, Any]:
-        return build_club_strategy_report(iteration_id, force_refresh=refresh)
+        # Click paths always serve the 5am snapshot. Rebuild via hub-snapshots.
+        _ = refresh
+        return build_club_strategy_report(iteration_id, force_refresh=False)
 
     @app.get("/api/club-strategy/first-goal")
     def club_strategy_first_goal_route(
         iteration_id: int = Query(..., ge=1),
         refresh: bool = Query(False),
     ) -> dict[str, Any]:
-        return build_first_goal_report(iteration_id, force_refresh=refresh)
+        _ = refresh
+        return build_first_goal_report(iteration_id, force_refresh=False)
 
     @app.get("/api/club-strategy/export-pdf")
     def club_strategy_export_pdf_route(

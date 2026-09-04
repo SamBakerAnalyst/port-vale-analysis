@@ -127,3 +127,52 @@ def test_readiness_probe_never_raises(monkeypatch):
     result = analysis_cache.provider_ready()
     assert result["ready"] is False
     assert "Impect 503" in result["detail"]
+
+
+def test_daily_refresh_scopes_include_strategy_reports():
+    assert "strategy_tracker" in hub_snapshots.VALID_SCOPES
+    assert "win_drivers" in hub_snapshots.VALID_SCOPES
+    assert "standings" in hub_snapshots.VALID_SCOPES
+
+
+def test_refresh_win_drivers_forces_impect_rebuild(monkeypatch):
+    calls: list[tuple[str, bool]] = []
+
+    monkeypatch.setattr(
+        "app.win_drivers.win_drivers_meta",
+        lambda force_refresh=False: (
+            calls.append(("meta", force_refresh))
+            or {"seasons": [{"iteration_id": 99}]}
+        ),
+    )
+    monkeypatch.setattr(
+        "app.win_drivers.build_history",
+        lambda force_refresh=False: calls.append(("history", force_refresh)) or {},
+    )
+    monkeypatch.setattr(
+        "app.win_drivers.build_table",
+        lambda iid, force_refresh=False: calls.append(("table", force_refresh)) or {},
+    )
+    monkeypatch.setattr(hub_snapshots, "_write_meta", lambda updates: updates)
+
+    result = hub_snapshots.refresh_win_drivers()
+    assert result["seasons_rebuilt"] == [99]
+    assert ("meta", True) in calls
+    assert ("history", True) in calls
+    assert ("table", True) in calls
+
+
+def test_refresh_strategy_tracker_forces_impect_rebuild(monkeypatch):
+    calls: list[bool] = []
+
+    monkeypatch.setattr(
+        "app.strategy_tracker.build_strategy_tracker",
+        lambda competition="League Two", force_refresh=False: (
+            calls.append(force_refresh)
+            or {"iteration_id": 11, "season": "2026-2027", "generated_at": "now"}
+        ),
+    )
+    monkeypatch.setattr(hub_snapshots, "_write_meta", lambda updates: updates)
+
+    hub_snapshots.refresh_strategy_tracker()
+    assert calls == [True]

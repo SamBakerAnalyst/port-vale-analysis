@@ -54,11 +54,13 @@ PLAYER_STAT_KEYS = (
 class RefreshBody(BaseModel):
     scope: str = Field(
         default="all",
-        description="all | players | standings | win_drivers | analysis",
+        description="all | players | standings | win_drivers | strategy_tracker | analysis",
     )
 
 
-VALID_SCOPES = frozenset({"all", "players", "standings", "win_drivers", "analysis"})
+VALID_SCOPES = frozenset(
+    {"all", "players", "standings", "win_drivers", "strategy_tracker", "analysis"}
+)
 
 # Impect finish whenever they finish — there is no set upload time. So the
 # analysis cache waits for the data to actually land instead of firing on a
@@ -224,11 +226,17 @@ def load_standings_snapshot() -> dict[str, Any] | None:
 def refresh_standings() -> dict[str, Any]:
     from app.club_strategy import build_club_strategy_report, club_strategy_meta
 
-    meta = club_strategy_meta("League Two")
+    meta = club_strategy_meta("League Two", force_refresh=True)
     iteration_id = int(meta.get("default_iteration_id") or 0)
     if not iteration_id:
         raise RuntimeError("No League Two iteration found for standings snapshot.")
     report = build_club_strategy_report(iteration_id, force_refresh=True)
+    try:
+        from app.club_strategy import build_first_goal_report
+
+        build_first_goal_report(iteration_id, force_refresh=True)
+    except Exception:
+        logger.exception("First-goal warm after standings snapshot failed")
     payload = {
         "updated_at": _now_iso(),
         "competition": "League Two",
@@ -321,7 +329,7 @@ def refresh_players() -> dict[str, Any]:
 def refresh_win_drivers() -> dict[str, Any]:
     from app.win_drivers import build_history, build_table, win_drivers_meta
 
-    meta = win_drivers_meta()
+    meta = win_drivers_meta(force_refresh=True)
     seasons = list(meta.get("seasons") or [])
 
     iteration_ids: list[int] = []
@@ -338,13 +346,13 @@ def refresh_win_drivers() -> dict[str, Any]:
         _write_meta({"win_drivers_updated_at": updated_at})
         return {"updated_at": updated_at, "seasons_rebuilt": []}
 
-    # Build history only if the disk cache is missing. The table can then
-    # rebuild without forcing history rebuilds (see app/win_drivers.py).
-    build_history(force_refresh=False)
+    # Daily / Refresh button must rebuild from Impect, then click paths
+    # serve the saved files until the next 05:00 pull.
+    build_history(force_refresh=True)
 
     rebuilt: list[int] = []
     for iid in iteration_ids:
-        build_table(iid, force_refresh=False)
+        build_table(iid, force_refresh=True)
         rebuilt.append(iid)
 
     updated_at = _now_iso()
@@ -355,8 +363,7 @@ def refresh_win_drivers() -> dict[str, Any]:
 def refresh_strategy_tracker() -> dict[str, Any]:
     from app.strategy_tracker import build_strategy_tracker
 
-    # Use existing disk cache unless missing/stale.
-    payload = build_strategy_tracker(competition="League Two", force_refresh=False)
+    payload = build_strategy_tracker(competition="League Two", force_refresh=True)
     updated_at = _now_iso()
     _write_meta({"strategy_tracker_updated_at": updated_at})
     return {
@@ -380,7 +387,8 @@ def refresh_snapshots(scope: str = "all") -> dict[str, Any]:
     scope_key = str(scope or "all").strip().lower()
     if scope_key not in VALID_SCOPES:
         raise ValueError(
-            "scope must be all, players, standings, win_drivers, or analysis"
+            "scope must be all, players, standings, win_drivers, "
+            "strategy_tracker, or analysis"
         )
 
     with _refresh_lock:
@@ -403,7 +411,7 @@ def refresh_snapshots(scope: str = "all") -> dict[str, Any]:
             result["standings"] = refresh_standings()
         if scope_key in {"all", "players"}:
             result["players"] = refresh_players()
-        if scope_key == "all":
+        if scope_key in {"all", "strategy_tracker"}:
             result["strategy_tracker"] = refresh_strategy_tracker()
         if scope_key in {"all", "win_drivers"}:
             result["win_drivers"] = refresh_win_drivers()
@@ -611,7 +619,7 @@ def register_hub_snapshots_routes(app: FastAPI) -> None:
         if chosen not in VALID_SCOPES:
             raise HTTPException(
                 status_code=400,
-                detail="scope must be all, players, standings, win_drivers, or analysis",
+                detail="scope must be all, players, standings, win_drivers, strategy_tracker, or analysis",
             )
         return schedule_refresh(chosen)
 
