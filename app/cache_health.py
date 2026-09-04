@@ -26,7 +26,6 @@ from app.paths import (
     DATA_ROOT,
     FIXTURE_PLANNER_DATA_DIR,
     HUB_SNAPSHOTS_DIR,
-    SCOUTING_DISK_CACHE_DIR,
     WIN_DRIVERS_CACHE_DIR,
 )
 
@@ -85,15 +84,16 @@ CHECKS: tuple[CacheCheck, ...] = (
         min_bytes=1_000,
         is_dir=True,
     ),
-    CacheCheck(
-        id="scouting",
-        label="Season long lists",
-        tool="Scouting reports",
-        path=SCOUTING_DISK_CACHE_DIR,
-        max_age_hours=72,
-        min_bytes=1_000,
-        is_dir=True,
-    ),
+    # No check for the scouting report bundles, deliberately. paths.py defines
+    # SCOUTING_DISK_CACHE_DIR as /data/cache/impect-scouting, but scouting.py
+    # ignores that and declares its own pointing at ~/.cache/impect-scouting.
+    # The volume directory only holds two abandoned files from July, so watching
+    # it reports a fault that is not real — and a panel that is always amber is
+    # a panel people stop reading.
+    #
+    # The live path is inside the container, so those bundles are lost on every
+    # deploy. Worth moving onto the volume, but that is a change to scouting.py
+    # rather than something to paper over here.
     CacheCheck(
         id="fixture_planner",
         label="Assignments and coverage",

@@ -137,6 +137,21 @@ def test_every_check_has_a_size_floor():
         assert check.max_age_hours > 0, f"{check.id} has no age limit"
 
 
+def test_we_do_not_watch_a_directory_no_code_writes():
+    """paths.py and scouting.py disagree about where scouting bundles live.
+
+    paths.py says /data/cache/impect-scouting; scouting.py declares its own
+    pointing at ~/.cache/impect-scouting and uses that. Watching the volume one
+    reports a fault that is not real, and a panel that is always amber is a
+    panel people stop reading.
+    """
+    from app.cache_health import CHECKS
+    from app.paths import SCOUTING_DISK_CACHE_DIR
+
+    watched = {c.path for c in CHECKS}
+    assert SCOUTING_DISK_CACHE_DIR not in watched
+
+
 def test_durations_read_as_english():
     assert _humanise_duration(0.25) == "15 minutes"
     assert _humanise_duration(2) == "2.0 hours"
