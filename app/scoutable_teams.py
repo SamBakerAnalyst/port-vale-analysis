@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import threading
@@ -45,14 +46,21 @@ from app.scouting import (
 
 from app.season_defaults import CURRENT_SEASON
 
+logger = logging.getLogger(__name__)
+
 _BOARD_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 _SQUAD_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
-_BOARD_TTL = 30 * 60
+# The board is league → club structure, which barely moves across a season, so a
+# short TTL just bought us a 6-league Impect round trip every half hour. Counts
+# are attached fresh per request (_attach_board_counts), so they stay live.
+_BOARD_TTL = 12 * 3600
 _SQUAD_TTL = 6 * 3600
 _MIN_MINUTES = 90.0
 _CACHE_VERSION = 5  # no Other-profile dump; stronger primary fallback
 
 SCOUT_NOTES_PATH = DATA_ROOT / "scoutable-teams-notes.json"
+# Memory-only caching meant every deploy handed the next person a cold rebuild.
+BOARD_DISK_CACHE = DATA_ROOT / "scoutable-teams-board-cache.json"
 _notes_lock = threading.Lock()
 WATCHED_STAGE = "watched"
 
@@ -439,13 +447,56 @@ def _pick_iteration_for_competition(competition: str) -> dict[str, Any] | None:
     return {"iteration": iteration, "squads": names}
 
 
-def build_leagues_board() -> dict[str, Any]:
+def _load_board_disk(cache_key: str) -> tuple[float, dict[str, Any]] | None:
+    """Board structure saved on the data volume, so it survives a redeploy."""
+    try:
+        if not BOARD_DISK_CACHE.exists():
+            return None
+        store = json.loads(BOARD_DISK_CACHE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    entry = store.get(cache_key) if isinstance(store, dict) else None
+    if not isinstance(entry, dict):
+        return None
+    payload = entry.get("payload")
+    if not isinstance(payload, dict) or not payload.get("leagues"):
+        return None
+    return float(entry.get("saved_at") or 0), payload
+
+
+def _save_board_disk(cache_key: str, payload: dict[str, Any]) -> None:
+    try:
+        ensure_data_dirs()
+        store: dict[str, Any] = {}
+        if BOARD_DISK_CACHE.exists():
+            try:
+                loaded = json.loads(BOARD_DISK_CACHE.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    store = loaded
+            except json.JSONDecodeError:
+                store = {}
+        store[cache_key] = {"saved_at": time.time(), "payload": payload}
+        tmp = BOARD_DISK_CACHE.with_suffix(BOARD_DISK_CACHE.suffix + ".tmp")
+        tmp.write_text(json.dumps(store, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(BOARD_DISK_CACHE)
+    except Exception:  # noqa: BLE001 - a cache write must not fail the request
+        logger.exception("Failed to write scoutable teams board cache")
+
+
+def build_leagues_board(*, force_refresh: bool = False) -> dict[str, Any]:
     cache_key = f"board:v{_CACHE_VERSION}"
-    cached = _BOARD_CACHE.get(cache_key)
     now = time.time()
-    if cached and now - cached[0] < _BOARD_TTL:
-        payload = dict(cached[1])
-        return _attach_board_counts(payload)
+
+    if not force_refresh:
+        cached = _BOARD_CACHE.get(cache_key)
+        if cached and now - cached[0] < _BOARD_TTL:
+            return _attach_board_counts(dict(cached[1]))
+
+        disk = _load_board_disk(cache_key)
+        if disk and now - disk[0] < _BOARD_TTL:
+            saved_at, payload = disk
+            _BOARD_CACHE[cache_key] = (saved_at, payload)
+            return _attach_board_counts(dict(payload))
 
     leagues: list[dict[str, Any]] = []
     for league in STANDOUTS_LEAGUES:
@@ -492,6 +543,7 @@ def build_leagues_board() -> dict[str, Any]:
         "leagues": leagues,
     }
     _BOARD_CACHE[cache_key] = (now, payload)
+    _save_board_disk(cache_key, payload)
     return _attach_board_counts(dict(payload))
 
 

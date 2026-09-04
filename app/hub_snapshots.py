@@ -54,12 +54,23 @@ PLAYER_STAT_KEYS = (
 class RefreshBody(BaseModel):
     scope: str = Field(
         default="all",
-        description="all | players | standings | win_drivers | strategy_tracker | analysis",
+        description=(
+            "all | players | standings | win_drivers | strategy_tracker "
+            "| scouting | analysis"
+        ),
     )
 
 
 VALID_SCOPES = frozenset(
-    {"all", "players", "standings", "win_drivers", "strategy_tracker", "analysis"}
+    {
+        "all",
+        "players",
+        "standings",
+        "win_drivers",
+        "strategy_tracker",
+        "analysis",
+        "scouting",
+    }
 )
 
 # Impect finish whenever they finish — there is no set upload time. So the
@@ -108,6 +119,7 @@ def load_meta() -> dict[str, Any]:
         "win_drivers_updated_at": str(meta.get("win_drivers_updated_at") or ""),
         "strategy_tracker_updated_at": str(meta.get("strategy_tracker_updated_at") or ""),
         "analysis_updated_at": str(meta.get("analysis_updated_at") or ""),
+        "scouting_updated_at": str(meta.get("scouting_updated_at") or ""),
         "last_refresh_started_at": str(meta.get("last_refresh_started_at") or ""),
         "last_refresh_finished_at": str(meta.get("last_refresh_finished_at") or ""),
         "last_refresh_status": str(meta.get("last_refresh_status") or "never"),
@@ -374,6 +386,43 @@ def refresh_strategy_tracker() -> dict[str, Any]:
     }
 
 
+def refresh_scouting() -> dict[str, Any]:
+    """Warm Who To Scout and Scoutable Teams before staff open them.
+
+    Both build lazily on first request, so without this the first person in each
+    morning (or after any deploy) waited on a full rebuild — minutes for Who To
+    Scout, which scores every player in six leagues.
+    """
+    from app.scoutable_teams import build_leagues_board
+    from app.who_to_scout import _load_standouts_raw_payload
+
+    result: dict[str, Any] = {}
+
+    try:
+        # force_refresh builds from Impect and writes both the memory and disk
+        # caches; without it a cold call just returns a "building" placeholder
+        # and leaves the page polling.
+        standouts = _load_standouts_raw_payload(period="season", force_refresh=True)
+        players = standouts.get("players") if isinstance(standouts, dict) else None
+        result["who_to_scout"] = {"ok": True, "players": len(players or [])}
+    except Exception as exc:  # noqa: BLE001 - one tool must not stop the other
+        logger.exception("Who To Scout warm failed")
+        result["who_to_scout"] = {"ok": False, "error": str(exc)}
+
+    try:
+        board = build_leagues_board(force_refresh=True)
+        clubs = sum(len(lg.get("clubs") or []) for lg in board.get("leagues") or [])
+        result["scoutable_teams"] = {"ok": True, "clubs": clubs}
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Scoutable Teams warm failed")
+        result["scoutable_teams"] = {"ok": False, "error": str(exc)}
+
+    updated_at = _now_iso()
+    _write_meta({"scouting_updated_at": updated_at})
+    result["updated_at"] = updated_at
+    return result
+
+
 def refresh_analysis() -> dict[str, Any]:
     from app.analysis_cache import refresh_analysis_data
 
@@ -388,7 +437,7 @@ def refresh_snapshots(scope: str = "all") -> dict[str, Any]:
     if scope_key not in VALID_SCOPES:
         raise ValueError(
             "scope must be all, players, standings, win_drivers, "
-            "strategy_tracker, or analysis"
+            "strategy_tracker, scouting, or analysis"
         )
 
     with _refresh_lock:
@@ -415,6 +464,8 @@ def refresh_snapshots(scope: str = "all") -> dict[str, Any]:
             result["strategy_tracker"] = refresh_strategy_tracker()
         if scope_key in {"all", "win_drivers"}:
             result["win_drivers"] = refresh_win_drivers()
+        if scope_key in {"all", "scouting"}:
+            result["scouting"] = refresh_scouting()
         if scope_key == "all":
             from app.home_dashboard import build_port_vale_fixtures
 
@@ -540,6 +591,31 @@ def start_daily_scheduler() -> None:
     _scheduler_started = True
     _ensure_dir()
 
+    def _boot_warm_scouting() -> None:
+        """Pull the scouting caches from disk into memory after a restart.
+
+        A deploy wipes the in-process caches even though the saved data is still
+        good, and both tools build lazily — so without this the first person to
+        open Who To Scout or Scoutable Teams pays for the rebuild. These are the
+        unforced paths on purpose: they read the disk cache when it is there, and
+        only fall back to Impect when it genuinely is not.
+        """
+        time.sleep(15)
+        try:
+            from app.scoutable_teams import build_leagues_board
+
+            build_leagues_board()
+            logger.info("Scoutable Teams board warmed at boot")
+        except Exception:
+            logger.exception("Boot warm of Scoutable Teams failed")
+        try:
+            from app.who_to_scout import _load_standouts_raw_payload
+
+            _load_standouts_raw_payload(period="season")
+            logger.info("Who To Scout standouts warmed at boot")
+        except Exception:
+            logger.exception("Boot warm of Who To Scout failed")
+
     def _loop() -> None:
         # If never refreshed (or very stale), warm shortly after boot.
         if _meta_is_stale():
@@ -610,6 +686,9 @@ def start_daily_scheduler() -> None:
     threading.Thread(
         target=_analysis_loop, name="hub-analysis-provider-poll", daemon=True
     ).start()
+    threading.Thread(
+        target=_boot_warm_scouting, name="hub-scouting-boot-warm", daemon=True
+    ).start()
 
 
 def register_hub_snapshots_routes(app: FastAPI) -> None:
@@ -627,7 +706,10 @@ def register_hub_snapshots_routes(app: FastAPI) -> None:
         if chosen not in VALID_SCOPES:
             raise HTTPException(
                 status_code=400,
-                detail="scope must be all, players, standings, win_drivers, strategy_tracker, or analysis",
+                detail=(
+                    "scope must be all, players, standings, win_drivers, "
+                    "strategy_tracker, scouting, or analysis"
+                ),
             )
         return schedule_refresh(chosen)
 

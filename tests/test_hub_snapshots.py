@@ -176,3 +176,59 @@ def test_refresh_strategy_tracker_forces_impect_rebuild(monkeypatch):
 
     hub_snapshots.refresh_strategy_tracker()
     assert calls == [True]
+
+
+def test_daily_refresh_scope_includes_scouting():
+    """Who To Scout / Scoutable Teams build lazily, so the 5am job must warm them."""
+    assert "scouting" in hub_snapshots.VALID_SCOPES
+
+
+def test_refresh_scouting_forces_a_rebuild_of_both_tools(monkeypatch):
+    import app.main  # noqa: F401 - resolves the router import order
+
+    calls: list[tuple[str, bool]] = []
+
+    monkeypatch.setattr(
+        "app.who_to_scout._load_standouts_raw_payload",
+        lambda *, period, force_refresh=False, **kw: (
+            calls.append(("who-to-scout", force_refresh))
+            or {"players": [{"id": 1}, {"id": 2}]}
+        ),
+    )
+    monkeypatch.setattr(
+        "app.scoutable_teams.build_leagues_board",
+        lambda force_refresh=False: (
+            calls.append(("scoutable-teams", force_refresh))
+            or {"leagues": [{"clubs": [{"id": 1}, {"id": 2}, {"id": 3}]}]}
+        ),
+    )
+    monkeypatch.setattr(hub_snapshots, "_write_meta", lambda updates: updates)
+
+    result = hub_snapshots.refresh_scouting()
+
+    # A non-forced call would return a "building" placeholder and leave the page polling.
+    assert ("who-to-scout", True) in calls
+    assert ("scoutable-teams", True) in calls
+    assert result["who_to_scout"] == {"ok": True, "players": 2}
+    assert result["scoutable_teams"] == {"ok": True, "clubs": 3}
+
+
+def test_refresh_scouting_reports_one_tool_failing_without_losing_the_other(monkeypatch):
+    import app.main  # noqa: F401
+
+    monkeypatch.setattr(
+        "app.who_to_scout._load_standouts_raw_payload",
+        lambda *, period, force_refresh=False, **kw: (_ for _ in ()).throw(
+            RuntimeError("impect down")
+        ),
+    )
+    monkeypatch.setattr(
+        "app.scoutable_teams.build_leagues_board",
+        lambda force_refresh=False: {"leagues": [{"clubs": [{"id": 1}]}]},
+    )
+    monkeypatch.setattr(hub_snapshots, "_write_meta", lambda updates: updates)
+
+    result = hub_snapshots.refresh_scouting()
+    assert result["who_to_scout"]["ok"] is False
+    assert "impect down" in result["who_to_scout"]["error"]
+    assert result["scoutable_teams"]["ok"] is True
