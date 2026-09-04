@@ -3,6 +3,13 @@
 Admin (TEAM_USERNAME / TEAM_PASSWORD) keeps full access.
 Analysis accounts (ANALYSIS_USERNAME / ANALYSIS_PASSWORD, or HUB_USERS JSON)
 can only open Analysis tools + the hub home ribbon for those apps.
+Scout accounts (HUB_USERS with role "scouts") get Recruitment + Scouts tools,
+so their own name lands on Watch list and pipeline notes.
+
+Personal accounts go in the HUB_USERS env var on the server:
+
+    HUB_USERS='[{"username":"jsmith","password":"...",
+                 "role":"scouts","display_name":"Joe Smith"}]'
 """
 
 from __future__ import annotations
@@ -46,18 +53,19 @@ PUBLIC_PREFIXES = (
     "/api/gi/",
 )
 
-# Paths an analysis-only account may hit (prefix match, except "/" which is exact).
-ANALYSIS_ALLOWED_EXACT = frozenset(
+# Paths any signed-in account may hit (prefix match, except "/" which is exact).
+ROLE_ALLOWED_EXACT = frozenset(
     {"/", "/hub", "/api/auth/me", "/api/auth/logout", "/api/apps"}
 )
+ANALYSIS_ALLOWED_EXACT = ROLE_ALLOWED_EXACT
 
 
-def _analysis_allowed_prefixes() -> tuple[str, ...]:
+def _role_allowed_prefixes(role: str) -> tuple[str, ...]:
     """Derived from apps_manifest — do not hand-edit a parallel list."""
     try:
-        from app.apps_manifest import analysis_path_prefixes
+        from app.apps_manifest import role_path_prefixes
 
-        return analysis_path_prefixes()
+        return role_path_prefixes(role)
     except Exception:
         # Boot-safe fallback if manifest import fails during early load.
         return (
@@ -88,6 +96,16 @@ def _analysis_allowed_prefixes() -> tuple[str, ...]:
 ROLE_GROUPS = {
     "admin": ("analysis", "recruitment", "scouts", "strategy", "presentations"),
     "analysis": ("analysis",),
+    # Scouts get the recruitment funnel and their own fixtures/reports, but not
+    # Strategy or the Presentations decks.
+    "scouts": ("recruitment", "scouts"),
+}
+
+# Hub home tabs a role may open, keyed to data-tab in hub.html.
+ROLE_HOME_TABS = {
+    "admin": ("home", "performance", "recruitment", "strategy"),
+    "analysis": ("home",),
+    "scouts": ("home", "recruitment"),
 }
 
 
@@ -193,6 +211,7 @@ def current_user_payload(request: Request) -> dict[str, Any]:
         "display_name": str(request.session.get("display_name") or request.session.get("username") or team_username()),
         "role": role,
         "groups": list(ROLE_GROUPS.get(role, ROLE_GROUPS["analysis"])),
+        "home_tabs": list(ROLE_HOME_TABS.get(role, ROLE_HOME_TABS["analysis"])),
         "allow_all": role == "admin",
     }
 
@@ -206,18 +225,18 @@ def _is_public_path(path: str) -> bool:
 def _path_allowed_for_role(path: str, role: str) -> bool:
     if role == "admin" or not auth_enabled():
         return True
-    if path in ANALYSIS_ALLOWED_EXACT:
+    if path in ROLE_ALLOWED_EXACT:
         return True
     # Allow asset files under standalone; block other app HTML if ever served raw.
     if path.startswith("/standalone/"):
         lower = path.lower()
         if lower.endswith((".js", ".css", ".png", ".jpg", ".jpeg", ".webp", ".svg", ".json", ".woff", ".woff2", ".map")):
             return True
-        # Analysis pages are routed via FastAPI paths, not raw HTML.
+        # Tool pages are routed via FastAPI paths, not raw HTML.
         return False
     return any(
         path == prefix.rstrip("/") or path.startswith(prefix)
-        for prefix in _analysis_allowed_prefixes()
+        for prefix in _role_allowed_prefixes(role)
     )
 
 

@@ -61,6 +61,31 @@ See `.env.example`. Key variables:
 | `IMPECT_USERNAME` / `IMPECT_PASSWORD` | Impect API credentials (required) |
 | `DATA_ROOT` | Persistent data directory (default: `./data`) |
 | `HOST` / `PORT` | Server bind address (`0.0.0.0` for team/LAN access) |
+| `TEAM_USERNAME` / `TEAM_PASSWORD` | Admin login — full access |
+| `HUB_USERS` | JSON list of personal staff logins (see below) |
+
+## Personal staff logins
+
+Shared logins put one name on every Watch list row and pipeline note. Personal
+accounts go in `HUB_USERS` on the server (`/opt/port-vale-analysis/.env`), then
+`docker compose up -d` to pick them up:
+
+```bash
+HUB_USERS='[{"username":"jsmith","password":"...","role":"scouts","display_name":"Joe Smith"}]'
+```
+
+`display_name` is what lands in `added_by`, `moved_by` and note authors.
+
+| Role | Opens |
+|---|---|
+| `admin` | Everything |
+| `scouts` | Recruitment + Scouts tools — not Strategy or Presentations |
+| `analysis` | Analysis tools only |
+
+Roles are defined in `ROLE_GROUPS` / `ROLE_HOME_TABS` (`app/auth.py`); which
+tools each one opens comes from the `roles` tuple per app in
+`app/apps_manifest.py`. `tests/test_role_access.py` pins those boundaries — a
+tool moving between roles should fail a test before it reaches staff.
 
 ## Docker
 

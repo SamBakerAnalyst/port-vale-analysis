@@ -277,8 +277,21 @@ APPS: list[dict[str, Any]] = [
         "icon": "⚽",
         "accent": "#56d4ff",
         "tags": ["Charts", "Profiles"],
-        "roles": ("admin",),
-        "api_prefixes": ("/studio", "/api/"),
+        "roles": ("scouts", "admin"),
+        # Studio endpoints listed one by one. A bare "/api/" here would hand every
+        # non-admin role the whole API.
+        "api_prefixes": (
+            "/studio",
+            "/api/charts",
+            "/api/export-pdf",
+            "/api/export-pptx",
+            "/api/iterations",
+            "/api/player-history",
+            "/api/player-positions",
+            "/api/players",
+            "/api/player-photo/upload",
+            "/api/squad-balance/meta",
+        ),
         "router": "main_studio",
     },
     {
@@ -293,7 +306,7 @@ APPS: list[dict[str, Any]] = [
         "icon": "🎯",
         "accent": "#34d399",
         "tags": ["Scouting", "Profiles", "Leagues"],
-        "roles": ("admin",),
+        "roles": ("scouts", "admin",),
         "api_prefixes": (
             "/who-to-scout",
             "/api/who-to-scout",
@@ -314,7 +327,7 @@ APPS: list[dict[str, Any]] = [
         "icon": "⚖️",
         "accent": "#f5c518",
         "tags": ["Squad", "Balance"],
-        "roles": ("admin",),
+        "roles": ("scouts", "admin",),
         "api_prefixes": ("/squad-balance", "/api/squad-balance"),
         "router": "squad_balance",
     },
@@ -330,7 +343,7 @@ APPS: list[dict[str, Any]] = [
         "icon": "👀",
         "accent": "#38bdf8",
         "tags": ["Watch list", "Scouting", "Targets"],
-        "roles": ("admin",),
+        "roles": ("scouts", "admin",),
         "api_prefixes": ("/watch-list", "/api/watch-list", "/api/player-pipelines"),
         "router": "player_pipelines",
     },
@@ -347,7 +360,7 @@ APPS: list[dict[str, Any]] = [
         "icon": "📌",
         "accent": "#a78bfa",
         "tags": ["Pipelines", "Scouting", "Targets", "Notes"],
-        "roles": ("admin",),
+        "roles": ("scouts", "admin",),
         "api_prefixes": ("/player-pipelines", "/api/player-pipelines"),
         "router": "player_pipelines",
     },
@@ -363,7 +376,7 @@ APPS: list[dict[str, Any]] = [
         "icon": "🏟️",
         "accent": "#34d399",
         "tags": ["Scouting", "Clubs", "Pipelines"],
-        "roles": ("admin",),
+        "roles": ("scouts", "admin",),
         "api_prefixes": ("/scoutable-teams", "/api/scoutable-teams"),
         "router": "scoutable_teams",
     },
@@ -379,7 +392,7 @@ APPS: list[dict[str, Any]] = [
         "icon": "📋",
         "accent": "#3d8bfd",
         "tags": ["Squad", "Planning"],
-        "roles": ("admin",),
+        "roles": ("scouts", "admin",),
         "api_prefixes": ("/squad-planner", "/api/squad-planner"),
         "router": "squad_planner",
     },
@@ -395,7 +408,7 @@ APPS: list[dict[str, Any]] = [
         "icon": "📅",
         "accent": "#34d399",
         "tags": ["Fixtures", "Upcoming"],
-        "roles": ("admin",),
+        "roles": ("scouts", "admin",),
         "api_prefixes": ("/fixture-planner", "/api/fixture-planner"),
         "router": "fixture_planner",
     },
@@ -411,7 +424,7 @@ APPS: list[dict[str, Any]] = [
         "icon": "🎬",
         "accent": "#fbbf24",
         "tags": ["Fixtures", "Played", "Video"],
-        "roles": ("admin",),
+        "roles": ("scouts", "admin",),
         "api_prefixes": ("/played-fixtures", "/api/fixture-planner"),
         "router": "fixture_planner",
     },
@@ -427,7 +440,7 @@ APPS: list[dict[str, Any]] = [
         "icon": "🗺️",
         "accent": "#38bdf8",
         "tags": ["Scouts", "Map", "Travel"],
-        "roles": ("admin",),
+        "roles": ("scouts", "admin",),
         "api_prefixes": ("/scouting-address", "/api/scouting-address"),
         "router": "scouting_address",
     },
@@ -443,7 +456,7 @@ APPS: list[dict[str, Any]] = [
         "icon": "📄",
         "accent": "#38bdf8",
         "tags": ["Scouts", "Reports", "PDF"],
-        "roles": ("admin",),
+        "roles": ("scouts", "admin",),
         "api_prefixes": ("/scout-summary-report", "/api/fixture-planner"),
         "router": "fixture_planner",
     },
@@ -459,7 +472,7 @@ APPS: list[dict[str, Any]] = [
         "icon": "📊",
         "accent": "#a78bfa",
         "tags": ["Scouts", "Coverage"],
-        "roles": ("admin",),
+        "roles": ("scouts", "admin",),
         "api_prefixes": ("/scout-summary", "/api/fixture-planner"),
         "router": "fixture_planner",
     },
@@ -475,7 +488,7 @@ APPS: list[dict[str, Any]] = [
         "icon": "🗓️",
         "accent": "#f97316",
         "tags": ["Scouts", "Live"],
-        "roles": ("admin",),
+        "roles": ("scouts", "admin",),
         "api_prefixes": ("/scouts-calendar", "/api/fixture-planner"),
         "router": "fixture_planner",
     },
@@ -491,7 +504,7 @@ APPS: list[dict[str, Any]] = [
         "icon": "🎬",
         "accent": "#f97316",
         "tags": ["Scouts", "Video", "PNG"],
-        "roles": ("admin",),
+        "roles": ("scouts", "admin",),
         "api_prefixes": (
             "/meeting-front-pages",
             "/api/meeting-front-pages",
@@ -716,10 +729,12 @@ LIVE_ESSENTIAL_IDS = frozenset(
         "xg-chance-analysis",
         "blocks-analysis",
         # Recruitment
-        # Player Pipelines + Scoutable Teams stay held back until every scout
-        # has a personal login (shared board needs real names on the notes).
         "who-to-scout",
         "watch-list",
+        # Live once scouts have personal logins, so the shared board and its
+        # notes carry real names rather than one team account.
+        "player-pipelines",
+        "scoutable-teams",
         # Scouts
         "fixture-planner",
         "played-fixtures",
@@ -786,29 +801,53 @@ def public_app_payload(app: dict[str, Any], *, reveal_all: bool = False) -> dict
     return payload
 
 
-def analysis_path_prefixes() -> tuple[str, ...]:
+# Shared assets + feedback + WYSIWYG always allowed for any signed-in account.
+SHARED_PATH_PREFIXES: tuple[str, ...] = (
+    "/api/feedback",
+    "/api/apps",
+    "/api/player-photo",
+    "/api/wysiwyg-export-pdf",
+    "/api/wysiwyg-export-png-zip",
+    "/static/",
+    "/standalone/",
+)
+
+# Recruitment/scouting accounts also need the hub home widgets they can see, the
+# player dossier behind Watch list rows, and the daily snapshot scores come from.
+RECRUITMENT_SUPPORT_PREFIXES: tuple[str, ...] = (
+    "/api/home/",
+    "/api/hub-snapshots/",
+    "/api/players",
+    "/api/player/",
+    "/player/",
+    "/api/team-badge",
+)
+RECRUITMENT_GROUPS = frozenset({"recruitment", "scouts"})
+
+
+def role_path_prefixes(role: str) -> tuple[str, ...]:
+    """Paths a non-admin account may hit. Derived from APPS — no parallel list."""
+    role_key = str(role or "").strip().lower()
     prefixes: list[str] = []
+    needs_recruitment_support = False
     for app in APPS:
-        roles = tuple(app.get("roles") or ())
-        if "analysis" not in roles:
+        if role_key not in tuple(app.get("roles") or ()):
             continue
         for prefix in app.get("api_prefixes") or ():
             prefixes.append(str(prefix))
-    # Shared assets + feedback + WYSIWYG PDF always allowed for signed-in analysis users.
-    prefixes.extend(
-        (
-            "/api/feedback",
-            "/api/apps",
-            "/api/player-photo",
-            "/api/wysiwyg-export-pdf",
-            "/static/",
-            "/standalone/",
-        )
-    )
+        if app.get("group") in RECRUITMENT_GROUPS:
+            needs_recruitment_support = True
+    prefixes.extend(SHARED_PATH_PREFIXES)
+    if needs_recruitment_support:
+        prefixes.extend(RECRUITMENT_SUPPORT_PREFIXES)
     # Dedupe, longest-first so more specific prefixes win in mental model
     # (middleware uses startswith either way).
     uniq = sorted(set(prefixes), key=lambda p: (-len(p), p))
     return tuple(uniq)
+
+
+def analysis_path_prefixes() -> tuple[str, ...]:
+    return role_path_prefixes("analysis")
 
 
 def required_sidebar_titles() -> list[str]:

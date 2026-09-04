@@ -45,7 +45,7 @@ window.IMPECT_APPS = [
     "id": "pre-match",
     "group": "analysis",
     "title": "Pre-Match Report",
-    "description": "Automated opponent prep — squad overview, form, team metrics, and more.",
+    "description": "Opponent prep — full slide deck plus editable Two pager handout.",
     "href": "/pre-match",
     "icon": "📋",
     "accent": "#fbbf24",
@@ -94,6 +94,19 @@ window.IMPECT_APPS = [
     ],
     "comingSoon": true,
     "note": "Coming soon"
+  },
+  {
+    "id": "match-day-countdown",
+    "group": "analysis",
+    "title": "Match Day Countdown",
+    "description": "Dead-simple dressing-room clock — next opponent badges, countdown to kick-off, and the next match-day timing (analysis, warm-up, etc.).",
+    "href": "/match-day-countdown",
+    "icon": "⏰",
+    "accent": "#f5c518",
+    "tags": [
+      "Match day",
+      "Clock"
+    ]
   },
   {
     "id": "match-story",
@@ -194,7 +207,9 @@ window.IMPECT_APPS = [
       "Goals",
       "Coaches",
       "Match day"
-    ]
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
   },
   {
     "id": "blocks-analysis",
@@ -297,9 +312,7 @@ window.IMPECT_APPS = [
       "Scouting",
       "Targets",
       "Notes"
-    ],
-    "comingSoon": true,
-    "note": "Coming soon"
+    ]
   },
   {
     "id": "scoutable-teams",
@@ -313,9 +326,7 @@ window.IMPECT_APPS = [
       "Scouting",
       "Clubs",
       "Pipelines"
-    ],
-    "comingSoon": true,
-    "note": "Coming soon"
+    ]
   },
   {
     "id": "squad-planner",
@@ -416,6 +427,22 @@ window.IMPECT_APPS = [
     ]
   },
   {
+    "id": "meeting-front-pages",
+    "group": "scouts",
+    "title": "Meeting Front Pages",
+    "description": "Scout video title cards — identity page plus one PNG per PV profile (Wide Creator, Goal Threat, etc.). Download a pack.",
+    "href": "/meeting-front-pages",
+    "icon": "🎬",
+    "accent": "#f97316",
+    "tags": [
+      "Scouts",
+      "Video",
+      "PNG"
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
+  },
+  {
     "id": "squad-comparison",
     "group": "strategy",
     "title": "Squad Comparison",
@@ -456,7 +483,9 @@ window.IMPECT_APPS = [
       "League Two",
       "Impect",
       "Table"
-    ]
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
   },
   {
     "id": "club-strategy",
@@ -499,6 +528,8 @@ window.IMPECT_APPS = [
       "League Two",
       "Strategy"
     ],
+    "comingSoon": true,
+    "note": "Coming soon",
     "sidebar": false
   },
   {
@@ -514,6 +545,8 @@ window.IMPECT_APPS = [
       "Players",
       "Presentation"
     ],
+    "comingSoon": true,
+    "note": "Coming soon",
     "sidebar": false
   },
   {
@@ -529,6 +562,8 @@ window.IMPECT_APPS = [
       "Staff",
       "Presentation"
     ],
+    "comingSoon": true,
+    "note": "Coming soon",
     "sidebar": false
   },
   {
@@ -544,6 +579,8 @@ window.IMPECT_APPS = [
       "Values",
       "Presentation"
     ],
+    "comingSoon": true,
+    "note": "Coming soon",
     "sidebar": false
   },
   {
@@ -559,13 +596,15 @@ window.IMPECT_APPS = [
       "Progress",
       "Pace"
     ],
+    "comingSoon": true,
+    "note": "Coming soon",
     "sidebar": false
   },
   {
     "id": "hub-origin",
     "group": "presentations",
     "title": "Hub Origin Story",
-    "description": "Why we built the Analysis Hub, how it started, and what’s live.",
+    "description": "Why we built the Analysis Hub, how Player Comparison on leave started it, and what’s live — Present deck for staff briefings.",
     "href": "/hub-origin",
     "icon": "✦",
     "accent": "#a78bfa",
@@ -573,13 +612,15 @@ window.IMPECT_APPS = [
       "Story",
       "Presentation"
     ],
+    "comingSoon": true,
+    "note": "Coming soon",
     "sidebar": false
   },
   {
     "id": "window-review",
     "group": "presentations",
     "title": "Summer Window Review",
-    "description": "End of 26/27 summer window — ins and outs, average age, and primary-position depth.",
+    "description": "End of 26/27 summer window — ins and outs, average age change, and squad depth in primary positions. Present or PDF.",
     "href": "/window-review",
     "icon": "🔁",
     "accent": "#a78bfa",
@@ -588,6 +629,8 @@ window.IMPECT_APPS = [
       "Transfers",
       "Presentation"
     ],
+    "comingSoon": true,
+    "note": "Coming soon",
     "sidebar": false
   }
 ];

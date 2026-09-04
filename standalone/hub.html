@@ -2210,6 +2210,7 @@
             id="hubBrokeJoke"
             title="Little joke. Reset by editing standalone/hub-uptime-joke.json when we next break."
           >— days since we last broke</span>
+          <button type="button" class="hub__restart-btn" id="forceRefreshDataBtn" title="Pull fresh match data from Impect after games upload (~10am). Use a couple of times a week.">Force refresh data</button>
           <button type="button" class="hub__restart-btn" id="restartServerBtn">Restart</button>
           <a class="hub__restart-btn" id="startServerLink" href="/standalone/restart.command" hidden>Start server</a>
           <div class="hub__clock" aria-live="polite">
@@ -2643,10 +2644,20 @@
     window.HubAuth = {
       role: "pending",
       groups: [],
+      home_tabs: [],
       allow_all: false,
       username: "",
       display_name: "",
     };
+
+    function allowedHomeTabs() {
+      return new Set(window.HubAuth.home_tabs || ["home"]);
+    }
+
+    // Home widgets only load for roles with a tab beyond the plain landing panel.
+    function canLoadHomeDashboard() {
+      return window.HubAuth.allow_all || allowedHomeTabs().size > 1;
+    }
 
     function appUrl(href) {
       return href.startsWith("http") ? href : `${BASE}${href}`;
@@ -2711,24 +2722,24 @@
       if (restartBtn) restartBtn.hidden = !isAdmin;
       if (startLink && !isAdmin) startLink.hidden = true;
 
+      // Player search reads the dossier, so anyone with Recruitment gets it.
       const search = document.getElementById("hubPlayerSearchWrap");
-      if (search) search.hidden = !isAdmin;
+      if (search) search.hidden = !(isAdmin || allowedGroups().has("recruitment"));
 
+      const tabs = allowedHomeTabs();
       document.querySelectorAll(".home-tab").forEach((btn) => {
         const tab = btn.dataset.tab;
         if (tab === "home") return;
-        btn.hidden = !isAdmin;
+        btn.hidden = !(isAdmin || tabs.has(tab));
       });
 
-      if (!isAdmin) {
-        // Soften home for analysis-only: hide league/recruit widgets they cannot load.
+      // Roles with only the landing tab (analysis) get a plain tool list instead
+      // of league/recruitment widgets their account cannot load.
+      if (!canLoadHomeDashboard()) {
         document.querySelectorAll(
           "#homeDashboard .home-kpis, #homeDashboard .home-grid, #homeDashboard .home-live-grid"
         ).forEach((el) => {
           el.hidden = true;
-        });
-        document.querySelectorAll(".home-tab").forEach((tab) => {
-          if (tab.dataset.tab !== "home") tab.hidden = true;
         });
         let tools = document.getElementById("analysisOnlyTools");
         if (!tools) {
@@ -2767,7 +2778,7 @@
       }
 
       if (new URLSearchParams(window.location.search).get("locked") === "1") {
-        window.alert("That tool is locked on your account. Analysis tools only.");
+        window.alert("That tool is locked on your account.");
         history.replaceState({}, "", "/");
       }
     }
@@ -2863,7 +2874,7 @@
         if (await checkServer()) break;
       }
       btn.disabled = false;
-      if (window.HubHome) HubHome.load();
+      if (window.HubHome && canLoadHomeDashboard()) HubHome.load();
     }
 
     document.getElementById("greeting").textContent = `${greeting()} — Port Vale`;
@@ -2871,8 +2882,50 @@
     updateClock();
     setInterval(updateClock, 30_000);
     document.getElementById("restartServerBtn").addEventListener("click", restartServer);
+
+    async function forceRefreshAnalysisData() {
+      const btn = document.getElementById("forceRefreshDataBtn");
+      const statusText = document.getElementById("serverStatusText");
+      if (!btn || btn.disabled) return;
+      const ok = window.confirm(
+        "Force refresh Analysis data from Impect?\n\nUse after games upload (usually ~10am). Takes a few minutes in the background — tools stay usable."
+      );
+      if (!ok) return;
+      btn.disabled = true;
+      const previous = btn.textContent;
+      btn.textContent = "Refreshing…";
+      try {
+        const res = await fetch(`${BASE}/api/hub-snapshots/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scope: "analysis" }),
+          cache: "no-store",
+          signal: AbortSignal.timeout(15000),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.detail || data.error || `Refresh failed (${res.status})`);
+        }
+        if (statusText) {
+          statusText.textContent = data.started
+            ? "Analysis refresh started — check back in a few minutes"
+            : data.detail || "Refresh already running";
+        }
+      } catch (err) {
+        if (statusText) {
+          statusText.textContent = err.message || "Force refresh failed";
+        }
+      } finally {
+        window.setTimeout(() => {
+          btn.disabled = false;
+          btn.textContent = previous || "Force refresh data";
+        }, 4000);
+      }
+    }
+    document.getElementById("forceRefreshDataBtn")?.addEventListener("click", forceRefreshAnalysisData);
+
     document.getElementById("railHomeBtn").addEventListener("click", () => {
-      if (window.HubHome && (window.HubAuth.allow_all || window.HubAuth.role === "admin")) {
+      if (window.HubHome && canLoadHomeDashboard()) {
         HubHome.setTab("home");
       }
       document.getElementById("homeDashboard").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -2886,6 +2939,7 @@
           window.HubAuth = {
             role: me.role || "analysis",
             groups: me.groups || ["analysis"],
+            home_tabs: me.home_tabs || ["home"],
             allow_all: !!me.allow_all,
             username: me.username || "",
             display_name: me.display_name || me.username || "",
@@ -2936,7 +2990,7 @@
       renderRail();
       checkServer();
       setInterval(checkServer, 30_000);
-      if (window.HubHome && (window.HubAuth.allow_all || window.HubAuth.role === "admin")) {
+      if (window.HubHome && canLoadHomeDashboard()) {
         HubHome.load();
       }
     }

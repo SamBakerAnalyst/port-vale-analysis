@@ -63,6 +63,8 @@ if [[ "${#REQUIRED_APPS[@]}" -eq 0 ]]; then
     "Blocks Analysis"
     "Who To Scout"
     "Watch list"
+    "Player Pipelines"
+    "Scoutable Teams"
     "Fixture Planner"
     "Played Fixtures"
     "Scouting Address Tool"
@@ -104,16 +106,19 @@ PY
     bad "essential marked comingSoon: $need"
   fi
 done
-# Recruitment launch shape: Watch list open, Pipelines + Scoutable Teams held back
-# until every scout has a personal login. Assert both halves so neither drifts.
+# Recruitment launch shape: the whole funnel is open now that scouts have personal
+# logins. Strategy decks stay held. Assert both halves so neither drifts.
 check_launch_shape() {
   python3 - "$1" <<'PY'
 import json, sys
-want_open = {"Who To Scout", "Watch list"}
-want_held = {"Player Pipelines", "Scoutable Teams"}
+want_open = {"Who To Scout", "Watch list", "Player Pipelines", "Scoutable Teams"}
+want_held = {"Club Strategy", "What Wins Games"}
 data = json.load(open("/tmp/pv-smoke-apps.json"))
 by_title = {a.get("title"): a for a in data.get("apps") or []}
 problems = []
+# Staging reveals every tool on purpose, so only the open half applies there.
+if data.get("staging"):
+    want_held = set()
 for title in sorted(want_open):
     app = by_title.get(title)
     if app is None:
@@ -131,12 +136,13 @@ raise SystemExit(0)
 PY
 }
 if shape_err="$(check_launch_shape "$apps_file")"; then
-  pass "recruitment launch shape (Watch list open, Pipelines held)"
+  pass "recruitment launch shape (full funnel open, strategy held)"
 else
   bad "recruitment launch shape wrong: ${shape_err:-unknown}"
 fi
 
-curl -s --max-time 15 "$BASE_URL/standalone/hub-home.js" -o /tmp/pv-smoke-home.js || true
+# Send the cookie: Live serves assets through Caddy before auth, Staging does not.
+curl -s -b "$COOKIE_JAR" --max-time 15 "$BASE_URL/standalone/hub-home.js" -o /tmp/pv-smoke-home.js || true
 if grep -Fq "Promise.allSettled" /tmp/pv-smoke-home.js; then pass "hub-home paints widgets independently"; else bad "hub-home missing paint fix — Loading… can stick"; fi
 if grep -Fq 'const COMPETITION = "League Two"' /tmp/pv-smoke-home.js; then pass "hub-home is League Two"; else bad "hub-home still League One — stale season"; fi
 
@@ -157,7 +163,7 @@ done
 
 # Fixture planner JS must handle staff-as-list. GitHub deploys of old main
 # used to restore assignment.staff.split and crash the page.
-curl -s --max-time 15 "$BASE_URL/static/fixture-planner.js" -o /tmp/pv-smoke-fp.js || true
+curl -s -b "$COOKIE_JAR" --max-time 15 "$BASE_URL/static/fixture-planner.js" -o /tmp/pv-smoke-fp.js || true
 if grep -Fq 'function staffNames' /tmp/pv-smoke-fp.js; then
   pass "fixture-planner.js has staffNames"
 else
@@ -197,7 +203,7 @@ do
 done
 
 # Suggest widget must be on the hub shell (every tool page also loads it).
-curl -s --max-time 15 "$BASE_URL/static/hub-feedback.js" -o /tmp/pv-smoke-feedback.js || true
+curl -s -b "$COOKIE_JAR" --max-time 15 "$BASE_URL/static/hub-feedback.js" -o /tmp/pv-smoke-feedback.js || true
 if grep -Fq "/api/feedback" /tmp/pv-smoke-feedback.js; then
   pass "hub-feedback.js present"
 else
