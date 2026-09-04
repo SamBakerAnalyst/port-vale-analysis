@@ -441,9 +441,16 @@ def warm_blocks_analysis() -> dict[str, Any]:
     """
     from app.blocks_analysis import build_blocks_analysis_payload
 
+    started = time.time()
     try:
         payload = build_blocks_analysis_payload(force_refresh=False)
-        return {"ok": True, "blocks": len(payload.get("blocks") or [])}
+        blocks = len(payload.get("blocks") or [])
+        # Logged on success as well as failure: a warm that silently stops
+        # working looks exactly like one that was never wired up.
+        logger.info(
+            "Blocks Analysis warm: %d blocks in %.1fs", blocks, time.time() - started
+        )
+        return {"ok": True, "blocks": blocks}
     except Exception as exc:  # noqa: BLE001 - never let a warm take the app down
         logger.exception("Blocks Analysis warm failed")
         return {"ok": False, "error": str(exc)}
