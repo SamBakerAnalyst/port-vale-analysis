@@ -15,7 +15,6 @@ DECK_TITLES = {
     "Players Strategy Report",
     "Staff Strategy Report",
     "Values Report",
-    "Season Progress Report",
     "Hub Origin Story",
     "Summer Window Review",
 }
@@ -24,6 +23,7 @@ DECK_TITLES = {
 def test_presentations_is_the_only_rail_item_in_that_group():
     titles = required_sidebar_titles()
     assert "Presentations" in titles
+    assert "Season Progress Report" in titles
     for title in DECK_TITLES:
         assert title not in titles
     visible = [app for app in APPS if app.get("group") == "presentations" and app.get("sidebar") is not False]
@@ -39,6 +39,7 @@ def test_strategy_rail_is_dashboards_only():
     assert strategy == [
         "Squad Comparison",
         "Squad Availability",
+        "Season Progress Report",
         "What Wins Games",
         "Club Strategy",
     ]
@@ -66,3 +67,5 @@ def test_gallery_html_lists_every_deck():
     for app in presentation_decks():
         assert app["title"] in page
         assert app["href"] in page
+    assert "Season Progress Report" not in page
+    assert "/strategy-tracker" not in page

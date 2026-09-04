@@ -1547,6 +1547,8 @@
 
     .home-pace__text strong { color: var(--text); font-weight: 700; }
 
+    .home-pace .home-card__link { margin-left: auto; }
+
     .home-bars { display: flex; flex-direction: column; gap: 0.7rem; }
 
     .home-bar {
@@ -2559,6 +2561,7 @@
           <div id="homePaceBanner" class="home-pace">
             <span class="home-pace__badge is-off">Checking pace…</span>
             <p class="home-pace__text">Loading points-per-game track…</p>
+            <a class="home-card__link" href="/strategy-tracker">Season Progress →</a>
           </div>
           <div class="home-kpis">
             <article class="home-kpi" id="stratKpiPpg" style="--kpi-accent:#f5c518">
@@ -2613,6 +2616,7 @@
               </div>
               <div id="homeVsLeague"><p class="home-empty">Loading comparison…</p></div>
               <div class="home-quick" style="margin-top:0.85rem">
+                <a href="/strategy-tracker">Season Progress</a>
                 <a href="/squad-review">Squad Comparison</a>
                 <a href="/availability-tracker">Availability</a>
                 <a href="/strategy">L2 Strategy Report</a>

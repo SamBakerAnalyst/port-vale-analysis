@@ -550,6 +550,22 @@ APPS: list[dict[str, Any]] = [
         "router": "availability_tracker",
     },
     {
+        "id": "league-two-progress",
+        "group": "strategy",
+        "title": "Season Progress Report",
+        "description": (
+            "Live promotion pace, Impect style stats, and a Present / PDF board pack "
+            "versus auto / play-off / champions."
+        ),
+        "href": "/strategy-tracker",
+        "icon": "📉",
+        "accent": "#f5c518",
+        "tags": ["League Two", "Progress", "Pace"],
+        "roles": ("admin",),
+        "api_prefixes": ("/strategy-tracker", "/api/strategy-tracker"),
+        "router": "strategy_tracker",
+    },
+    {
         "id": "win-drivers",
         "group": "strategy",
         "title": "What Wins Games",
@@ -664,23 +680,6 @@ APPS: list[dict[str, Any]] = [
         "sidebar": False,
     },
     {
-        "id": "league-two-progress",
-        "group": "presentations",
-        "title": "Season Progress Report",
-        "description": (
-            "Live promotion pace, Impect style stats, and a Present / PDF board pack "
-            "versus auto / play-off / champions."
-        ),
-        "href": "/strategy-tracker",
-        "icon": "📉",
-        "accent": "#a78bfa",
-        "tags": ["League Two", "Progress", "Pace"],
-        "roles": ("admin",),
-        "api_prefixes": ("/strategy-tracker", "/api/strategy-tracker"),
-        "router": "strategy_tracker",
-        "sidebar": False,
-    },
-    {
         "id": "hub-origin",
         "group": "presentations",
         "title": "Hub Origin Story",
@@ -714,6 +713,23 @@ APPS: list[dict[str, Any]] = [
         "router": "window_review",
         "sidebar": False,
     },
+    {
+        "id": "efl-transfer-report",
+        "group": "presentations",
+        "title": "EFL Transfer Report",
+        "description": (
+            "Summer 2026 window — every League One, League Two, National League "
+            "and Scottish Prem club: who they signed and who they released."
+        ),
+        "href": "/efl-transfer-report",
+        "icon": "🔁",
+        "accent": "#a78bfa",
+        "tags": ["Transfers", "EFL", "Presentation"],
+        "roles": ("admin",),
+        "api_prefixes": ("/efl-transfer-report", "/api/efl-transfer-report"),
+        "router": "efl_transfer_report",
+        "sidebar": False,
+    },
 ]
 
 
@@ -743,11 +759,11 @@ LIVE_ESSENTIAL_IDS = frozenset(
         "scouts-calendar",
         # Strategy
         "availability-tracker",
+        "league-two-progress",
         "win-drivers",
         "club-strategy",
         # Presentations (one rail link; decks live on the gallery page)
         "presentations",
-        "league-two-progress",
     }
 )
 

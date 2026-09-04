@@ -472,6 +472,20 @@ window.IMPECT_APPS = [
     ]
   },
   {
+    "id": "league-two-progress",
+    "group": "strategy",
+    "title": "Season Progress Report",
+    "description": "Live promotion pace, Impect style stats, and a Present / PDF board pack versus auto / play-off / champions.",
+    "href": "/strategy-tracker",
+    "icon": "📉",
+    "accent": "#f5c518",
+    "tags": [
+      "League Two",
+      "Progress",
+      "Pace"
+    ]
+  },
+  {
     "id": "win-drivers",
     "group": "strategy",
     "title": "What Wins Games",
@@ -577,21 +591,6 @@ window.IMPECT_APPS = [
     ],
     "comingSoon": true,
     "note": "Coming soon",
-    "sidebar": false
-  },
-  {
-    "id": "league-two-progress",
-    "group": "presentations",
-    "title": "Season Progress Report",
-    "description": "Live promotion pace, Impect style stats, and a Present / PDF board pack versus auto / play-off / champions.",
-    "href": "/strategy-tracker",
-    "icon": "📉",
-    "accent": "#a78bfa",
-    "tags": [
-      "League Two",
-      "Progress",
-      "Pace"
-    ],
     "sidebar": false
   },
   {

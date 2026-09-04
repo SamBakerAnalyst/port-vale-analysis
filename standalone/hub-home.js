@@ -2322,7 +2322,8 @@
           · play-off line <strong>${fmt(pace.playoff_ppg, 2)}</strong>${pace.playoff_club ? ` (${pace.playoff_club})` : ""}
           · auto <strong>${fmt(pace.auto_ppg, 2)}</strong>
           · ${signed(pace.pts_vs_playoff, 0)} pts vs 6th
-        </p>`;
+        </p>
+        <a class="home-card__link" href="/strategy-tracker">Season Progress →</a>`;
     }
 
     setKpi(
