@@ -72,7 +72,17 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   #
   # Staging deliberately does not do this: shipping work in progress there is the
   # whole point of it.
-  dirty="$(git status --porcelain --untracked-files=all)"
+  # data/ is excluded on purpose. The app rewrites its caches (home-recruitment,
+  # home-strategy) as it runs, so the tree is essentially always dirty there. A
+  # guard that trips every single time is one that gets bypassed every time, and
+  # then it is protecting nothing. Code is what must be committed.
+  dirty="$(git status --porcelain --untracked-files=all -- . ':(exclude)data/')"
+  dirty_data="$(git status --porcelain --untracked-files=no -- 'data/')"
+  if [[ -n "$dirty_data" ]]; then
+    echo "NOTE: runtime data files changed (not a blocker):"
+    echo "$dirty_data" | sed 's/^/    /'
+    echo ""
+  fi
   if [[ -n "$dirty" ]]; then
     if [[ "${ALLOW_DIRTY_DEPLOY:-}" == "1" ]]; then
       echo "WARNING: ALLOW_DIRTY_DEPLOY=1 — shipping an uncommitted tree to LIVE:"
@@ -81,7 +91,13 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     else
       echo "ERROR: refusing to deploy Live from an uncommitted tree."
       echo ""
-      echo "$dirty" | sed 's/^/    /'
+      # One feature can drag in a hundred files (90 club badges, say), and a
+      # wall of paths is a wall nobody reads.
+      dirty_count="$(printf '%s\n' "$dirty" | wc -l | tr -d ' ')"
+      printf '%s\n' "$dirty" | head -20 | sed 's/^/    /'
+      if (( dirty_count > 20 )); then
+        echo "    … and $((dirty_count - 20)) more ($dirty_count uncommitted paths)"
+      fi
       echo ""
       echo "Live rsyncs these files as they are, so unfinished work reaches staff."
       echo "Then the next GitHub Actions run deploys main and silently reverts it."
@@ -117,6 +133,7 @@ RSYNC_EXCLUDES=(
   --include 'data/home-recruitment-cache.json'
   --include 'data/home-strategy-cache.json'
   --include 'data/squad-planner.json'
+  --include 'data/efl-transfer-report-2026.json'
   --include 'data/'
   --exclude 'data/*'
   --exclude '.env'
