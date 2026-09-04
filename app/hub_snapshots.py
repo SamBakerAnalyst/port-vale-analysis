@@ -59,8 +59,13 @@ class RefreshBody(BaseModel):
 
 
 VALID_SCOPES = frozenset({"all", "players", "standings", "win_drivers", "analysis"})
-DAILY_ANALYSIS_REFRESH_HOUR = 10
-DAILY_ANALYSIS_REFRESH_MINUTE = 30  # After typical Impect ~10am uploads
+
+# Impect finish whenever they finish — there is no set upload time. So the
+# analysis cache waits for the data to actually land instead of firing on a
+# clock and then sitting on a half-built match for the rest of the day.
+ANALYSIS_WINDOW_START_HOUR = 8  # earliest we start looking, Europe/London
+ANALYSIS_GIVE_UP_HOUR = 22  # stop looking; tomorrow's window tries again
+ANALYSIS_POLL_MINUTES = 20
 
 
 def _now_iso() -> str:
@@ -469,17 +474,21 @@ def _seconds_until_daily_refresh() -> float:
     return max(60.0, (target - now).total_seconds())
 
 
-def _seconds_until_analysis_refresh() -> float:
+def _seconds_until_analysis_window() -> float:
+    """Wait until today's window opens, or tomorrow's if we are past give-up."""
     now = datetime.now(LONDON)
     target = now.replace(
-        hour=DAILY_ANALYSIS_REFRESH_HOUR,
-        minute=DAILY_ANALYSIS_REFRESH_MINUTE,
+        hour=ANALYSIS_WINDOW_START_HOUR,
+        minute=0,
         second=0,
         microsecond=0,
     )
     if now >= target:
+        # Inside the window already — start looking now rather than waiting a day.
+        if now.hour < ANALYSIS_GIVE_UP_HOUR:
+            return 0.0
         target += timedelta(days=1)
-    return max(60.0, (target - now).total_seconds())
+    return max(0.0, (target - now).total_seconds())
 
 
 def _meta_is_stale(max_age_hours: float = 36.0) -> bool:
@@ -537,23 +546,53 @@ def start_daily_scheduler() -> None:
                 logger.exception("Daily hub snapshot refresh failed")
 
     def _analysis_loop() -> None:
+        from app.analysis_cache import provider_ready
+
+        handled_date = None  # day we already refreshed (or gave up on)
         while True:
-            delay = _seconds_until_analysis_refresh()
-            logger.info(
-                "Next Analysis cache refresh in %.0f minutes (daily %02d:%02d London)",
-                delay / 60.0,
-                DAILY_ANALYSIS_REFRESH_HOUR,
-                DAILY_ANALYSIS_REFRESH_MINUTE,
+            now = datetime.now(LONDON)
+            today = now.date()
+            in_window = ANALYSIS_WINDOW_START_HOUR <= now.hour < ANALYSIS_GIVE_UP_HOUR
+
+            if handled_date == today or not in_window:
+                delay = _seconds_until_analysis_window()
+                logger.info(
+                    "Analysis cache idle — next window in %.0f minutes", delay / 60.0
+                )
+                time.sleep(max(60.0, delay))
+                continue
+
+            check = provider_ready()
+            _write_meta(
+                {
+                    "analysis_checked_at": _now_iso(),
+                    "analysis_waiting_for_provider": not bool(check.get("ready")),
+                    "analysis_provider_detail": str(check.get("detail") or ""),
+                }
             )
-            time.sleep(delay)
-            try:
-                refresh_snapshots("analysis")
-            except Exception:
-                logger.exception("Daily Analysis cache refresh failed")
+
+            if check.get("ready"):
+                logger.info("Provider data ready — refreshing Analysis cache")
+                try:
+                    refresh_snapshots("analysis")
+                except Exception:
+                    logger.exception("Analysis cache refresh failed")
+                handled_date = today
+                continue
+
+            if now.hour >= ANALYSIS_GIVE_UP_HOUR - 1:
+                logger.warning(
+                    "Provider data still missing near give-up: %s", check.get("detail")
+                )
+                handled_date = today
+                continue
+
+            logger.info("Waiting on provider: %s", check.get("detail"))
+            time.sleep(ANALYSIS_POLL_MINUTES * 60)
 
     threading.Thread(target=_loop, name="hub-snapshot-daily", daemon=True).start()
     threading.Thread(
-        target=_analysis_loop, name="hub-analysis-daily-1030", daemon=True
+        target=_analysis_loop, name="hub-analysis-provider-poll", daemon=True
     ).start()
 
 

@@ -35,3 +35,95 @@ def test_put_and_apply_player_stats(tmp_path, monkeypatch):
     assert row["overall_score"] == 61.2
     assert row["minutes"] == 412
     assert row["top_profile"] == "Creator"
+
+
+# --- Analysis cache refresh timing ------------------------------------------
+# Impect have no fixed upload time, so the analysis refresh polls for the data
+# instead of firing on a clock. These pin that it waits rather than caching a
+# match the provider has not finished publishing.
+
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+import app.analysis_cache as analysis_cache
+import app.hub_snapshots as hub_snapshots
+
+LONDON = ZoneInfo("Europe/London")
+
+
+def _freeze(monkeypatch, when: datetime):
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return when if tz is None else when.astimezone(tz)
+
+    monkeypatch.setattr(hub_snapshots, "datetime", FrozenDatetime)
+
+
+def test_window_opens_immediately_when_already_inside_it(monkeypatch):
+    _freeze(monkeypatch, datetime(2026, 9, 4, 11, 0, tzinfo=LONDON))
+    assert hub_snapshots._seconds_until_analysis_window() == 0.0
+
+
+def test_window_waits_until_morning_when_too_early(monkeypatch):
+    _freeze(monkeypatch, datetime(2026, 9, 4, 6, 0, tzinfo=LONDON))
+    delay = hub_snapshots._seconds_until_analysis_window()
+    assert delay == 2 * 3600
+
+
+def test_window_rolls_to_tomorrow_after_give_up(monkeypatch):
+    _freeze(monkeypatch, datetime(2026, 9, 4, 23, 0, tzinfo=LONDON))
+    delay = hub_snapshots._seconds_until_analysis_window()
+    # 23:00 -> 08:00 next day
+    assert delay == 9 * 3600
+
+
+def test_give_up_hour_is_after_window_start():
+    assert hub_snapshots.ANALYSIS_WINDOW_START_HOUR < hub_snapshots.ANALYSIS_GIVE_UP_HOUR
+    assert hub_snapshots.ANALYSIS_POLL_MINUTES > 0
+
+
+def test_provider_not_ready_when_no_events_published(monkeypatch):
+    """A played match with zero events means Impect have not finished."""
+    monkeypatch.setattr(
+        analysis_cache,
+        "_probe_newest_match_events",
+        lambda: (270749, []),
+        raising=False,
+    )
+    result = analysis_cache.provider_ready()
+    assert result["ready"] is False
+    assert "270749" in result["detail"]
+
+
+def test_provider_ready_when_events_published(monkeypatch):
+    monkeypatch.setattr(
+        analysis_cache,
+        "_probe_newest_match_events",
+        lambda: (270749, [{"id": 1}, {"id": 2}]),
+        raising=False,
+    )
+    result = analysis_cache.provider_ready()
+    assert result["ready"] is True
+    assert result["event_count"] == 2
+
+
+def test_provider_not_ready_when_no_completed_fixtures(monkeypatch):
+    monkeypatch.setattr(
+        analysis_cache, "_probe_newest_match_events", lambda: (None, []), raising=False
+    )
+    assert analysis_cache.provider_ready()["ready"] is False
+
+
+def test_readiness_probe_never_raises(monkeypatch):
+    """A provider outage must not kill the refresh thread."""
+
+    def boom():
+        raise RuntimeError("Impect 503")
+
+    monkeypatch.setattr(
+        analysis_cache, "_probe_newest_match_events", boom, raising=False
+    )
+    result = analysis_cache.provider_ready()
+    assert result["ready"] is False
+    assert "Impect 503" in result["detail"]

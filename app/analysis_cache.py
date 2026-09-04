@@ -189,6 +189,57 @@ def clear_tool_memory_caches() -> None:
         logger.exception("Could not clear home_dashboard fixtures cache")
 
 
+def _probe_newest_match_events() -> tuple[int | None, list[Any]]:
+    """Newest played Vale match, plus whatever events the provider has for it."""
+    from app.xg_chance_analysis import (
+        _default_fixture_match_id,
+        _impect,
+        _unwrap_items,
+        build_xg_chance_fixtures,
+    )
+
+    match_id = _default_fixture_match_id(build_xg_chance_fixtures(None))
+    if match_id is None:
+        return None, []
+
+    impect = _impect()
+    events = _unwrap_items(
+        impect._impect_get(f"/v5/{impect._api_prefix()}/matches/{match_id}/events")[
+            "data"
+        ]
+    )
+    return match_id, list(events or [])
+
+
+def provider_ready() -> dict[str, Any]:
+    """Has Impect published event data for Vale's newest played match?
+
+    There is no set upload time — it is whenever the provider finishes — so the
+    scheduler polls this rather than guessing an hour. Refreshing too early
+    caches a match with no events and then serves that until tomorrow.
+    """
+    try:
+        match_id, events = _probe_newest_match_events()
+    except Exception as exc:  # noqa: BLE001 - a provider outage must not kill the loop
+        logger.warning("Analysis readiness check failed: %s", exc)
+        return {"ready": False, "detail": f"Readiness check failed: {exc}"}
+
+    if match_id is None:
+        return {"ready": False, "detail": "No completed fixtures yet."}
+
+    count = len(events)
+    return {
+        "ready": count > 0,
+        "match_id": match_id,
+        "event_count": count,
+        "detail": (
+            f"Match {match_id} has {count} events."
+            if count
+            else f"Provider has not published match {match_id} yet."
+        ),
+    }
+
+
 def refresh_analysis_data(*, force: bool = True) -> dict[str, Any]:
     """Rebuild Analysis tool caches after Impect uploads (e.g. 10am post-match).
 
