@@ -431,7 +431,41 @@ def refresh_analysis() -> dict[str, Any]:
     return payload
 
 
-def warm_scouting_from_disk() -> dict[str, Any]:
+def _rebuild_standouts_with_retry(load, *, attempts: int, wait: float) -> str:
+    """Rebuild the standouts cache, backing off if Impect rate-limits us.
+
+    Boot starts several Impect jobs at once — this warm, the analysis readiness
+    probe, the recruitment snapshot — and they trip Impect's rate limit against
+    each other. The 429 that comes back is not a real failure, it is our own
+    startup traffic colliding, but it was enough to abandon the rebuild. The
+    cache then stayed empty, so every visitor triggered a fresh four-minute
+    build. That is what Live did from 20 August until it was noticed.
+    """
+    last: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            load(period="season", force_refresh=True)
+            return "rebuilt" if attempt == 1 else f"rebuilt on attempt {attempt}"
+        except Exception as exc:  # noqa: BLE001 - retry whatever the provider threw
+            last = exc
+            if attempt == attempts:
+                break
+            delay = wait * attempt  # widen the gap; the limit is per window
+            logger.warning(
+                "Standouts rebuild attempt %d/%d failed (%s) — retrying in %.0fs",
+                attempt,
+                attempts,
+                exc,
+                delay,
+            )
+            time.sleep(delay)
+    logger.error("Standouts rebuild gave up after %d attempts: %s", attempts, last)
+    return f"failed: {last}"
+
+
+def warm_scouting_from_disk(
+    *, rebuild_attempts: int = 3, retry_wait: float = 120.0
+) -> dict[str, Any]:
     """Get the scouting caches back into memory after a restart.
 
     A deploy empties the in-process caches even though the saved data is still
@@ -460,8 +494,11 @@ def warm_scouting_from_disk() -> dict[str, Any]:
     try:
         if _load_standouts_disk(_standouts_raw_cache_key("season")) is None:
             logger.info("No usable standouts cache — rebuilding at boot")
-            _load_standouts_raw_payload(period="season", force_refresh=True)
-            result["who_to_scout"] = "rebuilt"
+            result["who_to_scout"] = _rebuild_standouts_with_retry(
+                _load_standouts_raw_payload,
+                attempts=rebuild_attempts,
+                wait=retry_wait,
+            )
         else:
             _load_standouts_raw_payload(period="season")
             result["who_to_scout"] = "warm"
@@ -703,7 +740,10 @@ def start_daily_scheduler() -> None:
         target=_analysis_loop, name="hub-analysis-provider-poll", daemon=True
     ).start()
     def _scouting_boot_warm() -> None:
-        time.sleep(15)  # let the app finish coming up first
+        # Long enough for the analysis readiness probe and the recruitment
+        # snapshot to finish their Impect calls. Starting at 15s put all three
+        # inside the same rate-limit window and they knocked each other over.
+        time.sleep(90)
         warm_scouting_from_disk()
 
     threading.Thread(

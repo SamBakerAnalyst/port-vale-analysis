@@ -40,9 +40,9 @@ RSYNC_EXCLUDES=(
   --exclude '.venv'
   --exclude '__pycache__'
   --exclude '.git'
-  --include 'data/home-standouts-cache.json'
-  --include 'data/home-recruitment-cache.json'
-  --include 'data/home-strategy-cache.json'
+  # Derived caches (home-standouts / home-recruitment / home-strategy) are
+  # deliberately NOT shipped. They are rebuilt on the server, and copying a
+  # developer's copy up only risks overwriting good data with a local stub.
   --include 'data/squad-planner.json'
   --include 'data/efl-transfer-report-2026.json'
   --include 'data/'
