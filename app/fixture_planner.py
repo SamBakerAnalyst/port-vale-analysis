@@ -644,6 +644,10 @@ FIXTURE_LEAGUES: tuple[dict[str, Any], ...] = (
         "pulse_competition_id": 6,
         "color": "#14b8a6",
     },
+)
+
+# German leagues — shown under a dedicated Germany tab (not mixed with UK leagues).
+FIXTURE_GERMANY_LEAGUES: tuple[dict[str, Any], ...] = (
     {
         "ui": "Bundesliga",
         "competition": "Bundesliga",
@@ -763,9 +767,12 @@ COUNTRY_LABELS: dict[str, str] = {
     "GER": "Germany",
 }
 
-FIXTURE_COMPETITIONS: tuple[dict[str, Any], ...] = tuple(FIXTURE_LEAGUES) + tuple(FIXTURE_CUPS)
+FIXTURE_COMPETITIONS: tuple[dict[str, Any], ...] = (
+    tuple(FIXTURE_LEAGUES) + tuple(FIXTURE_GERMANY_LEAGUES) + tuple(FIXTURE_CUPS)
+)
 FIXTURE_LEAGUE_BY_UI = {row["ui"]: row for row in FIXTURE_COMPETITIONS}
 FIXTURE_LEAGUE_UIS = [row["ui"] for row in FIXTURE_LEAGUES]
+FIXTURE_GERMANY_UIS = [row["ui"] for row in FIXTURE_GERMANY_LEAGUES]
 FIXTURE_CUP_UIS = [row["ui"] for row in FIXTURE_CUPS]
 
 BBC_SEASON_MONTHS: dict[str, tuple[str, ...]] = {
@@ -2202,6 +2209,16 @@ def fixture_planner_meta() -> dict[str, Any]:
             }
             for row in FIXTURE_LEAGUES
         ],
+        "germany": [
+            {
+                "ui": row["ui"],
+                "competition": row["competition"],
+                "color": row["color"],
+                "seasons": allowed,
+            }
+            for row in FIXTURE_GERMANY_LEAGUES
+        ],
+        "germany_uis": list(FIXTURE_GERMANY_UIS),
         "cups": [
             {
                 "ui": row["ui"],
@@ -2213,6 +2230,7 @@ def fixture_planner_meta() -> dict[str, Any]:
         ],
         "cup_uis": list(FIXTURE_CUP_UIS),
         "default_leagues": FIXTURE_LEAGUE_UIS,
+        "default_germany": FIXTURE_GERMANY_UIS,
         "sources": ["fotmob", "pulse", "impect"],
         "generated_at": datetime.now(UTC).isoformat(),
     }
@@ -2309,7 +2327,7 @@ def _cached_payload_for_season(season: str) -> tuple[float, dict[str, Any]] | No
 
 
 def _compute_fixture_planner_payload(season: str) -> dict[str, Any]:
-    selected = list(FIXTURE_LEAGUE_UIS) + list(FIXTURE_CUP_UIS)
+    selected = list(FIXTURE_LEAGUE_UIS) + list(FIXTURE_GERMANY_UIS) + list(FIXTURE_CUP_UIS)
     bundles = [_build_league_bundle(league_ui, season) for league_ui in selected]
     fixtures = [fixture for bundle in bundles for fixture in bundle["fixtures"]]
     fixtures.sort(
@@ -2322,6 +2340,7 @@ def _compute_fixture_planner_payload(season: str) -> dict[str, Any]:
     return {
         "season": season,
         "leagues": list(FIXTURE_LEAGUE_UIS),
+        "germany": list(FIXTURE_GERMANY_UIS),
         "cups": list(FIXTURE_CUP_UIS),
         "fixtures": fixtures,
         "bundles": [

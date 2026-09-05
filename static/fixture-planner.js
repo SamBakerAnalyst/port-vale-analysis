@@ -10,10 +10,11 @@ const state = {
   payload: null,
   season: DEFAULT_SEASON,
   leagues: [],
-  /** @type {"leagues"|"cups"|"all"} */
+  /** @type {"leagues"|"germany"|"cups"|"all"} */
   compScope: "leagues",
   cupsMode: false,
   savedLeagueSelection: null,
+  savedGermanySelection: null,
   savedCupSelection: null,
   savedAllSelection: null,
   expandedFixtureIds: {},
@@ -1398,13 +1399,26 @@ function fixturesForLeagues(all = state.payload?.fixtures || []) {
     });
   }
 
+  if (state.compScope === "germany") {
+    const selected = (state.leagues.length ? state.leagues : germanyUis()).filter((name) =>
+      germanyUis().includes(name),
+    );
+    const active = selected.length ? selected : germanyUis();
+    return all.filter((fixture) => {
+      if (fixture.manual) return false;
+      if (isCupCompetition(fixture.league) || fixture.cup) return false;
+      return active.includes(String(fixture.league || "").trim());
+    });
+  }
+
   if (state.compScope === "all") {
     const leagueNames = allLeagueUis();
+    const germanyNames = germanyUis();
     const cupNames = cupUis();
-    const selected = (state.leagues.length ? state.leagues : [...leagueNames, ...cupNames]).filter(
-      (name) => leagueNames.includes(name) || cupNames.includes(name),
+    const selected = (state.leagues.length ? state.leagues : [...leagueNames, ...germanyNames, ...cupNames]).filter(
+      (name) => leagueNames.includes(name) || germanyNames.includes(name) || cupNames.includes(name),
     );
-    const active = selected.length ? selected : [...leagueNames, ...cupNames];
+    const active = selected.length ? selected : [...leagueNames, ...germanyNames, ...cupNames];
     return all.filter((fixture) => {
       if (fixture.manual) return true;
       const league = String(fixture.league || "").trim();
@@ -1419,6 +1433,7 @@ function fixturesForLeagues(all = state.payload?.fixtures || []) {
   return all.filter((fixture) => {
     if (fixture.manual) return true;
     if (isCupCompetition(fixture.league) || fixture.cup) return false;
+    if (germanyUis().includes(String(fixture.league || "").trim())) return false;
     const league = String(fixture.league || "").trim();
     if (leagues.includes(league)) return true;
     if (leagues.includes("Professional Development League") && /^pdl$/i.test(league)) return true;
@@ -1973,6 +1988,20 @@ function allLeagueUis() {
   return (state.meta?.leagues || []).map((row) => row.ui);
 }
 
+function germanyUis() {
+  if (state.meta?.germany_uis?.length) return state.meta.germany_uis;
+  if (state.meta?.germany?.length) return state.meta.germany.map((row) => row.ui);
+  return ["Bundesliga", "2. Bundesliga"];
+}
+
+function germanyMetaRows() {
+  if (state.meta?.germany?.length) return state.meta.germany;
+  return germanyUis().map((ui) => ({
+    ui,
+    color: leagueColors[ui] || "#e11d48",
+  }));
+}
+
 function selectedCupUis() {
   const selected = state.leagues.filter((name) => cupUis().includes(name));
   return selected.length ? selected : [...cupUis()];
@@ -1983,8 +2012,13 @@ function selectedLeagueUis() {
   return selected.length ? selected : allLeagueUis();
 }
 
+function selectedGermanyUis() {
+  const selected = state.leagues.filter((name) => germanyUis().includes(name));
+  return selected.length ? selected : [...germanyUis()];
+}
+
 function selectedAllCompUis() {
-  const allowed = [...allLeagueUis(), ...cupUis()];
+  const allowed = [...allLeagueUis(), ...germanyUis(), ...cupUis()];
   const selected = state.leagues.filter((name) => allowed.includes(name));
   return selected.length ? selected : allowed;
 }
@@ -2002,7 +2036,8 @@ function syncCompTabs() {
 }
 
 function setCompetitionScope(nextScope, { refetch = false } = {}) {
-  const scope = nextScope === "cups" || nextScope === "all" ? nextScope : "leagues";
+  const scope =
+    nextScope === "cups" || nextScope === "all" || nextScope === "germany" ? nextScope : "leagues";
   if (scope === state.compScope && !refetch) {
     renderLeagueToggle();
     renderMonthFilter();
@@ -2013,6 +2048,8 @@ function setCompetitionScope(nextScope, { refetch = false } = {}) {
 
   if (state.compScope === "leagues") {
     state.savedLeagueSelection = selectedLeagueUis();
+  } else if (state.compScope === "germany") {
+    state.savedGermanySelection = selectedGermanyUis();
   } else if (state.compScope === "cups") {
     state.savedCupSelection = selectedCupUis();
   } else if (state.compScope === "all") {
@@ -2026,10 +2063,16 @@ function setCompetitionScope(nextScope, { refetch = false } = {}) {
     state.leagues = state.savedCupSelection?.length ? [...state.savedCupSelection] : [...cupUis()];
     state.monthFilter = "";
     state.view = "list";
+  } else if (scope === "germany") {
+    state.leagues = state.savedGermanySelection?.length
+      ? [...state.savedGermanySelection]
+      : [...germanyUis()];
+    state.monthFilter = "";
+    state.view = "list";
   } else if (scope === "all") {
     state.leagues = state.savedAllSelection?.length
       ? [...state.savedAllSelection]
-      : [...allLeagueUis(), ...cupUis()];
+      : [...allLeagueUis(), ...germanyUis(), ...cupUis()];
     state.monthFilter = "";
     state.view = "list";
   } else {
@@ -2042,25 +2085,29 @@ function setCompetitionScope(nextScope, { refetch = false } = {}) {
   renderMonthFilter();
   renderSummary();
   renderView();
-  if (scope === "cups" || scope === "all" || refetch) {
+  if (scope === "cups" || scope === "all" || scope === "germany" || refetch) {
     els.statusBar.textContent =
       scope === "cups"
         ? "Loading cup fixtures…"
-        : scope === "all"
-          ? "Loading all competitions…"
-          : "Loading league fixtures…";
+        : scope === "germany"
+          ? "Loading German league fixtures…"
+          : scope === "all"
+            ? "Loading all competitions…"
+            : "Loading league fixtures…";
     loadFixtures();
   }
 }
 
 function renderLeagueToggle() {
   const leagues = state.meta?.leagues || [];
+  const germany = germanyMetaRows();
   const cups = cupMetaRows();
   syncCompTabs();
 
   if (!state.leagues.length) {
     if (state.compScope === "cups") state.leagues = [...cupUis()];
-    else if (state.compScope === "all") state.leagues = [...allLeagueUis(), ...cupUis()];
+    else if (state.compScope === "germany") state.leagues = [...germanyUis()];
+    else if (state.compScope === "all") state.leagues = [...allLeagueUis(), ...germanyUis(), ...cupUis()];
     else state.leagues = leagues.map((row) => row.ui);
   }
 
@@ -2075,9 +2122,20 @@ function renderLeagueToggle() {
         return `<button type="button" class="fp-league-btn${active ? " fp-league-btn--active" : ""}" data-cup="${escapeHtml(cup.ui)}" title="${escapeHtml(cup.ui)}" style="--league-color:${color}"${state.loading ? " disabled" : ""}>${escapeHtml(cupShortLabel(cup.ui))}</button>`;
       }),
     ].join("");
+  } else if (state.compScope === "germany") {
+    const selected = selectedGermanyUis();
+    const allSelected = germanyUis().every((name) => selected.includes(name));
+    els.leagueToggle.innerHTML = [
+      `<button type="button" class="fp-league-btn fp-league-btn--all${allSelected ? " fp-league-btn--active" : ""}" data-league-action="all-germany"${state.loading ? " disabled" : ""}>All German</button>`,
+      ...germany.map((league) => {
+        const active = selected.includes(league.ui);
+        const color = league.color || leagueColors[league.ui] || "#e11d48";
+        return `<button type="button" class="fp-league-btn${active ? " fp-league-btn--active" : ""}" data-germany="${escapeHtml(league.ui)}" style="--league-color:${color}"${state.loading ? " disabled" : ""}>${escapeHtml(league.ui)}</button>`;
+      }),
+    ].join("");
   } else if (state.compScope === "all") {
     const selected = selectedAllCompUis();
-    const allowed = [...allLeagueUis(), ...cupUis()];
+    const allowed = [...allLeagueUis(), ...germanyUis(), ...cupUis()];
     const allSelected = allowed.every((name) => selected.includes(name));
     els.leagueToggle.innerHTML = [
       `<button type="button" class="fp-league-btn fp-league-btn--all${allSelected ? " fp-league-btn--active" : ""}" data-league-action="all-comps"${state.loading ? " disabled" : ""}>All comps</button>`,
@@ -2085,6 +2143,11 @@ function renderLeagueToggle() {
         const active = selected.includes(league.ui);
         const color = league.color || leagueColors[league.ui] || "#34d399";
         return `<button type="button" class="fp-league-btn${active ? " fp-league-btn--active" : ""}" data-league="${escapeHtml(league.ui)}" style="--league-color:${color}"${state.loading ? " disabled" : ""}>${escapeHtml(league.ui)}</button>`;
+      }),
+      ...germany.map((league) => {
+        const active = selected.includes(league.ui);
+        const color = league.color || leagueColors[league.ui] || "#e11d48";
+        return `<button type="button" class="fp-league-btn${active ? " fp-league-btn--active" : ""}" data-germany="${escapeHtml(league.ui)}" style="--league-color:${color}"${state.loading ? " disabled" : ""}>${escapeHtml(league.ui)}</button>`;
       }),
       ...cups.map((cup) => {
         const active = selected.includes(cup.ui);
@@ -2114,10 +2177,15 @@ function renderLeagueToggle() {
         state.cupsMode = true;
         state.leagues = [...cupUis()];
         state.savedCupSelection = [...cupUis()];
+      } else if (btn.dataset.leagueAction === "all-germany") {
+        state.compScope = "germany";
+        state.cupsMode = false;
+        state.leagues = [...germanyUis()];
+        state.savedGermanySelection = [...state.leagues];
       } else if (btn.dataset.leagueAction === "all-comps") {
         state.compScope = "all";
         state.cupsMode = false;
-        state.leagues = [...allLeagueUis(), ...cupUis()];
+        state.leagues = [...allLeagueUis(), ...germanyUis(), ...cupUis()];
         state.savedAllSelection = [...state.leagues];
       } else if (btn.dataset.leagueAction === "all") {
         state.compScope = "leagues";
@@ -2128,7 +2196,7 @@ function renderLeagueToggle() {
         const cup = btn.dataset.cup;
         if (state.compScope === "all") {
           let next = state.leagues.filter((item) =>
-            allLeagueUis().includes(item) || cupUis().includes(item),
+            allLeagueUis().includes(item) || germanyUis().includes(item) || cupUis().includes(item),
           );
           if (!next.length) next = [cup];
           else if (next.includes(cup)) {
@@ -2149,11 +2217,36 @@ function renderLeagueToggle() {
           state.leagues = next;
           state.savedCupSelection = [...next];
         }
+      } else if (btn.dataset.germany) {
+        const league = btn.dataset.germany;
+        if (state.compScope === "all") {
+          let next = state.leagues.filter((item) =>
+            allLeagueUis().includes(item) || germanyUis().includes(item) || cupUis().includes(item),
+          );
+          if (!next.length) next = [league];
+          else if (next.includes(league)) {
+            next = next.filter((item) => item !== league);
+            if (!next.length) next = [league];
+          } else next = [...next, league];
+          state.leagues = next;
+          state.savedAllSelection = [...next];
+        } else {
+          state.compScope = "germany";
+          state.cupsMode = false;
+          let next = state.leagues.filter((item) => germanyUis().includes(item));
+          if (!next.length) next = [league];
+          else if (next.includes(league)) {
+            next = next.filter((item) => item !== league);
+            if (!next.length) next = [league];
+          } else next = [...next, league];
+          state.leagues = next;
+          state.savedGermanySelection = [...next];
+        }
       } else {
         const league = btn.dataset.league;
         if (state.compScope === "all") {
           let next = state.leagues.filter((item) =>
-            allLeagueUis().includes(item) || cupUis().includes(item),
+            allLeagueUis().includes(item) || germanyUis().includes(item) || cupUis().includes(item),
           );
           if (!next.length) next = [league];
           else if (next.includes(league)) {
@@ -2219,9 +2312,11 @@ function renderCoveragePanel() {
   const order =
     state.compScope === "cups"
       ? cupUis()
-      : state.compScope === "all"
-        ? selectedAllCompUis()
-        : activeLeagueOrder();
+      : state.compScope === "germany"
+        ? selectedGermanyUis()
+        : state.compScope === "all"
+          ? selectedAllCompUis()
+          : activeLeagueOrder();
   const rows = order.map((league) => {
     const apiRow = apiCoverage[league] || {};
     const computedRow = computedCoverage[league] || {};
@@ -2284,15 +2379,19 @@ function renderSummary() {
   const selectionLabel =
     state.compScope === "cups"
       ? "Cup comps"
-      : state.compScope === "all"
-        ? "Comps selected"
-        : "Leagues selected";
+      : state.compScope === "germany"
+        ? "German leagues"
+        : state.compScope === "all"
+          ? "Comps selected"
+          : "Leagues selected";
   const selectionValue =
     state.compScope === "cups"
       ? selectedCupUis().length
-      : state.compScope === "all"
-        ? selectedAllCompUis().length
-        : selectedLeagueUis().length;
+      : state.compScope === "germany"
+        ? selectedGermanyUis().length
+        : state.compScope === "all"
+          ? selectedAllCompUis().length
+          : selectedLeagueUis().length;
 
   els.summaryPanel.innerHTML = `
     <div class="fp-summary__item">
@@ -2320,9 +2419,11 @@ function renderSummary() {
   const leagueLabel =
     state.compScope === "cups"
       ? `Cups (${cupsLabelShort()})`
-      : state.compScope === "all"
-        ? `All comps (${selectedAllCompUis().length})`
-        : state.leagues.filter((item) => allLeagueUis().includes(item)).join(", ") || "All leagues";
+      : state.compScope === "germany"
+        ? selectedGermanyUis().join(", ") || "Germany"
+        : state.compScope === "all"
+          ? `All comps (${selectedAllCompUis().length})`
+          : state.leagues.filter((item) => allLeagueUis().includes(item)).join(", ") || "All leagues";
   if (els.pageSubtitle) {
     els.pageSubtitle.textContent = IS_PLAYED_APP
       ? `${state.season} played fixtures · ${leagueLabel} · keep LIVE coverage, pick up VIDEO, players & reports`
@@ -2496,10 +2597,12 @@ function groupFixturesByLeague(fixtures) {
 }
 
 function activeLeagueOrder() {
-  const selected = state.leagues.length ? state.leagues : (state.meta?.default_leagues || Object.keys(leagueColors));
-  const order = (state.meta?.default_leagues || Object.keys(leagueColors)).filter((league) =>
-    selected.includes(league),
-  );
+  const defaults =
+    state.compScope === "germany"
+      ? germanyUis()
+      : state.meta?.default_leagues || allLeagueUis() || Object.keys(leagueColors);
+  const selected = state.leagues.length ? state.leagues : defaults;
+  const order = defaults.filter((league) => selected.includes(league));
   const seen = new Set(order);
   for (const fixture of visibleFixtures()) {
     const league = fixture.league || "Manual";
@@ -2597,9 +2700,11 @@ function renderList({ scrollToUpcoming = false } = {}) {
       hint ||
       (state.compScope === "cups"
         ? `No cup fixtures for the selected season and filters. Cups: ${cupsLabelShort()} — clear the month filter and hit Refresh.`
-        : state.compScope === "all"
-          ? "No fixtures for the selected competitions and filters."
-          : "No fixtures for the selected leagues and filters.");
+        : state.compScope === "germany"
+          ? "No German league fixtures for the selected season and filters."
+          : state.compScope === "all"
+            ? "No fixtures for the selected competitions and filters."
+            : "No fixtures for the selected leagues and filters.");
     els.listRoot.innerHTML = `<div class="card fp-list-empty"><p>${escapeHtml(message)}</p></div>`;
     return;
   }
@@ -2682,9 +2787,11 @@ async function loadFixtures({ forceRefresh = false } = {}) {
   els.statusBar.textContent =
     state.compScope === "cups"
       ? "Pulling cup fixtures…"
-      : state.compScope === "all"
-        ? "Pulling league + cup fixtures…"
-        : "Fetching fixtures from Impect, FotMob and BBC…";
+      : state.compScope === "germany"
+        ? "Pulling Bundesliga + 2. Bundesliga…"
+        : state.compScope === "all"
+          ? "Pulling league + cup fixtures…"
+          : "Fetching fixtures from Impect, FotMob and BBC…";
 
   try {
     const refresh = forceRefresh ? "&refresh=1" : "";
@@ -3616,13 +3723,13 @@ async function init() {
   document.querySelectorAll("[data-comp-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
       if (btn.disabled) return;
-      const nextScope = btn.dataset.compTab === "cups"
-        ? "cups"
-        : btn.dataset.compTab === "all"
-          ? "all"
-          : "leagues";
+      const tab = btn.dataset.compTab;
+      const nextScope =
+        tab === "cups" ? "cups" : tab === "all" ? "all" : tab === "germany" ? "germany" : "leagues";
       setCompetitionScope(nextScope, {
-        refetch: (nextScope === "cups" || nextScope === "all") && state.compScope === "leagues",
+        refetch:
+          (nextScope === "cups" || nextScope === "all" || nextScope === "germany") &&
+          state.compScope === "leagues",
       });
     });
   });
