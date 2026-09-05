@@ -40,7 +40,7 @@ DEFAULT_SEASON = "26/27"
 ALLOWED_FIXTURE_SEASONS: tuple[str, ...] = ("26/27", "25/26")
 FIXTURE_CACHE_TTL_SECONDS = 1800
 FIXTURE_CACHE_STALE_SECONDS = 12 * 3600
-FIXTURE_CACHE_VERSION = "v17"
+FIXTURE_CACHE_VERSION = "v18"
 
 FIXTURE_STAFF_TEAMS: tuple[dict[str, Any], ...] = (
     {
@@ -644,6 +644,18 @@ FIXTURE_LEAGUES: tuple[dict[str, Any], ...] = (
         "pulse_competition_id": 6,
         "color": "#14b8a6",
     },
+    {
+        "ui": "Bundesliga",
+        "competition": "Bundesliga",
+        "fotmob_id": 54,
+        "color": "#e11d48",
+    },
+    {
+        "ui": "2. Bundesliga",
+        "competition": "2. Bundesliga",
+        "fotmob_id": 146,
+        "color": "#94a3b8",
+    },
 )
 
 # Domestic cups — shown under a dedicated Cups toggle with stacked layout.
@@ -699,8 +711,8 @@ FIXTURE_CUPS: tuple[dict[str, Any], ...] = (
     },
 )
 
-# FotMob competitions used only for manual-fixture club autocomplete.
-# Strictly England / Scotland / Wales / Republic of Ireland / Northern Ireland.
+# FotMob competitions used for manual-fixture club autocomplete.
+# UK/Ireland plus German top two (Fixture Planner leagues).
 FOTMOB_TEAM_CATALOG_LEAGUES: tuple[dict[str, Any], ...] = (
     # England
     {"id": 47, "label": "Premier League", "country": "ENG"},
@@ -732,9 +744,12 @@ FOTMOB_TEAM_CATALOG_LEAGUES: tuple[dict[str, Any], ...] = (
     {"id": 219, "label": "FAI Cup", "country": "IRL", "calendar_year": True},
     # Northern Ireland
     {"id": 129, "label": "NIFL Premiership", "country": "NIR"},
+    # Germany (Fixture Planner leagues)
+    {"id": 54, "label": "Bundesliga", "country": "GER"},
+    {"id": 146, "label": "2. Bundesliga", "country": "GER"},
 )
 
-TEAM_CATALOG_COUNTRIES = frozenset({"ENG", "SCO", "WAL", "IRL", "NIR"})
+TEAM_CATALOG_COUNTRIES = frozenset({"ENG", "SCO", "WAL", "IRL", "NIR", "GER"})
 TEAM_CATALOG_TTL_SECONDS = 6 * 3600
 _team_catalog_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 _team_catalog_cache_lock = threading.Lock()
@@ -745,6 +760,7 @@ COUNTRY_LABELS: dict[str, str] = {
     "WAL": "Wales",
     "IRL": "Ireland",
     "NIR": "N. Ireland",
+    "GER": "Germany",
 }
 
 FIXTURE_COMPETITIONS: tuple[dict[str, Any], ...] = tuple(FIXTURE_LEAGUES) + tuple(FIXTURE_CUPS)

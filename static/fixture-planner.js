@@ -41,6 +41,9 @@ const leagueColors = {
   "Scottish Prem": "#a78bfa",
   PL2: "#f97316",
   "Irish Prem": "#22d3ee",
+  "Professional Development League": "#14b8a6",
+  Bundesliga: "#e11d48",
+  "2. Bundesliga": "#94a3b8",
   Manual: "#f472b6",
   "FA Cup": "#ef4444",
   "EFL Cup": "#fb923c",
@@ -48,7 +51,6 @@ const leagueColors = {
   "Vertu Trophy": "#eab308",
   "National League Cup": "#84cc16",
   "Premier League Cup": "#a855f7",
-  "Professional Development League": "#14b8a6",
   "Scottish Cup": "#38bdf8",
   Cups: "#f43f5e",
 };
