@@ -140,7 +140,7 @@ _cache: dict[int, tuple[float, dict[str, Any]]] = {}
 CACHE_TTL_SECONDS = 36 * 3600
 TRACKER_CACHE_DIR = CACHE_ROOT / "strategy-tracker"
 TRACKER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-TRACKER_CACHE_VERSION = 4
+TRACKER_CACHE_VERSION = 5
 
 # Match-level Impect KPIs (same IDs as post-match / Blocks Analysis).
 # Match Impect Scout Absolute (BYPASSED_OPPONENTS / BYPASSED_DEFENDERS), not *_RAW.
@@ -1312,10 +1312,12 @@ def _assemble_tracker(
         "bucket_order": [label for label in TIME_BUCKETS if label != "unknown"],
     }
     source = (
-        "Live Impect league matches · League Two benchmarks from the Strategy Report "
+        "Live Impect league matches · packing = Scout Absolute (not RAW) · "
+        "League Two benchmarks from the Strategy Report "
         "(champ / auto / play-off multi-season averages)"
         if competition == "League Two"
-        else         "Live Impect league matches · League One benchmarks from recent EFL seasons "
+        else "Live Impect league matches · packing = Scout Absolute (not RAW) · "
+        "League One benchmarks from recent EFL seasons "
         "(1st / auto 2nd–3rd / play-off 4th–7th averages)"
     )
     source = (

@@ -397,6 +397,9 @@ function formationParts(formation) {
 
 function unitBaselinesForFormation(formation) {
   const parts = formationParts(formation);
+  if (parts.length === 3 && parts[0] === 5 && parts[1] === 2 && parts[2] === 3) {
+    return { DEF: 5, MID: 2, ATT: 3 };
+  }
   if (parts.length === 3 && parts[0] === 4 && parts[1] === 4 && parts[2] === 2) {
     return { DEF: 4, MID: 2, ATT: 4 };
   }
@@ -483,7 +486,7 @@ const PLAYER_BOARDS = [
   { key: "offensiveInterventions", label: "Aggressive regains", hint: "Opponents removed when you win the ball", digits: 0 },
   { key: "defensiveInterventions", label: "Defensive ball wins", hint: "Teammates added when you win the ball", digits: 0 },
   { key: "regainsFromDefenders", label: "Regains from opp defenders", hint: "Won it vs one of their four deepest", digits: 0 },
-  { key: "defendersBypassed", label: "Backline beaten", hint: "Passes or dribbles that beat a defender", digits: 1 },
+  { key: "defendersBypassed", label: "Backline beaten", hint: "Impect Absolute — beat a defender on the ball", digits: 1 },
   { key: "duelRate", label: "Duels won", hint: "Won of attempted", digits: 1, rate: true, minDuels: 3 },
 ];
 
@@ -505,8 +508,8 @@ const UNIT_SLIDES = [
       {
         label: "In possession",
         metrics: [
-          { key: "defendersBypassed", label: "Backline beaten", hint: "Beat a defender on the ball", digits: 1 },
-          { key: "ballProgression", label: "Ball progression", hint: "Opponents beaten on the ball", digits: 1 },
+          { key: "defendersBypassed", label: "Backline beaten", hint: "Impect Absolute — beat a defender on the ball", digits: 1 },
+          { key: "ballProgression", label: "Ball progression", hint: "Impect Absolute — opponents beaten on the ball", digits: 1 },
         ],
       },
     ],
@@ -533,8 +536,8 @@ const UNIT_SLIDES = [
       {
         label: "In possession",
         metrics: [
-          { key: "defendersBypassed", label: "Backline beaten", hint: "Beat a defender on the ball", digits: 1 },
-          { key: "ballProgression", label: "Ball progression", hint: "Opponents beaten on the ball", digits: 1 },
+          { key: "defendersBypassed", label: "Backline beaten", hint: "Impect Absolute — beat a defender on the ball", digits: 1 },
+          { key: "ballProgression", label: "Ball progression", hint: "Impect Absolute — opponents beaten on the ball", digits: 1 },
           { key: "xg", label: "Expected goals", hint: "Open play · no pens / DFKs", digits: 2 },
         ],
       },
@@ -556,7 +559,7 @@ const UNIT_SLIDES = [
         metrics: [
           { key: "xg", label: "Expected goals", hint: "Open play · no pens / DFKs", digits: 2 },
           { key: "shots", label: "Total shots", hint: "Open play · no pens / DFKs", digits: 0 },
-          { key: "defendersBypassed", label: "Backline beaten", hint: "Beat a defender on the ball", digits: 1 },
+          { key: "defendersBypassed", label: "Backline beaten", hint: "Impect Absolute — beat a defender on the ball", digits: 1 },
           { key: "crossPxt", label: "Crossed expected threat", hint: "Altered threat from high & low crosses", digits: 1, rate: true },
         ],
       },
@@ -1276,7 +1279,7 @@ function guideMeterDemo() {
       <div class="ba-gdemo__ref">
         <p><span class="ba-gdemo__pill ba-gdemo__pill--req">Req</span> Top 7 in League Two — promotion benchmark.</p>
         <p><span class="ba-gdemo__pill ba-gdemo__pill--avg">Avg</span> Vale’s usual level — only shown when it differs from this match.</p>
-        <p><span class="ba-gdemo__pill ba-gdemo__pill--wb">WB</span> Full-backs count in DEF. Wing-backs in a back three do not.</p>
+        <p><span class="ba-gdemo__pill ba-gdemo__pill--wb">WB</span> Full-backs and 5-2-3 wing-backs count in DEF. High wing-backs in a back three do not.</p>
       </div>
     </div>
   `;
@@ -1313,7 +1316,7 @@ function guideSheetsHtml({ kicker, fixture, totalPages = 4 }) {
           ${guideCard(4, "Chance race", "Who built the better chances.", "Two lines through the game. Steeper = stronger spell. Football icons = goals.")}
           ${guideCard(5, "Territory", "Who lived in the final third.", `Attacking-third share overall and in 15-minute blocks vs ${opp}.`)}
           ${guideCard(6, "Balls in behind", "Did we get in behind their last line?", "Touches beyond their deepest defenders — left, centre, right. Brighter = more. Names = who received.")}
-          ${guideCard(7, "Backline beaten", "Who broke their shape?", "Passes or dribbles that beat a defender — split by DEF, MID and ATT.")}
+          ${guideCard(7, "Backline beaten", "Who broke their shape?", "Impect Absolute — beat a defender on the ball, split by DEF, MID and ATT.")}
           ${guideCard(8, "Duels won", "Who won the physical battle?", "Duel success % for defenders, midfielders and attackers.")}
         </div>
       </div>
@@ -1327,7 +1330,7 @@ function guideSheetsHtml({ kicker, fixture, totalPages = 4 }) {
         <div class="ba-guide__cards ba-guide__cards--1">
           ${guideCard(1, "Standouts", "Three names to discuss first.", "Best expected goals, most backline beaten and best duel % in this match — with photos.")}
           ${guideCard(2, "Six leaderboards", "Full top-five lists.", "Every player ranked for xG, aggressive regains, defensive ball wins, regains off opp defenders, backline beaten and duels won.")}
-          ${guideCard(3, "Unit target slides", "DEF, MID and ATT each have their own page.", "Five unit stats vs Req (top 7) and Vale Avg, plus the unit’s own leaderboards. Full-backs sit in DEF; wing-backs in a back three do not.")}
+          ${guideCard(3, "Unit target slides", "DEF, MID and ATT each have their own page.", "Five unit stats vs Req (top 7) and Vale Avg, plus the unit’s own leaderboards. Full-backs and 5-2-3 wing-backs sit in DEF; high wing-backs in a back three do not. In 5-2-3 the double pivot is MID and the front three are ATT.")}
         </div>
         <div class="ba-guide__defs ba-guide__defs--fill">
           ${guideDef("Expected goals", "Shot quality added up — open play only (penalties and direct free kicks excluded), same as the VS card.")}
@@ -1942,7 +1945,7 @@ function dashHtml(block) {
             </div>
           ` : ""}
           <div class="ba-sheet__main ${single ? "ba-sheet__main--compact" : ""}">
-            ${unitPanelHtml("Backline beaten", "defendersBypassed", "Passes or dribbles that beat a defender", stats, single)}
+            ${unitPanelHtml("Backline beaten", "defendersBypassed", "Impect Absolute — beat a defender on the ball", stats, single)}
             ${unitPanelHtml("Duels won", "duelRate", "Success rate by unit", stats, single)}
           </div>
         </div>
@@ -2057,7 +2060,7 @@ async function load(refresh = false) {
     });
     render();
     setStatus("");
-    els.statusBar.textContent = `Updated ${new Date(payload.generatedAt || Date.now()).toLocaleTimeString("en-GB")} · Block ${payload.currentBlockId} of 9`;
+    els.statusBar.textContent = `Updated ${new Date(payload.generatedAt || Date.now()).toLocaleTimeString("en-GB")} · Block ${payload.currentBlockId} of 9 · Impect Absolute packing`;
   } catch (err) {
     setStatus(err.message || "Failed to load Blocks Analysis", "error");
     els.statusBar.textContent = "Load failed";

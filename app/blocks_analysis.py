@@ -67,10 +67,12 @@ LONDON = ZoneInfo("Europe/London")
 BLOCK_COUNT = 9
 GAMES_PER_BLOCK = 5
 LEAGUE_TABLE_GAMES = 46
-# Impect weighted bypassed defenders — matches platform league averages (~45/game).
-# KPI 1400 (raw) reads ~65/game and must not be used for Req / team backline beaten.
+# Impect Absolute packing KPIs (same as Scout Absolute) — never *_RAW for board views.
+# KPI 1400 / 1399 are raw event counts and rank differently (~13th vs ~21st).
 KPI_BYPASSED_DEFENDERS = 2
-KPI_BYPASSED_OPPONENTS = 1399  # in-possession packing / opponents beaten on the ball
+KPI_BYPASSED_DEFENDERS_RAW = 1400
+KPI_BYPASSED_OPPONENTS = 0
+KPI_BYPASSED_OPPONENTS_RAW = 1399
 KPI_SHOT_XG = 82
 KPI_PACKING_XG = 83  # chance created before the shot
 KPI_GOALS = 28
@@ -78,7 +80,7 @@ KPI_ASSISTS = 77
 KPI_PXT_SHOT = 1408
 KPI_PXT_DRIBBLE = 1405
 MATCH_KPI_CACHE_TTL = 6 * 3600
-MATCH_STATS_CACHE_VERSION = 24
+MATCH_STATS_CACHE_VERSION = 26
 # Bump when cross PXT logic changes — does not invalidate full match KPI cache.
 CROSS_PXT_VERSION = 2
 # Shot actions stripped from match + player xG boards (open-play / set-piece delivery only).
@@ -486,6 +488,10 @@ def _is_433_formation(formation: str | None) -> bool:
     return _formation_parts(formation) == [4, 3, 3]
 
 
+def _is_523_formation(formation: str | None) -> bool:
+    return _formation_parts(formation) == [5, 2, 3]
+
+
 LYNCH_PLAYER_ID = 239824
 
 
@@ -544,10 +550,16 @@ def _coach_formation_from_lineup(
     parts = _formation_parts(cleaned)
     token = "-".join(str(part) for part in parts) if parts else cleaned
 
-    if token in {"5-2-2-1", "5-2-1-2"}:
+    if token in {"5-2-2-1", "5-2-1-2", "5-2-3"}:
         n_dm = sum(1 for code in codes if code == "DEFENSE_MIDFIELD")
         n_am = sum(1 for code in codes if code == "ATTACKING_MIDFIELD")
         n_cf = sum(1 for code in codes if code in _FORWARD_POSITION_CODES)
+        n_cb = sum(1 for code in codes if code == "CENTRAL_DEFENDER")
+        n_wb = sum(1 for code in codes if "WINGBACK" in code)
+        # True five-at-the-back (Salford 5 Sep): 3 CBs + 2 WBs + double pivot → 5-2-3.
+        if n_cb >= 3 and n_wb >= 2:
+            return "5-2-3"
+        # Impect sometimes tags a back-four 4-2-3-1 as 5-2-2-1.
         if n_dm >= 2 and n_am >= 2 and n_cf >= 1:
             return "4-2-3-1"
 
@@ -588,6 +600,9 @@ def _unit_baselines_for_formation(formation: str | None) -> dict[str, int]:
     if _is_442_formation(formation):
         # Two pivots in MID; wide players + strikers in ATT — scale Req to four-man attack.
         return {"DEF": 4, "MID": 2, "ATT": 4}
+    if _is_523_formation(formation):
+        # Five-man defence (CBs + wing-backs), double pivot, front three.
+        return {"DEF": 5, "MID": 2, "ATT": 3}
     parts = _formation_parts(formation)
     if len(parts) == 3:
         return {"DEF": parts[0], "MID": parts[1], "ATT": parts[2]}
@@ -665,13 +680,17 @@ def _unit_for_position(
     text = _normalize_position(position)
     if _is_wingback_position(text):
         # Back four: Impect still labels LB/RB as wing-backs — they are DEF.
-        # Back three / five: genuine wing-backs stay out of the CB unit.
+        # Back five (5-2-3): wing-backs are part of the five-man defence.
+        # Back three only: genuine high wing-backs stay out of the CB unit.
         back = _formation_back_line(formation)
-        if back is not None and back != 4:
+        if back == 3:
             return "WB"
         return "DEF"
     # In 4-4-2 Impect often codes the second striker as ATTACKING_MIDFIELD — still ATT.
     if text == "ATTACKING_MIDFIELD" and _is_442_formation(formation) and not on_as_sub:
+        return "ATT"
+    # In 5-2-3 the two 10s sit in the front three with the 9 (Garrity/Dempsey stay MID).
+    if text == "ATTACKING_MIDFIELD" and _is_523_formation(formation) and not on_as_sub:
         return "ATT"
     # Starter 10s stay in MID in other shapes. Bench AM arrivals are attacking subs.
     if text == "ATTACKING_MIDFIELD" and on_as_sub:
@@ -878,8 +897,8 @@ def _units_from_players(
         lost = _kpi_value(kpis, KPI_LOST_GROUND_DUELS) + _kpi_value(kpis, KPI_LOST_AERIAL_DUELS)
         aerial_won = _kpi_value(kpis, KPI_WON_AERIAL_DUELS)
         aerial_lost = _kpi_value(kpis, KPI_LOST_AERIAL_DUELS)
-        bypassed = _kpi_value(kpis, KPI_BYPASSED_DEFENDERS)
-        progression = _kpi_value(kpis, KPI_BYPASSED_OPPONENTS)
+        bypassed = _packing_defenders(kpis)
+        progression = _packing_opponents(kpis)
         offensive = _kpi_value(kpis, KPI_BALL_WIN_REMOVED_OPPONENTS)
         defensive = _kpi_value(kpis, KPI_BALL_WIN_ADDED_TEAMMATES)
         deepest = _kpi_value(kpis, KPI_BALL_WIN_REMOVED_OPPONENTS_DEFENDERS)
@@ -947,6 +966,7 @@ def _player_match_report(
     players: list[dict[str, Any]],
     squad_id: int,
     player_names: dict[int, str],
+    formation: str | None = None,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for row in _consolidate_player_match_rows(
@@ -971,7 +991,7 @@ def _player_match_report(
             {
                 "playerId": player_id,
                 "name": name,
-                "unit": _unit_for_position(row.get("position")),
+                "unit": _unit_for_position(row.get("position"), formation),
                 "started": minutes >= 45,
                 "minutes": round(minutes, 1),
                 "xg": round(_kpi_value(kpis, KPI_SHOT_XG), 2),
@@ -984,8 +1004,8 @@ def _player_match_report(
                 "regainsFromDefenders": int(
                     round(_kpi_value(kpis, KPI_BALL_WIN_REMOVED_OPPONENTS_DEFENDERS))
                 ),
-                "defendersBypassed": round(_kpi_value(kpis, KPI_BYPASSED_DEFENDERS), 1),
-                "ballProgression": round(_kpi_value(kpis, KPI_BYPASSED_OPPONENTS), 1),
+                "defendersBypassed": round(_packing_defenders(kpis), 1),
+                "ballProgression": round(_packing_opponents(kpis), 1),
                 "duelWon": int(round(won)),
                 "duelTotal": int(round(total)),
                 "duelRate": round((won / total) * 100, 1) if total > 0 else None,
@@ -1081,7 +1101,7 @@ def _units_from_report(players: list[dict[str, Any]]) -> dict[str, dict[str, Any
     return result
 
 
-def _kpi_value(kpis: dict[int, float], kpi_id: int) -> float:
+def _kpi_value(kpis: dict[int, float] | dict[str, Any], kpi_id: int) -> float:
     raw = kpis.get(kpi_id)
     if raw is None:
         raw = kpis.get(str(kpi_id))  # type: ignore[call-overload]
@@ -1089,6 +1109,22 @@ def _kpi_value(kpis: dict[int, float], kpi_id: int) -> float:
         return float(raw or 0.0)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _kpi_first(kpis: dict[int, float] | dict[str, Any], *kpi_ids: int) -> float:
+    """Prefer Impect Absolute ids; fall back to *_RAW when a feed omits Absolute."""
+    for kpi_id in kpi_ids:
+        if kpi_id in kpis or str(kpi_id) in kpis:
+            return _kpi_value(kpis, kpi_id)
+    return 0.0
+
+
+def _packing_defenders(kpis: dict[int, float] | dict[str, Any]) -> float:
+    return _kpi_first(kpis, KPI_BYPASSED_DEFENDERS, KPI_BYPASSED_DEFENDERS_RAW)
+
+
+def _packing_opponents(kpis: dict[int, float] | dict[str, Any]) -> float:
+    return _kpi_first(kpis, KPI_BYPASSED_OPPONENTS, KPI_BYPASSED_OPPONENTS_RAW)
 
 
 def _extract_rate_kpis(kpis: dict[int, float]) -> dict[str, Any]:
@@ -1099,7 +1135,7 @@ def _extract_rate_kpis(kpis: dict[int, float]) -> dict[str, Any]:
     duel_rate = (won / duel_total) * 100 if duel_total > 0 else None
     offensive = _kpi_value(kpis, KPI_BALL_WIN_REMOVED_OPPONENTS)
     return {
-        "defendersBypassed": _kpi_value(kpis, KPI_BYPASSED_DEFENDERS),
+        "defendersBypassed": _packing_defenders(kpis),
         "offensiveInterventions": offensive,
         "duelRate": duel_rate,
         "ballWinsFromOppDefenders": _kpi_value(
@@ -1116,7 +1152,7 @@ def _extract_match_kpis(kpis: dict[int, float]) -> dict[str, Any]:
     duel_rate = round((won / duel_total) * 100, 1) if duel_total > 0 else None
     offensive = int(round(_kpi_value(kpis, KPI_BALL_WIN_REMOVED_OPPONENTS)))
     return {
-        "defendersBypassed": round(_kpi_value(kpis, KPI_BYPASSED_DEFENDERS), 1),
+        "defendersBypassed": round(_packing_defenders(kpis), 1),
         "offensiveInterventions": offensive,
         "duelWon": int(round(won)),
         "duelTotal": int(round(duel_total)),
@@ -2171,7 +2207,7 @@ def _fetch_match_stats(
             names,
         )
         stats["units"] = _units_from_players(players, squad_id, formation)
-        stats["players"] = _player_match_report(players, squad_id, names)
+        stats["players"] = _player_match_report(players, squad_id, names, formation)
         _apply_lineup_roles(stats["players"], _lineup_roles(match_id, squad_id))
         stats["units"] = _units_from_report(stats["players"])
     except Exception:  # noqa: BLE001
@@ -2452,11 +2488,13 @@ def _fetch_match_unit_stats(
             impect_get(v5_path(f"/matches/{match_id}/player-kpis"))["data"],
             names,
         )
-        report = _player_match_report(players, squad_id, names)
+        formation = _match_starting_formation(match_id, squad_id)
+        report = _player_match_report(players, squad_id, names, formation)
         _apply_lineup_roles(report, _lineup_roles(match_id, squad_id))
         stats: dict[str, Any] = {
             "players": report,
             "units": _units_from_report(report),
+            "formation": formation,
         }
         _hydrate_open_play_shots(stats, squad_id, match_id, fetch_remote=True)
         units = stats.get("units")
@@ -3133,6 +3171,11 @@ def _assemble_blocks_payload(
         "benchmarks": benchmarks,
         "matchCount": len(matches),
         "playedCount": sum(1 for match in matches if match.get("outcome")),
+        "kpiBasis": "impect_absolute",
+        "kpiBasisNote": (
+            "Packing KPIs use Impect Absolute (BYPASSED_DEFENDERS / BYPASSED_OPPONENTS), "
+            "same as Scout — not the RAW event-count variants."
+        ),
     }
 
 

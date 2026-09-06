@@ -29,7 +29,7 @@ MIN_OBSERVATIONS = 16
 COLLINEARITY_R = 0.90
 HISTORY_TTL_SECONDS = 12 * 3600
 TABLE_TTL_SECONDS = 1800
-CACHE_VERSION = 6
+CACHE_VERSION = 7
 
 # Impect squad KPI ids — prefer platform Absolute names (same as Impect Scout),
 # not the *_RAW counts (1399 / 1400) which rank differently.
@@ -371,6 +371,7 @@ STORY = {
     ],
     "sample": (
         "Impect League Two, 96 team-seasons (22/23–25/26), 20+ games each. "
+        "Packing KPIs use Impect Absolute (same as Scout Absolute — not RAW counts). "
         "Ranked by how strongly each per-game stat tracks win percentage. "
         "Goals scored left out — they are the result, not the driver."
     ),
@@ -738,11 +739,12 @@ def build_history(*, force_refresh: bool = False) -> dict[str, Any]:
         "generated_at": datetime.now(UTC).isoformat(),
         "competition": COMPETITION,
         "method": (
-            "Spearman rank correlation of Impect per-game squad stats with win "
+            "Spearman rank correlation of Impect Absolute per-game squad stats with win "
             "percentage, pooled across every League Two team-season in the data "
-            f"(minimum {MIN_GAMES_HISTORY} league games). Goals scored are excluded "
-            "because they are the result, not the driver. Near-duplicate stats "
-            "are dropped so the fifteen columns stay distinct."
+            f"(minimum {MIN_GAMES_HISTORY} league games). Packing uses Scout Absolute "
+            "KPIs (BYPASSED_DEFENDERS / BYPASSED_OPPONENTS), not RAW event counts. "
+            "Goals scored are excluded because they are the result, not the driver. "
+            "Near-duplicate stats are dropped so the fifteen columns stay distinct."
         ),
         "story": STORY,
         "team_seasons": len(observations),

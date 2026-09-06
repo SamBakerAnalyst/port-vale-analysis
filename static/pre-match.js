@@ -4327,6 +4327,7 @@ function renderTwoPagerPage1(report) {
             : `Shape ${formation} — tell me if you want a different shape`,
           layerAttrs: `data-tp-xi="1" data-two-match-index="${Math.max(0, matches.length - 1)}"`,
           crest: report.opponent,
+          markerMode: "number",
         })}
       </div>
       <aside class="tp-page1-v2__right">
@@ -4391,7 +4392,7 @@ function renderTwoPagerPage2(report) {
         title: "Average positions",
         meta: fromEvents
           ? "Mean event start coordinates — not formation slots"
-          : "Event averages unavailable — showing typical XI fallback",
+          : "Impect event packet not cached yet — showing typical XI fallback",
         layerAttrs: `data-avg-shape="1"`,
         crest: report.opponent,
         markerMode: "number",

@@ -147,16 +147,17 @@ def _fetch_match_events(match_id: int, *, refresh: bool = False) -> list[dict[st
     from app.analysis_cache import PACKET_TTL_SECONDS, read_list, write_list
 
     mid = int(match_id)
+    now = time.time()
     if not refresh:
         cached = _match_events_cache.get(mid)
-        now = time.time()
-        if cached:
+        if cached and cached[1]:
             return cached[1]
         disk = read_list("xg-events", str(mid), ttl=PACKET_TTL_SECONDS, allow_stale=True)
-        if disk is not None:
+        # Empty disk is not trusted: Impect often marks a match available before
+        # the event packet lands (Exeter vs Barnet 1 Sep 2026 — lineups yes, events later).
+        if disk:
             _match_events_cache[mid] = (now, disk)
             return disk
-        return []
 
     impect = _impect()
     raw = impect._impect_get(

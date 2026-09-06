@@ -306,60 +306,97 @@ class XgChanceAnalysisPDF(FPDF):
         )
 
     def _player_table(self, x: float, y: float, w: float, h: float, title: str, players: list[dict[str, Any]], *, limit: int = 9) -> None:
+        """Backward-compatible name — renders filled player cards, not a sparse grid. """
+        self._player_panel(x, y, w, h, title, players, limit=limit)
+
+    def _player_panel(self, x: float, y: float, w: float, h: float, title: str, players: list[dict[str, Any]], *, limit: int = 10) -> None:
         self._card(x, y, w, h)
         pad = 3.5
-        self.set_xy(x + pad, y + 3)
-        self.set_font("Helvetica", "B", 9)
-        self._text(TEXT)
-        self.cell(w - pad * 2, 5, pdf_safe(title.upper()))
-
-        headers = ["#", "Player", "Shots", "xG", "Exc", "VG", "OK", "Poor", "VP", "G"]
-        widths = [w * 0.05, w * 0.30, w * 0.08, w * 0.10, w * 0.07, w * 0.07, w * 0.07, w * 0.08, w * 0.07, w * 0.06]
-        row_y = y + 11
-        cursor = x + pad
-        self.set_font("Helvetica", "B", 6)
-        self._text(MUTED)
-        for header, col_w in zip(headers, widths):
-            self.set_xy(cursor, row_y)
-            self.cell(col_w, 4, header, align="C" if header != "Player" else "L")
-            cursor += col_w
-
         rows = (players or [])[:limit]
-        body_top = row_y + 5.5
-        available = h - (body_top - y) - 3
-        row_h = min(8.0, available / max(len(rows) or 1, 1))
+        total_shots = sum(int(r.get("shots") or 0) for r in rows)
+        total_xg = sum(float(r.get("xg") or 0) for r in rows)
+        total_goals = sum(int(r.get("goals") or 0) for r in rows)
+
+        self.set_xy(x + pad, y + 2.8)
+        self.set_font("Helvetica", "B", 10)
+        self._text(TEXT)
+        self.cell(w * 0.42, 5, pdf_safe(title.upper()))
+        self.set_font("Helvetica", "", 7)
+        self._text(MUTED)
+        self.cell(w * 0.55, 5, pdf_safe(f"{total_shots} shots  ·  {_fmt(total_xg)} xG  ·  {total_goals} goals"), align="R")
+
+        body_top = y + 10.5
+        available = h - (body_top - y) - 3.5
         if not rows:
-            self.set_xy(x + pad, body_top + 2)
-            self.set_font("Helvetica", "", 8)
+            self.set_xy(x + pad, body_top + 4)
+            self.set_font("Helvetica", "", 9)
             self._text(MUTED)
-            self.cell(w - pad * 2, 5, "No shots")
+            self.cell(w - pad * 2, 5, "No shots recorded")
             return
 
+        # Keep cards dense so the slide doesn't look empty with few shooters.
+        row_h = min(16.5, max(12.2, available / max(len(rows), 1)))
+        max_xg = max((float(r.get("xg") or 0) for r in rows), default=0.01) or 0.01
+        tag_specs = [
+            ("excellent", "Exc", CHANCE_COLORS["excellent"]),
+            ("very_good", "VG", CHANCE_COLORS["very_good"]),
+            ("ok", "OK", CHANCE_COLORS["ok"]),
+            ("poor", "Poor", CHANCE_COLORS["poor"]),
+            ("very_poor", "VP", CHANCE_COLORS["very_poor"]),
+        ]
+
         for index, row in enumerate(rows):
-            if index % 2 == 0:
-                self._fill(ROW_ALT)
-                self.rect(x + 1.5, body_top, w - 3, row_h, style="F")
+            card_y = body_top + index * row_h
+            if card_y + row_h > y + h - 2:
+                break
+            self._fill(SURFACE_2 if index % 2 == 0 else ROW_ALT)
+            self.rect(x + 2, card_y, w - 4, row_h - 1.1, style="F")
+
+            name = pdf_safe(str(row.get("playerName") or "Unknown"))
+            shots = int(row.get("shots") or 0)
+            xg = float(row.get("xg") or 0)
+            goals = int(row.get("goals") or 0)
+            avg = float(row.get("avgXg") or (xg / shots if shots else 0))
             counts = row.get("chanceCounts") or {}
-            values = [
-                str(index + 1),
-                str(row.get("playerName") or "Unknown"),
-                str(row.get("shots") or 0),
-                _fmt(row.get("xg"), digits=2),
-                str(counts.get("excellent") or 0),
-                str(counts.get("very_good") or 0),
-                str(counts.get("ok") or 0),
-                str(counts.get("poor") or 0),
-                str(counts.get("very_poor") or 0),
-                str(row.get("goals") or 0),
-            ]
-            cursor = x + pad
-            for col_i, (value, col_w) in enumerate(zip(values, widths)):
-                self.set_xy(cursor, body_top + 1.5)
-                self.set_font("Helvetica", "B" if col_i == 1 else "", 7)
-                self._text(TEXT)
-                self.cell(col_w, row_h - 2.5, pdf_safe(value), align="C" if col_i != 1 else "L")
-                cursor += col_w
-            body_top += row_h
+
+            self.set_xy(x + pad + 0.5, card_y + 1.2)
+            self.set_font("Helvetica", "B", 8)
+            self._text(MUTED)
+            self.cell(7, 4, f"#{index + 1}")
+            self.set_font("Helvetica", "B", 8.5)
+            self._text(TEXT)
+            self.cell(w * 0.48, 4, name[:28])
+            self.set_font("Helvetica", "B", 10)
+            self._text(ACCENT)
+            self.cell(w * 0.28, 4, _fmt(xg), align="R")
+
+            self.set_xy(x + pad + 7.5, card_y + 5.2)
+            self.set_font("Helvetica", "", 6.5)
+            self._text(MUTED)
+            goal_bit = f"  ·  {goals} goal{'s' if goals != 1 else ''}" if goals else ""
+            self.cell(w * 0.55, 3.2, pdf_safe(f"{shots} shots · {_fmt(avg)} avg xG{goal_bit}"))
+
+            bar_x = x + pad + 7.5
+            bar_w = w - pad * 2 - 10
+            bar_y = card_y + 8.6
+            self._fill(BORDER)
+            self.rect(bar_x, bar_y, bar_w, 1.6, style="F")
+            fill_w = max(2.0, bar_w * (xg / max_xg))
+            self._fill(ACCENT)
+            self.rect(bar_x, bar_y, fill_w, 1.6, style="F")
+
+            tag_x = bar_x
+            tag_y = card_y + 10.8
+            tag_h = 3.6
+            for key, label, color in tag_specs:
+                count = int(counts.get(key) or 0)
+                text = f"{count} {label}"
+                self.set_font("Helvetica", "B", 5.5)
+                tag_w = max(12.0, self.get_string_width(text) + 3.5)
+                if tag_x + tag_w > x + w - pad:
+                    break
+                self._pill(tag_x, tag_y, tag_w, tag_h, text, color)
+                tag_x += tag_w + 1.2
 
     def add_match_summary_slide(self, report: dict[str, Any]) -> None:
         match = (report.get("matches") or [{}])[0]
@@ -385,7 +422,7 @@ class XgChanceAnalysisPDF(FPDF):
         hero_x = MARGIN
         hero_y = content_top
         hero_w = SLIDE_WIDTH_MM - (MARGIN * 2)
-        hero_h = 72.0
+        hero_h = 58.0
         self._card(hero_x, hero_y, hero_w, hero_h)
 
         chip_x = hero_x + 5
@@ -401,61 +438,47 @@ class XgChanceAnalysisPDF(FPDF):
         self._text(MUTED)
         self.cell(hero_w * 0.45 - 5, 4, pdf_safe(f"{competition} {season}").upper(), align="R")
 
-        crest_size = 16.0
-        score_y = hero_y + 15
+        crest_size = 18.0
+        score_y = hero_y + 14
         mid = hero_x + hero_w / 2
         vale_badge = _local_badge()
         opp_badge = _fetch_image_bytes(opponent.get("imageUrl"))
 
-        # Vale (left block): crest + name + goals
-        vale_block_x = mid - 95
-        self._draw_crest(vale_block_x + 13, score_y, crest_size, vale_badge, "PV")
-        self.set_xy(vale_block_x, score_y + crest_size + 1.5)
-        self.set_font("Helvetica", "B", 12)
+        # Clean scoreboard: crest · name · goals | – | goals · name · crest
+        left_x = mid - 110
+        self._draw_crest(left_x, score_y, crest_size, vale_badge, "PV")
+        self.set_xy(left_x + crest_size + 3, score_y + 1)
+        self.set_font("Helvetica", "B", 13)
         self._text(TEXT)
-        self.cell(42, 5, "PORT VALE", align="C")
-        self.set_xy(vale_block_x + 42, score_y + 2)
-        self.set_font("Helvetica", "B", 30)
+        self.cell(48, 6, "PORT VALE")
+        self.set_xy(left_x + crest_size + 3, score_y + 8)
+        self.set_font("Helvetica", "B", 28)
         self._text(ACCENT if vale_won else TEXT)
-        self.cell(24, 16, pdf_safe(str(vale_goals if vale_goals is not None else "-")), align="C")
+        self.cell(30, 12, pdf_safe(str(vale_goals if vale_goals is not None else "-")))
 
-        self.set_xy(mid - 8, score_y + 5)
+        self.set_xy(mid - 6, score_y + 6)
         self.set_font("Helvetica", "B", 18)
         self._text(MUTED)
-        self.cell(16, 12, "-", align="C")
+        self.cell(12, 10, "-", align="C")
 
-        # Opp (right block)
-        opp_block_x = mid + 29
-        self.set_xy(opp_block_x, score_y + 2)
-        self.set_font("Helvetica", "B", 30)
+        right_goal_x = mid + 12
+        self.set_xy(right_goal_x, score_y + 8)
+        self.set_font("Helvetica", "B", 28)
         self._text(ACCENT if opp_won else TEXT)
-        self.cell(24, 16, pdf_safe(str(opp_goals if opp_goals is not None else "-")), align="C")
-        self._draw_crest(opp_block_x + 28, score_y, crest_size, opp_badge, opponent_name[:2])
-        self.set_xy(opp_block_x + 16, score_y + crest_size + 1.5)
-        self.set_font("Helvetica", "B", 12)
+        self.cell(30, 12, pdf_safe(str(opp_goals if opp_goals is not None else "-")), align="R")
+        self.set_xy(right_goal_x + 32, score_y + 1)
+        self.set_font("Helvetica", "B", 13)
         self._text(TEXT)
-        self.cell(42, 5, pdf_safe(opponent_name.upper())[:18], align="C")
+        self.cell(52, 6, pdf_safe(opponent_name.upper())[:18], align="R")
+        self._draw_crest(right_goal_x + 86, score_y, crest_size, opp_badge, opponent_name[:2])
 
         bar_x = hero_x + 28
         bar_w = hero_w - 56
-        self._xg_bar(bar_x, hero_y + 48, bar_w, "Vale xG", vale_xg, max_xg, VALE)
-        self._xg_bar(bar_x, hero_y + 56, bar_w, "Opp xG", opp_xg, max_xg, ACCENT)
-
-        self.set_xy(hero_x, hero_y + hero_h - 8)
-        self.set_font("Helvetica", "", 7.5)
-        self._text(MUTED)
-        self.cell(
-            hero_w,
-            4,
-            pdf_safe(
-                f"{match.get('valeShots') or 0} Vale shots  ·  {match.get('shotCount') or 0} total shots  ·  "
-                f"{match.get('oppShots') or 0} Opp shots"
-            ),
-            align="C",
-        )
+        self._xg_bar(bar_x, hero_y + 38, bar_w, "Vale xG", vale_xg, max_xg, VALE)
+        self._xg_bar(bar_x, hero_y + 46, bar_w, "Opp xG", opp_xg, max_xg, ACCENT)
 
         tables_y = hero_y + hero_h + GAP
-        tables_h = SLIDE_HEIGHT_MM - tables_y - MARGIN
+        tables_h = SLIDE_HEIGHT_MM - tables_y - MARGIN - 8
         table_w = (hero_w - GAP) / 2
         self._bucket_table(hero_x, tables_y, table_w, tables_h, "xG created (Vale)", report.get("xgCreated") or {})
         self._bucket_table(
@@ -467,6 +490,140 @@ class XgChanceAnalysisPDF(FPDF):
             report.get("xgAgainst") or {},
         )
 
+        # Chance rating key under the tables
+        key_y = SLIDE_HEIGHT_MM - MARGIN - 5.5
+        self.set_xy(MARGIN, key_y)
+        self.set_font("Helvetica", "B", 6.5)
+        self._text(MUTED)
+        self.cell(12, 4, "KEY")
+        key_x = MARGIN + 14
+        for label, color in [
+            ("Excellent >=0.35", CHANCE_COLORS["excellent"]),
+            ("Very Good >=0.19", CHANCE_COLORS["very_good"]),
+            ("OK >=0.09", CHANCE_COLORS["ok"]),
+            ("Poor >=0.04", CHANCE_COLORS["poor"]),
+            ("Very Poor <0.04", CHANCE_COLORS["very_poor"]),
+        ]:
+            self._pill(key_x, key_y, 38, 4.5, label, color)
+            key_x += 40
+
+    def add_match_context_slide(self, report: dict[str, Any]) -> None:
+        match = (report.get("matches") or [{}])[0]
+        opponent = ((match.get("opponent") or {}).get("name")) or "Opponent"
+        self.add_page()
+        self._bg()
+        top = self._toolbar(
+            "Game state & splits",
+            f"MD{match.get('matchDay') or '?'} vs {opponent}  |  When Vale shot · half · manpower",
+        )
+        panel_w = (SLIDE_WIDTH_MM - (MARGIN * 2) - GAP) / 2
+        panel_h = SLIDE_HEIGHT_MM - top - MARGIN
+
+        # Left: game state
+        self._card(MARGIN, top, panel_w, panel_h)
+        self.set_xy(MARGIN + 4, top + 3)
+        self.set_font("Helvetica", "B", 9)
+        self._text(TEXT)
+        self.cell(panel_w - 8, 5, "GAME STATE WHEN SHOOTING (VALE)")
+
+        headers = ["State", "Shots", "Goals", "xG"]
+        widths = [panel_w * 0.42, panel_w * 0.16, panel_w * 0.16, panel_w * 0.26]
+        row_y = top + 11
+        cursor = MARGIN + 4
+        self.set_font("Helvetica", "B", 6.5)
+        self._text(MUTED)
+        for header, col_w in zip(headers, widths):
+            self.set_xy(cursor, row_y)
+            self.cell(col_w - 1, 4, header.upper(), align="L" if header == "State" else "R")
+            cursor += col_w
+        self._draw(BORDER)
+        self.line(MARGIN + 4, row_y + 5, MARGIN + panel_w - 4, row_y + 5)
+
+        state_rows = (report.get("gameStateBreakdown") or {}).get("vale") or []
+        body_y = row_y + 7
+        # Stretch game-state rows so the left panel doesn't look empty.
+        row_h = max(14.0, min(28.0, (panel_h - 22) / max(len(state_rows) or 1, 1)))
+        state_colors = {
+            "winning": GOOD,
+            "drawing": GOLD,
+            "losing": BAD,
+        }
+        for index, row in enumerate(state_rows):
+            if index % 2 == 0:
+                self._fill(ROW_ALT)
+                self.rect(MARGIN + 2, body_y, panel_w - 4, row_h, style="F")
+            sid = str(row.get("id") or "")
+            label = str(row.get("label") or sid)
+            pill_w = 34.0
+            self._pill(MARGIN + 5, body_y + (row_h - 7) / 2, pill_w, 7.0, label, state_colors.get(sid, MUTED))
+            values = [str(row.get("shots") or 0), str(row.get("goals") or 0), _fmt(row.get("xg"))]
+            cursor = MARGIN + 4 + widths[0]
+            for value, col_w in zip(values, widths[1:]):
+                self.set_xy(cursor, body_y + (row_h - 6) / 2)
+                self.set_font("Helvetica", "B", 11)
+                self._text(TEXT)
+                self.cell(col_w - 1, 6, value, align="R")
+                cursor += col_w
+            body_y += row_h
+
+        # Right: half + manpower
+        right_x = MARGIN + panel_w + GAP
+        self._card(right_x, top, panel_w, panel_h)
+        self.set_xy(right_x + 4, top + 3)
+        self.set_font("Helvetica", "B", 9)
+        self._text(TEXT)
+        self.cell(panel_w - 8, 5, "HALF & MANPOWER SPLITS")
+
+        period = report.get("periodBreakdown") or {}
+        sections = [
+            ("BY HALF", period.get("halves") or []),
+            ("BY MANPOWER", period.get("manpower") or []),
+        ]
+        sec_y = top + 11
+        usable = panel_h - 16
+        section_h = usable / max(len(sections), 1)
+        for title, rows in sections:
+            block_top = sec_y
+            self.set_xy(right_x + 4, block_top)
+            self.set_font("Helvetica", "B", 7.5)
+            self._text(MUTED)
+            self.cell(panel_w - 8, 4.5, title)
+            headers2 = ["Period", "Vale sh", "Vale xG", "Opp sh", "Opp xG"]
+            widths2 = [panel_w * 0.28, panel_w * 0.16, panel_w * 0.20, panel_w * 0.16, panel_w * 0.20]
+            cursor = right_x + 4
+            head_y = block_top + 5.5
+            self.set_font("Helvetica", "B", 6.5)
+            self._text(MUTED)
+            for header, col_w in zip(headers2, widths2):
+                self.set_xy(cursor, head_y)
+                self.cell(col_w - 1, 3.8, header.upper(), align="L" if header == "Period" else "R")
+                cursor += col_w
+            rows_top = head_y + 5.5
+            rows_space = section_h - 14
+            row_h2 = max(11.0, rows_space / max(len(rows) or 1, 1))
+            for index, row in enumerate(rows):
+                ry = rows_top + index * row_h2
+                if ry + row_h2 > block_top + section_h - 2:
+                    break
+                if index % 2 == 0:
+                    self._fill(ROW_ALT)
+                    self.rect(right_x + 2, ry, panel_w - 4, row_h2 - 0.8, style="F")
+                values = [
+                    str(row.get("label") or ""),
+                    str(row.get("valeShots") or 0),
+                    _fmt(row.get("valeXg")),
+                    str(row.get("oppShots") or 0),
+                    _fmt(row.get("oppXg")),
+                ]
+                cursor = right_x + 4
+                for col_i, (value, col_w) in enumerate(zip(values, widths2)):
+                    self.set_xy(cursor, ry + (row_h2 - 5) / 2)
+                    self.set_font("Helvetica", "B" if col_i == 0 else "", 8.5)
+                    self._text(TEXT)
+                    self.cell(col_w - 1, 5, pdf_safe(value), align="L" if col_i == 0 else "R")
+                    cursor += col_w
+            sec_y += section_h
+
     def add_match_players_slide(self, report: dict[str, Any]) -> None:
         match = (report.get("matches") or [{}])[0]
         opponent = ((match.get("opponent") or {}).get("name")) or "Opponent"
@@ -474,13 +631,28 @@ class XgChanceAnalysisPDF(FPDF):
         self._bg()
         top = self._toolbar(
             "Shot quality by player",
-            f"MD{match.get('matchDay') or '?'} vs {opponent}  |  {report.get('competition') or ''} {report.get('season') or ''}",
+            f"MD{match.get('matchDay') or '?'} vs {opponent}  |  {report.get('competition') or ''} {report.get('season') or ''}  |  Tags = chance counts",
         )
         panel_w = (SLIDE_WIDTH_MM - (MARGIN * 2) - GAP) / 2
-        panel_h = SLIDE_HEIGHT_MM - top - MARGIN
+        panel_h = SLIDE_HEIGHT_MM - top - MARGIN - 8
         players = report.get("playerBreakdown") or {}
-        self._player_table(MARGIN, top, panel_w, panel_h, "Vale", players.get("vale") or {}, limit=10)
-        self._player_table(MARGIN + panel_w + GAP, top, panel_w, panel_h, "Opposition", players.get("opp") or {}, limit=10)
+        self._player_panel(MARGIN, top, panel_w, panel_h, "Vale", players.get("vale") or {}, limit=10)
+        self._player_panel(MARGIN + panel_w + GAP, top, panel_w, panel_h, "Opposition", players.get("opp") or {}, limit=10)
+        key_y = SLIDE_HEIGHT_MM - MARGIN - 5.2
+        self.set_xy(MARGIN, key_y)
+        self.set_font("Helvetica", "B", 6.5)
+        self._text(MUTED)
+        self.cell(18, 4, "TAG KEY")
+        key_x = MARGIN + 20
+        for label, color in [
+            ("Exc = Excellent", CHANCE_COLORS["excellent"]),
+            ("VG = Very Good", CHANCE_COLORS["very_good"]),
+            ("OK", CHANCE_COLORS["ok"]),
+            ("Poor", CHANCE_COLORS["poor"]),
+            ("VP = Very Poor", CHANCE_COLORS["very_poor"]),
+        ]:
+            self._pill(key_x, key_y, 42, 4.4, label, color)
+            key_x += 44
 
     def add_possession_map_slide(self, shots: dict[str, Any]) -> None:
         self.add_page()
@@ -807,6 +979,7 @@ def build_xg_chance_analysis_pdf(
         pdf.add_season_players_slide(report)
     else:
         pdf.add_match_summary_slide(report)
+        pdf.add_match_context_slide(report)
         pdf.add_match_players_slide(report)
     if shots_payload:
         pdf.add_possession_map_slide(shots_payload)
