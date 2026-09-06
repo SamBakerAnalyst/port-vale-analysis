@@ -29,17 +29,20 @@ MIN_OBSERVATIONS = 16
 COLLINEARITY_R = 0.90
 HISTORY_TTL_SECONDS = 12 * 3600
 TABLE_TTL_SECONDS = 1800
-CACHE_VERSION = 5
+CACHE_VERSION = 6
 
-# Impect squad KPI ids used across post-match / strategy tracker / pre-match.
+# Impect squad KPI ids — prefer platform Absolute names (same as Impect Scout),
+# not the *_RAW counts (1399 / 1400) which rank differently.
 KPI_SHOT_XG = 82
 KPI_CONCEDED_SHOT_XG = 1463
 KPI_PACKING_XG = 83
 KPI_CONCEDED_PACKING_XG = 1464
 KPI_POSTSHOT_XG = 1401
 KPI_CONCEDED_POSTSHOT_XG = 1462
-KPI_BYPASSED_OPPONENTS = 1399
-KPI_BYPASSED_DEFENDERS = 1400
+KPI_BYPASSED_OPPONENTS = 0  # BYPASSED_OPPONENTS (platform Absolute)
+KPI_BYPASSED_OPPONENTS_RAW = 1399
+KPI_BYPASSED_DEFENDERS = 2  # BYPASSED_DEFENDERS (platform Absolute)
+KPI_BYPASSED_DEFENDERS_RAW = 1400
 KPI_SUFFERED_BYPASSED_DEFENDERS = 40
 KPI_FINAL_THIRD_ENTRIES = 284
 KPI_FINAL_THIRD_AGAINST = 149
@@ -162,8 +165,8 @@ CANDIDATES: tuple[Candidate, ...] = (
         "key": "defenders_bypassed",
         "label": "Defenders bypassed",
         "short": "Def byp.",
-        "hint": "Opposition defenders packed / broken per game.",
-        "kpi_ids": (KPI_BYPASSED_DEFENDERS, 2),
+        "hint": "Impect Absolute — opposition defenders packed / broken per game.",
+        "kpi_ids": (KPI_BYPASSED_DEFENDERS,),
         "fmt": "dec",
         "digits": 1,
         "unit": "/g",
@@ -172,7 +175,7 @@ CANDIDATES: tuple[Candidate, ...] = (
         "key": "ball_progression",
         "label": "Ball progression",
         "short": "Prog.",
-        "hint": "Opponents bypassed on the ball per game.",
+        "hint": "Impect Absolute — opponents bypassed on the ball per game.",
         "kpi_ids": (KPI_BYPASSED_OPPONENTS,),
         "fmt": "dec",
         "digits": 1,

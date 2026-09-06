@@ -3236,7 +3236,7 @@ def register_blocks_analysis_routes(app: FastAPI) -> None:
         refresh: bool = Query(False),
     ) -> JSONResponse:
         try:
-            payload = build_blocks_analysis_payload(force_refresh=False)
+            payload = build_blocks_analysis_payload(force_refresh=bool(refresh))
         except HTTPException:
             raise
         except Exception as exc:  # noqa: BLE001

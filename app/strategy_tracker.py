@@ -140,11 +140,14 @@ _cache: dict[int, tuple[float, dict[str, Any]]] = {}
 CACHE_TTL_SECONDS = 36 * 3600
 TRACKER_CACHE_DIR = CACHE_ROOT / "strategy-tracker"
 TRACKER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-TRACKER_CACHE_VERSION = 3
+TRACKER_CACHE_VERSION = 4
 
 # Match-level Impect KPIs (same IDs as post-match / Blocks Analysis).
-KPI_BYPASSED_OPPONENTS = 1399
-KPI_BYPASSED_DEFENDERS = 1400
+# Match Impect Scout Absolute (BYPASSED_OPPONENTS / BYPASSED_DEFENDERS), not *_RAW.
+KPI_BYPASSED_OPPONENTS = 0
+KPI_BYPASSED_OPPONENTS_RAW = 1399
+KPI_BYPASSED_DEFENDERS = 2
+KPI_BYPASSED_DEFENDERS_RAW = 1400
 KPI_SUFFERED_BYPASSED_DEFENDERS = 40
 KPI_SHOT_XG = 82
 KPI_CONCEDED_SHOT_XG = 1463
@@ -196,7 +199,7 @@ STYLE_METRIC_META: dict[str, dict[str, Any]] = {
         "chart": "cumulative",
         "digits": 0,
         "player": True,
-        "hint": "Packing — breaking opposition defensive lines. Strong link to chance quality.",
+        "hint": "Packing — Impect Absolute defenders bypassed. Strong link to chance quality.",
     },
     "ball_progression": {
         "label": "Ball progression",
@@ -206,7 +209,7 @@ STYLE_METRIC_META: dict[str, dict[str, Any]] = {
         "chart": "cumulative",
         "digits": 0,
         "player": True,
-        "hint": "Opponents bypassed on the ball (Impect ball progression).",
+        "hint": "Impect Absolute — opponents bypassed on the ball.",
     },
     "xg_for": {
         "label": "xG",
@@ -458,6 +461,14 @@ def _kpi(kpis: dict[int, float], kpi_id: int) -> float:
     return float(kpis.get(kpi_id) or 0.0)
 
 
+def _kpi_first(kpis: dict[int, float], *kpi_ids: int) -> float:
+    """Prefer Impect Absolute ids; fall back to *_RAW when a feed omits Absolute."""
+    for kpi_id in kpi_ids:
+        if kpi_id in kpis:
+            return float(kpis[kpi_id])
+    return 0.0
+
+
 def _style_from_kpis(kpis: dict[int, float]) -> dict[str, float]:
     won = _kpi(kpis, KPI_WON_GROUND_DUELS) + _kpi(kpis, KPI_WON_AERIAL_DUELS)
     lost = _kpi(kpis, KPI_LOST_GROUND_DUELS) + _kpi(kpis, KPI_LOST_AERIAL_DUELS)
@@ -469,8 +480,12 @@ def _style_from_kpis(kpis: dict[int, float]) -> dict[str, float]:
     xg_against = _kpi(kpis, KPI_CONCEDED_SHOT_XG)
     altered = _kpi(kpis, KPI_ALTERED_THREAT)
     return {
-        "defenders_bypassed": _kpi(kpis, KPI_BYPASSED_DEFENDERS),
-        "ball_progression": _kpi(kpis, KPI_BYPASSED_OPPONENTS),
+        "defenders_bypassed": _kpi_first(
+            kpis, KPI_BYPASSED_DEFENDERS, KPI_BYPASSED_DEFENDERS_RAW
+        ),
+        "ball_progression": _kpi_first(
+            kpis, KPI_BYPASSED_OPPONENTS, KPI_BYPASSED_OPPONENTS_RAW
+        ),
         "xg_for": xg_for,
         "xg_against": xg_against,
         "xg_diff": round(xg_for - xg_against, 3),

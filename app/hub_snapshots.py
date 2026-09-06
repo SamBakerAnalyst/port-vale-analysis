@@ -431,26 +431,33 @@ def refresh_analysis() -> dict[str, Any]:
     return payload
 
 
-def warm_blocks_analysis() -> dict[str, Any]:
+def warm_blocks_analysis(*, force_refresh: bool = False) -> dict[str, Any]:
     """Assemble the Blocks payload before a coach opens the page.
 
-    Its match-KPI cache expires after six hours, so the first person in after
-    that rebuilt it themselves and watched "Loading…" for about a minute — which
-    is exactly what happened at 14:28 on 4 Sep, three minutes after a deploy.
-    Unforced: if the disk cache is still inside its TTL this is nearly free.
+    Unforced (boot): reuse the disk/memory payload when it already has KPIs —
+    nearly free after a deploy.
+
+    Forced (Refresh data / daily analysis job): rebuild season fixtures from
+    Impect. Without that, a finished game can sit on the API while Blocks still
+    serves yesterday's season-matches + payload cache (Salford 5 Sep 2026).
     """
     from app.blocks_analysis import build_blocks_analysis_payload
 
     started = time.time()
     try:
-        payload = build_blocks_analysis_payload(force_refresh=False)
+        payload = build_blocks_analysis_payload(force_refresh=force_refresh)
         blocks = len(payload.get("blocks") or [])
+        played = int(payload.get("playedCount") or 0)
         # Logged on success as well as failure: a warm that silently stops
         # working looks exactly like one that was never wired up.
         logger.info(
-            "Blocks Analysis warm: %d blocks in %.1fs", blocks, time.time() - started
+            "Blocks Analysis warm: %d blocks, %d played in %.1fs (force=%s)",
+            blocks,
+            played,
+            time.time() - started,
+            force_refresh,
         )
-        return {"ok": True, "blocks": blocks}
+        return {"ok": True, "blocks": blocks, "played": played, "force": force_refresh}
     except Exception as exc:  # noqa: BLE001 - never let a warm take the app down
         logger.exception("Blocks Analysis warm failed")
         return {"ok": False, "error": str(exc)}
@@ -570,9 +577,10 @@ def refresh_snapshots(scope: str = "all") -> dict[str, Any]:
         if scope_key in {"all", "scouting"}:
             result["scouting"] = refresh_scouting()
         if scope_key in {"all", "analysis"}:
-            # The match-KPI cache lapses every six hours, so the daily job takes
-            # that hit instead of the first coach through the door.
-            result["blocks_analysis"] = warm_blocks_analysis()
+            # Force so new full-time scores (and KPI rows for those matches) land
+            # when a coach hits Refresh or the daily analysis job runs. Boot warm
+            # stays unforced so deploys stay quick.
+            result["blocks_analysis"] = warm_blocks_analysis(force_refresh=True)
         if scope_key == "all":
             from app.home_dashboard import build_port_vale_fixtures
 
