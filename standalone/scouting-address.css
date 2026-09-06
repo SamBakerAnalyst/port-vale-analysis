@@ -14,6 +14,14 @@
   margin-bottom: .85rem;
 }
 
+.sa-controls__row--tabs {
+  align-items: flex-end;
+}
+
+.sa-region-tabs {
+  margin-bottom: 0;
+}
+
 .sa-controls__row {
   display: flex;
   flex-wrap: wrap;

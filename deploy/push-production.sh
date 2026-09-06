@@ -30,6 +30,7 @@ echo "Syncing code → ${TARGET}:${REMOTE}"
   "$ROOT/static/scouting-address.js" \
   "$ROOT/static/scouting-address.css" \
   "$ROOT/static/stadiums.json" \
+  "$ROOT/static/stadiums-de.json" \
   "$TARGET:$REMOTE/static/"
 
 "${RSYNC[@]}" -av \
@@ -39,6 +40,7 @@ echo "Syncing code → ${TARGET}:${REMOTE}"
   "$ROOT/standalone/scouting-address.js" \
   "$ROOT/standalone/scouting-address.css" \
   "$ROOT/standalone/stadiums.json" \
+  "$ROOT/standalone/stadiums-de.json" \
   "$ROOT/standalone/apps.js" \
   "$TARGET:$REMOTE/standalone/"
 

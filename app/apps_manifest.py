@@ -434,7 +434,7 @@ APPS: list[dict[str, Any]] = [
         "title": "Scouting Address Tool",
         "description": (
             "UK stadium map for EFL, National League, NL North/South, Scottish "
-            "Prem/Champ and more."
+            "Prem/Champ and more, plus a Germany tab for Bundesliga / 2. Bundesliga."
         ),
         "href": "/scouting-address",
         "icon": "🗺️",

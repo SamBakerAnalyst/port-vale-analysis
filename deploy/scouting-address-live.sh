@@ -26,6 +26,7 @@ echo "Syncing scouting files → ${TARGET}:${REMOTE}"
   "$ROOT/standalone/scouting-address.js" \
   "$ROOT/standalone/scouting-address.css" \
   "$ROOT/standalone/stadiums.json" \
+  "$ROOT/standalone/stadiums-de.json" \
   "$TARGET:$REMOTE/standalone/"
 
 echo "Rebuilding hub container (standalone files are copied at build time)…"

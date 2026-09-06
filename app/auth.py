@@ -44,7 +44,9 @@ PUBLIC_PATHS = frozenset(
 PUBLIC_PREFIXES = (
     "/standalone/port-vale-badge",
     "/standalone/stadiums.json",
+    "/standalone/stadiums-de.json",
     "/static/stadiums.json",
+    "/static/stadiums-de.json",
     "/api/player-photo",
     "/api/availability/photo",
     # Signed per-coach Goal Involvement scoring links. The token itself carries

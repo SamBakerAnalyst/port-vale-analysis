@@ -34,6 +34,11 @@ if not _default_stadiums.exists():
     _default_stadiums = STATIC_DIR / "stadiums.json"
 STADIUMS_PATH = Path(os.environ.get("STADIUMS_PATH", _default_stadiums))
 
+_default_stadiums_de = STANDALONE_DIR / "stadiums-de.json"
+if not _default_stadiums_de.exists():
+    _default_stadiums_de = STATIC_DIR / "stadiums-de.json"
+STADIUMS_DE_PATH = Path(os.environ.get("STADIUMS_DE_PATH", _default_stadiums_de))
+
 # Per-tool disk caches (shared across team when DATA_ROOT is on a volume)
 CACHE_ROOT = Path(os.environ.get("CACHE_ROOT", DATA_ROOT / "cache"))
 

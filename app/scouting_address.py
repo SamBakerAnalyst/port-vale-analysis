@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from app.scouting import SCOUTING_DIR
 
-from app.paths import STADIUMS_PATH
+from app.paths import STADIUMS_DE_PATH, STADIUMS_PATH
 
 LEAGUE_META: dict[str, dict[str, str]] = {
     "Championship": {"color": "#ef4444", "label": "Championship"},
@@ -24,6 +24,11 @@ LEAGUE_META: dict[str, dict[str, str]] = {
     "National League South": {"color": "#ec4899", "label": "NL South"},
     "Scottish Prem": {"color": "#a78bfa", "label": "Scottish Prem"},
     "Scottish Champ": {"color": "#6366f1", "label": "Scottish Champ"},
+}
+
+LEAGUE_META_DE: dict[str, dict[str, str]] = {
+    "Bundesliga": {"color": "#e11d48", "label": "Bundesliga"},
+    "2. Bundesliga": {"color": "#94a3b8", "label": "2. Bundesliga"},
 }
 
 LEAGUE_TO_FIXTURE: dict[str, str] = {
@@ -37,11 +42,14 @@ LEAGUE_TO_FIXTURE: dict[str, str] = {
 OSRM_TABLE_URL = "https://router.project-osrm.org/table/v1/driving"
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 POSTCODES_IO_URL = "https://api.postcodes.io/postcodes"
+ZIPPOPOTAM_DE_URL = "https://api.zippopotam.us/de"
 USER_AGENT = "ImpectScoutingAddressTool/1.0 (Port Vale FC scouting)"
 UK_POSTCODE_RE = re.compile(
     r"^\s*[A-Z]{1,2}\d[A-Z\d]?\s+\d[A-Z]{2}\s*$",
     re.IGNORECASE,
 )
+DE_POSTCODE_RE = re.compile(r"^\s*\d{5}\s*$")
+ALLOWED_REGIONS = frozenset({"uk", "de"})
 
 _http = requests.Session()
 _http.headers.update({"User-Agent": USER_AGENT})
@@ -53,12 +61,29 @@ class ReachableRequest(BaseModel):
     max_minutes: int = Field(default=60, ge=5, le=180)
     max_miles: float = Field(default=36.0, ge=5, le=200)
     leagues: list[str] | None = None
+    region: str = Field(default="uk")
 
 
-def _load_stadiums() -> list[dict[str, Any]]:
-    if not STADIUMS_PATH.exists():
+def _normalize_region(region: str | None) -> str:
+    value = (region or "uk").strip().lower()
+    if value not in ALLOWED_REGIONS:
+        raise HTTPException(status_code=400, detail="Region must be uk or de.")
+    return value
+
+
+def _stadiums_path(region: str) -> Path:
+    return STADIUMS_DE_PATH if region == "de" else STADIUMS_PATH
+
+
+def _league_meta(region: str) -> dict[str, dict[str, str]]:
+    return LEAGUE_META_DE if region == "de" else LEAGUE_META
+
+
+def _load_stadiums(region: str = "uk") -> list[dict[str, Any]]:
+    path = _stadiums_path(region)
+    if not path.exists():
         raise HTTPException(status_code=500, detail="Stadium database not found.")
-    with STADIUMS_PATH.open(encoding="utf-8") as handle:
+    with path.open(encoding="utf-8") as handle:
         data = json.load(handle)
     return [row for row in data if row.get("lat") is not None and row.get("lng") is not None]
 
@@ -97,14 +122,40 @@ def _geocode_uk_postcode(postcode: str) -> dict[str, Any]:
     }
 
 
-def _geocode_nominatim(query: str) -> dict[str, Any]:
+def _normalize_de_postcode(query: str) -> str | None:
+    compact = re.sub(r"\s+", "", query.strip())
+    return compact if DE_POSTCODE_RE.match(compact) else None
+
+
+def _geocode_de_postcode(postcode: str) -> dict[str, Any]:
+    response = _http.get(f"{ZIPPOPOTAM_DE_URL}/{requests.utils.quote(postcode)}", timeout=15)
+    if response.status_code == 404:
+        raise HTTPException(status_code=404, detail=f"Postcode not found: {postcode}")
+    response.raise_for_status()
+    payload = response.json()
+    places = payload.get("places") or []
+    if not places:
+        raise HTTPException(status_code=404, detail=f"Postcode not found: {postcode}")
+    row = places[0]
+    label = ", ".join(
+        part for part in (row.get("place name"), payload.get("post code") or postcode) if part
+    )
+    return {
+        "lat": float(row["latitude"]),
+        "lng": float(row["longitude"]),
+        "label": label or postcode,
+        "source": "zippopotam",
+    }
+
+
+def _geocode_nominatim(query: str, *, countrycodes: str = "gb") -> dict[str, Any]:
     results = _http_get_json(
         NOMINATIM_URL,
         params={
             "q": query,
             "format": "json",
             "limit": 1,
-            "countrycodes": "gb",
+            "countrycodes": countrycodes,
         },
         timeout=20.0,
     )
@@ -142,10 +193,29 @@ def _estimate_drive(distance_km: float) -> tuple[int, float]:
     return minutes, round(miles, 1)
 
 
-def _geocode_address(query: str) -> dict[str, Any]:
+def _geocode_address(query: str, region: str = "uk") -> dict[str, Any]:
     cleaned = query.strip()
     if not cleaned:
         raise HTTPException(status_code=400, detail="Address is required.")
+
+    if region == "de":
+        postcode = _normalize_de_postcode(cleaned)
+        if postcode:
+            try:
+                return _geocode_de_postcode(postcode)
+            except HTTPException as exc:
+                if exc.status_code != 404:
+                    raise
+            except requests.RequestException:
+                pass
+        lookup = cleaned if "," in cleaned else f"{cleaned}, Germany"
+        try:
+            return _geocode_nominatim(lookup, countrycodes="de")
+        except requests.RequestException as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="Geocoding service unavailable. Check your connection and try again.",
+            ) from exc
 
     postcode = _normalize_postcode(cleaned)
     if postcode:
@@ -243,15 +313,16 @@ def _travel_times(origin_lat: float, origin_lng: float, stadiums: list[dict[str,
     return enriched
 
 
-def scouting_address_meta() -> dict[str, Any]:
-    stadiums = _load_stadiums()
+def scouting_address_meta(region: str = "uk") -> dict[str, Any]:
+    stadiums = _load_stadiums(region)
     by_league: dict[str, int] = {}
     for row in stadiums:
         by_league[row["league"]] = by_league.get(row["league"], 0) + 1
     return {
+        "region": region,
         "leagues": [
             {"id": league_id, **meta, "count": by_league.get(league_id, 0)}
-            for league_id, meta in LEAGUE_META.items()
+            for league_id, meta in _league_meta(region).items()
         ],
         "stadium_count": len(stadiums),
         "default_max_minutes": 60,
@@ -273,26 +344,33 @@ def register_scouting_address_routes(app: FastAPI) -> None:
         return HTMLResponse(html_path.read_text(encoding="utf-8"))
 
     @app.get("/api/scouting-address/meta")
-    def scouting_address_meta_route() -> dict[str, Any]:
-        return scouting_address_meta()
+    def scouting_address_meta_route(
+        region: str = Query(default="uk"),
+    ) -> dict[str, Any]:
+        return scouting_address_meta(_normalize_region(region))
 
     @app.get("/api/scouting-address/stadiums")
     def scouting_address_stadiums_route(
         leagues: str | None = Query(default=None, description="Comma-separated league ids"),
+        region: str = Query(default="uk"),
     ) -> dict[str, Any]:
-        stadiums = _load_stadiums()
+        stadiums = _load_stadiums(_normalize_region(region))
         if leagues:
             allowed = {part.strip() for part in leagues.split(",") if part.strip()}
             stadiums = [row for row in stadiums if row["league"] in allowed]
         return {"stadiums": stadiums}
 
     @app.get("/api/scouting-address/geocode")
-    def scouting_address_geocode_route(q: str = Query(min_length=3)) -> dict[str, Any]:
-        return _geocode_address(q.strip())
+    def scouting_address_geocode_route(
+        q: str = Query(min_length=3),
+        region: str = Query(default="uk"),
+    ) -> dict[str, Any]:
+        return _geocode_address(q.strip(), _normalize_region(region))
 
     @app.post("/api/scouting-address/reachable")
     def scouting_address_reachable_route(body: ReachableRequest) -> dict[str, Any]:
-        stadiums = _load_stadiums()
+        region = _normalize_region(body.region)
+        stadiums = _load_stadiums(region)
         if body.leagues:
             allowed = set(body.leagues)
             stadiums = [row for row in stadiums if row["league"] in allowed]

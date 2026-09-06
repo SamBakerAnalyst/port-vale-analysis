@@ -7,7 +7,7 @@
   <title>Scouting Address Tool</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
   <link rel="stylesheet" href="/static/fixture-planner.css?v=13" />
   <link rel="stylesheet" href="/static/scout-ops.css?v=3" />
@@ -26,6 +26,14 @@
   gap: .85rem;
   padding: .85rem 1rem;
   margin-bottom: .85rem;
+}
+
+.sa-controls__row--tabs {
+  align-items: flex-end;
+}
+
+.sa-region-tabs {
+  margin-bottom: 0;
 }
 
 .sa-controls__row {
@@ -401,7 +409,7 @@
       <div class="so-toolbar__left">
         <p class="so-toolbar__eyebrow">Scouts · <a href="/?section=scouts">← Scouts</a> · <a href="/">All apps</a></p>
         <h1 class="so-toolbar__title">Scouting Address Tool</h1>
-        <p class="so-toolbar__subtitle">UK stadium map — enter a scout's address to see which grounds are reachable within an hour's drive</p>
+        <p class="so-toolbar__subtitle" id="regionSubtitle">UK stadium map — enter a scout's address to see which grounds are reachable within an hour's drive</p>
       </div>
       <div class="so-toolbar__right">
         <nav class="so-toolbar__nav" aria-label="Related pages">
@@ -413,6 +421,15 @@
     </header>
 
     <section class="sa-controls card">
+      <div class="sa-controls__row sa-controls__row--tabs">
+        <div class="sa-controls__group">
+          <span class="fp-controls__label">Map</span>
+          <div class="fp-comp-scope sa-region-tabs" id="regionTabs" role="tablist" aria-label="Country map">
+            <button type="button" class="fp-comp-scope__btn fp-comp-scope__btn--active" data-region="uk" role="tab" aria-selected="true">UK</button>
+            <button type="button" class="fp-comp-scope__btn" data-region="de" role="tab" aria-selected="false">Germany</button>
+          </div>
+        </div>
+      </div>
       <div class="sa-controls__row">
         <div class="sa-controls__group sa-controls__group--grow">
           <span class="fp-controls__label">Scout address</span>
@@ -484,15 +501,17 @@
     </section>
 
     <footer id="statusBar" class="fp-footer">Loading stadium data…</footer>
-    <p id="buildStamp" style="margin:.35rem 0 0;font-size:.75rem;color:#8b9bb0;text-align:center">Build: webpage-v16</p>
+    <p id="buildStamp" style="margin:.35rem 0 0;font-size:.75rem;color:#8b9bb0;text-align:center">Build: webpage-v17</p>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script>
 const DEFAULT_SEASON = "26/27";
 const ALLOWED_SEASONS = ["26/27", "25/26"];
+const DEFAULT_REGION = "uk";
 const STADIUMS_URL = "/standalone/stadiums.json";
 const UK_POSTCODE_RE = /^\s*[A-Z]{1,2}\d[A-Z\d]?\s+\d[A-Z]{2}\s*$/i;
+const DE_POSTCODE_RE = /^\s*\d{5}\s*$/;
 
 const LEAGUE_META = {
   Championship: { color: "#ef4444", label: "Championship" },
@@ -503,6 +522,44 @@ const LEAGUE_META = {
   "National League South": { color: "#ec4899", label: "NL South" },
   "Scottish Prem": { color: "#a78bfa", label: "Scottish Prem" },
   "Scottish Champ": { color: "#6366f1", label: "Scottish Champ" },
+};
+
+const LEAGUE_META_DE = {
+  Bundesliga: { color: "#e11d48", label: "Bundesliga" },
+  "2. Bundesliga": { color: "#94a3b8", label: "2. Bundesliga" },
+};
+
+const REGIONS = {
+  uk: {
+    id: "uk",
+    label: "UK",
+    subtitle: "UK stadium map — enter a scout's address to see which grounds are reachable within an hour's drive",
+    placeholder: "Postcode or address — e.g. NN4 5BF, ST4 4EG, 19 Hamil Road Stoke",
+    mapAria: "UK stadium map",
+    center: [54.5, -3.5],
+    zoom: 6,
+    countryHint: "UK",
+    countryCodes: ["GB", "United Kingdom"],
+    stadiumUrls: [STADIUMS_URL, "/static/stadiums.json", "/api/scouting-address/stadiums"],
+    leagues: LEAGUE_META,
+  },
+  de: {
+    id: "de",
+    label: "Germany",
+    subtitle: "Germany stadium map — enter a German address to see which grounds are reachable within an hour's drive",
+    placeholder: "Postcode or address — e.g. 10115, 80331 München, Hauptstraße 12 Köln",
+    mapAria: "Germany stadium map",
+    center: [51.16, 10.45],
+    zoom: 6,
+    countryHint: "Germany",
+    countryCodes: ["DE", "Germany", "Deutschland"],
+    stadiumUrls: [
+      "/standalone/stadiums-de.json",
+      "/static/stadiums-de.json",
+      "/api/scouting-address/stadiums?region=de",
+    ],
+    leagues: LEAGUE_META_DE,
+  },
 };
 
 const LEAGUE_TO_FIXTURE = {
@@ -527,6 +584,7 @@ const STRETCH_RATIO = 1.15;
 const roadDriveCache = new Map();
 
 const state = {
+  region: DEFAULT_REGION,
   meta: null,
   allStadiums: [],
   stadiums: [],
@@ -561,15 +619,34 @@ function bindElements() {
     fixturesList: document.getElementById("fixturesList"),
     statusBanner: document.getElementById("statusBanner"),
     statusBar: document.getElementById("statusBar"),
+    regionTabs: document.getElementById("regionTabs"),
+    subtitle: document.getElementById("regionSubtitle"),
+    mapEl: document.getElementById("map"),
   };
 }
 
+function currentRegion() {
+  return REGIONS[state.region] || REGIONS.uk;
+}
+
+function regionLeagueMeta() {
+  return currentRegion().leagues;
+}
+
 function leagueColor(leagueId) {
-  return LEAGUE_META[leagueId]?.color || state.meta?.leagues?.find((row) => row.id === leagueId)?.color || "#34d399";
+  return (
+    regionLeagueMeta()[leagueId]?.color ||
+    state.meta?.leagues?.find((row) => row.id === leagueId)?.color ||
+    "#34d399"
+  );
 }
 
 function leagueLabel(leagueId) {
-  return LEAGUE_META[leagueId]?.label || state.meta?.leagues?.find((row) => row.id === leagueId)?.label || leagueId;
+  return (
+    regionLeagueMeta()[leagueId]?.label ||
+    state.meta?.leagues?.find((row) => row.id === leagueId)?.label ||
+    leagueId
+  );
 }
 
 async function fetchJson(url, options) {
@@ -602,10 +679,11 @@ function buildMeta(stadiums) {
   stadiums.forEach((row) => {
     byLeague[row.league] = (byLeague[row.league] || 0) + 1;
   });
+  const leagueMeta = regionLeagueMeta();
   return {
-    leagues: Object.keys(LEAGUE_META).map((id) => ({
+    leagues: Object.keys(leagueMeta).map((id) => ({
       id,
-      ...LEAGUE_META[id],
+      ...leagueMeta[id],
       count: byLeague[id] || 0,
     })),
     stadium_count: stadiums.length,
@@ -620,6 +698,11 @@ function normalizePostcode(query) {
   if (compact.length < 5 || compact.length > 8) return null;
   const candidate = `${compact.slice(0, -3)} ${compact.slice(-3)}`;
   return UK_POSTCODE_RE.test(candidate) ? candidate : null;
+}
+
+function normalizeDePostcode(query) {
+  const compact = query.trim().replace(/\s+/g, "");
+  return DE_POSTCODE_RE.test(compact) ? compact : null;
 }
 
 async function geocodePostcode(postcode) {
@@ -638,17 +721,36 @@ async function geocodePostcode(postcode) {
   };
 }
 
+async function geocodeDePostcode(postcode) {
+  const response = await fetch(`https://api.zippopotam.us/de/${encodeURIComponent(postcode)}`);
+  const payload = await response.json().catch(() => ({}));
+  const row = payload.places?.[0];
+  if (!response.ok || !row) {
+    throw new Error(`Postcode not found: ${postcode}`);
+  }
+  const label = [row["place name"], payload["post code"] || postcode].filter(Boolean).join(", ");
+  return {
+    lat: Number(row.latitude),
+    lng: Number(row.longitude),
+    label: label || postcode,
+    source: "zippopotam",
+  };
+}
+
 async function geocodeAddress(query) {
+  const region = currentRegion();
   const params = new URLSearchParams({
     q: query,
-    limit: "1",
-    lang: "en",
+    limit: "5",
+    lang: region.id === "de" ? "de" : "en",
   });
   const response = await fetch(`https://photon.komoot.io/api/?${params}`);
   const payload = await response.json().catch(() => ({}));
+  const allowed = new Set(region.countryCodes.map((code) => String(code).toUpperCase()));
   const row = (payload.features || []).find((feature) => {
     const country = feature.properties?.countrycode || feature.properties?.country;
-    return !country || country === "GB" || country === "United Kingdom";
+    if (!country) return true;
+    return allowed.has(String(country).toUpperCase());
   });
   if (!row?.geometry?.coordinates) {
     throw new Error(`Address not found: ${query}`);
@@ -662,6 +764,18 @@ async function geocodeAddress(query) {
 async function geocodeQuery(query) {
   const cleaned = query.trim();
   if (!cleaned) throw new Error("Enter a scout address or postcode.");
+
+  if (state.region === "de") {
+    const dePostcode = normalizeDePostcode(cleaned);
+    if (dePostcode) {
+      try {
+        return await geocodeDePostcode(dePostcode);
+      } catch (error) {
+        if (!DE_POSTCODE_RE.test(dePostcode)) throw error;
+      }
+    }
+    return geocodeAddress(cleaned.includes(",") ? cleaned : `${cleaned}, Germany`);
+  }
 
   const postcode = normalizePostcode(cleaned);
   if (postcode) {
@@ -1119,11 +1233,12 @@ function clearMarkers() {
 }
 
 function initMap() {
+  const region = currentRegion();
   state.map = L.map("map", {
     zoomControl: true,
     scrollWheelZoom: true,
     preferCanvas: true,
-  }).setView([54.5, -3.5], 6);
+  }).setView(region.center, region.zoom);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     maxZoom: 18,
@@ -1248,8 +1363,19 @@ function renderSummary() {
   `;
 }
 
+function foldGermanChars(value) {
+  return String(value || "")
+    .replace(/ä/g, "ae")
+    .replace(/ö/g, "oe")
+    .replace(/ü/g, "ue")
+    .replace(/ß/g, "ss")
+    .replace(/Ä/g, "ae")
+    .replace(/Ö/g, "oe")
+    .replace(/Ü/g, "ue");
+}
+
 function normalizeClub(name) {
-  return String(name || "")
+  return foldGermanChars(name)
     .toLowerCase()
     .replace(/fc|afc|town|city|united|athletic|rovers|county|borough|dons|&/g, " ")
     .replace(/[^a-z0-9]+/g, "");
@@ -1264,6 +1390,42 @@ const CLUB_ALIAS_GROUPS = [
   ["Harrogate Town", "Harrogate"],
   ["Sutton United", "Sutton"],
   ["Gateshead", "Gateshead FC"],
+  ["Bayern Munich", "Bayern München", "FC Bayern", "FC Bayern Munich", "FC Bayern München", "Bayern"],
+  ["1. FC Köln", "FC Cologne", "Cologne", "1. FC Cologne", "Köln"],
+  ["Union Berlin", "1. FC Union Berlin"],
+  ["Mainz 05", "1. FSV Mainz 05", "Mainz"],
+  ["Schalke 04", "FC Schalke 04", "Schalke"],
+  ["SV Elversberg", "Elversberg"],
+  ["SC Paderborn", "SC Paderborn 07", "Paderborn"],
+  ["Hamburger SV", "Hamburg", "HSV"],
+  ["Werder Bremen", "SV Werder Bremen"],
+  ["Bayer Leverkusen", "Bayer 04 Leverkusen", "Leverkusen"],
+  ["Borussia Mönchengladbach", "Borussia Monchengladbach", "Gladbach", "Mönchengladbach"],
+  ["TSG Hoffenheim", "1899 Hoffenheim", "Hoffenheim"],
+  ["RB Leipzig", "RasenBallsport Leipzig", "Leipzig"],
+  ["VfB Stuttgart", "Stuttgart"],
+  ["FC Augsburg", "Augsburg"],
+  ["SC Freiburg", "Freiburg"],
+  ["Eintracht Frankfurt", "Frankfurt"],
+  ["Hertha BSC", "Hertha Berlin", "Hertha"],
+  ["1. FC Nürnberg", "1. FC Nuremberg", "Nürnberg", "Nuremberg"],
+  ["Karlsruher SC", "Karlsruhe"],
+  ["SV Darmstadt 98", "Darmstadt 98", "Darmstadt"],
+  ["1. FC Kaiserslautern", "Kaiserslautern"],
+  ["SpVgg Greuther Fürth", "Greuther Fürth", "Greuther Furth"],
+  ["1. FC Heidenheim", "1. FC Heidenheim 1846", "Heidenheim"],
+  ["FC St. Pauli", "St. Pauli", "St Pauli"],
+  ["VfL Wolfsburg", "Wolfsburg"],
+  ["Holstein Kiel", "Kiel"],
+  ["VfL Bochum", "Bochum"],
+  ["Hannover 96", "Hannover"],
+  ["Eintracht Braunschweig", "Braunschweig"],
+  ["Arminia Bielefeld", "Bielefeld"],
+  ["1. FC Magdeburg", "Magdeburg"],
+  ["Dynamo Dresden", "SG Dynamo Dresden", "Dresden"],
+  ["VfL Osnabrück", "Osnabrück", "Osnabruck"],
+  ["Energie Cottbus", "FC Energie Cottbus", "Cottbus"],
+  ["Borussia Dortmund", "Dortmund", "BVB"],
 ];
 
 function clubAliasKeys(name) {
@@ -1354,7 +1516,9 @@ async function loadFixturesForReachable() {
     setStatus("Routing day-plan legs over roads…", "info");
     const { maxMinutes, maxMiles } = filterLimits();
 
+    const regionLeagues = new Set(Object.keys(regionLeagueMeta()));
     state.allFixturesForPlanning = fixtures
+      .filter((fixture) => regionLeagues.has(fixture.league))
       .filter((fixture) => {
         if (!fixture.date) return false;
         const when = new Date(fixture.date).getTime();
@@ -1402,11 +1566,7 @@ function applyStadiumFilter() {
 }
 
 async function loadStadiums() {
-  const urls = [
-    STADIUMS_URL,
-    "/static/stadiums.json",
-    "/api/scouting-address/stadiums",
-  ];
+  const urls = currentRegion().stadiumUrls;
   let stadiums = null;
   let lastError = null;
 
@@ -1488,11 +1648,73 @@ async function runSearch() {
   }
 }
 
+function applyRegionChrome() {
+  const region = currentRegion();
+  if (els.subtitle) els.subtitle.textContent = region.subtitle;
+  if (els.addressInput) els.addressInput.placeholder = region.placeholder;
+  if (els.mapEl) els.mapEl.setAttribute("aria-label", region.mapAria);
+}
+
+function renderRegionTabs() {
+  if (!els.regionTabs) return;
+  els.regionTabs.querySelectorAll("[data-region]").forEach((button) => {
+    const active = button.dataset.region === state.region;
+    button.classList.toggle("fp-comp-scope__btn--active", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+  });
+}
+
+function resetSearchState() {
+  state.origin = null;
+  state.reachable = [];
+  state.reachableClubs = new Set();
+  state.fixtures = [];
+  state.allFixturesForPlanning = [];
+  state.dayPlans = [];
+  if (els.addressInput) els.addressInput.value = "";
+  renderOriginMarker();
+  renderSummary();
+  renderFixtures();
+  renderDayPlans();
+}
+
+async function setRegion(regionId) {
+  if (!REGIONS[regionId] || state.region === regionId) return;
+  state.region = regionId;
+  state.leagues = [];
+  resetSearchState();
+  applyRegionChrome();
+  renderRegionTabs();
+  setStatus(`Loading ${currentRegion().label} stadiums…`, "info");
+  try {
+    await loadStadiums();
+    renderLeagueToggle();
+    renderLegend();
+    if (state.map) {
+      state.map.setView(currentRegion().center, currentRegion().zoom);
+      requestAnimationFrame(() => {
+        state.map.invalidateSize();
+        fitMapToView();
+      });
+    }
+    setStatus(`${state.meta.stadium_count} stadiums loaded across ${state.meta.leagues.length} leagues`);
+  } catch (error) {
+    setStatus(error.message || "Failed to load stadiums.", "error");
+  }
+}
+
 function bindEvents() {
   els.searchBtn.addEventListener("click", runSearch);
   els.addressInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") runSearch();
   });
+  if (els.regionTabs) {
+    els.regionTabs.addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-region]");
+      if (!button || state.loading) return;
+      await setRegion(button.dataset.region);
+    });
+  }
 
   els.leagueToggle.addEventListener("click", async (event) => {
     const button = event.target.closest("[data-league]");
@@ -1536,6 +1758,8 @@ function bindEvents() {
 
 async function init() {
   bindElements();
+  applyRegionChrome();
+  renderRegionTabs();
   initMap();
   bindEvents();
   try {

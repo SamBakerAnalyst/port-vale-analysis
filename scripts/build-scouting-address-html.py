@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CSS = (ROOT / "standalone/scouting-address.css").read_text(encoding="utf-8")
 JS = (ROOT / "standalone/scouting-address.js").read_text(encoding="utf-8")
-BUILD = "webpage-v16"
+BUILD = "webpage-v17"
 
 HTML = f"""<!DOCTYPE html>
 <html lang="en">
@@ -33,7 +33,7 @@ HTML = f"""<!DOCTYPE html>
       <div class="so-toolbar__left">
         <p class="so-toolbar__eyebrow">Scouts · <a href="/?section=scouts">← Scouts</a> · <a href="/">All apps</a></p>
         <h1 class="so-toolbar__title">Scouting Address Tool</h1>
-        <p class="so-toolbar__subtitle">UK stadium map — enter a scout's address to see which grounds are reachable within an hour's drive</p>
+        <p class="so-toolbar__subtitle" id="regionSubtitle">UK stadium map — enter a scout's address to see which grounds are reachable within an hour's drive</p>
       </div>
       <div class="so-toolbar__right">
         <nav class="so-toolbar__nav" aria-label="Related pages">
@@ -45,6 +45,15 @@ HTML = f"""<!DOCTYPE html>
     </header>
 
     <section class="sa-controls card">
+      <div class="sa-controls__row sa-controls__row--tabs">
+        <div class="sa-controls__group">
+          <span class="fp-controls__label">Map</span>
+          <div class="fp-comp-scope sa-region-tabs" id="regionTabs" role="tablist" aria-label="Country map">
+            <button type="button" class="fp-comp-scope__btn fp-comp-scope__btn--active" data-region="uk" role="tab" aria-selected="true">UK</button>
+            <button type="button" class="fp-comp-scope__btn" data-region="de" role="tab" aria-selected="false">Germany</button>
+          </div>
+        </div>
+      </div>
       <div class="sa-controls__row">
         <div class="sa-controls__group sa-controls__group--grow">
           <span class="fp-controls__label">Scout address</span>
