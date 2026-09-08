@@ -13,6 +13,9 @@ import pytest
 
 from app import transfer_status as ts
 
+# Captured before the autouse fixture redirects it at a temp file.
+SHIPPED_CANDIDATES = ts.TRANSFER_REPORT_CANDIDATES
+
 REPORT = {
     "leagues": [
         {
@@ -50,7 +53,7 @@ REPORT = {
 def _report(tmp_path, monkeypatch):
     path = tmp_path / "efl-transfer-report-2026.json"
     path.write_text(json.dumps(REPORT), encoding="utf-8")
-    monkeypatch.setattr(ts, "TRANSFER_REPORT_PATH", path)
+    monkeypatch.setattr(ts, "TRANSFER_REPORT_CANDIDATES", (path,))
     ts.reset_cache()
     yield path
     ts.reset_cache()
@@ -128,7 +131,7 @@ def test_annotate_leaves_untouched_players_alone():
 
 def test_a_missing_report_is_silent_not_fatal(monkeypatch, tmp_path):
     """No report should mean no flags, never a broken pool."""
-    monkeypatch.setattr(ts, "TRANSFER_REPORT_PATH", tmp_path / "gone.json")
+    monkeypatch.setattr(ts, "TRANSFER_REPORT_CANDIDATES", (tmp_path / "gone.json",))
     ts.reset_cache()
     assert ts.lookup("Gbemi Arubi", "Dundalk") is None
 
@@ -137,6 +140,35 @@ def test_a_corrupt_report_is_silent_not_fatal(_report):
     _report.write_text("{ not json", encoding="utf-8")
     ts.reset_cache()
     assert ts.lookup("Gbemi Arubi", "Dundalk") is None
+
+
+def test_we_look_where_the_report_actually_lives():
+    """The first cut of this looked only under DATA_ROOT.
+
+    On the server DATA_ROOT is the mounted volume, while the report ships inside
+    the image at HUB_ROOT/data. So Staging found no file, flagged nobody, and
+    looked identical to a window with no transfers in it. Sharing the report
+    page's candidate list means the two cannot drift apart again.
+    """
+    from app.efl_transfer_report import REPORT_CANDIDATES
+
+    assert SHIPPED_CANDIDATES == REPORT_CANDIDATES
+    assert len(REPORT_CANDIDATES) >= 2
+
+
+def test_a_real_report_is_readable_from_this_checkout(monkeypatch):
+    """Guards the wiring end to end, against the file we actually ship.
+
+    A fixture proves the matching works; only the shipped file proves we can
+    find it. On Staging the file sat at /app/data while the code looked in
+    /data, and every test still passed.
+    """
+    monkeypatch.setattr(ts, "TRANSFER_REPORT_CANDIDATES", SHIPPED_CANDIDATES)
+    ts.reset_cache()
+
+    assert ts._report_path() is not None, "no EFL transfer report in the repo"
+    assert len(ts._load_index()) > 100
+    assert ts.lookup("Gbemi Arubi", "Dundalk FC")["club"] == "Burton Albion"
 
 
 def test_who_to_scout_rows_carry_the_flag():

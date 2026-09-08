@@ -32,11 +32,15 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
-from app.paths import DATA_ROOT
+from app.efl_transfer_report import REPORT_CANDIDATES
 
 logger = logging.getLogger(__name__)
 
-TRANSFER_REPORT_PATH = DATA_ROOT / "efl-transfer-report-2026.json"
+# Deliberately the same candidate list the report page uses, not a path of our
+# own. On the server DATA_ROOT is the mounted volume while the report ships
+# inside the image at HUB_ROOT/data, so picking one of the two silently found
+# nothing on Staging and every player came back unflagged.
+TRANSFER_REPORT_CANDIDATES = REPORT_CANDIDATES
 
 # Confirmed by name and selling club.
 GONE = "gone"
@@ -114,6 +118,13 @@ def _build_index(report: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     return index
 
 
+def _report_path() -> Path | None:
+    for path in TRANSFER_REPORT_CANDIDATES:
+        if path.is_file():
+            return path
+    return None
+
+
 def _load_index() -> dict[str, list[dict[str, Any]]]:
     """The signings, reread only when the report file changes on disk.
 
@@ -122,8 +133,18 @@ def _load_index() -> dict[str, list[dict[str, Any]]]:
     """
     global _index, _index_mtime
 
+    path = _report_path()
+    if path is None:
+        # Warned, not silent. An unflagged pool looks exactly like a pool with
+        # no transfers in it, which is how this went unnoticed on Staging.
+        logger.warning(
+            "No transfer report found in %s — no players will be flagged as moved",
+            ", ".join(str(p) for p in TRANSFER_REPORT_CANDIDATES),
+        )
+        return {}
+
     try:
-        mtime = TRANSFER_REPORT_PATH.stat().st_mtime
+        mtime = path.stat().st_mtime
     except OSError:
         return {}
 
@@ -131,14 +152,14 @@ def _load_index() -> dict[str, list[dict[str, Any]]]:
         if _index is not None and _index_mtime == mtime:
             return _index
         try:
-            report = json.loads(TRANSFER_REPORT_PATH.read_text(encoding="utf-8"))
+            report = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             logger.exception("Could not read the transfer report — no move flags")
             _index, _index_mtime = {}, mtime
             return _index
         _index = _build_index(report)
         _index_mtime = mtime
-        logger.info("Transfer move index: %d players", len(_index))
+        logger.info("Transfer move index: %d players from %s", len(_index), path)
         return _index
 
 
