@@ -893,6 +893,7 @@ def register_player_pipelines_routes(app: FastAPI) -> None:
             "stats_pending": 0,
             "stats_missing": missing,
             "stats_moved": moved,
+            "transfer_check": transfer_status.report_meta(),
             "snapshot": load_meta(),
             # Hide promote controls while Pipelines is held back, so nobody
             # moves a player onto a board they cannot open.

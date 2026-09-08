@@ -116,6 +116,7 @@
 
   const els = {
     seasonLabel: document.getElementById("seasonLabel"),
+    transferNote: document.getElementById("transferNote"),
     pageNote: document.getElementById("pageNote"),
     statusBanner: document.getElementById("statusBanner"),
     leagueGrid: document.getElementById("leagueGrid"),
@@ -2148,7 +2149,19 @@
       : `${label} · Top ${limit} per ${groupWord} (fills below 85% cut-off if needed)`;
   }
 
-  function schedulePoll() {
+    // The report behind the red flags is built by hand from saved pages, so it
+    // cannot notice a new window opening. Printing its date is what stops a
+    // clean row being read as "still available" in January.
+    function updateTransferNote(check) {
+      const el = els.transferNote;
+      if (!el) return;
+      const detail = check?.detail || "";
+      el.hidden = !detail;
+      el.textContent = detail;
+      el.classList.toggle("is-stale", Boolean(check?.stale));
+    }
+
+    function schedulePoll() {
     if (state.pollTimer) clearTimeout(state.pollTimer);
     state.pollTimer = setTimeout(() => loadData({ silent: true }), 4000);
   }
@@ -2198,9 +2211,10 @@
           data.month ?? state.month ?? data.month_options[0].month,
         );
       }
-      fillPositions(state.positions);
-      fillLeagues(state.leagues);
-      fillClubOptions();
+        updateTransferNote(data.transfer_check);
+        fillPositions(state.positions);
+        fillLeagues(state.leagues);
+        fillClubOptions();
       syncFilterVisibility();
       syncTeamSheetUi();
       syncProfilesForPosition();

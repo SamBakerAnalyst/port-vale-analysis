@@ -86,6 +86,20 @@ a:hover { text-decoration: underline; }
   color: var(--text-muted);
 }
 
+/* What the red and amber club flags are based on, and how current it is. */
+.page-head__transfer {
+  margin: 0.3rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* A window has opened since the report was last built, so the flags are behind
+   and a clean row proves less than it looks. */
+.page-head__transfer.is-stale {
+  color: #fbbf24;
+  font-weight: 650;
+}
+
 .page-head__actions {
   display: flex;
   gap: 0.45rem;

@@ -17,6 +17,9 @@ from app import transfer_status as ts
 SHIPPED_CANDIDATES = ts.TRANSFER_REPORT_CANDIDATES
 
 REPORT = {
+    "updated": "2026-09-07",
+    "window": "Summer 2026 (15 June – 1/3 September)",
+    "season": "2026/27",
     "leagues": [
         {
             "name": "League One",
@@ -168,6 +171,38 @@ def test_annotate_leaves_untouched_players_alone():
 
     moved = ts.annotate({"name": "Gbemi Arubi", "club": "Dundalk FC"})
     assert moved["transfer"]["club"] == "Burton Albion"
+
+
+def test_between_windows_the_note_says_what_is_covered():
+    from datetime import date
+
+    meta = ts.report_meta(date(2026, 9, 8))
+
+    assert meta["available"] is True
+    assert meta["stale"] is False
+    assert "League Two" in meta["detail"], "must state the coverage limit"
+
+
+def test_a_report_built_before_the_open_window_reads_as_stale():
+    """The January case. Nothing rebuilds this file on its own, so the page has
+    to say so rather than let a clean row imply availability."""
+    from datetime import date
+
+    meta = ts.report_meta(date(2027, 1, 12))
+
+    assert meta["stale"] is True
+    assert "January" in meta["detail"]
+    assert "missing" in meta["detail"]
+
+
+def test_no_report_says_nobody_will_be_flagged(monkeypatch, tmp_path):
+    monkeypatch.setattr(ts, "TRANSFER_REPORT_CANDIDATES", (tmp_path / "gone.json",))
+    ts.reset_cache()
+
+    meta = ts.report_meta()
+
+    assert meta["available"] is False
+    assert "not be flagged" in meta["detail"]
 
 
 def test_a_missing_report_is_silent_not_fatal(monkeypatch, tmp_path):

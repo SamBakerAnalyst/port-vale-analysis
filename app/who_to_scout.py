@@ -464,6 +464,9 @@ def build_who_to_scout_data(
         "positions": raw_payload.get("positions") or _standouts_positions(),
         "profiles_by_position": profiles_by_position,
         "per_league_limit": STANDOUTS_PER_LEAGUE_LIMIT,
+        # Says what the red and amber flags rest on, and how current it is. A
+        # clean row means "no move recorded", which is not "still available".
+        "transfer_check": transfer_status.report_meta(),
         "scoring": {
             **(raw_payload.get("scoring") or {}),
             "note": (

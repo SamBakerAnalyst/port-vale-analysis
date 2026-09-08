@@ -314,8 +314,12 @@
       setUpdated(data.snapshot || null);
       render(state.targets);
         // A player who has moved outranks a stale stat: one wastes a trip, the
-        // other just looks untidy.
-        if (data.stats_moved) {
+        // other just looks untidy. A transfer check that is behind outranks
+        // both, because it makes every clean row mean less than it appears to.
+        const stale = data.transfer_check?.stale ? data.transfer_check.detail : "";
+        if (stale) {
+          setStatus(stale, true);
+        } else if (data.stats_moved) {
           const n = data.stats_moved;
           setStatus(
             `${n} tracked player${n === 1 ? " has" : "s have"} signed elsewhere — shown in red.`,

@@ -29,6 +29,7 @@ import logging
 import re
 import threading
 import unicodedata
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -69,9 +70,17 @@ _NOT_A_CLUB = frozenset(
     {"", "unattached", "free agent", "free", "n/a", "na", "unknown", "?", "trial"}
 )
 
+# Transfer windows, as dates rather than a feeling. Ends are the deadline day
+# itself; a few days either way does not change what we tell a scout.
+_WINDOWS: tuple[tuple[str, tuple[int, int], tuple[int, int]], ...] = (
+    ("January", (1, 1), (2, 3)),
+    ("summer", (6, 14), (9, 2)),
+)
+
 _lock = threading.Lock()
 _index: dict[str, list[dict[str, Any]]] | None = None
 _index_mtime: float | None = None
+_meta: dict[str, Any] = {}
 
 
 def _strip_accents(value: str) -> str:
@@ -143,7 +152,7 @@ def _load_index() -> dict[str, list[dict[str, Any]]]:
     Deliberately not tied to the standouts cache: that one takes four minutes to
     rebuild, and a transfer correction should not have to wait for it.
     """
-    global _index, _index_mtime
+    global _index, _index_mtime, _meta
 
     path = _report_path()
     if path is None:
@@ -171,6 +180,12 @@ def _load_index() -> dict[str, list[dict[str, Any]]]:
             return _index
         _index = _build_index(report)
         _index_mtime = mtime
+        _meta = {
+            "updated": str(report.get("updated") or "").strip(),
+            "window": str(report.get("window") or "").strip(),
+            "season": str(report.get("season") or "").strip(),
+            "signings": len(_index),
+        }
         logger.info("Transfer move index: %d players from %s", len(_index), path)
         return _index
 
@@ -218,8 +233,68 @@ def annotate(row: dict[str, Any], *, name_key_: str = "name", club_key_: str = "
     return row
 
 
+def _open_window(today: date) -> tuple[str, date] | None:
+    """The window open on this date, and the day it opened."""
+    for label, start, end in _WINDOWS:
+        opened = date(today.year, *start)
+        if opened <= today <= date(today.year, *end):
+            return label, opened
+    return None
+
+
+def _pretty(day: date) -> str:
+    return f"{day.day} {day:%B}"
+
+
+def report_meta(today: date | None = None) -> dict[str, Any]:
+    """What the flags rest on, in words a page can print.
+
+    The report is built by hand: someone saves BBC and retained-list pages into
+    data/efl-transfer-sources and runs the build script. Nothing fetches them, so
+    the file cannot notice a new window opening on its own. Saying when it was
+    last updated is the difference between a scout reading a clean row as "no
+    move recorded" and reading it as "still available".
+    """
+    _load_index()
+    meta = dict(_meta)
+    if not meta:
+        return {
+            "available": False,
+            "detail": "No transfer check — players will not be flagged as moved.",
+        }
+
+    today = today or date.today()
+    try:
+        updated = date.fromisoformat(meta["updated"])
+    except (KeyError, ValueError):
+        return {**meta, "available": True, "stale": False, "detail": ""}
+
+    window = _open_window(today)
+    if window and updated < window[1]:
+        label, opened = window
+        return {
+            **meta,
+            "available": True,
+            "stale": True,
+            "detail": (
+                f"Transfer check last updated {_pretty(updated)}, before the {label} "
+                f"window opened on {_pretty(opened)} — moves since then are missing."
+            ),
+        }
+    return {
+        **meta,
+        "available": True,
+        "stale": False,
+        "detail": (
+            f"Transfer check current to {_pretty(updated)} "
+            f"({meta.get('signings') or 0} signings). Covers moves into League One, "
+            "League Two, the National League and the Scottish Premiership only."
+        ),
+    }
+
+
 def reset_cache() -> None:
     """Drop the cached index. For tests, and after rebuilding the report."""
-    global _index, _index_mtime
+    global _index, _index_mtime, _meta
     with _lock:
-        _index, _index_mtime = None, None
+        _index, _index_mtime, _meta = None, None, {}
