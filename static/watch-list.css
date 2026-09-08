@@ -229,6 +229,38 @@ a { color: var(--accent); }
   text-decoration: none;
 }
 .wl-table .col-player a:hover { color: var(--accent); }
+
+/* Already signed elsewhere. The club stored on the target is where he was when
+   he was added, which is not where he is now. */
+.wl-table tbody tr.is-moved td.col-player a {
+  color: #f87171;
+  text-decoration: line-through;
+  text-decoration-color: rgba(248, 113, 113, 0.5);
+}
+
+.wl-table tbody tr.is-moved td { background: rgba(248, 113, 113, 0.07); }
+
+/* Name matched a signing, selling club did not — possibly a namesake, so ask
+   rather than tell. */
+.wl-table tbody tr.is-move-check td.col-player a { color: #fbbf24; }
+
+.wl-table .club-was {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-color: rgba(148, 163, 184, 0.5);
+}
+
+.wl-table tbody tr.is-move-check .club-was { text-decoration: none; }
+
+.wl-table .club-now {
+  display: block;
+  color: #f87171;
+  font-weight: 700;
+  font-size: 0.86em;
+  line-height: 1.25;
+}
+
+.wl-table .club-now--check { color: #fbbf24; }
 .wl-table .col-num {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;

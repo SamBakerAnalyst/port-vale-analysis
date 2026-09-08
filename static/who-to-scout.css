@@ -874,6 +874,57 @@ a:hover { text-decoration: underline; }
   font-weight: 700;
 }
 
+/* Already signed elsewhere. The club on the row is the one he played for in the
+   season data, not the one he is at now — Gbemi Arubi read as a Dundalk striker
+   for weeks after joining Burton Albion. Listed after the loan and veteran
+   rules on purpose: whatever else is true of the row, he cannot be signed. */
+.scout-table tr.is-moved td.col-player,
+.scout-table tr.is-moved td.col-player a,
+.scout-table tr.is-moved.has-scout td.col-player a,
+.scout-table tr.is-moved.is-loan td.col-player a,
+.scout-table tr.is-moved.row-veteran td.col-player a {
+  color: #f87171 !important;
+  text-decoration: line-through;
+  text-decoration-color: rgba(248, 113, 113, 0.5);
+}
+
+.scout-table tr.is-moved {
+  background: rgba(248, 113, 113, 0.07);
+}
+
+/* Name matched a signing but the selling club did not, so this may be a
+   namesake. Amber asks a question rather than making the claim. */
+.scout-table tr.is-move-check td.col-player,
+.scout-table tr.is-move-check td.col-player a,
+.scout-table tr.is-move-check.has-scout td.col-player a,
+.scout-table tr.is-move-check.is-loan td.col-player a,
+.scout-table tr.is-move-check.row-veteran td.col-player a {
+  color: #fbbf24 !important;
+}
+
+.scout-table td.col-club .club-was {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-color: rgba(148, 163, 184, 0.5);
+}
+
+/* Nothing is confirmed on a check row, so the old club is not struck out. */
+.scout-table tr.is-move-check td.col-club .club-was {
+  text-decoration: none;
+}
+
+.scout-table td.col-club .club-now {
+  display: block;
+  color: #f87171;
+  font-weight: 700;
+  font-size: 0.86em;
+  line-height: 1.25;
+}
+
+.scout-table td.col-club .club-now--check {
+  color: #fbbf24;
+}
+
 .export-root {
   position: fixed;
   left: -14000px;

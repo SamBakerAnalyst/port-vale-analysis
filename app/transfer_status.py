@@ -1,0 +1,185 @@
+"""Has this player already moved club?
+
+Who To Scout shows the club a player turned out for in the season data, which is
+not the same as the club he is at today. Gbemi Arubi sat in the Centre-forward
+pool as a Dundalk player long after signing for Burton Albion, and he is not
+alone: 314 of the 723 signings in the Summer 2026 window came from clubs we
+scout, so that many pool rows name a club the player has left.
+
+The signings come from the EFL transfer report this repo already builds, so
+there is no new feed to maintain. That also fixes the coverage, and it is worth
+being blunt about it: the report tracks moves *into* League One, League Two, the
+National League and the Scottish Premiership. A player joining a Championship
+club, going abroad, or moving between Irish Prem clubs will not show up. So
+"gone" means confirmed gone, while no flag means only "no move recorded" — not
+"still available". Anything that dresses this up as full transfer coverage will
+get a scout on a plane to watch someone else's player.
+
+Matching is on name first. Only two names in 723 appear twice in the report, and
+both are the same player on a loan return rather than two people, so collisions
+inside the feed are not the risk. The risk is a namesake in a pool, which is why
+a name-only hit reports as "check" rather than "gone" — a scout can settle it in
+seconds, and a wrong red is worse than an amber.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import re
+import threading
+import unicodedata
+from pathlib import Path
+from typing import Any
+
+from app.paths import DATA_ROOT
+
+logger = logging.getLogger(__name__)
+
+TRANSFER_REPORT_PATH = DATA_ROOT / "efl-transfer-report-2026.json"
+
+# Confirmed by name and selling club.
+GONE = "gone"
+# Name matched, selling club did not — most often a namesake or a club written a
+# different way in the two sources.
+CHECK = "check"
+
+# Words that carry no identity, so "Dundalk" and "Dundalk FC" are one club.
+# "United", "City", "Town" and the rest stay: Galway and Galway United are
+# different clubs, and dropping them would merge them.
+_GENERIC_CLUB_WORDS = frozenset({"fc", "afc", "football", "club", "the"})
+
+# A seller that is not a club, so there is nothing to match a pool row against.
+_NOT_A_CLUB = frozenset(
+    {"", "unattached", "free agent", "free", "n/a", "na", "unknown", "?", "trial"}
+)
+
+_lock = threading.Lock()
+_index: dict[str, list[dict[str, Any]]] | None = None
+_index_mtime: float | None = None
+
+
+def _strip_accents(value: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", value)
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+
+
+def name_key(value: str | None) -> str:
+    """A name reduced to something two sources can agree on."""
+    text = _strip_accents(str(value or "")).lower()
+    text = re.sub(r"[^a-z\s-]", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def club_key(value: str | None) -> str:
+    """A club reduced to its identifying words."""
+    text = _strip_accents(str(value or "")).lower()
+    text = re.sub(r"[^a-z\s]", " ", text)
+    words = [w for w in text.split() if w and w not in _GENERIC_CLUB_WORDS]
+    return " ".join(words)
+
+
+def _clubs_match(seller: str | None, pool_club: str | None) -> bool:
+    """Do these two spellings mean the same club?
+
+    Substring either way, because the two sources abbreviate differently:
+    "Dundalk" against "Dundalk FC", "Bohemian" against "Bohemians". It stays
+    tight enough to keep Derry City and Cork City apart, since neither reduces
+    to a bare "city".
+    """
+    left, right = club_key(seller), club_key(pool_club)
+    if not left or not right:
+        return False
+    return left == right or left in right or right in left
+
+
+def _build_index(report: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    index: dict[str, list[dict[str, Any]]] = {}
+    for league in report.get("leagues") or []:
+        league_name = str(league.get("name") or "").strip()
+        for team in league.get("teams") or []:
+            team_name = str(team.get("name") or "").strip()
+            for signing in team.get("signed") or []:
+                key = name_key(signing.get("player"))
+                if not key:
+                    continue
+                index.setdefault(key, []).append(
+                    {
+                        "club": team_name,
+                        "league": league_name,
+                        "from": str(signing.get("other") or "").strip(),
+                        "fee": str(signing.get("fee") or "").strip(),
+                    }
+                )
+    return index
+
+
+def _load_index() -> dict[str, list[dict[str, Any]]]:
+    """The signings, reread only when the report file changes on disk.
+
+    Deliberately not tied to the standouts cache: that one takes four minutes to
+    rebuild, and a transfer correction should not have to wait for it.
+    """
+    global _index, _index_mtime
+
+    try:
+        mtime = TRANSFER_REPORT_PATH.stat().st_mtime
+    except OSError:
+        return {}
+
+    with _lock:
+        if _index is not None and _index_mtime == mtime:
+            return _index
+        try:
+            report = json.loads(TRANSFER_REPORT_PATH.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            logger.exception("Could not read the transfer report — no move flags")
+            _index, _index_mtime = {}, mtime
+            return _index
+        _index = _build_index(report)
+        _index_mtime = mtime
+        logger.info("Transfer move index: %d players", len(_index))
+        return _index
+
+
+def lookup(name: str | None, club: str | None) -> dict[str, Any] | None:
+    """Where a player has moved to, or None if no move is on record.
+
+    `club` is the club shown on the row, i.e. the one the player is being
+    scouted at. It decides confidence, not whether there is a hit at all.
+    """
+    key = name_key(name)
+    if not key:
+        return None
+    matches = _load_index().get(key)
+    if not matches:
+        return None
+
+    # A club match settles it, so prefer one wherever the feed offers a choice
+    # (a player loaned out and recalled appears twice).
+    for record in matches:
+        if _clubs_match(record.get("from"), club):
+            return {**record, "status": GONE}
+
+    record = matches[0]
+    seller = club_key(record.get("from"))
+    if not seller or str(record.get("from") or "").strip().lower() in _NOT_A_CLUB:
+        # Signed as a free agent: nothing to check the row against, but the move
+        # itself is on record, so say so rather than staying silent.
+        return {**record, "status": GONE}
+    return {**record, "status": CHECK}
+
+
+def annotate(row: dict[str, Any], *, name_key_: str = "name", club_key_: str = "club") -> dict[str, Any]:
+    """Attach a `transfer` block to a player row, in place, when one applies."""
+    moved = lookup(row.get(name_key_), row.get(club_key_))
+    if moved:
+        row["transfer"] = moved
+    return row
+
+
+def reset_cache() -> None:
+    """Drop the cached index. For tests, and after rebuilding the report."""
+    global _index, _index_mtime
+    with _lock:
+        _index, _index_mtime = None, None

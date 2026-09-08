@@ -28,6 +28,7 @@ from app.home_dashboard import (
     _standouts_positions,
     _standouts_raw_cache_key,
 )
+from app import transfer_status
 from app.label_utils import humanize_profile_name
 from app.scouting import (
     SCOUTING_COMPETITION_TO_LEAGUE,
@@ -343,7 +344,11 @@ def _who_to_scout_player(row: dict[str, Any]) -> dict[str, Any]:
         "scout",
         "scout_total",
     )
-    return {key: row[key] for key in keep if key in row}
+    out = {key: row[key] for key in keep if key in row}
+    # Applied here, at serve time, rather than baked into the cached payload:
+    # the standouts rebuild takes four minutes, and a transfer correction should
+    # land on the next page load instead of waiting for it.
+    return transfer_status.annotate(out)
 
 
 def _load_standouts_raw_payload(

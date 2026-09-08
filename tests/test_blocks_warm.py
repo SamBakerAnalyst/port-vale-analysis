@@ -15,14 +15,27 @@ from app import hub_snapshots
 def test_warm_reports_the_blocks_it_built(monkeypatch):
     monkeypatch.setattr(
         "app.blocks_analysis.build_blocks_analysis_payload",
-        lambda force_refresh=False: {"blocks": [{"id": i} for i in range(9)]},
+        lambda force_refresh=False: {
+            "blocks": [{"id": i} for i in range(9)],
+            "playedCount": 7,
+        },
     )
 
-    assert hub_snapshots.warm_blocks_analysis() == {"ok": True, "blocks": 9}
+    assert hub_snapshots.warm_blocks_analysis() == {
+        "ok": True,
+        "blocks": 9,
+        "played": 7,
+        "force": False,
+    }
 
 
-def test_warm_does_not_force_a_rebuild(monkeypatch):
-    """Forcing would refetch from Impect every boot for no reason."""
+def test_the_boot_warm_does_not_force_a_rebuild(monkeypatch):
+    """Forcing at boot would refetch from Impect every deploy for no reason.
+
+    The daily job forces instead — see the test below. That split is deliberate:
+    a finished game must not sit behind a stale season-matches cache, but a
+    deploy should not pay for a full refetch either.
+    """
     seen: list[bool] = []
     monkeypatch.setattr(
         "app.blocks_analysis.build_blocks_analysis_payload",
@@ -53,17 +66,19 @@ def test_the_daily_analysis_refresh_includes_blocks(monkeypatch):
     monkeypatch.setattr(
         hub_snapshots, "refresh_analysis", lambda: calls.append("analysis") or {}
     )
-    monkeypatch.setattr(
-        hub_snapshots,
-        "warm_blocks_analysis",
-        lambda: calls.append("blocks") or {"ok": True, "blocks": 9},
-    )
+    def _warm(*, force_refresh: bool = False):
+        calls.append("blocks")
+        return {"ok": True, "blocks": 9, "force": force_refresh}
+
+    monkeypatch.setattr(hub_snapshots, "warm_blocks_analysis", _warm)
     monkeypatch.setattr(hub_snapshots, "_write_meta", lambda updates: updates)
 
     result = hub_snapshots.refresh_snapshots("analysis")
 
     assert "blocks" in calls
-    assert result["blocks_analysis"] == {"ok": True, "blocks": 9}
+    # Forced here, unlike at boot: a game that has just finished must not stay
+    # hidden behind yesterday's season-matches cache (Salford, 5 Sep 2026).
+    assert result["blocks_analysis"]["force"] is True
 
 
 def test_boot_warm_covers_blocks_as_well_as_scouting():

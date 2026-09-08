@@ -1364,7 +1364,37 @@
     if (scoutTotal) parts.push("has-scout");
     if (loanInfoForPlayer(p)) parts.push("is-loan");
     if (Number(p.age) > 30) parts.push("row-veteran");
+    const move = p?.transfer;
+    // Last, so it wins the cascade: a player who has signed elsewhere is not
+    // worth a trip whatever else the row says about him.
+    if (move?.club) parts.push(move.status === "gone" ? "is-moved" : "is-move-check");
     return parts.join(" ");
+  }
+
+  // The club shown here is the one a player turned out for in the season data,
+  // which is not the same as the club he is at today. Gbemi Arubi read as a
+  // Dundalk striker for weeks after signing for Burton Albion.
+  function clubCell(p, { exportMode = false } = {}) {
+    const club = p.club || "—";
+    const move = p?.transfer;
+    if (!move?.club) {
+      return `<td class="col-club" title="${escAttr(p.club || "")}">${club}</td>`;
+    }
+    const gone = move.status === "gone";
+    const where = `${move.club}${move.league ? ` (${move.league})` : ""}`;
+    const title = gone
+      ? `Signed for ${where}${move.from ? ` from ${move.from}` : ""}${move.fee ? ` · ${move.fee}` : ""}`
+      : `A player of this name signed for ${where}${
+          move.from ? ` from ${move.from}` : ""
+        } — check it is the same player before ruling him out`;
+    // Printed handouts lose colour, so the arrow has to carry the meaning.
+    const arrow = exportMode ? " &rarr; " : "";
+    return `<td class="col-club" title="${escAttr(title)}">
+      <span class="club-was">${escAttr(p.club || "—")}</span>${arrow}
+      <span class="club-now${gone ? "" : " club-now--check"}">${escAttr(move.club)}${
+        gone ? "" : "?"
+      }</span>
+    </td>`;
   }
 
   function updateExportButton(grouped) {
@@ -1421,7 +1451,7 @@
             ${nameCell}
             ${overallCell}
             ${showPos ? `<td class="col-pos" title="${p.positionLabel || p.position || ""}">${pos}</td>` : ""}
-            ${showClub ? `<td class="col-club" title="${p.club || ""}">${p.club || "—"}</td>` : ""}
+            ${showClub ? clubCell(p, { exportMode }) : ""}
             <td class="col-age${ageClass ? ` ${ageClass}` : ""}">${age}</td>
             <td class="col-mins">${mins}</td>
           </tr>`;
@@ -1430,7 +1460,7 @@
           ${watchCell(p, { exportMode })}
           <td class="col-rank">${rankStart + index + 1}</td>
           ${nameCell}
-          ${showClub ? `<td class="col-club" title="${p.club || ""}">${p.club || "—"}</td>` : ""}
+          ${showClub ? clubCell(p, { exportMode }) : ""}
           ${showLeague ? `<td class="col-league" title="${p.league || ""}">${p.league || "—"}</td>` : ""}
           ${showPos ? `<td class="col-pos" title="${p.positionLabel || p.position || ""}">${pos}</td>` : ""}
           <td class="col-age${ageClass ? ` ${ageClass}` : ""}">${age}</td>

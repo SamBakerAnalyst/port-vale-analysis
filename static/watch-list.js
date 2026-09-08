@@ -154,12 +154,38 @@
     </thead>`;
   }
 
-  function rowHtml(t) {
-    const pid = Number(t.player_id || 0);
-    const href = pid ? `/player/${encodeURIComponent(pid)}` : "#";
-    return `<tr data-id="${esc(t.id)}">
-      <td class="col-player"><a href="${esc(href)}">${esc(t.name || "—")}</a></td>
-      <td>${esc(t.club || "—")}</td>
+    // A tracked player who has already signed elsewhere is the costliest stale
+    // row on the hub — someone may be planning a trip to watch him.
+    function clubCell(t) {
+      const move = t?.transfer;
+      if (!move?.club) return `<td>${esc(t.club || "—")}</td>`;
+      const gone = move.status === "gone";
+      const where = `${move.club}${move.league ? ` (${move.league})` : ""}`;
+      const title = gone
+        ? `Signed for ${where}${move.from ? ` from ${move.from}` : ""}${move.fee ? ` · ${move.fee}` : ""}`
+        : `A player of this name signed for ${where}${
+            move.from ? ` from ${move.from}` : ""
+          } — check it is the same player before ruling him out`;
+      return `<td title="${esc(title)}">
+        <span class="club-was">${esc(t.club || "—")}</span>
+        <span class="club-now${gone ? "" : " club-now--check"}">${esc(move.club)}${
+          gone ? "" : "?"
+        }</span>
+      </td>`;
+    }
+
+    function rowHtml(t) {
+      const pid = Number(t.player_id || 0);
+      const href = pid ? `/player/${encodeURIComponent(pid)}` : "#";
+      const move = t?.transfer;
+      const moveClass = move?.club
+        ? move.status === "gone"
+          ? " is-moved"
+          : " is-move-check"
+        : "";
+      return `<tr data-id="${esc(t.id)}" class="${moveClass.trim()}">
+        <td class="col-player"><a href="${esc(href)}">${esc(t.name || "—")}</a></td>
+        ${clubCell(t)}
       <td>${t.age ?? "—"}</td>
       <td>${esc(t.league || "—")}</td>
       <td class="col-num">${formatMinutesBreakdown(t)}</td>
@@ -287,12 +313,20 @@
       applyPipelinesVisibility();
       setUpdated(data.snapshot || null);
       render(state.targets);
-      if (data.stats_missing) {
-        setStatus(
-          `${data.stats_missing} player${data.stats_missing === 1 ? "" : "s"} still need a data refresh — click Refresh data.`,
-          false,
-        );
-      }
+        // A player who has moved outranks a stale stat: one wastes a trip, the
+        // other just looks untidy.
+        if (data.stats_moved) {
+          const n = data.stats_moved;
+          setStatus(
+            `${n} tracked player${n === 1 ? " has" : "s have"} signed elsewhere — shown in red.`,
+            false,
+          );
+        } else if (data.stats_missing) {
+          setStatus(
+            `${data.stats_missing} player${data.stats_missing === 1 ? "" : "s"} still need a data refresh — click Refresh data.`,
+            false,
+          );
+        }
     } catch (err) {
       els.list.innerHTML = `<p class="wl-empty">${esc(err.message || "Failed to load")}</p>`;
       setStatus(err.message || "Failed to load watch list.", true);

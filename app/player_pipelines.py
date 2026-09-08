@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
+from app import transfer_status
 from app.apps_manifest import is_app_live
 from app.auth import current_user_payload
 from app.label_utils import humanize_profile_name
@@ -872,6 +873,11 @@ def register_player_pipelines_routes(app: FastAPI) -> None:
                 str(row.get("name") or "").casefold(),
             )
         )
+        # A tracked player who has already signed elsewhere is the most
+        # expensive kind of stale row — someone may be planning a trip to watch
+        # him. Annotated on the way out, so it follows the report file.
+        for row in watch_targets:
+            transfer_status.annotate(row)
         missing = sum(
             1
             for row in watch_targets
@@ -879,12 +885,14 @@ def register_player_pipelines_routes(app: FastAPI) -> None:
             and row.get("player_id")
             and (row.get("overall_score") is None or row.get("minutes") is None)
         )
+        moved = sum(1 for row in watch_targets if row.get("transfer"))
         return {
             **payload,
             "targets": watch_targets,
             "count": len(watch_targets),
             "stats_pending": 0,
             "stats_missing": missing,
+            "stats_moved": moved,
             "snapshot": load_meta(),
             # Hide promote controls while Pipelines is held back, so nobody
             # moves a player onto a board they cannot open.
