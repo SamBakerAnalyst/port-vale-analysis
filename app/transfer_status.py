@@ -211,12 +211,22 @@ def lookup(name: str | None, club: str | None) -> dict[str, Any] | None:
     `club` is the club shown on the row, i.e. the one the player is being
     scouted at. It decides confidence, not whether there is a hit at all.
     """
+    return _resolve(name, club)[0]
+
+
+def _resolve(name: str | None, club: str | None) -> tuple[dict[str, Any] | None, bool]:
+    """A row's status, plus whether a club actually matched.
+
+    That second value is what lets a caller settle namesakes. If some other
+    player of the same name matched the record's club, this row is demonstrably
+    not the man who moved.
+    """
     key = name_key(name)
     if not key:
-        return None
+        return None, False
     matches = _load_index().get(key)
     if not matches:
-        return None
+        return None, False
 
     # Order matters. Selling club first, so a player who moved twice is still
     # caught at his middle club.
@@ -227,7 +237,7 @@ def lookup(name: str | None, club: str | None) -> dict[str, Any] | None:
             return {
                 **record,
                 "status": LOAN_OUT if record.get("loan") else GONE,
-            }
+            }, True
 
     # Then the destination. If the row already names the club he signed for,
     # he has arrived rather than left.
@@ -237,24 +247,73 @@ def lookup(name: str | None, club: str | None) -> dict[str, Any] | None:
                 # Max Merrick: Hartlepool on the row, Chelsea's player. Saying
                 # nothing here loses the one fact that decides whether he can be
                 # signed at all, and who you would be negotiating with.
-                return {**record, "status": LOAN_IN}
-            # A permanent arrival: the row is simply correct.
-            return None
+                return {**record, "status": LOAN_IN}, True
+            # A permanent arrival: the row is simply correct. Still a positive
+            # identification, which is what clears his namesakes.
+            return None, True
 
     record = matches[0]
     if str(record.get("from") or "").strip().lower() in _NOT_A_CLUB:
         # Signed as a free agent, so there is no selling club to match the row
         # against. The move is still on record, so say so.
-        return {**record, "status": GONE}
-    return {**record, "status": CHECK}
+        return {**record, "status": GONE}, False
+    return {**record, "status": CHECK}, False
 
 
 def annotate(row: dict[str, Any], *, name_key_: str = "name", club_key_: str = "club") -> dict[str, Any]:
-    """Attach a `transfer` block to a player row, in place, when one applies."""
+    """Attach a `transfer` block to a player row, in place, when one applies.
+
+    Prefer `annotate_all` where the surrounding squad is available: on its own a
+    row cannot tell a namesake from the real thing.
+    """
     moved = lookup(row.get(name_key_), row.get(club_key_))
     if moved:
         row["transfer"] = moved
     return row
+
+
+def annotate_all(
+    rows: list[dict[str, Any]],
+    *,
+    name_key_: str = "name",
+    club_key_: str = "club",
+    roster: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Annotate a squad, using the squad itself to settle namesakes.
+
+    Two players can share a name exactly. The pool holds two Cameron Humphreys:
+    ours at 28, and a 22-year-old at Huddersfield on loan from Ipswich. A name
+    is not enough to tell them apart, so both used to be flagged — the young one
+    correctly, ours as an amber "check" on a player who is not going anywhere.
+
+    But if one of them positively matches the record's club, the other is
+    demonstrably not the man in it. That was true of every shared name in the
+    pool: five names, five ambers, all on the wrong player, two of them ours.
+    Amber is for genuine doubt, and this is not doubt — it is an answer.
+
+    Only "check" is cleared this way. A confirmed move stays put, because the
+    evidence for it never rested on the name alone.
+    """
+    identified: set[str] = set()
+    for row in roster if roster is not None else rows:
+        key = name_key(row.get(name_key_))
+        if not key or key in identified:
+            continue
+        if _resolve(row.get(name_key_), row.get(club_key_))[1]:
+            identified.add(key)
+
+    for row in rows:
+        status, matched = _resolve(row.get(name_key_), row.get(club_key_))
+        if status is None:
+            continue
+        if (
+            status["status"] == CHECK
+            and not matched
+            and name_key(row.get(name_key_)) in identified
+        ):
+            continue
+        row["transfer"] = status
+    return rows
 
 
 def _open_window(today: date) -> tuple[str, date] | None:

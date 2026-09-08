@@ -322,6 +322,40 @@ def _profiles_meta_from_disk() -> dict[str, list[dict[str, str]]]:
     }
 
 
+_NAMESAKE_ROSTER_TTL = 900.0
+_namesake_roster: tuple[float, list[dict[str, str]]] | None = None
+
+
+def namesake_roster() -> list[dict[str, str]]:
+    """Every name and club in the pool, for telling two players of one name apart.
+
+    Read from the disk cache only, and never triggers a rebuild — a Watch list
+    load must not cost four minutes. Without this the Watch list would show
+    amber on a namesake that Who To Scout has already settled, and two tools
+    disagreeing about the same player is how people stop believing either.
+    """
+    global _namesake_roster
+
+    now = time.time()
+    if _namesake_roster and now - _namesake_roster[0] < _NAMESAKE_ROSTER_TTL:
+        return _namesake_roster[1]
+
+    roster: list[dict[str, str]] = []
+    try:
+        disk = _load_standouts_disk(_standouts_raw_cache_key("season"))
+        if disk:
+            roster = [
+                {"name": str(row.get("name") or ""), "club": str(row.get("club") or "")}
+                for row in disk[1].get("players") or []
+            ]
+    except Exception:  # noqa: BLE001 - a missing roster only costs precision
+        logger.warning("Could not read the pool roster for namesake checks")
+        roster = []
+
+    _namesake_roster = (now, roster)
+    return roster
+
+
 def _who_to_scout_player(row: dict[str, Any]) -> dict[str, Any]:
     keep = (
         "id",
@@ -344,11 +378,7 @@ def _who_to_scout_player(row: dict[str, Any]) -> dict[str, Any]:
         "scout",
         "scout_total",
     )
-    out = {key: row[key] for key in keep if key in row}
-    # Applied here, at serve time, rather than baked into the cached payload:
-    # the standouts rebuild takes four minutes, and a transfer correction should
-    # land on the next page load instead of waiting for it.
-    return transfer_status.annotate(out)
+    return {key: row[key] for key in keep if key in row}
 
 
 def _load_standouts_raw_payload(
@@ -451,6 +481,11 @@ def build_who_to_scout_data(
         }
 
     players = [_who_to_scout_player(row) for row in raw_payload.get("players") or []]
+    # Over the whole pool at once, not row by row: the pool is what tells two
+    # players of the same name apart. Done at serve time rather than baked into
+    # the cached payload, because the standouts rebuild takes four minutes and a
+    # transfer correction should land on the next page load instead.
+    transfer_status.annotate_all(players)
     _attach_scout_coverage(players)
     profiles_by_position = _profiles_from_players(players) or _profiles_meta_from_disk()
 

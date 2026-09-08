@@ -267,6 +267,72 @@ def test_no_report_says_nobody_will_be_flagged(monkeypatch, tmp_path):
     assert "not be flagged" in meta["detail"]
 
 
+def test_a_namesake_is_cleared_once_the_real_mover_is_identified():
+    """Two Cameron Humphreys exist, with the exact same name.
+
+    Ours is 28 and at Port Vale; the other is 22 and at Huddersfield on loan
+    from Ipswich. A name cannot separate them, so ours was flagged amber — a
+    query against a player who is not going anywhere. But the pool holds the
+    other man at the club in the record, which identifies him positively and
+    leaves nothing to ask about ours.
+    """
+    rows = [
+        {"name": "Harry Wood", "club": "Barnet"},  # the man in the record
+        {"name": "Harry Wood", "club": "Shelbourne FC"},  # a different player
+    ]
+
+    ts.annotate_all(rows)
+
+    assert "transfer" not in rows[0], "already at Barnet — the row is correct"
+    assert "transfer" not in rows[1], "identified elsewhere, so nothing to check"
+
+
+def test_without_a_positive_match_the_doubt_is_kept():
+    """Nobody in the squad sits at either club, so amber is the honest answer."""
+    rows = [{"name": "Harry Wood", "club": "Shelbourne FC"}]
+
+    ts.annotate_all(rows)
+
+    assert rows[0]["transfer"]["status"] == ts.CHECK
+
+
+def test_a_confirmed_move_survives_a_namesake():
+    """Only amber is cleared this way. Red never rested on the name alone."""
+    rows = [
+        {"name": "Gbemi Arubi", "club": "Dundalk FC"},  # sold from here
+        {"name": "Gbemi Arubi", "club": "Sligo Rovers"},  # some other player
+    ]
+
+    ts.annotate_all(rows)
+
+    assert rows[0]["transfer"]["status"] == ts.GONE, "a real sale must stand"
+    assert "transfer" not in rows[1]
+
+
+def test_a_roster_settles_names_the_rows_alone_cannot():
+    """The Watch list holds twelve players; the pool holds four thousand.
+
+    Judged on its own the Watch list would show amber where Who To Scout shows
+    nothing, and two tools disagreeing about a player is how people stop
+    believing either of them.
+    """
+    watch_list = [{"name": "Harry Wood", "club": "Shelbourne FC"}]
+    pool = [{"name": "Harry Wood", "club": "Barnet"}]
+
+    ts.annotate_all(watch_list, roster=pool)
+
+    assert "transfer" not in watch_list[0]
+
+
+def test_an_empty_roster_falls_back_to_caution():
+    """A missing pool costs precision, never correctness."""
+    watch_list = [{"name": "Harry Wood", "club": "Shelbourne FC"}]
+
+    ts.annotate_all(watch_list, roster=[])
+
+    assert watch_list[0]["transfer"]["status"] == ts.CHECK
+
+
 def test_a_missing_report_is_silent_not_fatal(monkeypatch, tmp_path):
     """No report should mean no flags, never a broken pool."""
     monkeypatch.setattr(ts, "TRANSFER_REPORT_CANDIDATES", (tmp_path / "gone.json",))
@@ -344,23 +410,31 @@ def test_loan_detection_matches_the_shipped_report(monkeypatch):
     assert loans > 100, "loans have stopped being marked in the source"
 
 
-def test_who_to_scout_rows_carry_the_flag():
-    """Wiring check: annotated at serve time, not baked into the cache.
+def test_who_to_scout_annotates_the_whole_pool_at_once():
+    """Wiring check, and it has to be the pool rather than the row.
 
-    The standouts rebuild takes four minutes. Attaching this to the cached
-    payload would mean a transfer correction waited on that.
+    A single row cannot tell two Cameron Humphreys apart; the pool can, because
+    it holds them both. It also stays at serve time rather than being baked into
+    the cached payload — the standouts rebuild takes four minutes, and a
+    transfer correction should not wait on it.
     """
+    import inspect
+
     import app.main  # noqa: F401 - resolve the router imports
+    from app import who_to_scout
     from app.who_to_scout import _who_to_scout_player
 
-    row = _who_to_scout_player(
-        {"name": "Gbemi Arubi", "club": "Dundalk FC", "overall": 71.8, "minutes": 1799}
-    )
-    assert row["transfer"]["club"] == "Burton Albion"
-    assert row["transfer"]["status"] == ts.GONE
+    source = inspect.getsource(who_to_scout.build_who_to_scout_data)
+    assert "annotate_all(players)" in source, "pool-wide annotation was removed"
 
-    clean = _who_to_scout_player({"name": "Eoin Kenny", "club": "Dundalk FC"})
-    assert "transfer" not in clean
+    # The trim itself stays a trim: no per-row flagging behind the pool's back.
+    row = _who_to_scout_player({"name": "Gbemi Arubi", "club": "Dundalk FC"})
+    assert "transfer" not in row
+
+    rows = [dict(row)]
+    ts.annotate_all(rows)
+    assert rows[0]["transfer"]["club"] == "Burton Albion"
+    assert rows[0]["transfer"]["status"] == ts.GONE
 
 
 def test_the_index_reloads_when_the_report_changes(_report):

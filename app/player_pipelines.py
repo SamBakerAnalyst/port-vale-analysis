@@ -876,8 +876,11 @@ def register_player_pipelines_routes(app: FastAPI) -> None:
         # A tracked player who has already signed elsewhere is the most
         # expensive kind of stale row — someone may be planning a trip to watch
         # him. Annotated on the way out, so it follows the report file.
-        for row in watch_targets:
-            transfer_status.annotate(row)
+        # Resolved against the whole pool, not just these twelve rows, so a
+        # namesake settled on Who To Scout reads the same way here.
+        from app.who_to_scout import namesake_roster
+
+        transfer_status.annotate_all(watch_targets, roster=namesake_roster())
         missing = sum(
             1
             for row in watch_targets
