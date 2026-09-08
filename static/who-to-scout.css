@@ -927,16 +927,32 @@ a:hover { text-decoration: underline; }
   text-decoration: none;
 }
 
-.scout-table td.col-club .club-now {
+.scout-table td.col-club .club-now,
+.scout-table td.col-club .club-loan {
   display: block;
-  color: #f87171;
   font-weight: 700;
   font-size: 0.86em;
   line-height: 1.25;
 }
 
+.scout-table td.col-club .club-now {
+  color: #f87171;
+}
+
 .scout-table td.col-club .club-now--check {
   color: #fbbf24;
+}
+
+/* Same blue the pools have always used for loans, so "blue means loan" keeps
+   meaning that. A loan is a different fact from a sale, not a milder one: the
+   player is still somebody else's, and that decides who a deal is with. */
+.scout-table td.col-club .club-loan {
+  color: #60a5fa;
+}
+
+/* On a loan row the club shown is correct, so it is not struck out. */
+.scout-table td.col-club .club-held {
+  color: inherit;
 }
 
 .export-root {

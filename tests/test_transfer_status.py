@@ -44,8 +44,37 @@ REPORT = {
             "teams": [
                 {
                     "name": "Barnet",
-                    "signed": [{"player": "Harry Wood", "other": "Hull City", "fee": "Loan"}],
-                }
+                    "signed": [
+                        {
+                            "player": "Harry Wood",
+                            "other": "Hull City",
+                            "kind": "undisclosed",
+                            "fee": "Undisclosed",
+                        }
+                    ],
+                },
+                {
+                    "name": "Rochdale",
+                    "signed": [
+                        {
+                            "player": "Charlie Tasker",
+                            "other": "Brighton & Hove Albion",
+                            "kind": "loan",
+                            "fee": "Loan",
+                        }
+                    ],
+                },
+                {
+                    "name": "Hartlepool United",
+                    "signed": [
+                        {
+                            "player": "Max Merrick",
+                            "other": "Chelsea",
+                            "kind": "loan",
+                            "fee": "Loan",
+                        }
+                    ],
+                },
             ],
         },
     ]
@@ -86,6 +115,39 @@ def test_bohemian_and_bohemians_are_the_same_club():
 
 def test_an_accent_does_not_hide_a_move():
     assert ts.lookup("Séamus O'Ceallaigh", "Bohemians") is not None
+
+
+def test_a_loan_arrival_names_the_parent_club():
+    """Max Merrick's case, and the reason `kind` cannot be dropped.
+
+    The row says Hartlepool United and it is right — he plays there. But he is
+    Chelsea's player, so a permanent deal is with Chelsea. Clearing the row
+    silently threw away the one fact that decides whether he is signable at all.
+    """
+    moved = ts.lookup("Max Merrick", "Hartlepool United")
+    assert moved["status"] == ts.LOAN_IN
+    assert moved["from"] == "Chelsea"
+
+
+def test_a_loan_is_never_reported_as_sold():
+    """32 rows were shown as permanent moves when they were loans."""
+    out = ts.lookup("Charlie Tasker", "Brighton & Hove Albion U21")
+    assert out["status"] == ts.LOAN_OUT
+    assert out["status"] != ts.GONE
+    assert out["club"] == "Rochdale"
+
+
+def test_loan_statuses_are_grouped_for_callers():
+    """The UI colours on this set, so it has to hold both directions."""
+    assert ts.LOAN_IN in ts.LOAN_STATUSES
+    assert ts.LOAN_OUT in ts.LOAN_STATUSES
+    assert ts.GONE not in ts.LOAN_STATUSES
+    assert ts.CHECK not in ts.LOAN_STATUSES
+
+
+def test_a_permanent_sale_is_still_red():
+    """The loan work must not soften a real transfer."""
+    assert ts.lookup("Gbemi Arubi", "Dundalk FC")["status"] == ts.GONE
 
 
 def test_a_player_already_at_the_club_he_signed_for_is_not_flagged():
@@ -245,6 +307,41 @@ def test_a_real_report_is_readable_from_this_checkout(monkeypatch):
     assert ts._report_path() is not None, "no EFL transfer report in the repo"
     assert len(ts._load_index()) > 100
     assert ts.lookup("Gbemi Arubi", "Dundalk FC")["club"] == "Burton Albion"
+
+
+def test_loan_detection_matches_the_shipped_report(monkeypatch):
+    """`kind` is the only thing marking a loan, so it has to be trustworthy.
+
+    In the report we ship, `kind == "loan"` and a fee reading "loan" agree on
+    every one of the 723 signings. If a future source change breaks that, loans
+    would quietly start showing as permanent sales — the exact error this whole
+    change was correcting — so it fails here instead.
+    """
+    import json as _json
+
+    monkeypatch.setattr(ts, "TRANSFER_REPORT_CANDIDATES", SHIPPED_CANDIDATES)
+    ts.reset_cache()
+    report = _json.loads(ts._report_path().read_text(encoding="utf-8"))
+
+    disagreements = [
+        signing
+        for league in report["leagues"]
+        for team in league.get("teams") or []
+        for signing in team.get("signed") or []
+        if (((signing.get("kind") or "").lower() == "loan")
+            != ("loan" in (signing.get("fee") or "").lower()))
+    ]
+
+    assert not disagreements, f"kind/fee disagree on {len(disagreements)} signings"
+
+    loans = sum(
+        1
+        for league in report["leagues"]
+        for team in league.get("teams") or []
+        for signing in team.get("signed") or []
+        if (signing.get("kind") or "").lower() == "loan"
+    )
+    assert loans > 100, "loans have stopped being marked in the source"
 
 
 def test_who_to_scout_rows_carry_the_flag():

@@ -1366,35 +1366,68 @@
     if (loanInfoForPlayer(p)) parts.push("is-loan");
     if (Number(p.age) > 30) parts.push("row-veteran");
     const move = p?.transfer;
-    // Last, so it wins the cascade: a player who has signed elsewhere is not
-    // worth a trip whatever else the row says about him.
-    if (move?.club) parts.push(move.status === "gone" ? "is-moved" : "is-move-check");
+    if (move?.club) {
+      // Loans reuse is-loan rather than inventing a second blue. The pools have
+      // shown loans in blue since long before this code, and the hint under the
+      // filters already tells people what blue means.
+      if (isLoanMove(move)) parts.push("is-loan");
+      else parts.push(move.status === "gone" ? "is-moved" : "is-move-check");
+    }
     return parts.join(" ");
   }
 
+  function isLoanMove(move) {
+    return move?.status === "loan_in" || move?.status === "loan_out";
+  }
+
   // The club shown here is the one a player turned out for in the season data,
-  // which is not the same as the club he is at today. Gbemi Arubi read as a
-  // Dundalk striker for weeks after signing for Burton Albion.
+  // which is not the same as his situation today. Gbemi Arubi read as a Dundalk
+  // striker for weeks after signing for Burton Albion, and Max Merrick read as
+  // a Hartlepool goalkeeper when he is Chelsea's, on loan.
   function clubCell(p, { exportMode = false } = {}) {
-    const club = p.club || "—";
+    const club = escAttr(p.club || "—");
     const move = p?.transfer;
     if (!move?.club) {
       return `<td class="col-club" title="${escAttr(p.club || "")}">${club}</td>`;
     }
-    const gone = move.status === "gone";
     const where = `${move.club}${move.league ? ` (${move.league})` : ""}`;
-    const title = gone
-      ? `Signed for ${where}${move.from ? ` from ${move.from}` : ""}${move.fee ? ` · ${move.fee}` : ""}`
-      : `A player of this name signed for ${where}${
-          move.from ? ` from ${move.from}` : ""
-        } — check it is the same player before ruling him out`;
-    // Printed handouts lose colour, so the arrow has to carry the meaning.
-    const arrow = exportMode ? " &rarr; " : "";
+    let line;
+    let tone;
+    let title;
+    let struck = false;
+
+    if (move.status === "loan_in") {
+      // The row's club is right; the parent club is the one you would deal with.
+      line = `on loan from ${move.from || "another club"}`;
+      tone = "club-loan";
+      title = `On loan at ${p.club || "this club"} from ${
+        move.from || "another club"
+      } — any deal is with ${move.from || "the parent club"}, not ${p.club || "this club"}`;
+    } else if (move.status === "loan_out") {
+      // Away, not sold. He is still their player and the loan ends.
+      line = `on loan at ${move.club}`;
+      tone = "club-loan";
+      title = `Out on loan at ${where} — still ${p.club || "his club"}'s player`;
+    } else if (move.status === "gone") {
+      line = move.club;
+      tone = "club-now";
+      struck = true;
+      title = `Signed for ${where}${move.from ? ` from ${move.from}` : ""}${
+        move.fee ? ` · ${move.fee}` : ""
+      }`;
+    } else {
+      line = `${move.club}?`;
+      tone = "club-now club-now--check";
+      title = `A player of this name signed for ${where}${
+        move.from ? ` from ${move.from}` : ""
+      } — check it is the same player before ruling him out`;
+    }
+
+    // Printed handouts lose colour, so the wording has to carry the meaning.
+    const separator = exportMode ? " &middot; " : "";
     return `<td class="col-club" title="${escAttr(title)}">
-      <span class="club-was">${escAttr(p.club || "—")}</span>${arrow}
-      <span class="club-now${gone ? "" : " club-now--check"}">${escAttr(move.club)}${
-        gone ? "" : "?"
-      }</span>
+      <span class="${struck ? "club-was" : "club-held"}">${club}</span>${separator}
+      <span class="${tone}">${escAttr(line)}</span>
     </td>`;
   }
 

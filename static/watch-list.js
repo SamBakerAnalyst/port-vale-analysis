@@ -154,23 +154,51 @@
     </thead>`;
   }
 
-    // A tracked player who has already signed elsewhere is the costliest stale
-    // row on the hub — someone may be planning a trip to watch him.
+    function isLoanMove(move) {
+      return move?.status === "loan_in" || move?.status === "loan_out";
+    }
+
+    // A tracked player who has moved is the costliest stale row on the hub —
+    // someone may be planning a trip. A tracked player who is on loan is the
+    // second costliest: he is signable, but not from the club on the row.
     function clubCell(t) {
       const move = t?.transfer;
-      if (!move?.club) return `<td>${esc(t.club || "—")}</td>`;
-      const gone = move.status === "gone";
+      const club = esc(t.club || "—");
+      if (!move?.club) return `<td>${club}</td>`;
       const where = `${move.club}${move.league ? ` (${move.league})` : ""}`;
-      const title = gone
-        ? `Signed for ${where}${move.from ? ` from ${move.from}` : ""}${move.fee ? ` · ${move.fee}` : ""}`
-        : `A player of this name signed for ${where}${
-            move.from ? ` from ${move.from}` : ""
-          } — check it is the same player before ruling him out`;
+      let line;
+      let tone;
+      let title;
+      let struck = false;
+
+      if (move.status === "loan_in") {
+        line = `on loan from ${move.from || "another club"}`;
+        tone = "club-loan";
+        title = `On loan at ${t.club || "this club"} from ${
+          move.from || "another club"
+        } — any deal is with ${move.from || "the parent club"}, not ${t.club || "this club"}`;
+      } else if (move.status === "loan_out") {
+        line = `on loan at ${move.club}`;
+        tone = "club-loan";
+        title = `Out on loan at ${where} — still ${t.club || "his club"}'s player`;
+      } else if (move.status === "gone") {
+        line = move.club;
+        tone = "club-now";
+        struck = true;
+        title = `Signed for ${where}${move.from ? ` from ${move.from}` : ""}${
+          move.fee ? ` · ${move.fee}` : ""
+        }`;
+      } else {
+        line = `${move.club}?`;
+        tone = "club-now club-now--check";
+        title = `A player of this name signed for ${where}${
+          move.from ? ` from ${move.from}` : ""
+        } — check it is the same player before ruling him out`;
+      }
+
       return `<td title="${esc(title)}">
-        <span class="club-was">${esc(t.club || "—")}</span>
-        <span class="club-now${gone ? "" : " club-now--check"}">${esc(move.club)}${
-          gone ? "" : "?"
-        }</span>
+        <span class="${struck ? "club-was" : "club-held"}">${club}</span>
+        <span class="${tone}">${esc(line)}</span>
       </td>`;
     }
 
@@ -178,11 +206,13 @@
       const pid = Number(t.player_id || 0);
       const href = pid ? `/player/${encodeURIComponent(pid)}` : "#";
       const move = t?.transfer;
-      const moveClass = move?.club
-        ? move.status === "gone"
-          ? " is-moved"
-          : " is-move-check"
-        : "";
+      const moveClass = !move?.club
+        ? ""
+        : isLoanMove(move)
+          ? " is-loan"
+          : move.status === "gone"
+            ? " is-moved"
+            : " is-move-check";
       return `<tr data-id="${esc(t.id)}" class="${moveClass.trim()}">
         <td class="col-player"><a href="${esc(href)}">${esc(t.name || "—")}</a></td>
         ${clubCell(t)}
@@ -319,12 +349,17 @@
         const stale = data.transfer_check?.stale ? data.transfer_check.detail : "";
         if (stale) {
           setStatus(stale, true);
-        } else if (data.stats_moved) {
-          const n = data.stats_moved;
-          setStatus(
-            `${n} tracked player${n === 1 ? " has" : "s have"} signed elsewhere — shown in red.`,
-            false,
-          );
+        } else if (data.stats_moved || data.stats_loaned) {
+          const parts = [];
+          if (data.stats_moved) {
+            const n = data.stats_moved;
+            parts.push(`${n} ${n === 1 ? "has" : "have"} signed elsewhere (red)`);
+          }
+          if (data.stats_loaned) {
+            const n = data.stats_loaned;
+            parts.push(`${n} ${n === 1 ? "is" : "are"} on loan (blue)`);
+          }
+          setStatus(`Of the players you track, ${parts.join(", ")}.`, false);
         } else if (data.stats_missing) {
           setStatus(
             `${data.stats_missing} player${data.stats_missing === 1 ? "" : "s"} still need a data refresh — click Refresh data.`,

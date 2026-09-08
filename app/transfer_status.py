@@ -43,11 +43,22 @@ logger = logging.getLogger(__name__)
 # nothing on Staging and every player came back unflagged.
 TRANSFER_REPORT_CANDIDATES = REPORT_CANDIDATES
 
-# Confirmed by name and selling club.
+# Sold or signed permanently, and no longer at the club on the row.
 GONE = "gone"
+# Away on loan. Not the same thing as sold: he is still their player and he
+# comes back, so this must not read as gone.
+LOAN_OUT = "loan_out"
+# At the club on the row, but on loan from somewhere else. The row is correct;
+# what matters is that any deal is with the parent club, not this one.
+LOAN_IN = "loan_in"
 # Name matched, selling club did not — most often a namesake or a club written a
 # different way in the two sources.
 CHECK = "check"
+
+# A loan is a different fact about a player, not a weaker version of a transfer,
+# and the pools have shown loans in blue for far longer than this code has
+# existed. Painting one red would be a straight regression.
+LOAN_STATUSES = frozenset({LOAN_OUT, LOAN_IN})
 
 # Words that carry no identity, so "Dundalk" and "Dundalk FC" are one club.
 # "United", "City", "Town" and the rest stay: Galway and Galway United are
@@ -134,6 +145,10 @@ def _build_index(report: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
                         "league": league_name,
                         "from": str(signing.get("other") or "").strip(),
                         "fee": str(signing.get("fee") or "").strip(),
+                        # 251 of 723 signings this window were loans. Dropping
+                        # this field is what put Max Merrick — at Hartlepool on
+                        # loan from Chelsea — through the permanent-move path.
+                        "loan": str(signing.get("kind") or "").strip().lower() == "loan",
                     }
                 )
     return index
@@ -207,14 +222,23 @@ def lookup(name: str | None, club: str | None) -> dict[str, Any] | None:
     # caught at his middle club.
     for record in matches:
         if _clubs_match(record.get("from"), club):
-            return {**record, "status": GONE}
+            # Left on loan is not sold. He is still their player and the loan
+            # ends, so a scout needs to know he is away — not that he is gone.
+            return {
+                **record,
+                "status": LOAN_OUT if record.get("loan") else GONE,
+            }
 
-    # Then the destination. If the row already names the club he signed for, he
-    # is not gone — he has arrived, and the row is right. Missing this check
-    # flagged 866 players on Staging, among them Max Merrick shown as
-    # "Hartlepool United -> Hartlepool United", which is just where he plays.
+    # Then the destination. If the row already names the club he signed for,
+    # he has arrived rather than left.
     for record in matches:
         if _clubs_match(record.get("club"), club):
+            if record.get("loan"):
+                # Max Merrick: Hartlepool on the row, Chelsea's player. Saying
+                # nothing here loses the one fact that decides whether he can be
+                # signed at all, and who you would be negotiating with.
+                return {**record, "status": LOAN_IN}
+            # A permanent arrival: the row is simply correct.
             return None
 
     record = matches[0]

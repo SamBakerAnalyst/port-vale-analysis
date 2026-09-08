@@ -885,7 +885,19 @@ def register_player_pipelines_routes(app: FastAPI) -> None:
             and row.get("player_id")
             and (row.get("overall_score") is None or row.get("minutes") is None)
         )
-        moved = sum(1 for row in watch_targets if row.get("transfer"))
+        # Counted apart, because they mean different things to a scout. Gone is
+        # a wasted trip; on loan is a signable player whose deal is with someone
+        # other than the club on the row.
+        moved = sum(
+            1
+            for row in watch_targets
+            if (row.get("transfer") or {}).get("status") == transfer_status.GONE
+        )
+        loaned = sum(
+            1
+            for row in watch_targets
+            if (row.get("transfer") or {}).get("status") in transfer_status.LOAN_STATUSES
+        )
         return {
             **payload,
             "targets": watch_targets,
@@ -893,6 +905,7 @@ def register_player_pipelines_routes(app: FastAPI) -> None:
             "stats_pending": 0,
             "stats_missing": missing,
             "stats_moved": moved,
+            "stats_loaned": loaned,
             "transfer_check": transfer_status.report_meta(),
             "snapshot": load_meta(),
             # Hide promote controls while Pipelines is held back, so nobody

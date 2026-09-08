@@ -252,15 +252,24 @@ a { color: var(--accent); }
 
 .wl-table tbody tr.is-move-check .club-was { text-decoration: none; }
 
-.wl-table .club-now {
+/* On loan — the same blue Who To Scout uses. He is signable, but not from the
+   club on this row, and that decides who the call is with. */
+.wl-table tbody tr.is-loan td.col-player a { color: #60a5fa; font-weight: 700; }
+
+.wl-table .club-now,
+.wl-table .club-loan {
   display: block;
-  color: #f87171;
   font-weight: 700;
   font-size: 0.86em;
   line-height: 1.25;
 }
 
+.wl-table .club-now { color: #f87171; }
 .wl-table .club-now--check { color: #fbbf24; }
+.wl-table .club-loan { color: #60a5fa; }
+
+/* A loan row's club is correct, so it is not struck out. */
+.wl-table .club-held { color: inherit; }
 .wl-table .col-num {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
