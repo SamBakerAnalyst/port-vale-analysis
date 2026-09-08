@@ -53,6 +53,17 @@ CHECK = "check"
 # different clubs, and dropping them would merge them.
 _GENERIC_CLUB_WORDS = frozenset({"fc", "afc", "football", "club", "the"})
 
+# Two sources, two house styles. Substring matching absorbs most of it —
+# "Dundalk" against "Dundalk FC", "Bohemian" against "Bohemians" — but an
+# abbreviation that shares no word with the full name has to be spelled out.
+# Impect says "Milton Keynes Dons" where the transfer feed says "MK Dons", and
+# that alone accounted for seven of eighteen amber rows on Staging: players
+# already at the club they had signed for.
+_CLUB_ALIASES = {
+    "mk dons": "milton keynes dons",
+    "mk": "milton keynes dons",
+}
+
 # A seller that is not a club, so there is nothing to match a pool row against.
 _NOT_A_CLUB = frozenset(
     {"", "unattached", "free agent", "free", "n/a", "na", "unknown", "?", "trial"}
@@ -80,7 +91,8 @@ def club_key(value: str | None) -> str:
     text = _strip_accents(str(value or "")).lower()
     text = re.sub(r"[^a-z\s]", " ", text)
     words = [w for w in text.split() if w and w not in _GENERIC_CLUB_WORDS]
-    return " ".join(words)
+    key = " ".join(words)
+    return _CLUB_ALIASES.get(key, key)
 
 
 def _clubs_match(seller: str | None, pool_club: str | None) -> bool:
@@ -176,17 +188,24 @@ def lookup(name: str | None, club: str | None) -> dict[str, Any] | None:
     if not matches:
         return None
 
-    # A club match settles it, so prefer one wherever the feed offers a choice
-    # (a player loaned out and recalled appears twice).
+    # Order matters. Selling club first, so a player who moved twice is still
+    # caught at his middle club.
     for record in matches:
         if _clubs_match(record.get("from"), club):
             return {**record, "status": GONE}
 
+    # Then the destination. If the row already names the club he signed for, he
+    # is not gone — he has arrived, and the row is right. Missing this check
+    # flagged 866 players on Staging, among them Max Merrick shown as
+    # "Hartlepool United -> Hartlepool United", which is just where he plays.
+    for record in matches:
+        if _clubs_match(record.get("club"), club):
+            return None
+
     record = matches[0]
-    seller = club_key(record.get("from"))
-    if not seller or str(record.get("from") or "").strip().lower() in _NOT_A_CLUB:
-        # Signed as a free agent: nothing to check the row against, but the move
-        # itself is on record, so say so rather than staying silent.
+    if str(record.get("from") or "").strip().lower() in _NOT_A_CLUB:
+        # Signed as a free agent, so there is no selling club to match the row
+        # against. The move is still on record, so say so.
         return {**record, "status": GONE}
     return {**record, "status": CHECK}
 

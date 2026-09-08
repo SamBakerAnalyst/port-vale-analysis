@@ -85,6 +85,36 @@ def test_an_accent_does_not_hide_a_move():
     assert ts.lookup("Séamus O'Ceallaigh", "Bohemians") is not None
 
 
+def test_a_player_already_at_the_club_he_signed_for_is_not_flagged():
+    """The row is right, so there is nothing to say.
+
+    Missing this flagged 866 players on Staging. Max Merrick appeared as
+    "Hartlepool United -> Hartlepool United (from Chelsea)", which is not a
+    warning, it is just where he plays now. At that volume nobody reads the
+    colour at all.
+    """
+    assert ts.lookup("Gbemi Arubi", "Burton Albion") is None
+    assert ts.lookup("Harry Wood", "Barnet") is None
+
+
+def test_a_player_who_moved_twice_is_caught_at_the_middle_club(_report):
+    """Selling club is checked before destination, so a stop-off still flags."""
+    twice = json.loads(_report.read_text())
+    twice["leagues"][1]["teams"][0]["signed"].append(
+        {"player": "Rory Feely", "other": "Barnet", "fee": "Undisclosed"}
+    )
+    twice["leagues"][0]["teams"][0]["signed"].append(
+        {"player": "Rory Feely", "other": "Waterford", "fee": "Free"}
+    )
+    _report.write_text(json.dumps(twice), encoding="utf-8")
+    ts.reset_cache()
+
+    # Sitting at Barnet in the pool: he arrived there, then left for Burton.
+    moved = ts.lookup("Rory Feely", "Barnet")
+    assert moved is not None, "the second move must still register"
+    assert moved["status"] == ts.GONE
+
+
 def test_a_namesake_is_flagged_to_check_not_painted_red():
     """Harry Wood of Shelbourne is in the winger pool; the Harry Wood who signed
     for Barnet came from Hull City. Same name, different player — so ask a human
@@ -92,6 +122,17 @@ def test_a_namesake_is_flagged_to_check_not_painted_red():
     moved = ts.lookup("Harry Wood", "Shelbourne FC")
     assert moved["status"] == ts.CHECK
     assert moved["club"] == "Barnet"
+
+
+def test_mk_dons_and_milton_keynes_dons_are_one_club():
+    """An abbreviation sharing no word with the full name needs spelling out.
+
+    Impect writes "Milton Keynes Dons", the transfer feed writes "MK Dons".
+    Substring matching cannot bridge that, and it alone put seven players on
+    Staging's amber list who were simply at the club they had just joined.
+    """
+    assert ts._clubs_match("MK Dons", "Milton Keynes Dons") is True
+    assert ts.club_key("MK Dons") == ts.club_key("Milton Keynes Dons")
 
 
 def test_derry_city_and_cork_city_are_not_confused():
