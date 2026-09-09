@@ -8,9 +8,8 @@ PORT_VALE_SQUAD_ID = int(os.getenv("PORT_VALE_SQUAD_ID", "882"))
 DEFAULT_ITERATION_ID = int(os.getenv("DEFAULT_ITERATION_ID", "2120"))
 DEFAULT_SEASON_LABEL = os.getenv("DEFAULT_SEASON_LABEL", "26/27").strip() or "26/27"
 
-# Wolves vs Port Vale — EFL Cup R1, Fri 7 Aug 2026 (19:45 BST).
-# Report unlocks once Impect marks the match available after full time.
-DEFAULT_MATCH_ID = int(os.getenv("DEFAULT_MATCH_ID", "285444"))
+# Fallback only — the dashboard prefers the latest available match from the bar.
+DEFAULT_MATCH_ID = int(os.getenv("DEFAULT_MATCH_ID", "270725"))
 
 # Competitions merged into the post-match match bar (league + cups).
 # Add FA Cup / EFL Trophy iteration ids here when Impect publishes them.

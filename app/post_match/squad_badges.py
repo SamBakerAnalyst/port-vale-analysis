@@ -28,10 +28,16 @@ def _squad_image_url(iteration_id: int, squad_id: int) -> str | None:
 
     raw = impect_get(v5_path(f"/iterations/{iteration_id}/squads"))
     image_url: str | None = None
+    squad_name = ""
     for row in extract_rows(raw["data"]):
         if int(row.get("id") or 0) == int(squad_id):
             image_url = row.get("imageUrl")
+            squad_name = str(row.get("name") or "")
             break
+    if not image_url:
+        from app.handout_badges import fotmob_crest_url_for_club
+
+        image_url = fotmob_crest_url_for_club(squad_name)
     _BADGE_URL_CACHE[cache_key] = image_url
     return image_url
 
@@ -73,14 +79,13 @@ def ensure_badge_cached(squad_id: int, iteration_id: int) -> Path | None:
 
 def resolve_badge_url(squad_id: int | None, iteration_id: int | None) -> str | None:
     """Return same-origin badge URL when we can serve a cached/proxied image."""
-    if squad_id is None or iteration_id is None:
+    if squad_id is None:
         return None
     squad_id = int(squad_id)
-    iteration_id = int(iteration_id)
     cached = BADGE_DIR / _safe_filename(squad_id)
     if cached.is_file() and cached.stat().st_size > 0:
         return badge_api_path(squad_id)
-    if ensure_badge_cached(squad_id, iteration_id):
+    if iteration_id is not None and ensure_badge_cached(squad_id, int(iteration_id)):
         return badge_api_path(squad_id)
     return None
 
@@ -127,5 +132,10 @@ def squad_initials(name: str | None) -> str:
 def enrich_squad(squad: dict[str, Any], squad_id: int, iteration_id: int | None) -> dict[str, Any]:
     enriched = dict(squad)
     enriched["initials"] = squad_initials(enriched.get("name"))
-    enriched["badgeUrl"] = resolve_badge_url(squad_id, iteration_id)
+    badge_url = resolve_badge_url(squad_id, iteration_id)
+    if not badge_url:
+        from app.handout_badges import fotmob_crest_url_for_club
+
+        badge_url = fotmob_crest_url_for_club(str(enriched.get("name") or ""))
+    enriched["badgeUrl"] = badge_url
     return enriched

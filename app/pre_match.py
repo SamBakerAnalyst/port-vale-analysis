@@ -21,10 +21,12 @@ from app.opponent_photos import (
     fetch_opponent_photo_bytes,
     opponent_photo_api_url,
     player_on_transfermarkt_squad,
+    read_cached_photo_bytes,
     resolve_opponent_photo_source_url,
     resolve_transfermarkt_club_id,
     transfermarkt_entry_is_loaned_out,
     transfermarkt_first_team_roster,
+    write_cached_photo_bytes,
 )
 from app.paths import HUB_ROOT
 from app.scouting import SCOUTING_DIR
@@ -78,6 +80,11 @@ def _resolve_player_photo_bytes(
         _player_photo_bytes_cache[cache_key] = (now, image_bytes, content_type)
         return image_bytes, content_type
 
+    cached_disk = read_cached_photo_bytes(name, club_name=club, shirt=shirt)
+    if cached_disk:
+        _player_photo_bytes_cache[cache_key] = (now, cached_disk[0], cached_disk[1])
+        return cached_disk
+
     source_url = resolve_opponent_photo_source_url(
         name,
         club_name=club,
@@ -88,13 +95,17 @@ def _resolve_player_photo_bytes(
         raise HTTPException(status_code=404, detail=f"No photo found for {name}")
 
     try:
-        if "transfermarkt" in source_url or "images.gc." in source_url:
+        if any(
+            token in source_url
+            for token in ("transfermarkt", "images.gc.", "fotmob.com", "wikipedia", "wikimedia")
+        ):
             image_bytes, content_type = fetch_opponent_photo_bytes(source_url)
         else:
             image_bytes, content_type = fetch_photo_bytes(source_url)
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
+    write_cached_photo_bytes(name, image_bytes, club_name=club, shirt=shirt)
     _player_photo_bytes_cache[cache_key] = (now, image_bytes, content_type)
     return image_bytes, content_type
 
@@ -105,46 +116,42 @@ PRE_MATCH_SEASON_LIMIT = 2
 # Prefer the newest season (26/27 League Two).
 PRE_MATCH_DEFAULT_SEASON_INDEX = 0
 
-# Impect occasionally omits squad crests (Burton Albion in 25/26). Fall back to FotMob.
-_SQUAD_CREST_FOTMOB_IDS: dict[str, int] = {
-    "burton albion": 9792,
-}
-
-
-def _normalize_club_key(name: str | None) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", str(name or "").casefold()).strip()
+# Impect occasionally omits squad crests — FotMob ids live in efl-transfer-badges.json.
 
 
 def _squad_crest_url(name: str | None, image_url: Any = None) -> str | None:
     if _is_port_vale(str(name or "")):
         return "/standalone/port-vale-badge.png?v=2"
     token = str(image_url or "").strip()
-    if token.startswith("http"):
+    if token.startswith("/") or token.startswith("http"):
         return token
-    fotmob_id = _SQUAD_CREST_FOTMOB_IDS.get(_normalize_club_key(name))
-    if fotmob_id:
-        return f"https://images.fotmob.com/image_resources/logo/teamlogo/{fotmob_id}.png"
-    return None
+    from app.handout_badges import fotmob_crest_url_for_club
+
+    return fotmob_crest_url_for_club(name)
 
 
 def _enrich_team_crest(team: dict[str, Any], iteration_id: int) -> dict[str, Any]:
     """Prefer a same-origin crest so the UI and PDF export both render badges."""
-    from app.handout_badges import resolve_handout_badge_url
+    from app.handout_badges import enrich_team_badge, hydrate_team_badge
 
+    hydrated = hydrate_team_badge(team, iteration_id)
+    try:
+        enriched = enrich_team_badge(team, iteration_id)
+        if str(enriched.get("badge_url") or "").startswith("/"):
+            return enriched
+        if enriched.get("badge_url") and not hydrated.get("badge_url"):
+            return enriched
+    except Exception:
+        pass
+    if hydrated.get("badge_url"):
+        return hydrated
+    fallback = _squad_crest_url(team.get("name"), team.get("image_url") or team.get("imageUrl"))
     enriched = dict(team)
-    badge_url = resolve_handout_badge_url(
-        int(team.get("id") or 0) or None,
-        iteration_id,
-        str(team.get("name") or ""),
-    )
-    if badge_url:
-        enriched["badge_url"] = badge_url
-        enriched["image_url"] = badge_url
-    elif not enriched.get("image_url"):
-        fallback = _squad_crest_url(team.get("name"), None)
-        if fallback:
-            enriched["image_url"] = fallback
+    if fallback:
+        enriched["image_url"] = fallback
     return enriched
+
+
 PRE_MATCH_DEFAULT_OPPONENT_NAMES: tuple[str, ...] = ()
 
 _kpi_name_cache: tuple[float, dict[int, str]] | None = None
@@ -3427,21 +3434,12 @@ def _two_pager_stat_leaders(
                 label = f"{value:.1f}".rstrip("0").rstrip(".")
             name = str(bucket.get("name") or bucket.get("short_name") or "")
             shirt = bucket.get("shirt_number")
-            photo = None
-            if club_name and name:
-                source = resolve_opponent_photo_source_url(
-                    name,
-                    club_name=club_name,
-                    season=season,
-                    shirt_number=shirt,
-                )
-                if source:
-                    photo = opponent_photo_api_url(
-                        name,
-                        club_name=club_name,
-                        season=season,
-                        shirt_number=shirt,
-                    )
+            photo = opponent_photo_api_url(
+                name,
+                club_name=club_name,
+                season=season,
+                shirt_number=shirt,
+            ) if club_name and name else None
             scored.append(
                 {
                     "player_id": bucket["player_id"],
@@ -3721,7 +3719,14 @@ def _build_two_match_brief(
         away_id = int(match.get("awaySquadId") or -1)
         is_home = home_id == squad_id
         opponent_id = away_id if is_home else home_id
-        opponent_name = str(squads.get(opponent_id, {}).get("name") or "Opponent")
+        opponent = squads.get(opponent_id, {})
+        opponent_name = str(opponent.get("name") or "Opponent")
+        from app.handout_badges import hydrate_team_badge
+
+        opponent_crest = hydrate_team_badge(
+            {"id": opponent_id, "name": opponent_name},
+            iteration_id,
+        )
         result, score, venue = _match_result_score_venue(match, squad_id)
         raw_formation = str(squad.get("startingFormation") or "").strip() or None
         players = _beautify_pitch_layout(players)
@@ -3739,6 +3744,9 @@ def _build_two_match_brief(
                 "match_id": match_id,
                 "date": match.get("scheduledDate") or detail.get("dateTime"),
                 "opponent": opponent_name,
+                "opponent_id": opponent_id,
+                "opponent_badge_url": opponent_crest.get("badge_url")
+                or opponent_crest.get("image_url"),
                 "venue": venue,
                 "result": result,
                 "score": score,
@@ -3870,6 +3878,11 @@ def _build_previous_xi_slides(
         formation = _coach_formation_from_lineup(raw_formation, players)
         players = assign_lineup_formation_slots(players, formation)
         players = _beautify_pitch_layout(players)
+        players = attach_pitch_player_photos(
+            players[:PITCH_STARTER_LIMIT],
+            club_name=club_name,
+            season=season,
+        )
         slides.append(
             {
                 "match_id": match_id,
@@ -4422,6 +4435,16 @@ _FALLBACK_ITERATIONS = (
 )
 
 
+_SCORE_LABEL_RE = re.compile(r"^\d+\s*[-:]\s*\d+")
+
+
+def _fixture_looks_played(row: dict[str, Any]) -> bool:
+    if row.get("played"):
+        return True
+    label = str(row.get("kickoff_label") or "")
+    return bool(_SCORE_LABEL_RE.match(label.strip()))
+
+
 def _fixture_row_quality(row: dict[str, Any]) -> int:
     label = str(row.get("kickoff_label") or "")
     score = 0
@@ -4432,7 +4455,150 @@ def _fixture_row_quality(row: dict[str, Any]) -> int:
         pass
     if "·" in label or ":" in label:
         score += 5
+    if _fixture_looks_played(row):
+        score += 20
+    if (row.get("opponent") or {}).get("badge_url"):
+        score += 3
     return score
+
+
+def _hydrate_fixture_row(row: dict[str, Any], iteration_id: int) -> dict[str, Any]:
+    from app.handout_badges import hydrate_team_badge
+
+    hydrated = dict(row)
+    opponent = dict(hydrated.get("opponent") or {})
+    if opponent:
+        hydrated["opponent"] = hydrate_team_badge(opponent, iteration_id)
+    return hydrated
+
+
+def _hydrate_pitch_photos(
+    players: list[dict[str, Any]] | None,
+    *,
+    club_name: str,
+    season: str | None,
+) -> list[dict[str, Any]]:
+    return attach_pitch_player_photos(
+        [dict(player) for player in players or []],
+        club_name=club_name,
+        season=season,
+        warm=False,
+    )
+
+
+def _hydrate_cached_pre_match_report(report: dict[str, Any]) -> dict[str, Any]:
+    """Re-attach crests and photo proxy URLs on stale disk reports."""
+    from app.handout_badges import hydrate_team_badge
+
+    hydrated = dict(report)
+    try:
+        iteration_id = int(hydrated.get("iteration_id") or 0)
+    except (TypeError, ValueError):
+        iteration_id = 0
+    season = str(hydrated.get("season") or "")
+    opponent = dict(hydrated.get("opponent") or {})
+    club_name = str(opponent.get("name") or "")
+    if opponent:
+        hydrated["opponent"] = hydrate_team_badge(opponent, iteration_id)
+
+    fixture = dict(hydrated.get("fixture") or {})
+    if fixture.get("opponent"):
+        fixture["opponent"] = hydrate_team_badge(dict(fixture["opponent"]), iteration_id)
+        hydrated["fixture"] = fixture
+
+    form_rows: list[dict[str, Any]] = []
+    for match in hydrated.get("form") or []:
+        row = dict(match)
+        crest = hydrate_team_badge(
+            {"id": row.get("opponent_id"), "name": row.get("opponent") or ""},
+            iteration_id,
+        )
+        row["opponent_image_url"] = (
+            crest.get("badge_url")
+            or crest.get("image_url")
+            or row.get("opponent_image_url")
+        )
+        form_rows.append(row)
+    if form_rows:
+        hydrated["form"] = form_rows
+
+    two = dict(hydrated.get("two_match") or {})
+    two_matches: list[dict[str, Any]] = []
+    for match in two.get("matches") or []:
+        row = dict(match)
+        crest = hydrate_team_badge(
+            {"id": row.get("opponent_id"), "name": row.get("opponent") or ""},
+            iteration_id,
+        )
+        row["opponent_badge_url"] = (
+            crest.get("badge_url")
+            or crest.get("image_url")
+            or row.get("opponent_badge_url")
+        )
+        row["pitch_players"] = _hydrate_pitch_photos(
+            row.get("pitch_players"),
+            club_name=club_name,
+            season=season,
+        )
+        two_matches.append(row)
+    if two_matches:
+        two["matches"] = two_matches
+    if two.get("last_xi"):
+        two["last_xi"] = _hydrate_pitch_photos(
+            two.get("last_xi"),
+            club_name=club_name,
+            season=season,
+        )
+    if two.get("avg_positions"):
+        two["avg_positions"] = _hydrate_pitch_photos(
+            two.get("avg_positions"),
+            club_name=club_name,
+            season=season,
+        )
+    leaders = []
+    for board in two.get("stat_leaders") or []:
+        board_row = dict(board)
+        players = []
+        for player in board_row.get("players") or []:
+            item = dict(player)
+            name = str(item.get("name") or item.get("short_name") or "")
+            if name and not item.get("photo_url"):
+                item["photo_url"] = opponent_photo_api_url(
+                    name,
+                    club_name=club_name,
+                    season=season,
+                    shirt_number=item.get("shirt_number"),
+                )
+            players.append(item)
+        board_row["players"] = players
+        leaders.append(board_row)
+    if leaders:
+        two["stat_leaders"] = leaders
+    if two:
+        hydrated["two_match"] = two
+
+    squad_list = dict(hydrated.get("squad_list") or {})
+    if squad_list.get("pitch_players"):
+        squad_list["pitch_players"] = _hydrate_pitch_photos(
+            squad_list.get("pitch_players"),
+            club_name=club_name,
+            season=season,
+        )
+        hydrated["squad_list"] = squad_list
+
+    previous = []
+    for slide in hydrated.get("previous_xis") or []:
+        row = dict(slide)
+        row["pitch_players"] = _hydrate_pitch_photos(
+            row.get("pitch_players"),
+            club_name=club_name,
+            season=season,
+        )
+        previous.append(row)
+    if previous:
+        hydrated["previous_xis"] = previous
+
+    return hydrated
 
 
 def _merge_fixture_rows(*groups: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
@@ -4483,6 +4649,7 @@ def _fixture_from_pre_match_report(report: dict[str, Any]) -> dict[str, Any] | N
         or fixture.get("date_label")
         or "Saved",
         "is_home": fixture.get("is_home"),
+        "played": True,
         "opponent": opponent,
     }
 
@@ -4499,6 +4666,48 @@ def fixtures_from_saved_pre_match_reports(
         row = _fixture_from_pre_match_report(report)
         if row:
             fixtures.append(row)
+    return fixtures
+
+
+def fixtures_from_xg_cache() -> list[dict[str, Any]]:
+    """Played Vale games already cached by xG Chance — no Impect on click."""
+    from app.analysis_cache import all_json
+
+    fixtures: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for body in all_json("xg-fixtures"):
+        for item in body.get("fixtures") or []:
+            try:
+                match_id = int(item.get("matchId") or item.get("match_id") or 0)
+            except (TypeError, ValueError):
+                match_id = 0
+            if not match_id or match_id in seen:
+                continue
+            opponent = dict(item.get("opponent") or {})
+            if not opponent.get("id") and not opponent.get("name"):
+                continue
+            score = str(item.get("score") or "").strip()
+            kickoff = str(item.get("kickoffLabel") or item.get("kickoff_label") or "").strip()
+            label = score or kickoff or "Played"
+            try:
+                match_day = int(item.get("matchDay") or item.get("match_day") or 0)
+            except (TypeError, ValueError):
+                match_day = 0
+            # xG Chance stores human MD1, MD2…; pre-match rows use Impect's 0-based index.
+            if match_day > 0:
+                match_day -= 1
+            seen.add(match_id)
+            fixtures.append(
+                {
+                    "match_id": match_id,
+                    "match_day": match_day,
+                    "scheduled_date": item.get("scheduledDate") or item.get("scheduled_date"),
+                    "kickoff_label": label,
+                    "is_home": bool(item.get("isHome") if item.get("isHome") is not None else item.get("is_home")),
+                    "played": True,
+                    "opponent": opponent,
+                }
+            )
     return fixtures
 
 
@@ -4619,9 +4828,18 @@ def build_pre_match_fixtures(
             )
         except Exception:
             pass
+        recovered = _merge_fixture_rows(recovered, fixtures_from_xg_cache())
         merged = _merge_fixture_rows(cached_rows, recovered)
         if merged:
-            return merged
+            hydrated = [_hydrate_fixture_row(row, iteration_id) for row in merged]
+            if any(_fixture_looks_played(row) for row in hydrated) and not any(
+                _fixture_looks_played(row) for row in cached_rows
+            ):
+                try:
+                    write_json("pre-match-fixtures", cache_key, {"fixtures": hydrated})
+                except Exception:
+                    pass
+            return hydrated
 
     fixtures = _build_pre_match_fixtures_uncached(int(iteration_id))
     write_json("pre-match-fixtures", cache_key, {"fixtures": fixtures})
@@ -4651,25 +4869,40 @@ def _build_pre_match_fixtures_uncached(iteration_id: int) -> list[dict[str, Any]
         away_id = int(match.get("awaySquadId") or -1)
         if port_vale_id not in (home_id, away_id):
             continue
-        if _match_is_complete(match):
-            continue
         is_home = port_vale_id == home_id
         opponent_id = away_id if is_home else home_id
         opponent = squads.get(opponent_id, {})
+        played = _match_is_complete(match)
+        goals = match.get("goals") or {}
+        home_goals = (goals.get("home") or {}).get("fullTime")
+        away_goals = (goals.get("away") or {}).get("fullTime")
+        score = (
+            f"{home_goals}-{away_goals}"
+            if home_goals is not None and away_goals is not None
+            else ""
+        )
         fixtures.append(
             {
                 "match_id": int(match_id),
                 "match_day": _match_day_index(match),
                 "scheduled_date": match.get("scheduledDate"),
-                "kickoff_label": _kickoff_label(match.get("scheduledDate"), is_home),
+                "kickoff_label": (
+                    score or _kickoff_label(match.get("scheduledDate"), is_home)
+                    if played
+                    else _kickoff_label(match.get("scheduledDate"), is_home)
+                ),
                 "is_home": is_home,
-                "opponent": {
-                    "id": opponent_id,
-                    "name": str(opponent.get("name") or f"Squad {opponent_id}"),
-                    "image_url": _squad_crest_url(
-                        opponent.get("name"), opponent.get("imageUrl")
-                    ),
-                },
+                "played": played,
+                "opponent": _enrich_team_crest(
+                    {
+                        "id": opponent_id,
+                        "name": str(opponent.get("name") or f"Squad {opponent_id}"),
+                        "image_url": _squad_crest_url(
+                            opponent.get("name"), opponent.get("imageUrl")
+                        ),
+                    },
+                    iteration_id,
+                ),
             }
         )
 
@@ -4746,13 +4979,17 @@ def _completed_opponent_fixtures(
                 "scheduled_date": match.get("scheduledDate"),
                 "kickoff_label": score or _kickoff_label(match.get("scheduledDate"), is_home),
                 "is_home": is_home,
-                "opponent": {
-                    "id": opponent_id,
-                    "name": str(opponent.get("name") or f"Squad {opponent_id}"),
-                    "image_url": _squad_crest_url(
-                        opponent.get("name"), opponent.get("imageUrl")
-                    ),
-                },
+                "played": True,
+                "opponent": _enrich_team_crest(
+                    {
+                        "id": opponent_id,
+                        "name": str(opponent.get("name") or f"Squad {opponent_id}"),
+                        "image_url": _squad_crest_url(
+                            opponent.get("name"), opponent.get("imageUrl")
+                        ),
+                    },
+                    iteration_id,
+                ),
             }
         )
 
@@ -5444,7 +5681,7 @@ def build_pre_match_report(body: PreMatchReportRequest) -> dict[str, Any]:
                 int(body.iteration_id), int(body.squad_id), body.match_id
             )
         if cached:
-            cached = dict(cached)
+            cached = _hydrate_cached_pre_match_report(dict(cached))
             cached["cache"] = {"hit": True, "refreshed": False}
             return cached
         return {
@@ -5716,13 +5953,16 @@ def _build_pre_match_report_uncached(body: PreMatchReportRequest) -> dict[str, A
         "season": iteration.get("season"),
         "iteration_id": iteration_id,
         "fixture": fixture,
-        "opponent": {
-            "id": squad_id,
-            "name": str(squad.get("name") or ""),
-            "image_url": _squad_crest_url(squad.get("name"), squad.get("imageUrl")),
-            "league_position": league_position,
-            "matches_played": int(matches_played),
-        },
+        "opponent": _enrich_team_crest(
+            {
+                "id": squad_id,
+                "name": str(squad.get("name") or ""),
+                "image_url": _squad_crest_url(squad.get("name"), squad.get("imageUrl")),
+                "league_position": league_position,
+                "matches_played": int(matches_played),
+            },
+            iteration_id,
+        ),
         "overview": {
             "manager": squad_list.get("manager"),
             "formations": formations,

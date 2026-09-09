@@ -2,6 +2,7 @@ from app.set_piece_pre_match import (
     _backfill_tm_heights_from_previous_season,
     _height_band_label,
     _parse_tm_height_cm,
+    _sane_height_cm,
     _tm_profiles_have_heights,
 )
 
@@ -17,15 +18,36 @@ def test_parse_metric_height():
     assert _parse_tm_height_cm("1.91m") == 191
 
 
+def test_market_value_is_not_parsed_as_height():
+    # Real Transfermarkt row noise: height cell + €1.50m market value.
+    chunk = (
+        '<td class="zentriert">5 ft 10 in</td>'
+        '<td class="rechts hauptlink"><a href="/x/marktwertverlauf/spieler/1">€1.50m</a></td>'
+    )
+    assert _parse_tm_height_cm(chunk) == 178
+    assert _parse_tm_height_cm('€1.50m') is None
+    assert _parse_tm_height_cm('€2.00m') is None
+
+
 def test_imperial_height_lands_in_expected_band():
     assert _height_band_label(_parse_tm_height_cm("6 ft 3 in")) == "6'3\""
     assert _height_band_label(_parse_tm_height_cm("6 ft 4 in")) == "6'4\"+"
     assert _height_band_label(_parse_tm_height_cm("5 ft 8 in")) == "<5'9\""
 
 
+def test_sane_height_rejects_market_value_cm():
+    assert _sane_height_cm(150) == 150  # still a plausible height
+    assert _sane_height_cm(100) is None
+    assert _sane_height_cm(250) is None
+    assert _sane_height_cm(1.88) is None  # metres must be converted upstream
+
+
 def test_profiles_without_heights_are_unusable():
     assert not _tm_profiles_have_heights(
         {"tombooth": {"name": "Tom Booth", "height_cm": None}}
+    )
+    assert not _tm_profiles_have_heights(
+        {"tombooth": {"name": "Tom Booth", "height_cm": 100}}
     )
     assert _tm_profiles_have_heights(
         {"tombooth": {"name": "Tom Booth", "height_cm": 191}}

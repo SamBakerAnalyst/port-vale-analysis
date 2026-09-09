@@ -48,6 +48,7 @@ FIXTURE_PLANNER_DATA_DIR = CACHE_ROOT / "impect-fixture-planner"
 CLUB_STRATEGY_CACHE_DIR = CACHE_ROOT / "impect-club-strategy"
 SCHEDULE_DATA_DIR = CACHE_ROOT / "impect-schedule"
 SET_PIECE_CACHE_DIR = CACHE_ROOT / "impect-set-piece"
+OPPONENT_PHOTOS_CACHE_DIR = CACHE_ROOT / "opponent-photos"
 BLOCKS_ANALYSIS_DATA_DIR = CACHE_ROOT / "impect-blocks-analysis"
 WIN_DRIVERS_CACHE_DIR = CACHE_ROOT / "impect-win-drivers"
 HUB_SNAPSHOTS_DIR = CACHE_ROOT / "hub-snapshots"
@@ -70,12 +71,14 @@ def ensure_data_dirs() -> None:
         CLUB_STRATEGY_CACHE_DIR,
         SCHEDULE_DATA_DIR,
         SET_PIECE_CACHE_DIR,
+        OPPONENT_PHOTOS_CACHE_DIR,
         BLOCKS_ANALYSIS_DATA_DIR,
         WIN_DRIVERS_CACHE_DIR,
         HUB_SNAPSHOTS_DIR,
         ANALYSIS_CACHE_DIR,
         STATIC_DIR / "player-photos",
         STATIC_DIR / "post-match-badges",
+        STATIC_DIR / "handout-badges",
         DATA_ROOT / "feedback-screenshots",
     ):
         path.mkdir(parents=True, exist_ok=True)

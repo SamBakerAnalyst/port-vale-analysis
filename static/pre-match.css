@@ -7358,6 +7358,9 @@ body.is-two-pager .pm-toolbar {
 
 .tp-score__vs {
   margin: 0;
+  display: flex;
+  align-items: center;
+  gap: .4rem;
   font-family: var(--display);
   font-size: .92rem;
   font-weight: 800;
@@ -7368,6 +7371,24 @@ body.is-two-pager .pm-toolbar {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.tp-score__crest {
+  width: 1.35rem;
+  height: 1.35rem;
+  object-fit: contain;
+  flex: 0 0 auto;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+
+.tp-score__crest--empty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(148, 163, 184, 0.18);
+  font-size: .55rem;
+  letter-spacing: 0;
 }
 
 .tp-score__meta {

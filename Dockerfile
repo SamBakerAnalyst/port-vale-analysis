@@ -34,6 +34,7 @@ COPY standalone ./standalone
 COPY templates ./templates
 COPY strategy-reports ./strategy-reports
 COPY data/efl-transfer-report-2026.json ./data/efl-transfer-report-2026.json
+COPY data/efl-transfer-badges.json ./data/efl-transfer-badges.json
 
 ENV HUB_ROOT=/app
 ENV DATA_ROOT=/data

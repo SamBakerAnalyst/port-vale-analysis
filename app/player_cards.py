@@ -426,20 +426,24 @@ def _resolve_card_photo_urls(
 
     club_url = row.get("photo_url")
     if club_url:
-        primary = str(club_url)
-        fallbacks.append(primary)
+        fallbacks.append(str(club_url))
 
     fotmob_url = _fotmob_player_photo_url(row.get("fotmob_player_id"))
     if fotmob_url and fotmob_url not in fallbacks:
         fallbacks.append(fotmob_url)
-        if not primary:
-            primary = fotmob_url
 
-    proxy_url = opponent_photo_api_url(name, club_name=club, season=season)
-    if proxy_url and proxy_url not in fallbacks:
-        fallbacks.append(proxy_url)
-        if not primary:
-            primary = proxy_url
+    proxy_url = opponent_photo_api_url(
+        name,
+        club_name=club,
+        season=season,
+        shirt_number=row.get("shirt_number"),
+    )
+    if proxy_url:
+        # Same-origin proxy first so club CDNs / TM blocks don't blank the card.
+        fallbacks = [proxy_url] + [url for url in fallbacks if url != proxy_url]
+        primary = proxy_url
+    elif fallbacks:
+        primary = fallbacks[0]
 
     return primary, fotmob_url, fallbacks
 

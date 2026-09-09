@@ -77,7 +77,11 @@ APPS: list[dict[str, Any]] = [
         "accent": "#14b8a6",
         "tags": ["Opponent", "Set pieces"],
         "roles": ("analysis", "admin"),
-        "api_prefixes": ("/set-piece-pre-match", "/api/set-piece-pre-match"),
+        "api_prefixes": (
+            "/set-piece-pre-match",
+            "/api/set-piece-pre-match",
+            "/api/pre-match/player-photo",
+        ),
         "router": "set_piece_pre_match",
     },
     {
@@ -741,6 +745,7 @@ LIVE_ESSENTIAL_IDS = frozenset(
         "pre-match",
         "set-piece-pre-match",
         "player-cards",
+        "post-match",
         "match-day-countdown",
         "xg-chance-analysis",
         "blocks-analysis",
@@ -825,6 +830,7 @@ SHARED_PATH_PREFIXES: tuple[str, ...] = (
     "/api/feedback",
     "/api/apps",
     "/api/player-photo",
+    "/api/pre-match/player-photo",
     "/api/wysiwyg-export-pdf",
     "/api/wysiwyg-export-png-zip",
     "/static/",

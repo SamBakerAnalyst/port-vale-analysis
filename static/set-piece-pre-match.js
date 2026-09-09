@@ -468,6 +468,102 @@ function crestUrl(team) {
   return team?.image_url || team?.imageUrl || team?.image || "";
 }
 
+/** Fallback kit map when report.opponent.kit is missing (cached reports). */
+const OPPONENT_KIT_FALLBACKS = [
+  ["exeter", { primary: "#E30613", secondary: "#FFFFFF", text: "#FFFFFF", border: "#8B0018" }],
+  ["salford", { primary: "#C8102E", secondary: "#FFFFFF", text: "#FFFFFF", border: "#7A0A1C" }],
+  ["crewe", { primary: "#E30613", secondary: "#FFFFFF", text: "#FFFFFF", border: "#8B0018" }],
+  ["swindon", { primary: "#E30613", secondary: "#FFFFFF", text: "#FFFFFF", border: "#8B0018" }],
+  ["bradford", { primary: "#8B0000", secondary: "#FFD700", text: "#FFFFFF", border: "#5C0000" }],
+  ["chesterfield", { primary: "#0033A0", secondary: "#FFFFFF", text: "#FFFFFF", border: "#001F66" }],
+  ["grimsby", { primary: "#000000", secondary: "#FFFFFF", text: "#FFFFFF", border: "#333333" }],
+  ["harrogate", { primary: "#FFD100", secondary: "#000000", text: "#111111", border: "#111111" }],
+  ["newport", { primary: "#F5C518", secondary: "#000000", text: "#111111", border: "#111111" }],
+  ["notts county", { primary: "#000000", secondary: "#FFFFFF", text: "#FFFFFF", border: "#333333" }],
+  ["shrewsbury", { primary: "#0033A0", secondary: "#F5C518", text: "#FFFFFF", border: "#001F66" }],
+  ["tranmere", { primary: "#FFFFFF", secondary: "#0033A0", text: "#0033A0", border: "#0033A0" }],
+  ["wimbledon", { primary: "#0033A0", secondary: "#F5C518", text: "#FFFFFF", border: "#001F66" }],
+  ["mk dons", { primary: "#FFFFFF", secondary: "#E30613", text: "#111111", border: "#E30613" }],
+  ["milton keynes", { primary: "#FFFFFF", secondary: "#E30613", text: "#111111", border: "#E30613" }],
+  ["gillingham", { primary: "#0033A0", secondary: "#FFFFFF", text: "#FFFFFF", border: "#001F66" }],
+  ["oldham", { primary: "#0033A0", secondary: "#FFFFFF", text: "#FFFFFF", border: "#001F66" }],
+  ["colchester", { primary: "#0033A0", secondary: "#FFFFFF", text: "#FFFFFF", border: "#001F66" }],
+  ["walsall", { primary: "#E30613", secondary: "#FFFFFF", text: "#FFFFFF", border: "#8B0018" }],
+  ["fleetwood", { primary: "#E30613", secondary: "#FFFFFF", text: "#FFFFFF", border: "#8B0018" }],
+  ["cheltenham", { primary: "#E30613", secondary: "#FFFFFF", text: "#FFFFFF", border: "#8B0018" }],
+  ["crawley", { primary: "#E30613", secondary: "#FFFFFF", text: "#FFFFFF", border: "#8B0018" }],
+  ["barrow", { primary: "#0033A0", secondary: "#FFFFFF", text: "#FFFFFF", border: "#001F66" }],
+  ["bromley", { primary: "#FFFFFF", secondary: "#000000", text: "#111111", border: "#111111" }],
+  ["barnet", { primary: "#F5C518", secondary: "#000000", text: "#111111", border: "#111111" }],
+  ["cambridge", { primary: "#F5C518", secondary: "#000000", text: "#111111", border: "#111111" }],
+  ["lincoln", { primary: "#E4002B", secondary: "#FFFFFF", text: "#FFFFFF", border: "#8B0018" }],
+  ["rotherham", { primary: "#E30613", secondary: "#FFFFFF", text: "#FFFFFF", border: "#7A0409" }],
+];
+
+function opponentKit(report = state.report) {
+  const opponent = report?.opponent || report?.fixture?.opponent || {};
+  if (opponent.kit?.primary) {
+    return {
+      primary: opponent.kit.primary,
+      secondary: opponent.kit.secondary || "#FFFFFF",
+      text: opponent.kit.text || "#FFFFFF",
+      border: opponent.kit.border || opponent.kit.primary,
+    };
+  }
+  const name = String(opponent.name || "").toLowerCase();
+  for (const [key, kit] of OPPONENT_KIT_FALLBACKS) {
+    if (name.includes(key)) return { ...kit };
+  }
+  return { primary: "#F5C518", secondary: "#111111", text: "#111111", border: "#111111" };
+}
+
+function opponentThemeStyle(report = state.report) {
+  const kit = opponentKit(report);
+  return [
+    `--sp-opp-primary:${kit.primary}`,
+    `--sp-opp-secondary:${kit.secondary}`,
+    `--sp-opp-text:${kit.text}`,
+    `--sp-opp-border:${kit.border}`,
+  ].join(";");
+}
+
+function squadShirtLookup(report = state.report) {
+  const byId = new Map();
+  const byName = new Map();
+  for (const player of report?.squad || []) {
+    const shirt = player.shirt_number;
+    if (shirt == null || shirt === "") continue;
+    if (player.player_id != null && player.player_id !== "") {
+      byId.set(String(player.player_id), shirt);
+    }
+    const name = String(player.name || "").trim().toLowerCase();
+    if (name) byName.set(name, shirt);
+    const surname = String(player.surname || "").trim().toLowerCase();
+    if (surname) byName.set(surname, shirt);
+  }
+  return { byId, byName };
+}
+
+function shirtForPlayer(playerLike, lookup) {
+  if (!playerLike || !lookup) return null;
+  const id = playerLike.player_id ?? playerLike.playerId;
+  if (id != null && lookup.byId.has(String(id))) return lookup.byId.get(String(id));
+  const name = String(playerLike.name || playerLike.playerName || "").trim().toLowerCase();
+  if (name && lookup.byName.has(name)) return lookup.byName.get(name);
+  const parts = name.split(/\s+/).filter(Boolean);
+  if (parts.length) {
+    const surname = parts[parts.length - 1];
+    if (lookup.byName.has(surname)) return lookup.byName.get(surname);
+  }
+  return playerLike.shirt_number ?? playerLike.shirtNumber ?? null;
+}
+
+function formatPlayerLabel(row, { shirt = null, withHash = true } = {}) {
+  const name = row?.name || row?.playerName || "—";
+  if (shirt == null || shirt === "") return name;
+  return withHash ? `#${shirt} ${name}` : `${shirt}. ${name}`;
+}
+
 function crestInitials(name) {
   return String(name || "?")
     .split(/\s+/)
@@ -841,50 +937,88 @@ function clampPct(value) {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
-function teamMetricTone(side, key, { danger = false } = {}) {
-  const ranks = side?.ranks || {};
-  const higherBetter = side?.rankHigherBetter || {};
-  const rank = ranks[key] || null;
+function resolveSideRanks(side, report = state.report) {
+  const ranks = { ...(side?.ranks || {}) };
+  const higherBetter = { ...(side?.rankHigherBetter || {}) };
+  const sources = [
+    side?.corners?.season,
+    side?.freeKicks?.season,
+    side?.corners,
+    side?.freeKicks,
+  ];
+  for (const src of sources) {
+    if (!src?.ranks) continue;
+    for (const [key, value] of Object.entries(src.ranks)) {
+      if (!ranks[key] && value) ranks[key] = value;
+    }
+    Object.assign(higherBetter, src.rankHigherBetter || {});
+  }
+  const metricMap = {
+    SHOT_XG_AT_PHASE_SET_PIECE: "avgShotXg",
+    GOALS_AT_PHASE_SET_PIECE: "goals",
+    PXT_SETPIECE: "avgChains",
+  };
+  for (const metric of report?.team_metrics || []) {
+    const field = metricMap[metric.key];
+    if (!field || ranks[field] || !metric.rank) continue;
+    ranks[field] = metric.rank;
+    higherBetter[field] = metric.higher_better !== false;
+  }
+  return { ranks, higherBetter };
+}
+
+function teamMetricTone(side, key, { danger = false, ranks = null, higherBetter = null } = {}) {
+  const rankMap = ranks || side?.ranks || {};
+  const preferMap = higherBetter || side?.rankHigherBetter || {};
+  const rank = rankMap[key] || null;
   const rankNum = parseRankNumber(rank);
-  const prefersHigh = higherBetter[key] !== false;
+  const prefersHigh = preferMap[key] !== false;
   const elite = rankNum != null && rankNum <= 5 && prefersHigh;
   const warn = (rankNum != null && rankNum <= 5 && !prefersHigh) || danger;
   return { rank, elite, warn };
 }
 
-function renderTeamMeter(side, { key, label, value, danger = false } = {}) {
-  const tone = teamMetricTone(side, key, { danger });
+function renderTeamMeter(side, { key, label, value, danger = false, ranks = null, higherBetter = null } = {}) {
+  const tone = teamMetricTone(side, key, { danger, ranks, higherBetter });
   const bar = clampPct(value);
   const hasValue = value !== null && value !== undefined;
   return `
     <div class="sp-team-meter${tone.elite ? " sp-team-meter--elite" : ""}${tone.warn ? " sp-team-meter--warn" : ""}">
       <div class="sp-team-meter__row">
         <span class="sp-team-meter__label">${escapeHtml(label)}</span>
-        <span class="sp-team-meter__value">${escapeHtml(hasValue ? pct(value) : "—")}</span>
+        <span class="sp-team-meter__value-wrap">
+          <span class="sp-team-meter__value">${escapeHtml(hasValue ? pct(value) : "—")}</span>
+          ${
+            tone.rank
+              ? `<span class="sp-team-meter__rank${tone.elite ? " sp-team-meter__rank--elite" : ""}${tone.warn ? " sp-team-meter__rank--warn" : ""}">${escapeHtml(tone.rank)}</span>`
+              : ""
+          }
+        </span>
       </div>
       <div class="sp-team-meter__track" aria-hidden="true">
         <span class="sp-team-meter__fill" style="width:${hasValue ? bar : 0}%"></span>
       </div>
-      ${tone.rank ? `<span class="sp-team-meter__rank">Lg ${escapeHtml(tone.rank)}</span>` : ""}
     </div>`;
 }
 
-function renderTeamBoard(side, { dangerContact = false, accent = "gold", games = "0" } = {}) {
+function renderTeamBoard(side, { dangerContact = false, accent = "gold", games = "0", report = state.report } = {}) {
   const leftChains = Number(side?.left?.chains) || 0;
   const rightChains = Number(side?.right?.chains) || 0;
   const sideTotal = leftChains + rightChains;
   const leftShare = sideTotal ? Math.round((leftChains / sideTotal) * 100) : 0;
   const rightShare = sideTotal ? 100 - leftShare : 0;
-  const goalsTone = teamMetricTone(side, "goals");
-  const perGameTone = teamMetricTone(side, "avgChains");
-  const xgTone = teamMetricTone(side, "avgShotXg");
+  const { ranks, higherBetter } = resolveSideRanks(side, report);
+  const goalsTone = teamMetricTone(side, "goals", { ranks, higherBetter });
+  const perGameTone = teamMetricTone(side, "avgChains", { ranks, higherBetter });
+  const xgTone = teamMetricTone(side, "avgShotXg", { ranks, higherBetter });
+  const boardClass = accent === "opp" ? "sp-team-board--opp" : `sp-team-board--${escapeHtml(accent)}`;
 
   return `
-    <div class="sp-team-board sp-team-board--${escapeHtml(accent)}">
+    <div class="sp-team-board ${boardClass}">
       <div class="sp-team-board__head">
         <div>
-          <h3 class="sp-side-family__title">Team</h3>
-          <p class="sp-team-board__eyebrow">Season totals</p>
+          <h3 class="sp-side-family__title">Season totals</h3>
+          <p class="sp-team-board__eyebrow">Corners + free kicks · league ranks</p>
         </div>
         <span class="sp-team-board__games">${escapeHtml(games)} games</span>
       </div>
@@ -893,12 +1027,12 @@ function renderTeamBoard(side, { dangerContact = false, accent = "gold", games =
         <div class="sp-team-hero${perGameTone.elite ? " sp-team-hero--elite" : ""}">
           <div class="sp-team-hero__value">${escapeHtml(display(side?.avgChains))}</div>
           <div class="sp-team-hero__label">Per game</div>
-          <div class="sp-team-hero__sub">${escapeHtml(display(side?.chains, "0"))} total</div>
+          <div class="sp-team-hero__sub">${escapeHtml(display(side?.chains, "0"))} total${perGameTone.rank ? ` · <span class="sp-team-hero__rank">${escapeHtml(perGameTone.rank)}</span>` : ""}</div>
         </div>
         <div class="sp-team-hero${goalsTone.elite || xgTone.elite ? " sp-team-hero--elite" : ""}${goalsTone.warn ? " sp-team-hero--warn" : ""}">
           <div class="sp-team-hero__value">${escapeHtml(display(side?.goals))}</div>
           <div class="sp-team-hero__label">Goals</div>
-          <div class="sp-team-hero__sub">${escapeHtml(display(side?.avgShotXg))} xG / game</div>
+          <div class="sp-team-hero__sub">${escapeHtml(display(side?.avgShotXg))} xG / game${goalsTone.rank || xgTone.rank ? ` · <span class="sp-team-hero__rank">${escapeHtml(goalsTone.rank || xgTone.rank)}</span>` : ""}</div>
         </div>
       </div>
 
@@ -907,17 +1041,23 @@ function renderTeamBoard(side, { dangerContact = false, accent = "gold", games =
           key: "deliverySuccessPct",
           label: "Delivery success",
           value: side?.deliverySuccessPct,
+          ranks,
+          higherBetter,
         })}
         ${renderTeamMeter(side, {
           key: "firstContactWonPct",
           label: "1st contact won",
           value: side?.firstContactWonPct,
           danger: dangerContact,
+          ranks,
+          higherBetter,
         })}
         ${renderTeamMeter(side, {
           key: "intoBoxPct",
           label: "Into box",
           value: side?.intoBoxPct,
+          ranks,
+          higherBetter,
         })}
       </div>
 
@@ -1008,94 +1148,234 @@ function familyGoalPoints(side, familyKey) {
   });
 }
 
-function renderFamilyColumn(
-  block,
-  {
-    title,
-    familyKey = "corners",
-    side = {},
-    pitch = {},
-    tone = "gold",
-    defending = false,
-  } = {}
-) {
-  const volume = display(block?.chains, "0");
-  const perGame = display(block?.avgChains);
+function playerLeaderKey(row) {
+  if (row?.player_id != null && row.player_id !== "") return `id:${row.player_id}`;
+  return `name:${String(row?.name || "").trim().toLowerCase()}`;
+}
+
+function mergeFamilyLeaderBreakdown(cornerRows, fkRows, { primary, secondary = null, limit = 5, shirts = null } = {}) {
+  const buckets = new Map();
+  const ingest = (rows, family) => {
+    for (const row of rows || []) {
+      const key = playerLeaderKey(row);
+      if (!key || key === "name:") continue;
+      const bucket = buckets.get(key) || {
+        player_id: row.player_id,
+        name: row.name || "—",
+        shirt_number: shirtForPlayer(row, shirts),
+        corners: 0,
+        freeKicks: 0,
+        total: 0,
+        cornersSecondary: 0,
+        freeKicksSecondary: 0,
+        totalSecondary: 0,
+      };
+      const value = Number(row[primary]) || 0;
+      const sec = secondary != null ? Number(row[secondary]) || 0 : 0;
+      if (family === "corners") {
+        bucket.corners += value;
+        bucket.cornersSecondary += sec;
+      } else {
+        bucket.freeKicks += value;
+        bucket.freeKicksSecondary += sec;
+      }
+      bucket.total = bucket.corners + bucket.freeKicks;
+      bucket.totalSecondary = bucket.cornersSecondary + bucket.freeKicksSecondary;
+      if (row.name && (!bucket.name || bucket.name === "—")) bucket.name = row.name;
+      if (row.player_id != null) bucket.player_id = row.player_id;
+      if (bucket.shirt_number == null) {
+        bucket.shirt_number = shirtForPlayer(bucket, shirts) ?? shirtForPlayer(row, shirts);
+      }
+      buckets.set(key, bucket);
+    }
+  };
+  ingest(cornerRows, "corners");
+  ingest(fkRows, "freeKicks");
+  return [...buckets.values()]
+    .filter((row) => row.total > 0)
+    .sort(
+      (a, b) =>
+        b.total - a.total ||
+        b.totalSecondary - a.totalSecondary ||
+        String(a.name).localeCompare(String(b.name))
+    )
+    .slice(0, limit);
+}
+
+function familyContactLeaders(side, familyKey) {
+  const block = familyKey === "corners" ? side?.corners : side?.freeKicks;
   const points = familyWonContactPoints(side, familyKey);
-  const goalPts = familyGoalPoints(side, familyKey);
-  const contacts = (
-    block?.firstContactLeaders?.length
-      ? block.firstContactLeaders
-      : familyLeadersFromPoints(points, { limit: 5 })
-  ).slice(0, 5);
-  const goals = (block?.goalLeaders || []).slice(0, 4);
-  const xg = (block?.xgLeaders || []).slice(0, 4);
+  if (block?.firstContactLeaders?.length) return block.firstContactLeaders;
+  return familyLeadersFromPoints(points, { limit: 8 });
+}
+
+function renderBreakdownLeaderList(rows, { title, empty, formatRow } = {}) {
+  if (!rows?.length) {
+    return `<div class="sp-side-mini-leaders sp-side-mini-leaders--tight">
+      <div class="sp-side-mini-leaders__title">${escapeHtml(title)}</div>
+      <div class="sp-side-mini-empty sp-side-mini-empty--tight">${escapeHtml(empty || "—")}</div>
+    </div>`;
+  }
+  return `<div class="sp-side-mini-leaders sp-side-mini-leaders--tight sp-side-mini-leaders--breakdown">
+    <div class="sp-side-mini-leaders__title">${escapeHtml(title)}</div>
+    <div class="sp-break-head" aria-hidden="true">
+      <span></span><span></span>
+      <span>C</span><span>FK</span><span>Tot</span>
+    </div>
+    ${rows
+      .map((row, index) => {
+        const cells = formatRow(row);
+        const shirt =
+          row.shirt_number != null && row.shirt_number !== ""
+            ? `<span class="sp-shirt">#${escapeHtml(String(row.shirt_number))}</span>`
+            : "";
+        return `
+          <div class="sp-side-mini-leader sp-side-mini-leader--break">
+            <span class="sp-side-mini-leader__rank">${index + 1}</span>
+            <span class="sp-side-mini-leader__name">${shirt}${escapeHtml(row.name || "—")}</span>
+            <span class="sp-break-cell">${escapeHtml(cells.corners)}</span>
+            <span class="sp-break-cell">${escapeHtml(cells.freeKicks)}</span>
+            <span class="sp-break-cell sp-break-cell--total">${escapeHtml(cells.total)}</span>
+          </div>`;
+      })
+      .join("")}
+  </div>`;
+}
+
+function renderCombinedFamilyPanel(side, { pitch = {}, defending = false, report = state.report } = {}) {
+  const shirts = squadShirtLookup(report);
+  const corners = side?.corners || {};
+  const freeKicks = side?.freeKicks || {};
+  const cornerVol = Number(corners.chains) || 0;
+  const fkVol = Number(freeKicks.chains) || 0;
+  const totalVol = cornerVol + fkVol || Number(side?.chains) || 0;
+  const cornerPts = enrichPointsWithShirts(familyWonContactPoints(side, "corners"), shirts);
+  const fkPts = enrichPointsWithShirts(familyWonContactPoints(side, "freeKicks"), shirts);
+  const points = [...cornerPts, ...fkPts];
+  const goalPts = enrichPointsWithShirts(
+    [...familyGoalPoints(side, "corners"), ...familyGoalPoints(side, "freeKicks")],
+    shirts
+  );
   const leftCount = points.filter((pt) => deliverySideOf(pt) === "left").length;
   const rightCount = points.filter((pt) => deliverySideOf(pt) === "right").length;
   const mapHtml =
     points.length || goalPts.length
       ? renderFirstContactPitch(points, pitch, {
-          drawW: 300,
+          drawW: 360,
           compact: true,
           bySide: true,
           goals: goalPts,
+          preferShirt: true,
         })
       : `<div class="sp-side-mini-empty">No won first contacts</div>`;
 
-  const lists = defending
-    ? `${renderMiniLeaderList(contacts, {
-        title: "Who clears",
-        empty: "No defensive first contacts",
-        stat: (row) => `${display(row.contacts, "0")} · ${display(row.into_box, "0")} box`,
-      })}
-      ${
-        goals.length
-          ? renderMiniLeaderList(goals, {
-              title: "Goals conceded",
-              empty: "No goals conceded",
-              stat: (row) => `${display(row.goals, "0")} · ${formatXg(row.xg)} xG`,
-            })
-          : ""
-      }
-      ${renderMiniLeaderList(xg, {
-        title: "Highest xG",
-        empty: "No xG against",
-        stat: (row) => `${formatXg(row.xg)} · ${display(row.goals, "0")} g`,
-      })}`
-    : `${renderMiniLeaderList(contacts, {
-        title: "Most 1st contacts",
-        empty: "No won first contacts",
-        stat: (row) => `${display(row.contacts, "0")} · ${display(row.into_box, "0")} box`,
-      })}
-      ${renderMiniLeaderList(goals, {
-        title: "Most goals",
-        empty: "No goals",
-        stat: (row) => `${display(row.goals, "0")} · ${formatXg(row.xg)} xG`,
-      })}
-      ${renderMiniLeaderList(xg, {
-        title: "Highest xG",
-        empty: "No xG",
-        stat: (row) => `${formatXg(row.xg)} · ${display(row.goals, "0")} g`,
-      })}`;
+  const contacts = mergeFamilyLeaderBreakdown(
+    familyContactLeaders(side, "corners"),
+    familyContactLeaders(side, "freeKicks"),
+    { primary: "contacts", secondary: "into_box", limit: 6, shirts }
+  );
+  const goals = mergeFamilyLeaderBreakdown(
+    corners.goalLeaders || [],
+    freeKicks.goalLeaders || [],
+    { primary: "goals", secondary: "xg", limit: 5, shirts }
+  );
+  const xg = mergeFamilyLeaderBreakdown(
+    corners.xgLeaders || [],
+    freeKicks.xgLeaders || [],
+    { primary: "xg", secondary: "goals", limit: 5, shirts }
+  );
+
+  const contactList = renderBreakdownLeaderList(contacts, {
+    title: defending ? "Who clears" : "Most 1st contacts",
+    empty: defending ? "No defensive first contacts" : "No won first contacts",
+    formatRow: (row) => ({
+      corners: display(row.corners, "0"),
+      freeKicks: display(row.freeKicks, "0"),
+      total: display(row.total, "0"),
+    }),
+  });
+  const goalsList =
+    defending && !goals.length
+      ? ""
+      : renderBreakdownLeaderList(goals, {
+          title: defending ? "Goals conceded" : "Most goals",
+          empty: defending ? "No goals conceded" : "No goals",
+          formatRow: (row) => ({
+            corners: display(row.corners, "0"),
+            freeKicks: display(row.freeKicks, "0"),
+            total: display(row.total, "0"),
+          }),
+        });
+  const xgList = renderBreakdownLeaderList(xg, {
+    title: "Highest xG",
+    empty: defending ? "No xG against" : "No xG",
+    formatRow: (row) => ({
+      corners: formatXg(row.corners),
+      freeKicks: formatXg(row.freeKicks),
+      total: formatXg(row.total),
+    }),
+  });
 
   return `
-    <div class="sp-for-family sp-for-family--${escapeHtml(tone)}${defending ? " sp-for-family--against" : ""}">
-      <div class="sp-side-family__head">
-        <h3 class="sp-side-family__title">${escapeHtml(title)}</h3>
-        <span class="sp-side-family__count"><strong>${escapeHtml(volume)}</strong> · ${escapeHtml(perGame)} / game</span>
-      </div>
-      <div class="sp-for-family__map">
-        <div class="sp-side-mini-map">
-          <div class="sp-side-mini-map__title">${defending ? "Clears" : "Won 1st contacts"} · ${escapeHtml(String(points.length))}</div>
-          <div class="sp-side-mini-map__split">
-            <span><i class="sp-map-legend__swatch sp-map-legend__swatch--left"></i>${escapeHtml(String(leftCount))} left</span>
-            <span><i class="sp-map-legend__swatch sp-map-legend__swatch--right"></i>${escapeHtml(String(rightCount))} right</span>
-          </div>
-          <div class="sp-side-mini-map__pitch">${mapHtml}</div>
+    <div class="sp-for-combined${defending ? " sp-for-combined--against" : ""}">
+      <div class="sp-for-combined__head">
+        <div>
+          <h3 class="sp-side-family__title">Corners + free kicks</h3>
+          <p class="sp-for-combined__hint">Ranked by total · breakdown C / FK / Tot · squad numbers</p>
+        </div>
+        <div class="sp-for-combined__mix" aria-label="Set-play mix">
+          <span class="sp-for-combined__chip sp-for-combined__chip--corner"><strong>${escapeHtml(display(cornerVol, "0"))}</strong> corners</span>
+          <span class="sp-for-combined__chip sp-for-combined__chip--fk"><strong>${escapeHtml(display(fkVol, "0"))}</strong> free kicks</span>
+          <span class="sp-for-combined__chip sp-for-combined__chip--tot"><strong>${escapeHtml(display(totalVol, "0"))}</strong> total</span>
         </div>
       </div>
-      <div class="sp-for-family__lists${defending ? " sp-for-family__lists--against" : ""}">
-        ${lists}
+      <div class="sp-for-combined__body">
+        <div class="sp-for-combined__map">
+          <div class="sp-side-mini-map">
+            <div class="sp-side-mini-map__title">${defending ? "Clears" : "Won 1st contacts"} · ${escapeHtml(String(points.length))} · C ${escapeHtml(String(cornerPts.length))} · FK ${escapeHtml(String(fkPts.length))}</div>
+            <div class="sp-side-mini-map__split">
+              <span><i class="sp-map-legend__swatch sp-map-legend__swatch--left"></i>${escapeHtml(String(leftCount))} left</span>
+              <span><i class="sp-map-legend__swatch sp-map-legend__swatch--right"></i>${escapeHtml(String(rightCount))} right</span>
+            </div>
+            <div class="sp-side-mini-map__pitch">${mapHtml}</div>
+          </div>
+        </div>
+        <div class="sp-for-combined__lists">
+          ${contactList}
+          ${goalsList}
+          ${xgList}
+        </div>
+      </div>
+    </div>`;
+}
+
+function enrichPointsWithShirts(points, shirts) {
+  return (points || []).map((pt) => {
+    const shirt = shirtForPlayer(
+      {
+        player_id: pt.playerId ?? pt.player_id,
+        name: pt.playerName || pt.player_name,
+        shirt_number: pt.shirtNumber ?? pt.shirt_number,
+      },
+      shirts
+    );
+    return shirt != null ? { ...pt, shirtNumber: shirt, shirt_number: shirt } : pt;
+  });
+}
+
+function renderOpponentIdentity(report, { defending = false } = {}) {
+  const opponent = report.opponent || report.fixture?.opponent || { name: "Opponent" };
+  const crest = crestHtml(opponent, "sp-opp-id__crest");
+  const venue = report.fixture?.is_home === false ? "Away" : report.fixture?.is_home ? "Home" : "";
+  const kickoff = formatKickoff(report.fixture?.scheduled_date);
+  const sideLabel = defending ? "Defending set plays" : "Attacking set plays";
+  return `
+    <div class="sp-opp-id">
+      <div class="sp-opp-id__badge">${crest}</div>
+      <div class="sp-opp-id__copy">
+        <p class="sp-opp-id__eyebrow">${escapeHtml(sideLabel)}</p>
+        <h3 class="sp-opp-id__name">${escapeHtml(opponent.name || "Opponent")}</h3>
+        <p class="sp-opp-id__meta">${escapeHtml([venue, kickoff, "Season totals"].filter(Boolean).join(" · "))}</p>
       </div>
     </div>`;
 }
@@ -1107,29 +1387,17 @@ function renderForSlide(report, { twoPager = false } = {}) {
   const title = twoPager ? "For" : "Attacking Set Plays";
   const games = display(side.gameCount || report.season_games, "0");
 
-  return `<section class="sp-slide" data-slide-title="${title}">${slideShell({
+  return `<section class="sp-slide sp-slide--opp-theme" data-slide-title="${title}" style="${opponentThemeStyle(report)}">${slideShell({
     title,
-    subtitle: `${opponent} · Season totals · corners vs free kicks · colour = left / right delivery`,
-    barClass: "sp-slide__bar--gold",
+    subtitle: `${opponent} · corners + free kicks · left / right delivery`,
+    barClass: "sp-slide__bar--opp",
     body: `
       <div class="sp-for">
         <div class="sp-for-totals">
-          ${renderTeamBoard(side, { accent: "gold", games })}
+          ${renderOpponentIdentity(report, { defending: false })}
+          ${renderTeamBoard(side, { accent: "opp", games })}
         </div>
-        ${renderFamilyColumn(side.corners || {}, {
-          title: "Corners",
-          familyKey: "corners",
-          side,
-          pitch,
-          tone: "gold",
-        })}
-        ${renderFamilyColumn(side.freeKicks || {}, {
-          title: "Free kicks",
-          familyKey: "freeKicks",
-          side,
-          pitch,
-          tone: "teal",
-        })}
+        ${renderCombinedFamilyPanel(side, { pitch, defending: false, report })}
       </div>`,
   })}</section>`;
 }
@@ -1141,31 +1409,17 @@ function renderAgainstSlide(report, { twoPager = false } = {}) {
   const title = twoPager ? "Against" : "Defending Set Plays";
   const games = display(side.gameCount || report.season_games, "0");
 
-  return `<section class="sp-slide" data-slide-title="${title}">${slideShell({
+  return `<section class="sp-slide sp-slide--opp-theme" data-slide-title="${title}" style="${opponentThemeStyle(report)}">${slideShell({
     title,
-    subtitle: `${opponent} · Season totals · corners vs free kicks · colour = left / right delivery`,
-    barClass: "sp-slide__bar--orange",
+    subtitle: `${opponent} · corners + free kicks · left / right delivery`,
+    barClass: "sp-slide__bar--opp",
     body: `
       <div class="sp-for">
         <div class="sp-for-totals">
-          ${renderTeamBoard(side, { dangerContact: true, accent: "orange", games })}
+          ${renderOpponentIdentity(report, { defending: true })}
+          ${renderTeamBoard(side, { dangerContact: true, accent: "opp", games })}
         </div>
-        ${renderFamilyColumn(side.corners || {}, {
-          title: "Corners",
-          familyKey: "corners",
-          side,
-          pitch,
-          tone: "gold",
-          defending: true,
-        })}
-        ${renderFamilyColumn(side.freeKicks || {}, {
-          title: "Free kicks",
-          familyKey: "freeKicks",
-          side,
-          pitch,
-          tone: "teal",
-          defending: true,
-        })}
+        ${renderCombinedFamilyPanel(side, { pitch, defending: true, report })}
       </div>`,
   })}</section>`;
 }
@@ -1206,14 +1460,14 @@ function normalizeBandLabel(label) {
 
 function heightBandFromPlayer(player) {
   let cm = Number(player?.height_cm);
-  if (!Number.isFinite(cm) || cm <= 0) {
+  if (!Number.isFinite(cm) || cm < 140 || cm > 220) {
     const raw = String(player?.height || "");
     const imperial = raw.match(/(\d+)\s*(?:ft|'|’)\s*(\d{1,2})/i);
     if (imperial) {
       cm = Math.round((Number(imperial[1]) * 12 + Number(imperial[2])) * 2.54);
     }
   }
-  if (!Number.isFinite(cm) || cm <= 0) return null;
+  if (!Number.isFinite(cm) || cm < 140 || cm > 220) return null;
   const inches = Math.round(cm / 2.54);
   if (inches >= 76) return "6'4\"+";
   if (inches === 75) return "6'3\"";
@@ -1376,7 +1630,7 @@ function heightPlayerChipHtml(player, report) {
       : "";
   const photo = player.photo_url || opponentPhotoUrl(player.name, report) || "";
   const photoHtml = photo
-    ? `<img class="sp-hc-player__photo" src="${escapeHtml(photo)}" alt="" loading="eager" decoding="async" draggable="false" onerror="this.classList.add('sp-hc-player__photo--empty');this.removeAttribute('src')" />`
+    ? `<img class="sp-hc-player__photo" src="${escapeHtml(photo)}" alt="" loading="eager" decoding="async" draggable="false" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'sp-hc-player__photo sp-hc-player__photo--empty',ariaHidden:'true'}))" />`
     : `<span class="sp-hc-player__photo sp-hc-player__photo--empty" aria-hidden="true"></span>`;
   return `
     <div class="sp-hc-player" draggable="true" data-player-id="${escapeHtml(player.player_id)}" title="Drag to move · × to remove">
@@ -1669,7 +1923,7 @@ function goalMarkerStyle(point, { bySide = false, byFamily = false } = {}) {
   return { fill: "#f5c518", stroke: "#111111", text: "#111111" };
 }
 
-function renderFirstContactPitch(points, pitch, { drawW = 420, compact = false, goals = [], bySide = false, byFamily = false } = {}) {
+function renderFirstContactPitch(points, pitch, { drawW = 420, compact = false, goals = [], bySide = false, byFamily = false, preferShirt = false } = {}) {
   const pitchMeta = resolvePitchMeta(pitch);
   const padX = compact ? 6 : 10;
   const padY = compact ? 6 : 10;
@@ -1702,11 +1956,16 @@ function renderFirstContactPitch(points, pitch, { drawW = 420, compact = false, 
       const shape = compact
         ? `<circle cx="${svg.x}" cy="${svg.y}" r="${r}" fill="${colors.fill}" stroke="${colors.stroke}" stroke-width="1.35" />`
         : `<polygon points="${svg.x},${svg.y - r} ${svg.x + r * 0.9},${svg.y} ${svg.x},${svg.y + r} ${svg.x - r * 0.9},${svg.y}" fill="${colors.fill}" stroke="${colors.stroke}" stroke-width="1.1" />`;
-      const label = pt.playerInitials
+      const shirt = pt.shirtNumber ?? pt.shirt_number;
+      const markerLabel =
+        preferShirt && shirt != null && shirt !== ""
+          ? String(shirt)
+          : pt.playerInitials || "";
+      const label = markerLabel
         ? `<text x="${svg.x}" y="${svg.y + (compact ? 0.55 : 0.35)}" text-anchor="middle" dominant-baseline="middle"
-            fill="${colors.text}" font-family="Barlow Condensed, sans-serif" font-size="${fontSize}" font-weight="800" letter-spacing="-0.02em">${escapeHtml(pt.playerInitials)}</text>`
+            fill="${colors.text}" font-family="Barlow Condensed, sans-serif" font-size="${shirt != null && preferShirt ? fontSize + 0.8 : fontSize}" font-weight="800" letter-spacing="-0.02em">${escapeHtml(markerLabel)}</text>`
         : "";
-      const title = `${pt.minuteLabel || ""} ${pt.playerName || pt.playerInitials || "First contact"} · ${pt.typeLabel || ""}`;
+      const title = `${pt.minuteLabel || ""} ${shirt != null ? `#${shirt} ` : ""}${pt.playerName || pt.playerInitials || "First contact"} · ${pt.typeLabel || ""}`;
       return `<g><title>${escapeHtml(title)}</title>${goldRing}${shape}${label}</g>`;
     })
     .join("");

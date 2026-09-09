@@ -178,6 +178,22 @@ def clear_all() -> dict[str, int]:
     return counts
 
 
+# Played pre-match / set-piece packets stay valid; wiping them on Force refresh
+# left old opposition two-pagers empty until the next opponent was rebuilt.
+_PRESERVE_ON_FORCE = frozenset(
+    {"pre-match", "pre-match-fixtures", "pre-match-meta"}
+)
+
+
+def clear_volatile() -> dict[str, int]:
+    counts: dict[str, int] = {}
+    root = _ensure_dir()
+    for child in root.iterdir():
+        if child.is_dir() and child.name not in _PRESERVE_ON_FORCE:
+            counts[child.name] = clear_kind(child.name)
+    return counts
+
+
 def clear_tool_memory_caches() -> None:
     """Drop in-process TTLs so Force refresh actually hits Impect."""
     try:
@@ -292,7 +308,7 @@ def refresh_analysis_data(*, force: bool = True) -> dict[str, Any]:
     result: dict[str, Any] = {"force": force, "steps": {}}
 
     if force:
-        result["cleared"] = clear_all()
+        result["cleared"] = clear_volatile()
         clear_tool_memory_caches()
 
     # Blocks — already disk-backed; force rebuild KPIs.
@@ -308,46 +324,63 @@ def refresh_analysis_data(*, force: bool = True) -> dict[str, Any]:
         logger.exception("Analysis refresh: blocks failed")
         result["steps"]["blocks"] = {"ok": False, "error": str(exc)}
 
-    # Pre-match + set-piece for next upcoming opponent.
+    # Pre-match + set-piece for every played opponent, plus the next two upcoming.
     next_iteration_id = 0
     next_squad_id = 0
     next_match_id: int | None = None
     try:
         from app.pre_match import (
             PreMatchReportRequest,
+            _pick_next_fixture,
             build_pre_match_fixtures,
             build_pre_match_report,
+            pre_match_meta,
         )
         from app.squad_review import _default_port_vale_season, _resolve_port_vale_iteration
 
         iteration = _resolve_port_vale_iteration(_default_port_vale_season())
         next_iteration_id = int(iteration["id"])
         fixtures = build_pre_match_fixtures(next_iteration_id, refresh=True)
-        next_fix = fixtures[0] if fixtures else None
-        if next_fix:
-            opponent = next_fix.get("opponent") or {}
-            next_squad_id = int(opponent.get("id") or 0)
-            next_match_id = int(next_fix["match_id"]) if next_fix.get("match_id") else None
-            if next_squad_id:
-                from app.pre_match import pre_match_meta
-
-                pre_match_meta(refresh=True)
+        pre_match_meta(refresh=True)
+        played = [row for row in fixtures if row.get("played")]
+        upcoming = [row for row in fixtures if not row.get("played")]
+        next_fix = _pick_next_fixture(upcoming) or _pick_next_fixture(fixtures)
+        targets = list(played)
+        for row in upcoming[:2]:
+            if row not in targets:
+                targets.append(row)
+        built: list[str] = []
+        failed: list[str] = []
+        for row in targets:
+            opponent = row.get("opponent") or {}
+            squad_id = int(opponent.get("id") or 0)
+            if not squad_id:
+                continue
+            match_id = int(row["match_id"]) if row.get("match_id") else None
+            try:
                 report = build_pre_match_report(
                     PreMatchReportRequest(
                         iteration_id=next_iteration_id,
-                        squad_id=next_squad_id,
-                        match_id=next_match_id,
+                        squad_id=squad_id,
+                        match_id=match_id,
                         refresh=True,
                     )
                 )
-                result["steps"]["pre_match"] = {
-                    "ok": True,
-                    "opponent": (report.get("opponent") or {}).get("name"),
-                    "fixtures": len(fixtures),
-                }
-            else:
-                result["steps"]["pre_match"] = {"ok": False, "error": "No opponent squad"}
-        else:
+                built.append(str((report.get("opponent") or {}).get("name") or squad_id))
+            except Exception as exc:
+                logger.exception("Analysis refresh: pre_match %s failed", opponent.get("name"))
+                failed.append(str(exc))
+        if next_fix:
+            next_squad_id = int((next_fix.get("opponent") or {}).get("id") or 0)
+            next_match_id = int(next_fix["match_id"]) if next_fix.get("match_id") else None
+        result["steps"]["pre_match"] = {
+            "ok": bool(built) and not failed,
+            "opponent": built[-1] if built else None,
+            "reports": built,
+            "fixtures": len(fixtures),
+            "error": "; ".join(failed) if failed else None,
+        }
+        if not fixtures:
             result["steps"]["pre_match"] = {"ok": False, "error": "No fixtures"}
     except Exception as exc:
         logger.exception("Analysis refresh: pre_match failed")

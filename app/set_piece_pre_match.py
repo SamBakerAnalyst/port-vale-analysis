@@ -48,7 +48,7 @@ from app.pre_match import (
     build_pre_match_whatsapp_pdf,
     pre_match_meta,
 )
-from app.match_player_utils import POSITION_ABBR, _height_short
+from app.match_player_utils import POSITION_ABBR
 from app.post_match.impect_client import impect_get, v5_path
 from app.post_match.set_plays import (
     SHOT_XG_KPI_ID,
@@ -359,28 +359,39 @@ def _store_cached_report(cache_key: str, report: dict[str, Any]) -> None:
     _write_json_cache(_report_cache_path(cache_key), report)
 
 
+def _sane_height_cm(value: Any) -> int | None:
+    """Accept only plausible senior/academy heights (rejects market-value false hits)."""
+    try:
+        cm = int(round(float(value)))
+    except (TypeError, ValueError):
+        return None
+    if 140 <= cm <= 220:
+        return cm
+    return None
+
+
 def _height_cm(player: dict[str, Any]) -> int | None:
     for key in ("heightCm", "height", "bodyHeight"):
         raw = player.get(key)
         if raw is None or raw == "":
             continue
+        # Impect sometimes stores metres (1.88) — convert before sanity check.
         try:
-            cm = int(float(raw))
+            number = float(raw)
         except (TypeError, ValueError):
             continue
-        if cm > 0:
+        if 1.4 <= number <= 2.2:
+            number *= 100.0
+        cm = _sane_height_cm(number)
+        if cm is not None:
             return cm
     return None
 
 
 def _height_label_from_cm(cm: int | None) -> str:
     """Format cm as feet/inches. Reject nonsense values (avoids 0'0 from bad data)."""
-    try:
-        value = int(round(float(cm))) if cm is not None else 0
-    except (TypeError, ValueError):
-        return "—"
-    # Senior/academy footballers are almost never under 140cm or over 220cm.
-    if value < 140 or value > 220:
+    value = _sane_height_cm(cm)
+    if value is None:
         return "—"
     feet = int(value // 30.48)
     inches = int(round((value / 2.54) % 12))
@@ -393,14 +404,11 @@ def _height_label_from_cm(cm: int | None) -> str:
 
 
 def _parse_tm_height_cm(text: str) -> int | None:
-    """Parse Transfermarkt height cells: '1,88 m', '1.88m', or UK '6 ft 3 in'."""
+    """Parse Transfermarkt height cells: '1,88 m', '1.88m', or UK '6 ft 3 in'.
+
+    Prefer imperial on .co.uk pages. Never treat market values (€1.50m) as height.
+    """
     raw = str(text or "")
-    metric = re.search(r"(\d)[,.](\d{2})\s*m\b", raw, flags=re.I)
-    if metric:
-        try:
-            return int(metric.group(1)) * 100 + int(metric.group(2))
-        except (TypeError, ValueError):
-            return None
     imperial = re.search(
         r"(\d+)\s*(?:ft|'|’)\s*(\d{1,2})\s*(?:in|\"|”)?",
         raw,
@@ -410,9 +418,27 @@ def _parse_tm_height_cm(text: str) -> int | None:
         try:
             inches = int(imperial.group(1)) * 12 + int(imperial.group(2))
         except (TypeError, ValueError):
-            return None
+            inches = 0
         if 48 <= inches <= 90:
-            return int(round(inches * 2.54))
+            return _sane_height_cm(round(inches * 2.54))
+
+    # Metric heights only — exclude currency amounts like €1.50m / £2.00m.
+    for match in re.finditer(r"(\d)[,.](\d{2})\s*m\b", raw, flags=re.I):
+        start = match.start()
+        prefix = raw[max(0, start - 3) : start]
+        if re.search(r"[€$£]", prefix):
+            continue
+        # Also skip if the match is clearly a market-value token (€1.50m).
+        window = raw[max(0, start - 1) : match.end() + 1]
+        if re.search(r"[€$£]\s*\d[,.]\d{2}\s*m\b", window, flags=re.I):
+            continue
+        try:
+            cm = int(match.group(1)) * 100 + int(match.group(2))
+        except (TypeError, ValueError):
+            continue
+        sane = _sane_height_cm(cm)
+        if sane is not None:
+            return sane
     return None
 
 
@@ -444,11 +470,27 @@ def _tm_profiles_disk_path(club_id: int, season_year: int) -> Path:
     return _ensure_set_piece_cache_dir() / f"tm_{int(club_id)}_{int(season_year)}.json"
 
 
+def _sanitize_tm_profiles(
+    profiles: dict[str, dict[str, Any]] | None,
+) -> dict[str, dict[str, Any]]:
+    """Drop market-value false heights from cached / scraped rows."""
+    if not profiles:
+        return {}
+    cleaned: dict[str, dict[str, Any]] = {}
+    for key, row in profiles.items():
+        if not isinstance(row, dict):
+            continue
+        item = dict(row)
+        item["height_cm"] = _sane_height_cm(item.get("height_cm"))
+        cleaned[key] = item
+    return cleaned
+
+
 def _tm_profiles_have_heights(profiles: dict[str, Any] | None) -> bool:
     if not profiles:
         return False
     return any(
-        isinstance(row, dict) and row.get("height_cm")
+        isinstance(row, dict) and _sane_height_cm(row.get("height_cm"))
         for row in profiles.values()
     )
 
@@ -516,7 +558,9 @@ def _store_tm_profiles(
     cache_key: tuple[int, int],
     disk_path: Path,
 ) -> dict[str, dict[str, Any]]:
+    profiles = _sanitize_tm_profiles(profiles)
     profiles = _backfill_tm_heights_from_previous_season(profiles, club_id, season_year)
+    profiles = _sanitize_tm_profiles(profiles)
     if _tm_profiles_have_heights(profiles):
         _TM_SQUAD_CACHE[cache_key] = (now, profiles)
         _write_json_cache(disk_path, profiles)
@@ -551,7 +595,7 @@ def _fetch_transfermarkt_squad_profiles(
         )
 
     disk_path = _tm_profiles_disk_path(int(club_id), int(season_year))
-    disk = _read_json_cache(disk_path, ttl=_TM_HEIGHT_TTL)
+    disk = _sanitize_tm_profiles(_read_json_cache(disk_path, ttl=_TM_HEIGHT_TTL))
     if _tm_profiles_have_heights(disk):
         return _store_tm_profiles(
             disk,
@@ -571,7 +615,9 @@ def _fetch_transfermarkt_squad_profiles(
         response = requests.get(url, timeout=30, headers=TM_HEADERS)
         if response.status_code >= 400:
             # Live servers are often blocked by Transfermarkt — keep last good disk seed.
-            stale = _read_json_cache(disk_path, ttl=30 * 24 * 60 * 60)
+            stale = _sanitize_tm_profiles(
+                _read_json_cache(disk_path, ttl=30 * 24 * 60 * 60)
+            )
             if _tm_profiles_have_heights(stale):
                 return _store_tm_profiles(
                     stale,
@@ -584,7 +630,9 @@ def _fetch_transfermarkt_squad_profiles(
             return {}
         html = response.text
     except requests.RequestException:
-        stale = _read_json_cache(disk_path, ttl=30 * 24 * 60 * 60)
+        stale = _sanitize_tm_profiles(
+            _read_json_cache(disk_path, ttl=30 * 24 * 60 * 60)
+        )
         if _tm_profiles_have_heights(stale):
             return _store_tm_profiles(
                 stale,
@@ -667,7 +715,7 @@ def _fetch_transfermarkt_squad_profiles(
 
     # Empty / height-less scrape (common on the live IP) — fall back to a
     # previously seeded file, but only if it actually has heights.
-    stale = _read_json_cache(disk_path, ttl=30 * 24 * 60 * 60)
+    stale = _sanitize_tm_profiles(_read_json_cache(disk_path, ttl=30 * 24 * 60 * 60))
     if _tm_profiles_have_heights(stale):
         return _store_tm_profiles(
             stale,
@@ -677,7 +725,9 @@ def _fetch_transfermarkt_squad_profiles(
             cache_key=cache_key,
             disk_path=disk_path,
         )
-    return _backfill_tm_heights_from_previous_season(profiles, int(club_id), int(season_year))
+    return _backfill_tm_heights_from_previous_season(
+        _sanitize_tm_profiles(profiles), int(club_id), int(season_year)
+    )
 
 
 def _fetch_transfermarkt_heights(club_name: str, season: str | None) -> dict[str, int]:
@@ -726,11 +776,10 @@ def _lookup_tm_height(player_name: str, heights: dict[str, int]) -> int | None:
     sample = next(iter(heights.values()), None)
     if isinstance(sample, dict):
         profile = _lookup_tm_profile(player_name, heights)  # type: ignore[arg-type]
-        cm = profile.get("height_cm") if profile else None
-        return int(cm) if cm else None
+        return _sane_height_cm(profile.get("height_cm") if profile else None)
     direct = heights.get(_normalize_name_key(player_name))
-    if direct:
-        return int(direct)
+    if direct is not None:
+        return _sane_height_cm(direct)
     parts = [part for part in re.split(r"\s+", player_name.strip()) if part]
     if not parts:
         return None
@@ -738,10 +787,10 @@ def _lookup_tm_height(player_name: str, heights: dict[str, int]) -> int | None:
     first = _normalize_name_key(parts[0]) if len(parts) > 1 else ""
     candidates = [(key, cm) for key, cm in heights.items() if key.endswith(last) or last in key]
     if len(candidates) == 1:
-        return int(candidates[0][1])
+        return _sane_height_cm(candidates[0][1])
     for key, cm in candidates:
         if first and key.startswith(first[:3]):
-            return int(cm)
+            return _sane_height_cm(cm)
     return None
 
 
@@ -796,6 +845,26 @@ def _pass_volume(stats: dict[str, float], *, action: str) -> float | None:
 def _pass_success_pct(stats: dict[str, float], *, action: str) -> float | None:
     successful = float(stats.get(f"SUCCESSFUL_PASSES_BY_ACTION_{action}") or 0.0)
     unsuccessful = float(stats.get(f"UNSUCCESSFUL_PASSES_BY_ACTION_{action}") or 0.0)
+    total = successful + unsuccessful
+    if total <= 0:
+        return None
+    return round(100.0 * successful / total)
+
+
+def _combined_pass_volume(stats: dict[str, float]) -> float | None:
+    corner = float(_pass_volume(stats, action="CORNER") or 0.0)
+    free_kick = float(_pass_volume(stats, action="FREE_KICK") or 0.0)
+    total = corner + free_kick
+    return total if total > 0 else None
+
+
+def _combined_pass_success_pct(stats: dict[str, float]) -> float | None:
+    successful = float(stats.get("SUCCESSFUL_PASSES_BY_ACTION_CORNER") or 0.0) + float(
+        stats.get("SUCCESSFUL_PASSES_BY_ACTION_FREE_KICK") or 0.0
+    )
+    unsuccessful = float(stats.get("UNSUCCESSFUL_PASSES_BY_ACTION_CORNER") or 0.0) + float(
+        stats.get("UNSUCCESSFUL_PASSES_BY_ACTION_FREE_KICK") or 0.0
+    )
     total = successful + unsuccessful
     if total <= 0:
         return None
@@ -884,6 +953,39 @@ FAMILY_RANK_SPECS: dict[str, tuple[dict[str, Any], ...]] = {
             "field": "avgGoals",
             "higher_better": True,
             "key": "GOALS_BY_ACTION_FREE_KICK",
+        },
+    ),
+    # Combined corners + free kicks (left season board).
+    "side": (
+        {
+            "field": "avgChains",
+            "higher_better": True,
+            "compute": _combined_pass_volume,
+        },
+        {
+            "field": "deliverySuccessPct",
+            "higher_better": True,
+            "compute": _combined_pass_success_pct,
+        },
+        {
+            "field": "firstContactWonPct",
+            "higher_better": True,
+            "compute": _set_piece_aerial_win_pct,
+        },
+        {
+            "field": "avgShotXg",
+            "higher_better": True,
+            "key": "SHOT_XG_AT_PHASE_SET_PIECE",
+        },
+        {
+            "field": "goals",
+            "higher_better": True,
+            "key": "GOALS_AT_PHASE_SET_PIECE",
+        },
+        {
+            "field": "avgGoals",
+            "higher_better": True,
+            "key": "GOALS_AT_PHASE_SET_PIECE",
         },
     ),
 }
@@ -1024,6 +1126,16 @@ def _merge_dual_windows(
             recent_decorated["season"] = season_decorated
             side[recent_key] = recent_decorated
         side["season"] = _side_kpi_snapshot(season_side)
+        side_ranks = _family_block_ranks(
+            table,
+            squad_id,
+            "side",
+            season_side or side,
+            defending=defending,
+            use_squad_season_rank=not defending,
+        )
+        side["ranks"] = side_ranks.get("ranks") or {}
+        side["rankHigherBetter"] = side_ranks.get("rankHigherBetter") or {}
         out[side_key] = side
     out["seasonGameCount"] = int(season.get("gameCount") or 0)
     return out
@@ -1847,7 +1959,7 @@ def _attach_family_ranks(
     iteration_id: int,
     squad_id: int,
 ) -> dict[str, Any]:
-    """Legacy single-window rank attach — prefer _merge_dual_windows."""
+    """Attach league ranks on corner/FK blocks and the combined side board."""
     table = _squad_kpi_table(iteration_id)
     for side_key, defending in (("attacking", False), ("defending", True)):
         side = set_plays.get(side_key) or {}
@@ -1869,6 +1981,16 @@ def _attach_family_ranks(
             defending=defending,
             use_squad_season_rank=not defending,
         )
+        side_ranks = _family_block_ranks(
+            table,
+            squad_id,
+            "side",
+            side,
+            defending=defending,
+            use_squad_season_rank=not defending,
+        )
+        side["ranks"] = side_ranks.get("ranks") or {}
+        side["rankHigherBetter"] = side_ranks.get("rankHigherBetter") or {}
         set_plays[side_key] = side
     return set_plays
 
@@ -2231,10 +2353,12 @@ def _build_squad_rows(
         profile = tm_profiles.get(tm_key) if tm_key else None
         if tm_key:
             matched_tm_keys.add(tm_key)
-        cm = _height_cm(player) or (
-            int(profile["height_cm"]) if profile and profile.get("height_cm") else None
-        ) or _lookup_tm_height(name, tm_heights)
-        height_label = _height_short(player) if _height_cm(player) else _height_label_from_cm(cm)
+        cm = _sane_height_cm(
+            _height_cm(player)
+            or (profile.get("height_cm") if profile else None)
+            or _lookup_tm_height(name, tm_heights)
+        )
+        height_label = _height_label_from_cm(cm)
         position_label = _position_label(primary) if primary else "—"
         position_abbr = _position_abbr(primary)
         shirt_number = player.get("shirtNumber") or apps.get("shirt_number")
@@ -2281,7 +2405,7 @@ def _build_squad_rows(
         if profile.get("is_gk") or str(profile.get("position_abbr") or "").upper() == "GK":
             continue
         name = str(profile.get("name") or key)
-        cm = int(profile["height_cm"]) if profile.get("height_cm") else None
+        cm = _sane_height_cm(profile.get("height_cm"))
         rows.append(
             {
                 "player_id": f"tm:{key}",
@@ -2330,7 +2454,7 @@ HEIGHT_BAND_DEFS: tuple[tuple[str, int | None, int | None], ...] = (
     ("<5'9\"", None, 69),
 )
 HEIGHT_UNKNOWN_BAND = "No height"
-HEIGHT_CHART_VERSION = 2
+HEIGHT_CHART_VERSION = 3
 
 
 def _cm_to_total_inches(cm: int) -> int:
@@ -2523,7 +2647,13 @@ def build_set_piece_pre_match_report(body: SetPiecePreMatchRequest | PreMatchRep
                     newest = report
                     break
         if newest:
+            from app.handout_badges import hydrate_team_badge
+
             newest = dict(newest)
+            opponent = dict(newest.get("opponent") or {})
+            newest["opponent"] = hydrate_team_badge(
+                opponent, int(newest.get("iteration_id") or iteration_id)
+            )
             newest["cache"] = {"hit": True, "refreshed": False}
             return newest
 
@@ -2769,6 +2899,10 @@ def _build_set_piece_pre_match_report_uncached(
         or (fixture_out.get("opponent") or {}).get("image_url")
     )
 
+    from app.pre_match_handout import resolve_opponent_kit
+
+    opponent_kit = resolve_opponent_kit({"name": opponent_name, "id": squad_id})
+
     games_used = int(set_plays.get("gameCount") or 0)
     season_games = games_used
 
@@ -2779,6 +2913,7 @@ def _build_set_piece_pre_match_report_uncached(
             "name": opponent_name,
             "image": opponent_badge,
             "badge_url": opponent_badge,
+            "kit": opponent_kit,
         },
         "season": season_label,
         "iteration_id": iteration_id,

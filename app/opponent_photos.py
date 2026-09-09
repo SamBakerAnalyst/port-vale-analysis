@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+import json
 import re
 import time
 import unicodedata
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
 import requests
 
+from app.paths import OPPONENT_PHOTOS_CACHE_DIR, ensure_data_dirs
 from app.squad_photos import resolve_squad_photo_url
 
 PHOTO_CACHE_TTL_SECONDS = 6 * 60 * 60
+PHOTO_DISK_TTL_SECONDS = 30 * 24 * 60 * 60
 TM_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -59,6 +63,22 @@ KNOWN_CLUB_IDS: dict[str, int] = {
     "fcswindontown": 352,
     "salfordcity": 34888,
     "fcsalfordcity": 34888,
+    "accringtonstanley": 363,
+    "barnet": 2804,
+    "bristolrovers": 1073,
+    "cheltenhamtown": 1044,
+    "chesterfield": 1075,
+    "colchesterunited": 1060,
+    "crawleytown": 1232,
+    "fleetwoodtown": 2705,
+    "gillingham": 1024,
+    "grimsbytown": 1078,
+    "newportcounty": 2781,
+    "oldhamathletic": 1076,
+    "rochdale": 1065,
+    "shrewsburytown": 1082,
+    "walsall": 1230,
+    "yorkcity": 2803,
 }
 
 _club_id_cache: dict[str, tuple[float, int | None]] = {}
@@ -421,6 +441,56 @@ def transfermarkt_first_team_roster(
     return fetch_transfermarkt_squad_photos(club_id, season_year=_season_year(season))
 
 
+def _squad_photos_have_urls(entries: dict[str, Any] | None) -> bool:
+    if not entries:
+        return False
+    return any(
+        isinstance(row, dict) and str(row.get("url") or "").startswith("http")
+        for row in entries.values()
+    )
+
+
+def _squad_photos_disk_path(club_id: int, season_year: int) -> Path:
+    ensure_data_dirs()
+    return OPPONENT_PHOTOS_CACHE_DIR / f"tm_photos_{int(club_id)}_{int(season_year)}.json"
+
+
+def _read_squad_photos_disk(club_id: int, season_year: int) -> dict[str, dict[str, str]]:
+    path = _squad_photos_disk_path(club_id, season_year)
+    try:
+        if not path.is_file():
+            return {}
+        age = time.time() - path.stat().st_mtime
+        if age > PHOTO_DISK_TTL_SECONDS:
+            return {}
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    entries = {
+        str(key): value
+        for key, value in payload.items()
+        if isinstance(value, dict)
+    }
+    return entries if _squad_photos_have_urls(entries) else {}
+
+
+def _write_squad_photos_disk(
+    club_id: int,
+    season_year: int,
+    entries: dict[str, dict[str, str]],
+) -> None:
+    if not _squad_photos_have_urls(entries):
+        return
+    path = _squad_photos_disk_path(club_id, season_year)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        return
+
+
 def fetch_transfermarkt_squad_photos(
     club_id: int,
     *,
@@ -431,7 +501,14 @@ def fetch_transfermarkt_squad_photos(
     cached = _squad_photo_cache.get(cache_key)
     now = time.time()
     if not force and cached and now - cached[0] < PHOTO_CACHE_TTL_SECONDS:
-        return cached[1]
+        if _squad_photos_have_urls(cached[1]):
+            return cached[1]
+
+    if not force:
+        disk = _read_squad_photos_disk(club_id, season_year)
+        if disk:
+            _squad_photo_cache[cache_key] = (now, disk)
+            return disk
 
     url = (
         f"https://www.transfermarkt.co.uk/startseite/kader/verein/"
@@ -440,13 +517,40 @@ def fetch_transfermarkt_squad_photos(
     entries: dict[str, dict[str, str]] = {}
     try:
         response = requests.get(url, timeout=30, headers=TM_HEADERS)
-        if response.status_code < 400:
+        if response.status_code < 400 and response.text:
             entries = _parse_squad_photos(response.text)
     except requests.RequestException:
         entries = {}
 
-    _squad_photo_cache[cache_key] = (now, entries)
-    return entries
+    if _squad_photos_have_urls(entries):
+        _squad_photo_cache[cache_key] = (now, entries)
+        _write_squad_photos_disk(club_id, season_year, entries)
+        return entries
+
+    # Droplet IPs are often blocked by Transfermarkt HTML pages — keep last good seed.
+    stale = _read_squad_photos_disk(club_id, season_year)
+    if not stale:
+        # Allow slightly older seeds when the live scrape is empty.
+        path = _squad_photos_disk_path(club_id, season_year)
+        try:
+            if path.is_file():
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(payload, dict):
+                    stale = {
+                        str(key): value
+                        for key, value in payload.items()
+                        if isinstance(value, dict)
+                    }
+                    if not _squad_photos_have_urls(stale):
+                        stale = {}
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            stale = {}
+    if stale:
+        _squad_photo_cache[cache_key] = (now, stale)
+        return stale
+
+    _squad_photo_cache[cache_key] = (now, {})
+    return {}
 
 
 def _match_photo_entry(
@@ -458,12 +562,13 @@ def _match_photo_entry(
     if not entries:
         return None
 
+    first, last = _name_tokens(player_name)
+
     if player_name:
         direct = entries.get(_normalize_name_key(player_name))
         if direct:
             return direct
 
-        first, last = _name_tokens(player_name)
         if last:
             candidates: list[dict[str, str]] = []
             for entry in entries.values():
@@ -484,6 +589,20 @@ def _match_photo_entry(
                 candidate_first, _ = _name_tokens(entry["name"])
                 if candidate_first == first:
                     return entry
+            if last and not first:
+                unique = {entry["name"]: entry for entry in candidates}
+                if len(unique) == 1:
+                    return next(iter(unique.values()))
+
+    if last and not first:
+        surname_hits = [
+            entry
+            for entry in entries.values()
+            if _name_tokens(entry.get("name") or "")[1] == last
+        ]
+        unique = {entry.get("url") or entry.get("name"): entry for entry in surname_hits}
+        if len(unique) == 1:
+            return next(iter(unique.values()))
 
     if shirt_number is not None and str(shirt_number).strip() != "":
         try:
@@ -798,6 +917,118 @@ def fetch_club_website_squad_photos(
     return entries
 
 
+_fotmob_squad_photo_cache: dict[int, tuple[float, dict[str, dict[str, str]]]] = {}
+
+
+def fetch_fotmob_squad_photos(club_name: str) -> dict[str, dict[str, str]]:
+    """FotMob team squad headshots — works from the droplet when TM HTML is blocked."""
+    from app.handout_badges import fotmob_team_id_for_club
+
+    team_id = fotmob_team_id_for_club(club_name)
+    if not team_id:
+        return {}
+    cached = _fotmob_squad_photo_cache.get(team_id)
+    now = time.time()
+    if cached and now - cached[0] < PHOTO_CACHE_TTL_SECONDS:
+        return cached[1]
+
+    try:
+        response = requests.get(
+            "https://www.fotmob.com/api/data/teams",
+            params={"id": team_id},
+            timeout=25,
+            headers={
+                "User-Agent": TM_HEADERS["User-Agent"],
+                "Accept": "application/json",
+            },
+        )
+        if response.status_code >= 400:
+            _fotmob_squad_photo_cache[team_id] = (now, {})
+            return {}
+        payload = response.json()
+    except (requests.RequestException, ValueError, TypeError):
+        _fotmob_squad_photo_cache[team_id] = (now, {})
+        return {}
+
+    entries: dict[str, dict[str, str]] = {}
+    groups = ((payload.get("squad") or {}).get("squad") or []) if isinstance(payload, dict) else []
+    if not isinstance(groups, list):
+        _fotmob_squad_photo_cache[team_id] = (now, {})
+        return {}
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        if str(group.get("title") or "").casefold() == "coach":
+            continue
+        for member in group.get("members") or []:
+            if not isinstance(member, dict):
+                continue
+            name = str(member.get("name") or "").strip()
+            if not name:
+                continue
+            try:
+                player_id = int(member.get("id") or 0)
+            except (TypeError, ValueError):
+                player_id = 0
+            if player_id <= 0:
+                continue
+            url = f"https://images.fotmob.com/image_resources/playerimages/{player_id}.png"
+            key = _normalize_name_key(name)
+            bucket = {"name": name, "url": url, "source": "fotmob"}
+            shirt = member.get("shirtNumber")
+            if shirt is not None and str(shirt).strip() != "":
+                try:
+                    bucket["shirt_number"] = str(int(str(shirt).strip()))
+                except ValueError:
+                    bucket["shirt_number"] = str(shirt).strip()
+            entries[key] = bucket
+            surname = _name_tokens(name)[1]
+            if surname:
+                surname_key = _normalize_name_key(surname)
+                if surname_key and surname_key not in entries:
+                    entries[surname_key] = dict(bucket)
+    _fotmob_squad_photo_cache[team_id] = (now, entries)
+    return entries
+
+
+def _photo_bytes_disk_path(player_name: str, club_name: str | None, shirt: int | str | None) -> Path:
+    ensure_data_dirs()
+    key = _normalize_name_key(f"{club_name or ''}|{player_name}|{shirt or ''}")
+    return OPPONENT_PHOTOS_CACHE_DIR / "bytes" / f"{key or 'unknown'}.jpg"
+
+
+def read_cached_photo_bytes(
+    player_name: str,
+    *,
+    club_name: str | None = None,
+    shirt: int | str | None = None,
+) -> tuple[bytes, str] | None:
+    path = _photo_bytes_disk_path(player_name, club_name, shirt)
+    try:
+        if not path.is_file() or path.stat().st_size < 64:
+            return None
+        return path.read_bytes(), "image/jpeg"
+    except OSError:
+        return None
+
+
+def write_cached_photo_bytes(
+    player_name: str,
+    image_bytes: bytes,
+    *,
+    club_name: str | None = None,
+    shirt: int | str | None = None,
+) -> None:
+    if not image_bytes or len(image_bytes) < 64:
+        return
+    path = _photo_bytes_disk_path(player_name, club_name, shirt)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(image_bytes)
+    except OSError:
+        return
+
+
 def resolve_opponent_photo_source_url(
     player_name: str,
     *,
@@ -806,38 +1037,52 @@ def resolve_opponent_photo_source_url(
     force: bool = False,
     shirt_number: int | str | None = None,
 ) -> str | None:
-    """Prefer Port Vale club photos, then official club site, then Transfermarkt."""
+    """Club site, Transfermarkt, FotMob, then public-web fallbacks."""
     if club_name and _is_port_vale_name(club_name):
-        return resolve_squad_photo_url(player_name, force=force)
+        url = resolve_squad_photo_url(player_name, force=force)
+        if url:
+            return url
 
-    if not club_name:
-        return None
+    if club_name:
+        club_site = fetch_club_website_squad_photos(club_name, force=force)
+        if club_site:
+            entry = _match_photo_entry(
+                player_name,
+                club_site,
+                shirt_number=shirt_number,
+            )
+            if entry and entry.get("url"):
+                return entry["url"]
 
-    club_site = fetch_club_website_squad_photos(club_name, force=force)
-    if club_site:
-        entry = _match_photo_entry(
-            player_name,
-            club_site,
-            shirt_number=shirt_number,
-        )
-        if entry and entry.get("url"):
-            return entry["url"]
+        fotmob = fetch_fotmob_squad_photos(club_name)
+        if fotmob:
+            entry = _match_photo_entry(
+                player_name,
+                fotmob,
+                shirt_number=shirt_number,
+            )
+            if entry and entry.get("url"):
+                return entry["url"]
 
-    club_id = resolve_transfermarkt_club_id(club_name)
-    if not club_id:
-        return None
+        club_id = resolve_transfermarkt_club_id(club_name)
+        if club_id:
+            entries = fetch_transfermarkt_squad_photos(
+                club_id,
+                season_year=_season_year(season),
+                force=force,
+            )
+            entry = _match_photo_entry(
+                player_name,
+                entries,
+                shirt_number=shirt_number,
+            )
+            if entry and entry.get("url"):
+                return entry["url"]
 
-    entries = fetch_transfermarkt_squad_photos(
-        club_id,
-        season_year=_season_year(season),
-        force=force,
-    )
-    entry = _match_photo_entry(
-        player_name,
-        entries,
-        shirt_number=shirt_number,
-    )
-    return entry["url"] if entry and entry.get("url") else None
+    wiki = resolve_web_player_photo_url(player_name, club_name=club_name)
+    if wiki:
+        return wiki
+    return None
 
 
 def _is_port_vale_name(name: str) -> bool:
@@ -869,35 +1114,30 @@ def attach_pitch_player_photos(
     *,
     club_name: str,
     season: str | None,
+    warm: bool = True,
 ) -> list[dict[str, Any]]:
     if not pitch_players:
         return pitch_players
 
-    # Warm club-site + Transfermarkt maps once so matching is free per player.
-    if not _is_port_vale_name(club_name):
+    # Warm source maps once so the photo route is a cache hit, not a scrape.
+    if warm and club_name and not _is_port_vale_name(club_name):
         fetch_club_website_squad_photos(club_name)
         club_id = resolve_transfermarkt_club_id(club_name)
         if club_id:
             fetch_transfermarkt_squad_photos(club_id, season_year=_season_year(season))
+        fetch_fotmob_squad_photos(club_name)
 
     for player in pitch_players:
         name = str(player.get("name") or "")
+        if not name:
+            continue
         shirt = player.get("shirt_number")
-        source = resolve_opponent_photo_source_url(
+        player["photo_url"] = opponent_photo_api_url(
             name,
             club_name=club_name,
             season=season,
             shirt_number=shirt,
         )
-        if source:
-            player["photo_url"] = opponent_photo_api_url(
-                name,
-                club_name=club_name,
-                season=season,
-                shirt_number=shirt,
-            )
-        else:
-            player["photo_url"] = None
     return pitch_players
 
 
@@ -915,6 +1155,11 @@ def fetch_opponent_photo_bytes(source_url: str) -> tuple[bytes, str]:
             "User-Agent": GC_HEADERS["User-Agent"],
             "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
             "Referer": referer,
+        }
+    elif "fotmob.com" in source_url or "wikipedia.org" in source_url or "wikimedia.org" in source_url:
+        headers = {
+            "User-Agent": TM_HEADERS["User-Agent"],
+            "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
         }
     response = requests.get(source_url, timeout=25, headers=headers)
     if response.status_code >= 400:

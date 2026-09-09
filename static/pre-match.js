@@ -4035,12 +4035,19 @@ function twoPagerScoreCardHtml(match, index, total) {
   const resultClass = result ? ` tp-score--${result}` : "";
   const label = total === 2 ? (index === 0 ? "Game 1" : "Game 2") : "Last game";
   const opp = match.opponent || "Opponent";
+  const crestSrc =
+    match.opponent_badge_url
+    || match.opponent_image_url
+    || crestUrl({ name: opp, id: match.opponent_id, badge_url: match.opponent_badge_url });
+  const crest = crestSrc
+    ? `<img class="tp-score__crest" src="${escapeHtml(crestSrc)}" alt="" loading="lazy" onerror="this.onerror=null;this.classList.add('tp-score__crest--empty');this.removeAttribute('src')" />`
+    : `<span class="tp-score__crest tp-score__crest--empty" aria-hidden="true">${escapeHtml(crestInitials(opp))}</span>`;
   return `<div class="tp-score${resultClass}">
     <div class="tp-score__top">
       <span>${escapeHtml(label)}</span>
       <strong>${escapeHtml(result || "—")} ${escapeHtml(match.score || "")}</strong>
     </div>
-    <p class="tp-score__vs">${escapeHtml(opp)}</p>
+    <p class="tp-score__vs">${crest}${escapeHtml(opp)}</p>
     <p class="tp-score__meta">${formatMatchDate(match.date)} · ${escapeHtml(match.venue || "—")} · ${escapeHtml(match.formation || "—")}${scoreCardExtraMeta(match)}</p>
   </div>`;
 }

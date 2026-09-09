@@ -91,9 +91,7 @@ window.IMPECT_APPS = [
     "accent": "#34d399",
     "tags": [
       "Match day"
-    ],
-    "comingSoon": true,
-    "note": "Coming soon"
+    ]
   },
   {
     "id": "match-day-countdown",

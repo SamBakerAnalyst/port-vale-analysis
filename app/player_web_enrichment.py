@@ -37,51 +37,56 @@ def _clean_text(value: str) -> str:
 
 def _search_transfermarkt_player_url(player_name: str, club_name: str | None = None) -> str | None:
     queries = [f"{player_name} {club_name or ''}".strip(), player_name]
+    hosts = (
+        "https://www.transfermarkt.co.uk",
+        "https://www.transfermarkt.com",
+    )
     seen: set[str] = set()
     for query in queries:
         if not query or query in seen:
             continue
         seen.add(query)
-        try:
-            response = requests.get(
-                "https://www.transfermarkt.co.uk/schnellsuche/ergebnis/schnellsuche",
-                params={"query": query},
-                timeout=25,
-                headers=TM_HEADERS,
-            )
-            if response.status_code >= 400:
+        for host in hosts:
+            try:
+                response = requests.get(
+                    f"{host}/schnellsuche/ergebnis/schnellsuche",
+                    params={"query": query},
+                    timeout=25,
+                    headers=TM_HEADERS,
+                )
+                if response.status_code >= 400 or not response.text:
+                    continue
+                html = response.text
+            except requests.RequestException:
                 continue
-            html = response.text
-        except requests.RequestException:
-            continue
 
-        links = re.findall(
-            r'href="(/[a-z0-9\-]+/profil/spieler/(\d+))"',
-            html,
-            flags=re.I,
-        )
-        if not links:
-            continue
+            links = re.findall(
+                r'href="(/[a-z0-9\-]+/profil/spieler/(\d+))"',
+                html,
+                flags=re.I,
+            )
+            if not links:
+                continue
 
-        surname = _name_tokens(player_name)[1]
-        first = _name_tokens(player_name)[0]
-        ranked: list[tuple[int, str]] = []
-        for path, _player_id in links:
-            slug = path.strip("/").split("/")[0]
-            score = 0
-            slug_key = _normalize_name_key(slug)
-            if surname and surname in slug_key:
-                score += 3
-            if first and first[:3] in slug_key:
-                score += 1
-            if slug_key == _normalize_name_key(player_name):
-                score += 4
-            ranked.append((score, f"https://www.transfermarkt.co.uk{path}"))
+            surname = _name_tokens(player_name)[1]
+            first = _name_tokens(player_name)[0]
+            ranked: list[tuple[int, str]] = []
+            for path, _player_id in links:
+                slug = path.strip("/").split("/")[0]
+                score = 0
+                slug_key = _normalize_name_key(slug)
+                if surname and surname in slug_key:
+                    score += 3
+                if first and first[:3] in slug_key:
+                    score += 1
+                if slug_key == _normalize_name_key(player_name):
+                    score += 4
+                ranked.append((score, f"{host}{path}"))
 
-        ranked.sort(key=lambda item: item[0], reverse=True)
-        if ranked and ranked[0][0] > 0:
-            return ranked[0][1]
-        return f"https://www.transfermarkt.co.uk{links[0][0]}"
+            ranked.sort(key=lambda item: item[0], reverse=True)
+            if ranked and ranked[0][0] > 0:
+                return ranked[0][1]
+            return f"{host}{links[0][0]}"
     return None
 
 
@@ -484,6 +489,55 @@ def _fbref_num(raw: str | None) -> float | None:
         return None
 
 
+def _parse_fbref_season_rows(html: str) -> list[dict[str, Any]]:
+    """Season-by-season domestic league rows from the Standard Stats table."""
+    start = html.lower().find('id="stats_standard')
+    if start < 0:
+        start = html.lower().find("id='stats_standard")
+    if start < 0:
+        return []
+    window = html[start : start + 200_000]
+    # Prefer tbody so club/league split footers are skipped.
+    body_match = re.search(r"<tbody>(.*?)</tbody>", window, flags=re.S | re.I)
+    body = body_match.group(1) if body_match else window
+    rows: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for m in re.finditer(r"<tr[^>]*>(.*?)</tr>", body, flags=re.S | re.I):
+        row = m.group(0)
+        if 'data-stat="year_id"' not in row:
+            continue
+        season = _fbref_cell(row, "year_id") or ""
+        if not re.search(r"\d{4}", season):
+            continue
+        club = _fbref_cell(row, "team") or ""
+        competition = _fbref_cell(row, "comp_level") or _fbref_cell(row, "comp") or ""
+        key = (season.casefold(), club.casefold(), competition.casefold())
+        if key in seen:
+            continue
+        seen.add(key)
+
+        def _int(stat: str) -> int | None:
+            num = _fbref_num(_fbref_cell(row, stat))
+            return int(num) if num is not None else None
+
+        rows.append(
+            {
+                "season": season,
+                "club": club,
+                "competition": competition,
+                "apps": _int("games"),
+                "starts": _int("games_starts"),
+                "minutes": _int("minutes"),
+                "goals": _int("goals"),
+                "assists": _int("assists"),
+                "source": "fbref",
+            }
+        )
+        if len(rows) >= 40:
+            break
+    return rows
+
+
 def _parse_fbref_career(html: str) -> dict[str, Any]:
     """Career totals from the Standard Stats table footer (domestic leagues)."""
     # Avoid catastrophic regex over the full page — locate the table, then its tfoot.
@@ -581,6 +635,10 @@ def _parse_fbref_summary(html: str, page_url: str) -> dict[str, Any]:
         for key in ("matches", "starts", "minutes", "goals", "assists"):
             if career.get(key) is not None:
                 stats[f"career_{key}"] = career[key]
+
+    season_rows = _parse_fbref_season_rows(html)
+    if season_rows:
+        stats["season_rows"] = season_rows
 
     # Scout summary percentiles — only scan a small overview window (full-page
     # regex over FBref HTML is catastrophically slow).
