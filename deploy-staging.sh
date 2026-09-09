@@ -46,6 +46,7 @@ RSYNC_EXCLUDES=(
   --include 'data/squad-planner.json'
   --include 'data/efl-transfer-report-2026.json'
   --include 'data/efl-transfer-badges.json'
+  --include 'data/pre-match-two-pager.json'
   --include 'data/'
   --exclude 'data/*'
   --exclude '.env'
@@ -72,6 +73,10 @@ cd /opt/port-vale-analysis
 # Allow staff Macs to reach staging (idempotent).
 if command -v ufw >/dev/null 2>&1; then
   ufw allow 8080/tcp comment 'port-vale staging' >/dev/null 2>&1 || true
+fi
+mkdir -p /opt/port-vale-analysis/shared
+if [[ ! -f /opt/port-vale-analysis/shared/pre-match-two-pager.json && -f data/pre-match-two-pager.json ]]; then
+  cp data/pre-match-two-pager.json /opt/port-vale-analysis/shared/pre-match-two-pager.json
 fi
 docker compose --project-directory /opt/port-vale-analysis \
   -f deploy/docker-compose.staging.yml \

@@ -7,9 +7,11 @@ services:
       HOST: 0.0.0.0
       PORT: 8000
       DATA_ROOT: /data
+      SHARED_DATA_ROOT: /shared
       UVICORN_WORKERS: "1"
     volumes:
       - pv-data:/data
+      - /opt/port-vale-analysis/shared:/shared
     restart: unless-stopped
     expose:
       - "8000"

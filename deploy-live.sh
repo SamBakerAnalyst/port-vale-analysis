@@ -135,6 +135,7 @@ RSYNC_EXCLUDES=(
   --include 'data/squad-planner.json'
   --include 'data/efl-transfer-report-2026.json'
   --include 'data/efl-transfer-badges.json'
+  --include 'data/pre-match-two-pager.json'
   --include 'data/'
   --exclude 'data/*'
   --exclude '.env'

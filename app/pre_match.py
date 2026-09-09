@@ -16,6 +16,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel
 
+from app.pre_match_notes import load_two_pager_board, save_two_pager_board
 from app.opponent_photos import (
     attach_pitch_player_photos,
     fetch_opponent_photo_bytes,
@@ -504,6 +505,14 @@ class PreMatchReportRequest(BaseModel):
     match_id: int | None = None
     # Force rebuild past disk/memory caches (Refresh data / hub Force refresh).
     refresh: bool = False
+
+
+class TwoPagerBoardRequest(BaseModel):
+    iteration_id: int
+    squad_id: int
+    notes: dict[str, Any] | None = None
+    xi_shape: dict[str, Any] | None = None
+    avg_shape: dict[str, Any] | None = None
 
 
 class PreMatchPngExportPage(BaseModel):
@@ -6340,6 +6349,26 @@ def register_pre_match_routes(app: FastAPI) -> None:
     def pre_match_report(body: PreMatchReportRequest) -> dict[str, Any]:
         body.refresh = False
         return build_pre_match_report(body)
+
+    @app.get("/api/pre-match/two-pager")
+    def pre_match_two_pager(
+        iteration_id: int = Query(..., ge=1),
+        squad_id: int = Query(..., ge=1),
+    ) -> dict[str, Any]:
+        return load_two_pager_board(iteration_id, squad_id)
+
+    @app.post("/api/pre-match/two-pager")
+    def pre_match_two_pager_save(body: TwoPagerBoardRequest) -> dict[str, Any]:
+        try:
+            return save_two_pager_board(
+                body.iteration_id,
+                body.squad_id,
+                notes=body.notes,
+                xi_shape=body.xi_shape,
+                avg_shape=body.avg_shape,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/pre-match/player-photo")
     def pre_match_player_photo(

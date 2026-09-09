@@ -26,6 +26,7 @@ const state = {
   meta: null,
   fixtures: [],
   report: null,
+  twoPagerBoard: null,
   loading: false,
   reportLoadToken: 0,
   slideIndex: 0,
@@ -3747,6 +3748,10 @@ function persistTwoPagerPlayerPosition(layer, marker, player) {
   if (key) shape[key] = pos;
   if (Number.isFinite(index)) shape[`idx:${index}`] = pos;
   saveTwoPagerShapeMap(storageKey, shape);
+  if (!state.twoPagerBoard) state.twoPagerBoard = emptyTwoPagerBoard();
+  if (storageKey === twoPagerXiShapeKey()) state.twoPagerBoard.xi_shape = shape;
+  if (storageKey === twoPagerAvgShapeKey()) state.twoPagerBoard.avg_shape = shape;
+  scheduleTwoPagerBoardSave();
 
   // Keep last_xi + match XI copies in sync so re-renders don't wipe the drag.
   const two = state.report.two_match;
@@ -3768,28 +3773,147 @@ function persistTwoPagerPlayerPosition(layer, marker, player) {
   }
 }
 
-function loadTwoPagerNotes(report = state.report) {
+function emptyTwoPagerNotes() {
+  return { hurt_us: "", hurt_them: "", player_comments: "" };
+}
+
+function notesHaveText(notes) {
+  return Boolean(
+    String(notes?.hurt_us || "").trim()
+      || String(notes?.hurt_them || "").trim()
+      || String(notes?.player_comments || "").trim(),
+  );
+}
+
+function shapeHasPositions(shape) {
+  return Boolean(shape && typeof shape === "object" && Object.keys(shape).length);
+}
+
+function parseTwoPagerNotes(raw) {
   try {
-    const raw = localStorage.getItem(twoPagerNotesKey(report));
-    if (!raw) {
-      return { hurt_us: "", hurt_them: "", player_comments: "" };
-    }
-    const parsed = JSON.parse(raw);
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
     return {
       hurt_us: String(parsed?.hurt_us || parsed?.strengths || ""),
       hurt_them: String(parsed?.hurt_them || parsed?.weaknesses || ""),
       player_comments: String(parsed?.player_comments || parsed?.player_notes || ""),
     };
   } catch {
-    return { hurt_us: "", hurt_them: "", player_comments: "" };
+    return emptyTwoPagerNotes();
   }
 }
 
-function saveTwoPagerNotes(notes, report = state.report) {
+function loadTwoPagerNotesFromStorage(report = state.report) {
   try {
-    localStorage.setItem(twoPagerNotesKey(report), JSON.stringify(notes));
+    const raw = localStorage.getItem(twoPagerNotesKey(report));
+    if (!raw) return emptyTwoPagerNotes();
+    return parseTwoPagerNotes(raw);
+  } catch {
+    return emptyTwoPagerNotes();
+  }
+}
+
+function twoPagerBoardIds(report = state.report) {
+  return {
+    iterationId: Number(report?.iteration_id ?? Number(els.iterationId?.value || 0)),
+    squadId: Number(report?.opponent?.id ?? Number(els.opponentId?.value || 0)),
+  };
+}
+
+function emptyTwoPagerBoard(report = state.report) {
+  const { iterationId, squadId } = twoPagerBoardIds(report);
+  return {
+    iteration_id: iterationId,
+    squad_id: squadId,
+    notes: emptyTwoPagerNotes(),
+    xi_shape: {},
+    avg_shape: {},
+  };
+}
+
+function loadTwoPagerNotes(report = state.report) {
+  if (state.twoPagerBoard?.notes) return { ...emptyTwoPagerNotes(), ...state.twoPagerBoard.notes };
+  return loadTwoPagerNotesFromStorage(report);
+}
+
+let twoPagerBoardSaveTimer = 0;
+
+function saveTwoPagerNotes(notes, report = state.report) {
+  const next = { ...emptyTwoPagerNotes(), ...notes };
+  if (!state.twoPagerBoard) state.twoPagerBoard = emptyTwoPagerBoard(report);
+  state.twoPagerBoard.notes = next;
+  try {
+    localStorage.setItem(twoPagerNotesKey(report), JSON.stringify(next));
   } catch {
     /* ignore */
+  }
+  scheduleTwoPagerBoardSave();
+}
+
+function scheduleTwoPagerBoardSave() {
+  window.clearTimeout(twoPagerBoardSaveTimer);
+  twoPagerBoardSaveTimer = window.setTimeout(() => {
+    void persistTwoPagerBoardToServer();
+  }, 400);
+}
+
+async function persistTwoPagerBoardToServer(report = state.report) {
+  const board = state.twoPagerBoard || emptyTwoPagerBoard(report);
+  const { iterationId, squadId } = twoPagerBoardIds(report);
+  if (!iterationId || !squadId) return;
+  try {
+    await fetchJson("/api/pre-match/two-pager", {
+      method: "POST",
+      body: JSON.stringify({
+        iteration_id: iterationId,
+        squad_id: squadId,
+        notes: board.notes || emptyTwoPagerNotes(),
+        xi_shape: board.xi_shape || {},
+        avg_shape: board.avg_shape || {},
+      }),
+    });
+  } catch {
+    /* localStorage still has it */
+  }
+}
+
+async function hydrateTwoPagerBoard(report = state.report) {
+  const localNotes = loadTwoPagerNotesFromStorage(report);
+  const localXi = loadTwoPagerShapeMap(twoPagerXiShapeKey(report));
+  const localAvg = loadTwoPagerShapeMap(twoPagerAvgShapeKey(report));
+  const { iterationId, squadId } = twoPagerBoardIds(report);
+  let server = emptyTwoPagerBoard(report);
+  if (iterationId && squadId) {
+    try {
+      server = await fetchJson(
+        `/api/pre-match/two-pager?iteration_id=${iterationId}&squad_id=${squadId}`,
+      );
+    } catch {
+      server = emptyTwoPagerBoard(report);
+    }
+  }
+  const serverNotes = parseTwoPagerNotes(server?.notes || emptyTwoPagerNotes());
+  const notes = notesHaveText(serverNotes) ? serverNotes : localNotes;
+  const xiShape = shapeHasPositions(server?.xi_shape) ? server.xi_shape : localXi;
+  const avgShape = shapeHasPositions(server?.avg_shape) ? server.avg_shape : localAvg;
+  state.twoPagerBoard = {
+    iteration_id: iterationId,
+    squad_id: squadId,
+    notes,
+    xi_shape: xiShape || {},
+    avg_shape: avgShape || {},
+  };
+  try {
+    localStorage.setItem(twoPagerNotesKey(report), JSON.stringify(notes));
+    saveTwoPagerShapeMap(twoPagerXiShapeKey(report), xiShape);
+    saveTwoPagerShapeMap(twoPagerAvgShapeKey(report), avgShape);
+  } catch {
+    /* ignore */
+  }
+  const shouldMigrate = (!notesHaveText(serverNotes) && notesHaveText(localNotes))
+    || (!shapeHasPositions(server?.xi_shape) && shapeHasPositions(localXi))
+    || (!shapeHasPositions(server?.avg_shape) && shapeHasPositions(localAvg));
+  if (shouldMigrate) {
+    await persistTwoPagerBoardToServer(report);
   }
 }
 
@@ -4334,7 +4458,7 @@ function renderTwoPagerPage1(report) {
             : `Shape ${formation} — tell me if you want a different shape`,
           layerAttrs: `data-tp-xi="1" data-two-match-index="${Math.max(0, matches.length - 1)}"`,
           crest: report.opponent,
-          markerMode: "number",
+          markerMode: "photo",
         })}
       </div>
       <aside class="tp-page1-v2__right">
@@ -4657,7 +4781,7 @@ function bindTwoPagerNotes(root = els.deck) {
       window.clearTimeout(saveTimer);
       saveTimer = window.setTimeout(() => {
         persist();
-        setStatus("Two-pager notes saved on this device.");
+        setStatus("Two-pager notes saved.");
       }, 350);
     });
 
@@ -5165,6 +5289,8 @@ async function loadReport({ refresh = false } = {}) {
       return;
     }
     renderMatchBar();
+    await hydrateTwoPagerBoard(report);
+    if (token !== state.reportLoadToken) return;
     renderDeck(report);
     const cacheHit = report?.cache?.hit;
     setStatus("");

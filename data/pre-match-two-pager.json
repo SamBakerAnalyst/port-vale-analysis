@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "boards": {
+    "2120:2157": {
+      "notes": {
+        "hurt_us": "",
+        "hurt_them": "Attack the space behind Turton\nIsolate Molyneux 1v1 on switch\nFirst phase set delivery",
+        "player_comments": ""
+      },
+      "xi_shape": {},
+      "avg_shape": {},
+      "updated_at": "2026-09-09T12:50:00+00:00"
+    }
+  }
+}

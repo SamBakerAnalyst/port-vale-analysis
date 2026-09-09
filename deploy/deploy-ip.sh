@@ -48,6 +48,10 @@ if [[ -z "$HUB_AUTH_SECRET" ]]; then
 fi
 
 echo "Deploying (in-app login, IP-only)…"
+mkdir -p /opt/port-vale-analysis/shared
+if [[ ! -f /opt/port-vale-analysis/shared/pre-match-two-pager.json && -f "$ROOT/data/pre-match-two-pager.json" ]]; then
+  cp "$ROOT/data/pre-match-two-pager.json" /opt/port-vale-analysis/shared/pre-match-two-pager.json
+fi
 docker compose --project-directory "$ROOT" -f deploy/docker-compose.ip.yml build
 docker compose --project-directory "$ROOT" -f deploy/docker-compose.ip.yml up -d --remove-orphans
 
