@@ -249,6 +249,14 @@
   }
 
   function loanInfoForPlayer(player) {
+    const move = player?.transfer;
+    // The EFL transfer report already marks loan arrivals at every club we
+    // scout. Transfermarkt is only a supplement, and it was only warm for
+    // Exeter (pre-match had scraped that squad), so On loan looked empty
+    // everywhere else.
+    if (move?.status === "loan_in") {
+      return { from: move.from || "", name: player?.name || "" };
+    }
     const club = String(player?.club || "").trim();
     const maps = [];
     const seen = new Set();
@@ -261,9 +269,6 @@
     addMap(club);
     for (const key of Object.keys(state.loansByClub)) {
       if (nameKey(key) === nameKey(club)) addMap(key);
-    }
-    if (!maps.length) {
-      Object.keys(state.loansByClub).forEach(addMap);
     }
     const playerKey = nameKey(player?.name);
     const last = lastNameKey(player?.name);
@@ -314,9 +319,8 @@
             state.loansByClub[club] = { byName, byLast };
           }
         } catch {
-          chunk.forEach((name) => {
-            if (!state.loansByClub[name]) state.loansByClub[name] = { byName: {}, byLast: {} };
-          });
+          /* Leave the club missing so the next click retries. An empty map
+             would look like "no loans here" and hide real ones. */
         }
       }
     } finally {
@@ -352,10 +356,11 @@
   }
 
   function clubsForLoanFilter() {
-    // Only clubs on the current screen / filtered pool — not every club in the season dump.
-    const pool = rankedPool();
+    // Clubs in this league / age / minutes view — not the loan-filtered pool.
+    // Using rankedPool() here meant On loan only re-fetched clubs that already
+    // had a Transfermarkt hit (Exeter, after pre-match warmed that squad).
     const clubs = new Set();
-    for (const player of pool.slice(0, 120)) {
+    for (const player of rankedPool({ ignoreLoan: true })) {
       const club = String(player.club || "").trim();
       if (club) clubs.add(club);
     }
@@ -1039,7 +1044,7 @@
     return computeOverall(player.profileScores, profiles, weights, { equalWeight });
   }
 
-  function passesDemographicFilters(player) {
+  function passesDemographicFilters(player, opts = {}) {
     const minMinutes = parseNum(els.minMinutes) ?? 0;
     const minAge = parseNum(els.minAge);
     const maxAge = parseNum(els.maxAge);
@@ -1058,7 +1063,7 @@
       const cm = parseHeightCm(player.height);
       if (cm == null || cm < minHeight) return false;
     }
-    if (state.loanFilter === "loan" && !loanInfoForPlayer(player)) return false;
+    if (!opts.ignoreLoan && state.loanFilter === "loan" && !loanInfoForPlayer(player)) return false;
     const watchNeedle = clubNeedle().toLowerCase();
     const awayNeedle = oppoNeedle().toLowerCase();
     if (watchNeedle || awayNeedle) {
@@ -1076,7 +1081,7 @@
     return true;
   }
 
-  function rankedPool() {
+  function rankedPool({ ignoreLoan = false } = {}) {
     const weightPos = activeWeightPosition();
     const profiles =
       weightPos && state.groupBy === "league"
@@ -1103,7 +1108,7 @@
       .filter((p) => state.league === "ALL" || p.league === state.league)
       .filter((p) => !clubSet || clubSet.size === 0 || clubSet.has(String(p.club || "").trim()) || source !== state.players)
       .filter((p) => state.groupBy !== "league" || state.position === "ALL" || p.position === state.position)
-      .filter((p) => passesDemographicFilters(p))
+      .filter((p) => passesDemographicFilters(p, { ignoreLoan }))
       .filter((p) => {
         if (resolveViewMode() === "profiles" || resolveViewMode() === "team") return true;
         if (state.groupBy === "league") {
@@ -2256,6 +2261,7 @@
       if (isTeamSheetMode()) {
         loadTeamSheetExtras();
       } else if (state.loanFilter === "loan") {
+        renderGrid();
         void (async () => {
           await ensureLoanFilterReady();
           renderGrid();
@@ -2356,6 +2362,8 @@
       });
       void (async () => {
         if (state.loanFilter === "loan") {
+          updateSeasonLabel({});
+          renderGrid();
           await ensureLoanFilterReady();
         }
         updateSeasonLabel({});

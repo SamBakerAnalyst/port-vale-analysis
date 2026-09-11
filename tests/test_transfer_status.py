@@ -410,6 +410,30 @@ def test_loan_detection_matches_the_shipped_report(monkeypatch):
     assert loans > 100, "loans have stopped being marked in the source"
 
 
+def test_loan_arrivals_are_at_many_clubs_not_just_exeter(monkeypatch):
+    """On loan in Who To Scout used to show Exeter and nobody else."""
+    monkeypatch.setattr(ts, "TRANSFER_REPORT_CANDIDATES", SHIPPED_CANDIDATES)
+    ts.reset_cache()
+    clubs = {
+        rec["club"]
+        for rows in ts._load_index().values()
+        for rec in rows
+        if rec.get("loan") and rec.get("club")
+    }
+    assert len(clubs) > 20, f"only {sorted(clubs)[:8]} have loan arrivals"
+    assert not all("exeter" in str(name).lower() for name in clubs)
+
+
+def test_who_to_scout_on_loan_filter_uses_transfer_loan_ins():
+    from pathlib import Path
+
+    js = Path("static/who-to-scout.js").read_text(encoding="utf-8")
+    start = js.index("function loanInfoForPlayer")
+    chunk = js[start : start + 900]
+    assert 'move?.status === "loan_in"' in chunk
+    assert "rankedPool({ ignoreLoan: true })" in js
+
+
 def test_who_to_scout_annotates_the_whole_pool_at_once():
     """Wiring check, and it has to be the pool rather than the row.
 
