@@ -117,10 +117,22 @@ def test_force_refresh_does_not_wipe_pre_match_cache(tmp_path, monkeypatch):
     monkeypatch.setattr(analysis_cache, "ANALYSIS_CACHE_DIR", tmp_path)
     analysis_cache.write_json("pre-match", "keep_me", {"opponent": {"name": "Bromley"}})
     analysis_cache.write_json("xg-report", "drop_me", {"shotCount": 1})
+    analysis_cache.write_json(
+        "pre-match-fixtures",
+        "fixtures_2120",
+        {"fixtures": [{"opponent": {"name": "Exeter City"}, "played": False}]},
+    )
     counts = analysis_cache.clear_volatile()
     assert "pre-match" not in counts
+    assert "pre-match-fixtures" in counts
     assert analysis_cache.read_json("pre-match", "keep_me", ttl=1, allow_stale=True)["opponent"]["name"] == "Bromley"
     assert analysis_cache.read_json("xg-report", "drop_me", ttl=1, allow_stale=True) is None
+    assert (
+        analysis_cache.read_json(
+            "pre-match-fixtures", "fixtures_2120", ttl=1, allow_stale=True
+        )
+        is None
+    )
 
 
 def test_played_fixtures_keep_their_own_row():

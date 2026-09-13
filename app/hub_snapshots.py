@@ -576,12 +576,10 @@ def refresh_snapshots(scope: str = "all") -> dict[str, Any]:
             result["win_drivers"] = refresh_win_drivers()
         if scope_key in {"all", "scouting"}:
             result["scouting"] = refresh_scouting()
-        if scope_key in {"all", "analysis"}:
-            # Force so new full-time scores (and KPI rows for those matches) land
-            # when a coach hits Refresh or the daily analysis job runs. Boot warm
-            # stays unforced so deploys stay quick.
-            result["blocks_analysis"] = warm_blocks_analysis(force_refresh=True)
         if scope_key == "all":
+            # Force so new full-time scores land. Analysis scope rebuilds blocks
+            # inside refresh_analysis — do not do it twice (rate-limits Impect).
+            result["blocks_analysis"] = warm_blocks_analysis(force_refresh=True)
             from app.home_dashboard import build_port_vale_fixtures
 
             fixtures = build_port_vale_fixtures(force_refresh=True)
@@ -621,6 +619,15 @@ def refresh_snapshots(scope: str = "all") -> dict[str, Any]:
 
 def schedule_refresh(scope: str = "all") -> dict[str, Any]:
     """Kick a background refresh; returns immediately."""
+    from app.brand import is_demo
+
+    if is_demo():
+        return {
+            "started": False,
+            "demo": True,
+            "detail": "Blank demo hub — snapshot refresh is disabled.",
+        }
+
     meta = load_meta()
     if meta.get("refreshing"):
         return {"started": False, "detail": "Refresh already running.", **meta}
@@ -701,6 +708,11 @@ def _meta_is_stale(max_age_hours: float = 36.0) -> bool:
 def start_daily_scheduler() -> None:
     """Start the once-daily refresh loop (idempotent)."""
     global _scheduler_started
+    from app.brand import is_demo
+
+    if is_demo():
+        logger.info("LMS demo hub — skipping daily snapshot scheduler")
+        return
     if _scheduler_started:
         return
     _scheduler_started = True
@@ -759,7 +771,12 @@ def start_daily_scheduler() -> None:
                     refresh_snapshots("analysis")
                 except Exception:
                     logger.exception("Analysis cache refresh failed")
-                handled_date = today
+                from app.analysis_cache import analysis_results_incomplete
+
+                # A morning refresh that lands before Impect writes the score
+                # (Exeter 12 Sep 2026) must not close the window for the day.
+                if not analysis_results_incomplete():
+                    handled_date = today
                 continue
 
             if now.hour >= ANALYSIS_GIVE_UP_HOUR - 1:

@@ -240,6 +240,9 @@ def test_blocks_click_assembles_played_games_from_local_disks(tmp_path, monkeypa
 def test_blocks_click_serves_stale_disk(tmp_path, monkeypatch):
     monkeypatch.setattr(analysis_cache, "ANALYSIS_CACHE_DIR", tmp_path)
     monkeypatch.setattr("app.blocks_analysis._payload_cache", {})
+    monkeypatch.setattr(
+        "app.blocks_analysis.SEASON_MATCHES_PATH", tmp_path / "season-matches.json"
+    )
     write_json(
         "blocks",
         "default",

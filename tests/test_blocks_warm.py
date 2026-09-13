@@ -64,8 +64,12 @@ def test_the_daily_analysis_refresh_includes_blocks(monkeypatch):
     """Covers the six-hour KPI expiry without a person triggering it."""
     calls: list[str] = []
     monkeypatch.setattr(
-        hub_snapshots, "refresh_analysis", lambda: calls.append("analysis") or {}
+        hub_snapshots,
+        "refresh_analysis",
+        lambda: calls.append("analysis")
+        or {"steps": {"blocks": {"ok": True, "force": True}}},
     )
+
     def _warm(*, force_refresh: bool = False):
         calls.append("blocks")
         return {"ok": True, "blocks": 9, "force": force_refresh}
@@ -75,10 +79,11 @@ def test_the_daily_analysis_refresh_includes_blocks(monkeypatch):
 
     result = hub_snapshots.refresh_snapshots("analysis")
 
-    assert "blocks" in calls
-    # Forced here, unlike at boot: a game that has just finished must not stay
-    # hidden behind yesterday's season-matches cache (Salford, 5 Sep 2026).
-    assert result["blocks_analysis"]["force"] is True
+    assert "analysis" in calls
+    # Blocks rebuild lives inside refresh_analysis (force=True). A second warm
+    # here used to double-hit Impect and rate-limit the fixture rewrite.
+    assert "blocks" not in calls
+    assert result["analysis"]["steps"]["blocks"]["ok"] is True
 
 
 def test_boot_warm_covers_blocks_as_well_as_scouting():

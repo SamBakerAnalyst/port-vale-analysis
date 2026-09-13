@@ -2830,10 +2830,9 @@ def _resolve_port_vale_squad_id(iteration_id: int) -> int | None:
 
 
 def _match_is_complete(match: dict[str, Any]) -> bool:
-    goals = match.get("goals") or {}
-    home_ft = (goals.get("home") or {}).get("fullTime")
-    away_ft = (goals.get("away") or {}).get("fullTime")
-    return home_ft is not None and away_ft is not None
+    from app.analysis_cache import goals_full_time
+
+    return goals_full_time(match) is not None
 
 
 def _last_completed_match(
@@ -4840,15 +4839,27 @@ def build_pre_match_fixtures(
         recovered = _merge_fixture_rows(recovered, fixtures_from_xg_cache())
         merged = _merge_fixture_rows(cached_rows, recovered)
         if merged:
-            hydrated = [_hydrate_fixture_row(row, iteration_id) for row in merged]
-            if any(_fixture_looks_played(row) for row in hydrated) and not any(
-                _fixture_looks_played(row) for row in cached_rows
-            ):
-                try:
-                    write_json("pre-match-fixtures", cache_key, {"fixtures": hydrated})
-                except Exception:
-                    pass
-            return hydrated
+            from app.analysis_cache import rows_missing_finished_results
+
+            stale_unplayed = rows_missing_finished_results(
+                merged,
+                date_key="scheduled_date",
+                is_played=_fixture_looks_played,
+            )
+            if stale_unplayed:
+                refresh = True
+            else:
+                hydrated = [_hydrate_fixture_row(row, iteration_id) for row in merged]
+                if any(_fixture_looks_played(row) for row in hydrated) and not any(
+                    _fixture_looks_played(row) for row in cached_rows
+                ):
+                    try:
+                        write_json(
+                            "pre-match-fixtures", cache_key, {"fixtures": hydrated}
+                        )
+                    except Exception:
+                        pass
+                return hydrated
 
     fixtures = _build_pre_match_fixtures_uncached(int(iteration_id))
     write_json("pre-match-fixtures", cache_key, {"fixtures": fixtures})
@@ -4856,6 +4867,8 @@ def build_pre_match_fixtures(
 
 
 def _build_pre_match_fixtures_uncached(iteration_id: int) -> list[dict[str, Any]]:
+    from app.analysis_cache import goals_full_time
+
     port_vale_id = _resolve_port_vale_squad_id(iteration_id)
     squads = _squads_map(iteration_id)
 
@@ -4882,9 +4895,8 @@ def _build_pre_match_fixtures_uncached(iteration_id: int) -> list[dict[str, Any]
         opponent_id = away_id if is_home else home_id
         opponent = squads.get(opponent_id, {})
         played = _match_is_complete(match)
-        goals = match.get("goals") or {}
-        home_goals = (goals.get("home") or {}).get("fullTime")
-        away_goals = (goals.get("away") or {}).get("fullTime")
+        pair = goals_full_time(match) if played else None
+        home_goals, away_goals = pair if pair else (None, None)
         score = (
             f"{home_goals}-{away_goals}"
             if home_goals is not None and away_goals is not None
@@ -4973,9 +4985,10 @@ def _completed_opponent_fixtures(
         opponent_id = away_id if is_home else home_id
         opponent = squads.get(opponent_id, {})
         match_day = _match_day_index(match)
-        goals = match.get("goals") or {}
-        home_goals = (goals.get("home") or {}).get("fullTime")
-        away_goals = (goals.get("away") or {}).get("fullTime")
+        from app.analysis_cache import goals_full_time
+
+        pair = goals_full_time(match)
+        home_goals, away_goals = pair if pair else (None, None)
         score = (
             f"{home_goals}-{away_goals}"
             if home_goals is not None and away_goals is not None

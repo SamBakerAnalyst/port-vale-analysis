@@ -11,8 +11,9 @@ import json
 import logging
 import re
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from app.paths import CACHE_ROOT, ensure_data_dirs
 
@@ -178,11 +179,13 @@ def clear_all() -> dict[str, int]:
     return counts
 
 
-# Played pre-match / set-piece packets stay valid; wiping them on Force refresh
-# left old opposition two-pagers empty until the next opponent was rebuilt.
-_PRESERVE_ON_FORCE = frozenset(
-    {"pre-match", "pre-match-fixtures", "pre-match-meta"}
-)
+# Played pre-match packets stay valid; wiping them on Force refresh left old
+# opposition two-pagers empty. The fixture list must NOT be preserved — that
+# is how a finished game (Exeter 12 Sep 2026) stayed "upcoming" after refresh.
+_PRESERVE_ON_FORCE = frozenset({"pre-match", "pre-match-meta"})
+
+_RESULT_SCORE_RE = re.compile(r"^(\d+)\s*[:\-]\s*(\d+)")
+KICKOFF_FINISH_GRACE = timedelta(hours=2)
 
 
 def clear_volatile() -> dict[str, int]:
@@ -247,21 +250,152 @@ def clear_tool_memory_caches() -> None:
     except Exception:
         logger.exception("Could not clear home_dashboard fixtures cache")
 
+    try:
+        from app import blocks_analysis
+
+        cache = getattr(blocks_analysis, "_payload_cache", None)
+        if isinstance(cache, dict):
+            cache.clear()
+    except Exception:
+        logger.exception("Could not clear blocks_analysis payload cache")
+
+
+def parse_kickoff_utc(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        when = value
+    else:
+        text = str(value).strip()
+        if not text:
+            return None
+        try:
+            when = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    return when.astimezone(UTC)
+
+
+def kickoff_should_have_result(
+    value: Any,
+    *,
+    now: datetime | None = None,
+    grace: timedelta = KICKOFF_FINISH_GRACE,
+) -> bool:
+    """True once kickoff plus a full-time grace period is in the past."""
+    when = parse_kickoff_utc(value)
+    if when is None:
+        return False
+    current = now or datetime.now(UTC)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=UTC)
+    else:
+        current = current.astimezone(UTC)
+    return current >= when + grace
+
+
+def goals_full_time(match: dict[str, Any]) -> tuple[int, int] | None:
+    """Home/away full-time goals from the goals block or Impect's result string."""
+    goals = match.get("goals") or {}
+    home = (goals.get("home") or {}).get("fullTime")
+    away = (goals.get("away") or {}).get("fullTime")
+    if home is not None and away is not None:
+        try:
+            return int(home), int(away)
+        except (TypeError, ValueError):
+            pass
+    result = str(match.get("result") or "").strip()
+    matched = _RESULT_SCORE_RE.match(result)
+    if matched:
+        return int(matched.group(1)), int(matched.group(2))
+    return None
+
+
+def rows_missing_finished_results(
+    rows: list[dict[str, Any]],
+    *,
+    date_key: str,
+    is_played: Callable[[dict[str, Any]], bool],
+) -> bool:
+    for row in rows:
+        if is_played(row):
+            continue
+        if kickoff_should_have_result(row.get(date_key)):
+            return True
+    return False
+
+
+def analysis_results_incomplete() -> bool:
+    """True if a Vale kickoff in the past is still cached as unplayed."""
+    try:
+        from app.blocks_analysis import _load_season_matches_disk
+
+        matches = _load_season_matches_disk()
+        if rows_missing_finished_results(
+            matches,
+            date_key="scheduledDate",
+            is_played=lambda row: bool(row.get("outcome")),
+        ):
+            return True
+    except Exception:
+        logger.exception("Could not inspect blocks season matches")
+
+    try:
+        for body in all_json("pre-match-fixtures"):
+            rows = body.get("fixtures")
+            if not isinstance(rows, list):
+                continue
+            if rows_missing_finished_results(
+                rows,
+                date_key="scheduled_date",
+                is_played=lambda row: bool(row.get("played")),
+            ):
+                return True
+    except Exception:
+        logger.exception("Could not inspect pre-match fixtures")
+    return False
+
 
 def _probe_newest_match_events() -> tuple[int | None, list[Any]]:
-    """Newest played Vale match, plus whatever events the provider has for it."""
-    from app.xg_chance_analysis import (
-        _default_fixture_match_id,
-        _impect,
-        _unwrap_items,
-        build_xg_chance_fixtures,
-    )
+    """Newest Vale match that should already have a result, plus its events.
 
-    match_id = _default_fixture_match_id(build_xg_chance_fixtures(None, refresh=True))
-    if match_id is None:
+    Uses the iteration listing, not the completed-only xG fixture cache. That
+    cache hid Exeter the morning after the game — provider_ready saw Salford
+    (already complete, events published) and the daily job stopped for the day.
+    """
+    from app.pre_match import _impect, _resolve_port_vale_squad_id, _unwrap_items
+    from app.squad_review import _default_port_vale_season, _resolve_port_vale_iteration
+
+    iteration = _resolve_port_vale_iteration(_default_port_vale_season())
+    iteration_id = int(iteration["id"])
+    port_vale_id = _resolve_port_vale_squad_id(iteration_id)
+    if not port_vale_id:
         return None, []
 
     impect = _impect()
+    matches = _unwrap_items(
+        impect._impect_get(
+            f"/v5/{impect._api_prefix()}/iterations/{iteration_id}/matches"
+        )["data"]
+    )
+    past: list[dict[str, Any]] = []
+    for match in matches:
+        try:
+            match_id = int(match.get("id") or 0)
+            home_id = int(match.get("homeSquadId") or -1)
+            away_id = int(match.get("awaySquadId") or -1)
+        except (TypeError, ValueError):
+            continue
+        if not match_id or port_vale_id not in {home_id, away_id}:
+            continue
+        if kickoff_should_have_result(match.get("scheduledDate")):
+            past.append(match)
+    if not past:
+        return None, []
+    past.sort(key=lambda row: str(row.get("scheduledDate") or ""))
+    match_id = int(past[-1]["id"])
     events = _unwrap_items(
         impect._impect_get(f"/v5/{impect._api_prefix()}/matches/{match_id}/events")[
             "data"
@@ -271,11 +405,12 @@ def _probe_newest_match_events() -> tuple[int | None, list[Any]]:
 
 
 def provider_ready() -> dict[str, Any]:
-    """Has Impect published event data for Vale's newest played match?
+    """Has Impect published event data for Vale's newest finished kickoff?
 
     There is no set upload time — it is whenever the provider finishes — so the
-    scheduler polls this rather than guessing an hour. Refreshing too early
-    caches a match with no events and then serves that until tomorrow.
+    scheduler polls this rather than guessing an hour. The probe is the newest
+    Vale match whose kickoff is in the past, even if the iteration listing has
+    not written full-time goals yet.
     """
     try:
         match_id, events = _probe_newest_match_events()
@@ -304,6 +439,16 @@ def refresh_analysis_data(*, force: bool = True) -> dict[str, Any]:
 
     Safe to run from the hub Force refresh button a couple of times a week.
     """
+    from app.brand import is_demo
+
+    if is_demo():
+        return {
+            "force": force,
+            "demo": True,
+            "detail": "Blank demo hub — club data refresh is disabled.",
+            "steps": {},
+        }
+
     started = time.time()
     result: dict[str, Any] = {"force": force, "steps": {}}
 

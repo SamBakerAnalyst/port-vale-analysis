@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import threading
 import time
@@ -54,6 +55,8 @@ from app.post_match.phase_analysis import (
 from app.post_match.season_matches import build_season_matches
 from app.post_match.xg_race import _fetch_shots_with_xg, build_xg_race
 from app.scouting import SCOUTING_DIR
+
+logger = logging.getLogger(__name__)
 
 # League Two 26/27. Keep these here — post-match DEFAULT_ITERATION_ID may still
 # point at a previous season on some deploys.
@@ -3207,29 +3210,73 @@ def _payload_has_kpis(payload: dict[str, Any] | None) -> bool:
     return False
 
 
+def _season_matches_missing_results(matches: list[dict[str, Any]]) -> bool:
+    from app.analysis_cache import rows_missing_finished_results
+
+    return rows_missing_finished_results(
+        matches,
+        date_key="scheduledDate",
+        is_played=lambda row: bool(row.get("outcome")),
+    )
+
+
+def _fetch_season_matches() -> list[dict[str, Any]]:
+    return build_season_matches(
+        BLOCKS_ITERATION_ID,
+        PORT_VALE_SQUAD_ID,
+        include_upcoming=True,
+        competition_label=LEAGUE_LABEL,
+        competition_short=LEAGUE_SHORT,
+        season_label=BLOCKS_SEASON_LABEL,
+    )
+
+
 def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, Any]:
     cache_key = "default"
     now = time.time()
     if not force_refresh:
-        cached = _payload_cache.get(cache_key)
-        if cached and _payload_has_kpis(cached[1]):
-            return cached[1]
         from app.analysis_cache import REPORT_TTL_SECONDS, read_json
 
+        cached = _payload_cache.get(cache_key)
         disk = read_json("blocks", "default", ttl=REPORT_TTL_SECONDS, allow_stale=True)
-        if disk and _payload_has_kpis(disk):
+        payload = None
+        if cached and _payload_has_kpis(cached[1]):
+            payload = cached[1]
+        elif disk and _payload_has_kpis(disk):
+            payload = disk
             _payload_cache[cache_key] = (now, disk)
-            return disk
+
         matches = _load_season_matches_disk()
+        if _season_matches_missing_results(matches):
+            try:
+                matches = _fetch_season_matches()
+                if matches:
+                    _save_season_matches_disk(matches)
+            except Exception:
+                logger.exception("Blocks score refresh from Impect failed")
+                if payload:
+                    return payload
+            if matches:
+                played = [match for match in matches if match.get("outcome")]
+                kpi_by_match = _load_match_kpis(
+                    played or matches,
+                    force_refresh=False,
+                    fetch_missing=True,
+                    allow_stale=True,
+                )
+                rebuilt = _assemble_blocks_payload(
+                    matches, kpi_by_match, include_demo=False, force_refresh=False
+                )
+                if payload and payload.get("benchmarks") and not (
+                    rebuilt.get("benchmarks") or {}
+                ).get("goalsAgainst"):
+                    rebuilt["benchmarks"] = payload["benchmarks"]
+                return _store_blocks_payload(rebuilt)
+
+        if payload:
+            return payload
         if not matches:
-            matches = build_season_matches(
-                BLOCKS_ITERATION_ID,
-                PORT_VALE_SQUAD_ID,
-                include_upcoming=True,
-                competition_label=LEAGUE_LABEL,
-                competition_short=LEAGUE_SHORT,
-                season_label=BLOCKS_SEASON_LABEL,
-            )
+            matches = _fetch_season_matches()
             if matches:
                 _save_season_matches_disk(matches)
         played = [match for match in matches if match.get("outcome")]
@@ -3239,23 +3286,16 @@ def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, A
             fetch_missing=True,
             allow_stale=True,
         )
-        payload = _assemble_blocks_payload(
+        assembled = _assemble_blocks_payload(
             matches, kpi_by_match, include_demo=False, force_refresh=False
         )
-        if disk and disk.get("benchmarks") and not (payload.get("benchmarks") or {}).get(
+        if disk and disk.get("benchmarks") and not (assembled.get("benchmarks") or {}).get(
             "goalsAgainst"
         ):
-            payload["benchmarks"] = disk["benchmarks"]
-        return _store_blocks_payload(payload)
+            assembled["benchmarks"] = disk["benchmarks"]
+        return _store_blocks_payload(assembled)
 
-    matches = build_season_matches(
-        BLOCKS_ITERATION_ID,
-        PORT_VALE_SQUAD_ID,
-        include_upcoming=True,
-        competition_label=LEAGUE_LABEL,
-        competition_short=LEAGUE_SHORT,
-        season_label=BLOCKS_SEASON_LABEL,
-    )
+    matches = _fetch_season_matches()
     if matches:
         _save_season_matches_disk(matches)
     kpi_by_match = _load_match_kpis(matches, force_refresh=True)

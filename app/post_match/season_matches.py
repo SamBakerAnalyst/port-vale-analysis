@@ -18,14 +18,19 @@ def _match_day_index(match_row: dict[str, Any]) -> int | None:
     return None
 
 
+def _full_time_pair(row: dict[str, Any]) -> tuple[int, int] | None:
+    from app.analysis_cache import goals_full_time
+
+    return goals_full_time(row)
+
+
 def _focus_match_outcome(
     focus_squad_id: int,
     home_id: int,
     away_id: int,
-    goals: dict[str, Any],
+    home_ft: int | None,
+    away_ft: int | None,
 ) -> str | None:
-    home_ft = (goals.get("home") or {}).get("fullTime")
-    away_ft = (goals.get("away") or {}).get("fullTime")
     if home_ft is None or away_ft is None:
         return None
     if focus_squad_id == home_id:
@@ -45,10 +50,9 @@ def _score_label(
     focus_squad_id: int,
     home_id: int,
     away_id: int,
-    goals: dict[str, Any],
+    home_ft: int | None,
+    away_ft: int | None,
 ) -> str | None:
-    home_ft = (goals.get("home") or {}).get("fullTime")
-    away_ft = (goals.get("away") or {}).get("fullTime")
     if home_ft is None or away_ft is None:
         return None
     if focus_squad_id == home_id:
@@ -89,7 +93,8 @@ def build_season_matches(
         opponent = squads.get(opponent_id, {})
         home = squads.get(home_id, {})
         away = squads.get(away_id, {})
-        goals = row.get("goals") or {}
+        pair = _full_time_pair(row)
+        home_ft, away_ft = pair if pair else (None, None)
 
         matches.append(
             {
@@ -108,7 +113,7 @@ def build_season_matches(
                         "squadId": home_id,
                         "name": home.get("name") or f"Squad {home_id}",
                         "imageUrl": home.get("imageUrl"),
-                        "score": (goals.get("home") or {}).get("fullTime"),
+                        "score": home_ft,
                     },
                     home_id,
                     iteration_id,
@@ -118,7 +123,7 @@ def build_season_matches(
                         "squadId": away_id,
                         "name": away.get("name") or f"Squad {away_id}",
                         "imageUrl": away.get("imageUrl"),
-                        "score": (goals.get("away") or {}).get("fullTime"),
+                        "score": away_ft,
                     },
                     away_id,
                     iteration_id,
@@ -132,8 +137,12 @@ def build_season_matches(
                     opponent_id,
                     iteration_id,
                 ),
-                "outcome": _focus_match_outcome(focus_squad_id, home_id, away_id, goals),
-                "scoreLabel": _score_label(focus_squad_id, home_id, away_id, goals),
+                "outcome": _focus_match_outcome(
+                    focus_squad_id, home_id, away_id, home_ft, away_ft
+                ),
+                "scoreLabel": _score_label(
+                    focus_squad_id, home_id, away_id, home_ft, away_ft
+                ),
             }
         )
 
