@@ -26,6 +26,7 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
     from app.match_dashboards import register_match_dashboards_routes
     from app.match_day_countdown import register_match_day_countdown_routes
     from app.meeting_front_pages import register_meeting_front_pages_routes
+    from app.pa_meeting_slides import register_pa_meeting_slides_routes
     from app.player_cards import register_player_cards_routes
     from app.player_pipelines import register_player_pipelines_routes
     from app.presentations import register_presentations_routes
@@ -46,6 +47,10 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
     from app.xg_chance_analysis import register_xg_chance_analysis_routes
     from app.window_review import register_window_review_routes
     from app.efl_transfer_report import register_efl_transfer_report_routes
+    from app.transfer_centre import register_transfer_centre_routes
+    from app.games_to_watch import register_games_to_watch_routes
+    from app.goals_analysis import register_goals_analysis_routes
+    from app.video_watch import register_video_watch_routes
 
     return {
         "match_dashboards": register_match_dashboards_routes,
@@ -59,6 +64,10 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
         "hub_origin": register_hub_origin_routes,
         "window_review": register_window_review_routes,
         "efl_transfer_report": register_efl_transfer_report_routes,
+        "transfer_centre": register_transfer_centre_routes,
+        "games_to_watch": register_games_to_watch_routes,
+        "video_watch": register_video_watch_routes,
+        "goals_analysis": register_goals_analysis_routes,
         "blocks_analysis": register_blocks_analysis_routes,
         "schedule": register_schedule_routes,
         "scouting": register_scouting_routes,
@@ -76,6 +85,7 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
         "presentations": register_presentations_routes,
         "strategy_tracker": register_strategy_tracker_routes,
         "meeting_front_pages": register_meeting_front_pages_routes,
+        "pa_meeting_slides": register_pa_meeting_slides_routes,
         # Covered by routes defined in main.py (studio) — no-op registrar.
         "main_studio": lambda _app: None,
     }

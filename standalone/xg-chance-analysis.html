@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/xg-chance-analysis.css?v=8" />
+  <link rel="stylesheet" href="/static/xg-chance-analysis.css?v=10" />
 </head>
 <body>
   <div class="xca-app">
@@ -50,6 +50,10 @@
           <button type="button" class="xca-view-btn" data-view="players">Players</button>
         </div>
       </div>
+      <div class="xca-controls__group">
+        <span class="xca-controls__label">Penalties</span>
+        <button type="button" class="xca-scope-btn" id="penaltiesBtn" aria-pressed="false">Remove penalties</button>
+      </div>
     </section>
 
     <div id="statusBanner" class="xca-status hidden" role="status"></div>
@@ -89,7 +93,7 @@
     <footer id="statusBar" class="xca-footer">Loading…</footer>
   </div>
 
-  <script defer src="/static/xg-chance-analysis.js?v=16"></script>
+  <script defer src="/static/xg-chance-analysis.js?v=20"></script>
   <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>

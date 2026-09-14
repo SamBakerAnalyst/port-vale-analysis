@@ -1,0 +1,15 @@
+---
+description: Keep Port Vale talk and status strictly Port Vale — never mix in other products
+alwaysApply: true
+---
+
+# Port Vale conversations stay Port Vale
+
+When the user is talking about Port Vale (Live, Staging, staff tools, sync-ups, deploys, what is ready):
+
+- Only mention Port Vale Live and Port Vale Staging.
+- Do not mention other products, demo hubs, or other brands in the same answer.
+- Do not include them in “what is on Staging vs Live” lists.
+- If a task is Port Vale, status and next steps are Port Vale only.
+
+Other products exist in this repo for deploy isolation. That is internal. Do not bring them into Port Vale user replies unless the user explicitly asks about that other product by name.

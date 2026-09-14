@@ -44,6 +44,8 @@ esac
 
 # Guard: never ship the staff.split crash (GitHub Actions used to restore it).
 bash "$ROOT/deploy/check-fixture-planner.sh"
+# Guard: never overwrite hostname Caddy with hub:8000 (that put LMS on pvfc).
+bash "$ROOT/deploy/check-live-caddy.sh"
 
 # Keep GitHub in sync so Actions / console updates can't overwrite with older code.
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -135,6 +137,7 @@ RSYNC_EXCLUDES=(
   --include 'data/squad-planner.json'
   --include 'data/efl-transfer-report-2026.json'
   --include 'data/efl-transfer-badges.json'
+  --include 'data/transfer-centre-positions.json'
   --include 'data/pre-match-two-pager.json'
   --include 'data/'
   --exclude 'data/*'

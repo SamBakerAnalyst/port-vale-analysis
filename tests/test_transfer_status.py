@@ -145,6 +145,48 @@ def test_loan_statuses_are_grouped_for_callers():
     assert ts.CHECK not in ts.LOAN_STATUSES
 
 
+def test_a_left_move_abroad_is_flagged_even_when_the_destination_is_not_in_the_report():
+    """Ar'Jany Martha left Rotherham for Telstar — that loan is not a signing
+    in the EFL report, so it only exists on the selling club's `left` list."""
+    payload = json.loads(json.dumps(REPORT))
+    payload["leagues"].append(
+        {
+            "name": "League Two",
+            "teams": [
+                {
+                    "name": "Rotherham United",
+                    "signed": [
+                        {
+                            "player": "Jayce Fitzgerald",
+                            "other": "Manchester United",
+                            "kind": "loan",
+                            "fee": "Loan",
+                        }
+                    ],
+                    "left": [
+                        {
+                            "player": "Ar'Jany Martha",
+                            "other": "Telstar",
+                            "kind": "loan",
+                            "fee": "Loan",
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    path = ts.TRANSFER_REPORT_CANDIDATES[0]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    ts.reset_cache()
+    incoming = ts.lookup("Jayce Fitzgerald", "Rotherham United")
+    assert incoming["status"] == ts.LOAN_IN
+    assert incoming["from"] == "Manchester United"
+    outgoing = ts.lookup("Ar'Jany Martha", "Rotherham United")
+    assert outgoing["status"] == ts.LOAN_OUT
+    assert outgoing["club"] == "Telstar"
+    assert ts.lookup("Arjany Martha", "Rotherham United")["status"] == ts.LOAN_OUT
+
+
 def test_a_permanent_sale_is_still_red():
     """The loan work must not soften a real transfer."""
     assert ts.lookup("Gbemi Arubi", "Dundalk FC")["status"] == ts.GONE
@@ -373,40 +415,44 @@ def test_a_real_report_is_readable_from_this_checkout(monkeypatch):
     assert ts._report_path() is not None, "no EFL transfer report in the repo"
     assert len(ts._load_index()) > 100
     assert ts.lookup("Gbemi Arubi", "Dundalk FC")["club"] == "Burton Albion"
+    gone = ts.lookup("Abdul Abdulmalik", "Boreham Wood")
+    assert gone["status"] == ts.GONE
+    assert "Djurgarden" in gone["club"]
+    incoming = ts.lookup("Danny Cashman", "Boreham Wood")
+    assert incoming["status"] == ts.LOAN_IN
+    assert incoming["from"] == "Crawley Town"
 
 
-def test_loan_detection_matches_the_shipped_report(monkeypatch):
+def test_no_loan_in_the_shipped_report_is_read_as_a_sale(monkeypatch):
     """`kind` is the only thing marking a loan, so it has to be trustworthy.
 
-    In the report we ship, `kind == "loan"` and a fee reading "loan" agree on
-    every one of the 723 signings. If a future source change breaks that, loans
-    would quietly start showing as permanent sales — the exact error this whole
-    change was correcting — so it fails here instead.
+    A loan read as a sale is the exact error this change was correcting, so the
+    direction that matters is one-way: anything whose fee mentions a loan must
+    be marked as one. The reverse is not a fault — the Scottish rows put the
+    parent club in the fee ("Heart of Midlothian") rather than the word loan,
+    which is more use to a scout, not less.
     """
     import json as _json
 
     monkeypatch.setattr(ts, "TRANSFER_REPORT_CANDIDATES", SHIPPED_CANDIDATES)
     ts.reset_cache()
     report = _json.loads(ts._report_path().read_text(encoding="utf-8"))
-
-    disagreements = [
+    signings = [
         signing
         for league in report["leagues"]
         for team in league.get("teams") or []
         for signing in team.get("signed") or []
-        if (((signing.get("kind") or "").lower() == "loan")
-            != ("loan" in (signing.get("fee") or "").lower()))
     ]
 
-    assert not disagreements, f"kind/fee disagree on {len(disagreements)} signings"
+    missed = [
+        signing
+        for signing in signings
+        if "loan" in (signing.get("fee") or "").lower()
+        and (signing.get("kind") or "").lower() != "loan"
+    ]
+    assert not missed, f"{len(missed)} loans would show as permanent sales"
 
-    loans = sum(
-        1
-        for league in report["leagues"]
-        for team in league.get("teams") or []
-        for signing in team.get("signed") or []
-        if (signing.get("kind") or "").lower() == "loan"
-    )
+    loans = sum(1 for s in signings if (s.get("kind") or "").lower() == "loan")
     assert loans > 100, "loans have stopped being marked in the source"
 
 

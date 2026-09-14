@@ -8009,9 +8009,9 @@ body.is-two-pager .pm-toolbar {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center 16%;
-  transform: scale(1.34);
-  transform-origin: center 14%;
+  object-position: center 22%;
+  transform: none;
+  transform-origin: center center;
 }
 
 .tp-leaders__photo--empty {
@@ -8257,9 +8257,9 @@ body.is-two-pager .pm-toolbar {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center 14%;
-  transform: scale(1.42);
-  transform-origin: center 16%;
+  object-position: center 22%;
+  transform: none;
+  transform-origin: center center;
   display: block;
 }
 
@@ -8636,7 +8636,8 @@ body.is-two-pager .pm-toolbar {
   border-width: 3px !important;
 }
 .pm-slide--export-capture.pm-slide--two-pager-1 .tp-pitch .tp-marker__photo img {
-  transform: scale(1.32) !important;
+  transform: none !important;
+  object-position: center 22% !important;
 }
 .pm-slide--export-capture.pm-slide--two-pager-1 .tp-pitch .tp-marker__name,
 .pm-slide--export-capture.pm-slide--two-pager-1 .tp-pitch .xi-circle__name {

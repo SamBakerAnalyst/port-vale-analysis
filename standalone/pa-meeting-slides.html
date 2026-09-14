@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PA Meeting Slides</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/pa-meeting-slides.css?v=5" />
+</head>
+<body>
+  <div class="pams-app">
+    <header class="pams-chrome">
+      <div class="pams-chrome__brand">
+        <a class="pams-chrome__back" href="/">← Hub</a>
+        <div>
+          <p class="pams-chrome__eyebrow">Performance analysis · Meeting slides</p>
+          <h1 class="pams-chrome__title">PA Meeting Slides</h1>
+        </div>
+      </div>
+      <div class="pams-chrome__actions">
+        <button type="button" class="pams-btn pams-btn--ghost" id="valePhotosBtn">Refresh 26/27 match photos</button>
+        <button type="button" class="pams-btn pams-btn--ghost" id="oppPhotosBtn" disabled>Find opponent photos</button>
+        <button type="button" class="pams-btn pams-btn--ghost" id="saveBtn" disabled>Save deck</button>
+        <button type="button" class="pams-btn pams-btn--primary" id="downloadBtn" disabled>Download PNG pack</button>
+      </div>
+    </header>
+
+    <section class="pams-controls">
+      <div class="pams-search">
+        <label class="pams-label" for="clubSearch">Opponent</label>
+        <input id="clubSearch" class="pams-input" type="search" placeholder="Type a team — e.g. Exeter City" autocomplete="off" />
+        <ul id="searchResults" class="pams-results" hidden></ul>
+      </div>
+      <div class="pams-field">
+        <label class="pams-label" for="meetingTitle">Meeting title</label>
+        <input id="meetingTitle" class="pams-input" type="text" value="Set Plays" />
+      </div>
+      <div class="pams-cutout">
+        <label class="pams-label" for="cutoutInput">Own photo <span class="pams-label__optional">optional</span></label>
+        <div class="pams-cutout__row">
+          <label class="pams-file" for="cutoutInput">
+            <span class="pams-file__btn">Choose image</span>
+            <span class="pams-file__name" id="cutoutFileName">PNG / JPG — applies to selected slide</span>
+            <input id="cutoutInput" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+          </label>
+          <button type="button" class="pams-btn pams-btn--ghost pams-btn--small" id="clearCutoutBtn" disabled>Clear</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="pams-packs" aria-label="Meeting type">
+      <p class="pams-label">Pack</p>
+      <div class="pams-pills" id="packPills"></div>
+    </section>
+
+    <section class="pams-clubs" id="clubChips" aria-label="League Two clubs"></section>
+
+    <div id="statusBanner" class="pams-status hidden" role="status"></div>
+
+    <section class="pams-photos" id="photoPanel" hidden>
+      <div class="pams-photos__head">
+        <h2>Photos</h2>
+        <div class="pams-photos__tools">
+          <input id="photoQuery" class="pams-input pams-input--compact" type="search" placeholder="Search 26/27 e.g. vs Salford, corners" />
+          <button type="button" class="pams-btn pams-btn--ghost pams-btn--small" id="photoQueryBtn">Search</button>
+          <span class="pams-hint" id="photoMeta"></span>
+        </div>
+      </div>
+      <div class="pams-photo-grid" id="photoGrid"></div>
+    </section>
+
+    <div class="pams-workspace" id="workspace" hidden>
+      <aside class="pams-editor" id="editor"></aside>
+      <main class="pams-preview" id="preview" aria-live="polite"></main>
+    </div>
+  </div>
+
+  <script defer src="/static/wysiwyg-export.js?v=2"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script defer src="/static/pa-meeting-slides.js?v=9"></script>
+  <script defer src="/static/hub-feedback.js?v=1"></script>
+</body>
+</html>

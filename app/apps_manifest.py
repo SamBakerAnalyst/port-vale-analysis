@@ -85,6 +85,28 @@ APPS: list[dict[str, Any]] = [
         "router": "set_piece_pre_match",
     },
     {
+        "id": "pa-meeting-slides",
+        "group": "analysis",
+        "title": "PA Meeting Slides",
+        "description": (
+            "Video title cards for analysis meetings — opponent badges, set-play "
+            "topics such as attacking and defensive corners, and high-quality "
+            "Port Vale photos. Download a PNG pack."
+        ),
+        "href": "/pa-meeting-slides",
+        "icon": "🎬",
+        "accent": "#34d399",
+        "tags": ["Meetings", "Set pieces", "PNG"],
+        "roles": ("analysis", "admin"),
+        "api_prefixes": (
+            "/pa-meeting-slides",
+            "/api/pa-meeting-slides",
+            "/api/wysiwyg-export-pdf",
+            "/api/wysiwyg-export-png-zip",
+        ),
+        "router": "pa_meeting_slides",
+    },
+    {
         "id": "player-cards",
         "group": "analysis",
         "title": "Player Cards",
@@ -385,6 +407,68 @@ APPS: list[dict[str, Any]] = [
         "router": "scoutable_teams",
     },
     {
+        "id": "transfer-centre",
+        "group": "recruitment",
+        "title": "Transfer Centre",
+        "description": (
+            "Summer market board — every club's incomings, with ticks for manager liked, "
+            "recruitment liked, too expensive, and turned down. Transfer reports live here too."
+        ),
+        "href": "/transfer-centre",
+        "icon": "🔁",
+        "accent": "#38bdf8",
+        "tags": ["Transfers", "Market", "CMS"],
+        "roles": ("scouts", "admin"),
+        "api_prefixes": (
+            "/transfer-centre",
+            "/api/transfer-centre",
+            "/efl-transfer-report",
+            "/api/efl-transfer-report",
+            "/api/wysiwyg-export-pdf",
+        ),
+        "router": "transfer_centre",
+    },
+    {
+        "id": "games-to-watch",
+        "group": "recruitment",
+        "title": "Games to Watch",
+        "description": (
+            "Rank played and upcoming fixtures by young, high-scoring players so scouts "
+            "know which video to watch first. Open a team sheet and assign into Fixture Planner."
+        ),
+        "href": "/games-to-watch",
+        "icon": "📺",
+        "accent": "#22c55e",
+        "tags": ["Transfers", "Video", "Fixtures", "U27"],
+        "roles": ("scouts", "admin"),
+        "api_prefixes": (
+            "/games-to-watch",
+            "/api/games-to-watch",
+        ),
+        "router": "games_to_watch",
+    },
+    {
+        "id": "video-watch",
+        "group": "recruitment",
+        "title": "Player Reports",
+        "description": (
+            "Watch a game with both team sheets. Open a player, write comments, notes, "
+            "or a report — they stay on Scoutable Teams, Who to Scout, and the player page. "
+            "This is becoming the scouting hub."
+        ),
+        "href": "/player-reports",
+        "icon": "📝",
+        "accent": "#a78bfa",
+        "tags": ["Reports", "Notes", "Scouting", "Team sheet"],
+        "roles": ("scouts", "admin"),
+        "api_prefixes": (
+            "/player-reports",
+            "/video-watch",
+            "/api/video-watch",
+        ),
+        "router": "video_watch",
+    },
+    {
         "id": "squad-planner",
         "group": "recruitment",
         "title": "Squad Planner",
@@ -602,6 +686,21 @@ APPS: list[dict[str, Any]] = [
         "router": "club_strategy",
     },
     {
+        "id": "goals-analysis",
+        "group": "strategy",
+        "title": "Goals Analysis",
+        "description": (
+            "Log Wyscout clips, code origin, then exportable league / team / player summaries."
+        ),
+        "href": "/goals-analysis",
+        "icon": "⚽",
+        "accent": "#f5c518",
+        "tags": ["League Two", "Goals", "Video"],
+        "roles": ("admin",),
+        "api_prefixes": ("/goals-analysis", "/api/goals-analysis"),
+        "router": "goals_analysis",
+    },
+    {
         "id": "presentations",
         "group": "presentations",
         "title": "Presentations",
@@ -719,7 +818,7 @@ APPS: list[dict[str, Any]] = [
     },
     {
         "id": "efl-transfer-report",
-        "group": "presentations",
+        "group": "recruitment",
         "title": "EFL Transfer Report",
         "description": (
             "Summer 2026 window — every League One, League Two, National League "
@@ -729,7 +828,7 @@ APPS: list[dict[str, Any]] = [
         "icon": "🔁",
         "accent": "#a78bfa",
         "tags": ["Transfers", "EFL", "Presentation"],
-        "roles": ("admin",),
+        "roles": ("scouts", "admin"),
         "api_prefixes": ("/efl-transfer-report", "/api/efl-transfer-report", "/api/wysiwyg-export-pdf"),
         "router": "efl_transfer_report",
         "sidebar": False,
@@ -756,6 +855,8 @@ LIVE_ESSENTIAL_IDS = frozenset(
         # notes carry real names rather than one team account.
         "player-pipelines",
         "scoutable-teams",
+        "games-to-watch",
+        "video-watch",
         # Scouts
         "fixture-planner",
         "played-fixtures",
@@ -774,14 +875,20 @@ LIVE_ESSENTIAL_IDS = frozenset(
 
 
 def _is_staging_env() -> bool:
-    import os
+    from app.brand import is_staging_env
 
-    return os.getenv("HUB_ENV", "").strip().lower() == "staging"
+    return is_staging_env()
+
+
+def _reveal_all_tools() -> bool:
+    from app.brand import reveal_all_tools
+
+    return reveal_all_tools()
 
 
 def is_app_live(app_id: str) -> bool:
     """True when staff can actually open this tool from the rail right now."""
-    return _is_staging_env() or str(app_id) in LIVE_ESSENTIAL_IDS
+    return _reveal_all_tools() or str(app_id) in LIVE_ESSENTIAL_IDS
 
 
 def presentation_decks() -> list[dict[str, Any]]:
@@ -888,17 +995,26 @@ def essential_sidebar_titles() -> list[str]:
 
 
 def manifest_payload(*, role: str = "admin") -> dict[str, Any]:
-    reveal_all = _is_staging_env()
+    from app.brand import current_brand
+
+    brand = current_brand()
+    reveal_all = _reveal_all_tools()
     apps = [public_app_payload(app, reveal_all=reveal_all) for app in apps_for_role(role)]
     groups_used = {app["group"] for app in apps}
     groups = [g for g in APP_GROUPS if g["id"] in groups_used]
-    product = "Port Vale Staging" if reveal_all else "Port Vale Live"
+    if brand.demo:
+        product_id = "demo"
+    elif _is_staging_env():
+        product_id = "staging"
+    else:
+        product_id = "live"
     return {
         "groups": groups,
         "apps": apps,
         "titles": [app["title"] for app in apps if not app.get("comingSoon")],
         "all_titles": [app["title"] for app in apps],
         "staging": reveal_all,
-        "product": product,
-        "product_id": "staging" if reveal_all else "live",
+        "product": brand.product,
+        "product_id": product_id,
+        "brand": brand.as_dict(),
     }

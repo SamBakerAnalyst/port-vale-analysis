@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Player Reports</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/video-watch.css?v=14" />
+</head>
+<body>
+  <div class="vw" data-view="leagues" id="vwApp">
+    <header class="vw-top">
+      <div class="vw-top__brand">
+        <p class="vw-eyebrow">Recruitment · <a href="/">← All apps</a> · <a href="/games-to-watch">Games to Watch</a> · <a href="/scoutable-teams">Scoutable Teams</a></p>
+        <h1 id="vwTitle">Which league are you watching?</h1>
+      </div>
+      <div class="vw-top__tools" id="vwTools"></div>
+    </header>
+
+    <p id="vwStatus" class="vw-status hidden" role="status"></p>
+
+    <section class="vw-screen" id="vwLeagues" aria-label="Choose a league"></section>
+
+    <section class="vw-screen hidden" id="vwFixtures" aria-label="Fixtures">
+      <aside class="vw-clubs" id="vwClubs"></aside>
+      <div class="vw-matches">
+        <div class="vw-matches__head" id="vwMatchesHead"></div>
+        <div class="vw-matches__list" id="vwMatches"></div>
+      </div>
+    </section>
+
+    <section class="vw-screen hidden" id="vwDesk" aria-label="Watch desk">
+      <div class="vw-match" id="vwMatchMeta"></div>
+      <div class="vw-pitch">
+        <aside class="vw-sheet" id="vwHome" aria-label="Home team sheet"></aside>
+        <section class="vw-center" id="vwCenter" aria-label="Player profile">
+          <div class="vw-empty" id="vwEmpty">
+            <p>Pick a player from either formation</p>
+            <span>Comments, notes and reports stay on Scoutable Teams, Who to Scout, and the player page.</span>
+          </div>
+          <div class="vw-profile hidden" id="vwProfile"></div>
+        </section>
+        <aside class="vw-sheet" id="vwAway" aria-label="Away team sheet"></aside>
+      </div>
+    </section>
+    <div id="vwTip" class="vw-tip hidden" role="tooltip"></div>
+  </div>
+
+  <script defer src="/static/video-watch.js?v=14"></script>
+  <script defer src="/static/hub-feedback.js"></script>
+</body>
+</html>

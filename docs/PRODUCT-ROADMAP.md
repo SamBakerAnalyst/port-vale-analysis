@@ -11,6 +11,7 @@ Order matters. Do not unlock new live tools, chase SaaS, or expand the surface a
 | **Local Mac** (`~/impect-football-dashboard` only) | Day-to-day code. Default. |
 | **Port Vale Staging** http://178.128.161.215:8080/ | Break / fix / polish safely. Staff stay off this. |
 | **Port Vale Live** http://178.128.161.215/ | Boss + team. Promote only when you explicitly ask. |
+| **LMS Sports AI Consultancy** https://lmsc.sportsanalysis.ai/ | Blank demo of the hub. Separate login + empty data. `deploy-lms-demo.sh`. |
 
 Flow: build locally → verify on **Port Vale Staging** → promote to **Port Vale Live** only after `deploy/smoke-live.sh` PASS.
 
@@ -97,7 +98,9 @@ Promote rule for spare-time tools:
 
 ## Phase C — Second club (first real sell)
 
-Only after Phase B is quiet for a stretch (live set boring in a good way).
+The blank demo already exists: **LMS Sports AI Consultancy** at `:8090` (`HUB_PROFILE=lms`). Same tools, no Port Vale data.
+
+Only after Phase B is quiet for a stretch (live set boring in a good way):
 
 - Club config profile (name, Impect/FotMob IDs, competition, badge, branding)
 - Strip Port Vale literals from core paths

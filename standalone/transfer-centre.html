@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Transfer Centre</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/transfer-centre.css?v=8" />
+</head>
+<body>
+  <div class="tc">
+    <header class="tc-toolbar card">
+      <div class="tc-brand">
+        <p class="tc-eyebrow">Recruitment · <a href="/">← All apps</a></p>
+        <h1>Transfer Centre</h1>
+        <p class="tc-sub" id="tcSub">Summer market board — incomings by club, plus transfer reports as they upload.</p>
+      </div>
+      <div class="tc-toolbar__right">
+        <div class="tc-view-toggle" role="group" aria-label="Transfer Centre view">
+          <button type="button" class="tc-view-toggle__btn is-active" data-view="board" id="tcViewBoard">Market board</button>
+          <button type="button" class="tc-view-toggle__btn" data-view="reports" id="tcViewReports">Reports</button>
+        </div>
+        <label class="tc-search" id="tcFilterWrap">
+          Filter
+          <input id="tcFilter" type="search" placeholder="Player or club" autocomplete="off" />
+        </label>
+      </div>
+    </header>
+
+    <p id="tcStatus" class="tc-status hidden" role="status"></p>
+
+    <section id="tcBoardView">
+      <div class="tc-kpis" id="tcKpis"></div>
+      <div class="tc-filters card" id="tcFilters"></div>
+      <div id="tcBoard" class="tc-board" aria-label="Summer market board"></div>
+    </section>
+
+    <section id="tcReportsView" class="hidden" aria-label="Transfer reports">
+      <p class="tc-reports-lead">Window reports stay here as they upload. Open a deck to Present or download a PDF.</p>
+      <div id="tcReports" class="tc-reports"></div>
+    </section>
+  </div>
+
+  <aside class="tc-drawer" id="tcDrawer" hidden>
+    <div class="tc-drawer__backdrop" data-close-drawer></div>
+    <div class="tc-drawer__panel" role="dialog" aria-modal="true" aria-labelledby="tcDrawerName">
+      <header class="tc-drawer__head">
+        <div>
+          <p class="tc-drawer__club" id="tcDrawerClub"></p>
+          <h2 id="tcDrawerName"></h2>
+          <p class="tc-drawer__meta" id="tcDrawerMeta"></p>
+        </div>
+        <button type="button" class="tc-icon" data-close-drawer aria-label="Close">×</button>
+      </header>
+      <div class="tc-drawer__notes" id="tcDrawerNotes"></div>
+      <form id="tcNoteForm" class="tc-note-form">
+        <label for="tcNoteText">Add a note</label>
+        <textarea id="tcNoteText" rows="3" required maxlength="4000" placeholder="Fee, wages, agent, why we like him…"></textarea>
+        <button type="submit" class="tc-note-save">Save note</button>
+      </form>
+    </div>
+  </aside>
+
+  <script defer src="/static/transfer-centre.js?v=6"></script>
+  <script defer src="/static/hub-feedback.js"></script>
+</body>
+</html>

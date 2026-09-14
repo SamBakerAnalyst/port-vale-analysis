@@ -25,8 +25,33 @@ login="$(curl -s -c "$COOKIE_JAR" -o /tmp/pv-smoke-login.json -w "%{http_code}" 
 if [[ "$login" == "200" ]]; then pass "login 200"; else bad "login returned $login"; fi
 
 html="$(curl -s -b "$COOKIE_JAR" --max-time 20 "$BASE_URL/" || true)"
-if echo "$html" | grep -q 'hub-home.js'; then pass "hub HTML serves"; else bad "hub HTML missing hub-home.js"; fi
-if echo "$html" | grep -q 'homeDashboard\|homeKpiOverviewPos\|homeTodaySchedule'; then pass "hub HTML body"; else bad "hub HTML looks empty/wrong"; fi
+if grep -q 'hub-home.js' <<<"$html"; then pass "hub HTML serves"; else bad "hub HTML missing hub-home.js"; fi
+if grep -qE 'homeDashboard|homeKpiOverviewPos|homeTodaySchedule' <<<"$html"; then pass "hub HTML body"; else bad "hub HTML looks empty/wrong"; fi
+if grep -qiE 'LMS Sports AI Consultancy|Blank demo hub' <<<"$html"; then
+  bad "Port Vale Live is serving the LMS demo — staff hostname mixed with consultancy hub"
+else
+  pass "Port Vale Live is not the LMS demo"
+fi
+
+# Login chrome is the mix-up tell. Check staff IP and the public hostname.
+ip_login="$(curl -s --max-time 20 "$BASE_URL/login" || true)"
+if grep -q 'Sign in · Port Vale Analysis Hub' <<<"$ip_login" && ! grep -qiE 'LMS Sports AI Consultancy|Blank demo hub' <<<"$ip_login"; then
+  pass "staff IP login is Port Vale"
+else
+  bad "staff IP login is not Port Vale"
+fi
+pvfc_login="$(curl -sk --max-time 20 'https://pvfc.sportsanalysis.ai/login' || true)"
+if grep -q 'Sign in · Port Vale Analysis Hub' <<<"$pvfc_login" && ! grep -qiE 'LMS Sports AI Consultancy|Blank demo hub' <<<"$pvfc_login"; then
+  pass "pvfc.sportsanalysis.ai is Port Vale"
+else
+  bad "pvfc.sportsanalysis.ai is not Port Vale login"
+fi
+lmsc_login="$(curl -sk --max-time 20 'https://lmsc.sportsanalysis.ai/login' || true)"
+if grep -q 'LMS Sports AI Consultancy' <<<"$lmsc_login" && ! grep -q 'Port Vale' <<<"$lmsc_login"; then
+  pass "lmsc.sportsanalysis.ai is LMS only"
+else
+  bad "lmsc.sportsanalysis.ai is mixed with Port Vale"
+fi
 
 # Sidebar source of truth is GET /api/apps (from app/apps_manifest.py).
 curl -s -b "$COOKIE_JAR" --max-time 15 "$BASE_URL/api/apps" -o /tmp/pv-smoke-apps.json || true
@@ -116,6 +141,8 @@ want_open = {
     "Watch list",
     "Player Pipelines",
     "Scoutable Teams",
+    "Games to Watch",
+    "Player Reports",
     "Club Strategy",
     "What Wins Games",
 }

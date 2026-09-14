@@ -800,6 +800,32 @@ a:hover { text-decoration: underline; }
   text-decoration: underline;
 }
 
+.scout-note-mark {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.32rem;
+  border-radius: 999px;
+  background: rgba(52, 211, 153, 0.16);
+  color: #6ee7b7;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.scout-player-note {
+  margin-top: 0.18rem;
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #9ca3af;
+  font-size: 0.68rem;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
 .scout-table .col-club,
 .scout-table .col-pos,
 .scout-table .col-league {

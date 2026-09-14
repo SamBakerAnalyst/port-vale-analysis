@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/meeting-front-pages.css?v=34" />
+  <link rel="stylesheet" href="/static/meeting-front-pages.css?v=38" />
 </head>
 <body>
   <div class="mfp-app">
@@ -15,16 +15,22 @@
       <div class="mfp-chrome__brand">
         <a class="mfp-chrome__back" href="/">← Hub</a>
         <div>
-          <p class="mfp-chrome__eyebrow">Scouts · Video title cards</p>
+          <p class="mfp-chrome__eyebrow">Scouts · Meeting pages &amp; dossiers</p>
           <h1 class="mfp-chrome__title">Meeting Front Pages</h1>
         </div>
       </div>
       <div class="mfp-chrome__actions">
         <button type="button" class="mfp-btn mfp-btn--ghost" id="refreshPhotosBtn" disabled>Find web photos</button>
         <button type="button" class="mfp-btn mfp-btn--ghost" id="refreshBtn" disabled>Reload</button>
+        <button type="button" class="mfp-btn mfp-btn--ghost" id="saveDossierBtn" disabled hidden>Save dossier</button>
         <button type="button" class="mfp-btn mfp-btn--primary" id="downloadBtn" disabled>Download PNG pack</button>
       </div>
     </header>
+
+    <section class="mfp-modebar" aria-label="Tool mode">
+      <button type="button" class="mfp-mode is-active" data-mode="meeting">Meeting pages</button>
+      <button type="button" class="mfp-mode" data-mode="dossier">Dossier</button>
+    </section>
 
     <section class="mfp-controls">
       <div class="mfp-search">
@@ -32,7 +38,7 @@
         <input id="playerSearch" class="mfp-input" type="search" placeholder="Type a name — e.g. Trevan Sanusi" autocomplete="off" />
         <ul id="searchResults" class="mfp-results" hidden></ul>
       </div>
-      <div class="mfp-cutout">
+      <div class="mfp-cutout" id="cutoutPanel">
         <label class="mfp-label" for="cutoutInput">Own cutout <span class="mfp-label__optional">optional</span></label>
         <div class="mfp-cutout__row">
           <label class="mfp-file" for="cutoutInput">
@@ -64,7 +70,7 @@
   <script defer src="/static/wysiwyg-export.js?v=2"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script defer src="/static/meeting-front-pages.js?v=34"></script>
+  <script defer src="/static/meeting-front-pages.js?v=38"></script>
   <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>

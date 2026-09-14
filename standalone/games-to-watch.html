@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Games to Watch</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/games-to-watch.css?v=11" />
+</head>
+<body>
+  <div class="gw">
+    <header class="gw-toolbar card">
+      <div class="gw-brand">
+        <p class="gw-eyebrow">Recruitment · <a href="/">← All apps</a> · <a href="/player-reports">Player Reports</a> · <a href="/fixture-planner">Fixture Planner</a></p>
+        <h1>Games to Watch</h1>
+        <p class="gw-sub" id="gwSub">Which video to watch first. High scores = profile quality. Young players = U27s (26 and under) playing. Both = those two together.</p>
+      </div>
+      <div class="gw-kpis" id="gwKpis"></div>
+    </header>
+
+    <p id="gwStatus" class="gw-status hidden" role="status"></p>
+
+    <section class="gw-filters card" id="gwFilters">
+      <div class="gw-filter gw-filter--league">
+        <span class="gw-filter__label">League</span>
+        <div class="gw-chips" id="gwLeagues" role="group" aria-label="League filter"></div>
+      </div>
+      <div class="gw-filter-row">
+        <div class="gw-filter">
+          <span class="gw-filter__label">Look for</span>
+          <div class="gw-chips" id="gwLook" role="group" aria-label="Rank by high scores, young players, or both">
+            <button type="button" class="gw-chip is-active" data-look="scores">High scores</button>
+            <button type="button" class="gw-chip" data-look="both">Both</button>
+            <button type="button" class="gw-chip" data-look="young">Young players</button>
+          </div>
+        </div>
+        <div class="gw-filter">
+          <span class="gw-filter__label">Tape</span>
+          <div class="gw-chips" id="gwPhase" role="group" aria-label="Played or upcoming">
+            <button type="button" class="gw-chip is-active" data-phase="played">Played</button>
+            <button type="button" class="gw-chip" data-phase="upcoming">Upcoming</button>
+            <button type="button" class="gw-chip" data-phase="all">All</button>
+          </div>
+        </div>
+        <div class="gw-filter">
+          <span class="gw-filter__label">When</span>
+          <div class="gw-chips" id="gwWindow" role="group" aria-label="Date window">
+            <button type="button" class="gw-chip" data-window="weekend">Weekend</button>
+            <button type="button" class="gw-chip" data-window="7">7 days</button>
+            <button type="button" class="gw-chip" data-window="14">14 days</button>
+            <button type="button" class="gw-chip" data-window="30">30 days</button>
+            <button type="button" class="gw-chip is-active" data-window="all">This season</button>
+          </div>
+        </div>
+        <div class="gw-filter">
+          <span class="gw-filter__label">Coverage</span>
+          <div class="gw-chips" id="gwCoverage" role="group" aria-label="Assignment filter">
+            <button type="button" class="gw-chip is-active" data-coverage="all">All</button>
+            <button type="button" class="gw-chip" data-coverage="unassigned">Not assigned</button>
+            <button type="button" class="gw-chip" data-coverage="assigned">Already assigned</button>
+          </div>
+        </div>
+        <label class="gw-filter gw-search">
+          Search
+          <input id="gwSearch" type="search" placeholder="Club or player" autocomplete="off" />
+        </label>
+      </div>
+    </section>
+
+    <div class="gw-layout">
+      <section class="gw-list card" aria-label="Ranked fixtures">
+        <div class="gw-list__head">
+          <h2 id="gwListTitle">Ranked by high scores</h2>
+          <p id="gwListCount"></p>
+        </div>
+        <div id="gwList" class="gw-list__body"></div>
+      </section>
+
+      <aside class="gw-sheet card" id="gwSheet" aria-label="Team sheet">
+        <div class="gw-sheet__empty" id="gwSheetEmpty">
+          <p>Pick a game</p>
+          <span>Team sheets show age, minutes and profile score. Played games are the video queue — assign Video into Fixture Planner from here.</span>
+        </div>
+        <div class="gw-sheet__body hidden" id="gwSheetBody"></div>
+      </aside>
+    </div>
+  </div>
+
+  <script defer src="/static/games-to-watch.js?v=13"></script>
+  <script defer src="/static/hub-feedback.js"></script>
+</body>
+</html>

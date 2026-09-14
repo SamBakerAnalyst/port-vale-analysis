@@ -48,6 +48,13 @@ from app.season_defaults import CURRENT_SEASON
 
 logger = logging.getLogger(__name__)
 
+
+def _attach_recruitment_notes(players: list[dict[str, Any]]) -> None:
+    """Show the same scout comments that live on Scoutable Teams / Player Reports."""
+    from app.scoutable_teams import attach_scout_notes_to_players
+
+    attach_scout_notes_to_players(players)
+
 _squad_sheet_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 _SQUAD_SHEET_TTL = 6 * 3600
 _SQUAD_SHEET_MIN_MINUTES = 300
@@ -266,6 +273,7 @@ def build_club_team_sheet(club_query: str) -> dict[str, Any]:
                 players.append(sheet)
 
     _attach_scout_coverage(players)
+    _attach_recruitment_notes(players)
     payload = {
         "club": club_name,
         "league": league_label,
@@ -487,6 +495,7 @@ def build_who_to_scout_data(
     # transfer correction should land on the next page load instead.
     transfer_status.annotate_all(players)
     _attach_scout_coverage(players)
+    _attach_recruitment_notes(players)
     profiles_by_position = _profiles_from_players(players) or _profiles_meta_from_disk()
 
     result = {

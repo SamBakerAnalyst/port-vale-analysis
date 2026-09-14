@@ -6,14 +6,16 @@ copy/stats/cutout, then download a PNG pack for the video meeting.
 
 from __future__ import annotations
 
+import json
 import re
+import threading
 import time
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote, urlparse
 
 import requests
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from app.label_utils import humanize_profile_name, strip_pv_prefix
@@ -25,11 +27,13 @@ from app.opponent_photos import (
     _upgrade_portrait_url,
     _wikipedia_player_photo_url,
 )
-from app.paths import STANDALONE_DIR
+from app.paths import DATA_ROOT, STANDALONE_DIR, ensure_data_dirs
 from app.scouting import SCOUTING_DIR, _profiles_for_position
 
 _PHOTO_SEARCH_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 _PHOTO_SEARCH_TTL = 30 * 60
+_DOSSIER_PATH = DATA_ROOT / "meeting-dossiers.json"
+_DOSSIER_LOCK = threading.Lock()
 _PROXY_ALLOWED_HOST_SUFFIXES = (
     "transfermarkt.technology",
     "transfermarkt.co.uk",
@@ -861,6 +865,99 @@ def _profiles_for_exact_position(
     return profiles, minutes
 
 
+def _iteration_player_squad(
+    iteration_id: int,
+    player_id: int,
+) -> tuple[int | None, str]:
+    """Resolve the player's real squad in an iteration (catalog map can be wrong)."""
+    from app.player_dossier import _impect
+
+    impect = _impect()
+    try:
+        rows = impect._fetch_players_for_iteration(int(iteration_id))
+    except Exception:
+        return None, ""
+    hit = next((r for r in rows if int(r.get("id") or 0) == int(player_id)), None)
+    if not hit:
+        return None, ""
+    squad_raw = hit.get("currentSquadId")
+    try:
+        squad_id = int(squad_raw) if squad_raw is not None else None
+    except (TypeError, ValueError):
+        squad_id = None
+    club = ""
+    if squad_id is not None:
+        try:
+            names = impect._fetch_squad_names(int(iteration_id))
+            club = str(names.get(squad_id) or "").strip()
+        except Exception:
+            club = ""
+    return squad_id, club
+
+
+def _enrich_impect_appearance_rows(
+    player_id: int,
+    rows: list[dict[str, Any]],
+    *,
+    primary: str | None,
+) -> list[dict[str, Any]]:
+    """Fill club + minutes for every Impect season using the true squad id."""
+    positions: list[str] = []
+    if primary:
+        positions.append(str(primary).upper())
+    for code in (
+        "CENTER_FORWARD",
+        "SECOND_STRIKER",
+        "ATTACKING_MIDFIELD",
+        "LEFT_WINGER",
+        "RIGHT_WINGER",
+        "CENTRAL_MIDFIELD",
+        "LEFT_MIDFIELD",
+        "RIGHT_MIDFIELD",
+    ):
+        if code not in positions:
+            positions.append(code)
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if row.get("source") not in (None, "impect", "impect+fbref"):
+            continue
+        sid = row.get("iterationId")
+        if sid is None:
+            continue
+        try:
+            sid_i = int(sid)
+        except (TypeError, ValueError):
+            continue
+        squad_id, club = _iteration_player_squad(sid_i, int(player_id))
+        if club and not str(row.get("club") or "").strip():
+            row["club"] = club
+        if row.get("minutes") is not None and str(row.get("club") or "").strip():
+            continue
+        if squad_id is None:
+            continue
+        for pos in positions[:5]:
+            try:
+                profiles, minutes = _profiles_for_exact_position(
+                    sid_i, int(squad_id), int(player_id), pos
+                )
+            except Exception:
+                profiles, minutes = [], None
+            if minutes is None and not profiles:
+                continue
+            if row.get("minutes") is None and minutes is not None:
+                row["minutes"] = round(float(minutes))
+            if profiles and row.get("avgPct") is None:
+                row["avgPct"] = round(
+                    sum(float(p["scorePct"]) for p in profiles) / len(profiles)
+                )
+                row["topTitle"] = profiles[0].get("title")
+                row["topPct"] = profiles[0].get("scorePct")
+            break
+    return rows
+
+
 def _build_data_summary(
     player_id: int,
     *,
@@ -914,20 +1011,28 @@ def _build_data_summary(
     except Exception:
         catalog = None
     squad_map = (catalog or {}).get("squad_ids_by_iteration") or {}
-    # Current season first, then at most two older chartable seasons.
+    # All chartable catalog seasons (cap keeps Impect rate limits sane).
     seasons = list(dossier.get("seasons") or [])
     season_rows: list[dict[str, Any]] = []
+    seen_season_ids: set[int] = set()
     for season_row in seasons:
         if not isinstance(season_row, dict):
             continue
         sid = season_row.get("iteration_id")
         if sid is None:
             continue
-        if iter_id is not None and int(sid) == int(iter_id):
+        try:
+            sid_i = int(sid)
+        except (TypeError, ValueError):
+            continue
+        if sid_i in seen_season_ids:
+            continue
+        seen_season_ids.add(sid_i)
+        if iter_id is not None and sid_i == int(iter_id):
             season_rows.insert(0, season_row)
-        elif len(season_rows) < 3:
+        else:
             season_rows.append(season_row)
-    season_rows = season_rows[:3]
+    season_rows = season_rows[:12]
 
     by_position: list[dict[str, Any]] = []
     if iter_id is not None and squad_id is not None:
@@ -1058,19 +1163,49 @@ def _build_data_summary(
             season_minutes = player.get("minutes")
         else:
             squad_raw = squad_map.get(str(sid))
-            if squad_raw is None:
+            squad_try = None
+            if squad_raw is not None:
+                try:
+                    squad_try = int(squad_raw)
+                except (TypeError, ValueError):
+                    squad_try = None
+            # Catalog squad map can stick on the current club — resolve true squad.
+            real_squad, real_club = _iteration_player_squad(int(sid), int(player_id))
+            if real_squad is not None:
+                squad_try = real_squad
+            if squad_try is None:
                 continue
             try:
                 season_profiles, season_minutes = _profiles_for_exact_position(
                     int(sid),
-                    int(squad_raw),
+                    int(squad_try),
                     int(player_id),
                     str(primary or "LEFT_WINGER"),
                 )
             except Exception:
                 continue
-            if not season_profiles:
+            if not season_profiles and season_minutes is None:
                 continue
+            if real_club and not season_row.get("club"):
+                season_row = {**season_row, "club": real_club}
+            if not season_profiles:
+                by_season.append(
+                    {
+                        "iterationId": int(sid),
+                        "season": season_row.get("season") or "",
+                        "label": season_row.get("label") or season_row.get("season") or str(sid),
+                        "club": season_row.get("club") or real_club or "",
+                        "competition": season_row.get("competition_name") or "",
+                        "minutes": round(season_minutes) if season_minutes is not None else None,
+                        "avgPct": None,
+                        "topTitle": None,
+                        "topPct": None,
+                        "profiles": [],
+                    }
+                )
+                continue
+        if not season_profiles:
+            continue
         top = season_profiles[0]
         avg = round(sum(float(p["scorePct"]) for p in season_profiles) / len(season_profiles))
         by_season.append(
@@ -1350,10 +1485,20 @@ def build_meeting_front_pack(
             "iterationId": player.get("iteration_id"),
             "squadId": player.get("squad_id"),
             "marketValue": tm.get("market_value"),
+            "nationality": tm.get("citizenship") or player.get("nationality") or "",
+            "dateOfBirth": tm.get("date_of_birth") or player.get("birthdate") or "",
+            "weight": tm.get("weight") or player.get("weight") or "",
+            "contractExpires": tm.get("contract_expires") or "",
+            "onLoanFrom": tm.get("on_loan_from") or "",
+            "transfermarktUrl": tm.get("profile_url") or "",
         },
         "availablePositions": available_positions,
         "availableSeasons": available_seasons,
         "careerStats": _career_stats(dossier),
+        "web": {
+            "transfermarkt": tm or {},
+            "fbref": (web.get("fbref") if isinstance(web.get("fbref"), dict) else {}) or {},
+        },
         "pitch": (pitch_dots := _highlight_pitch(primary, positions)),
         "pitchRoles": _pitch_roles_from_dots(pitch_dots, primary),
         "formations": ["4-2-3-1", "4-4-2", "3-5-2", "3-4-3"],
@@ -1368,6 +1513,626 @@ def build_meeting_front_pack(
         "bulletDefaults": PROFILE_BULLET_DEFAULTS,
         "links": dossier.get("links") or {},
     }
+
+
+def _dossier_empty_store() -> dict[str, Any]:
+    return {"version": 1, "players": {}}
+
+
+def _load_dossier_store() -> dict[str, Any]:
+    ensure_data_dirs()
+    if not _DOSSIER_PATH.exists():
+        return _dossier_empty_store()
+    try:
+        payload = json.loads(_DOSSIER_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return _dossier_empty_store()
+    if not isinstance(payload, dict):
+        return _dossier_empty_store()
+    players = payload.get("players")
+    if not isinstance(players, dict):
+        players = {}
+    cleaned: dict[str, Any] = {}
+    for key, row in players.items():
+        if isinstance(key, str) and isinstance(row, dict):
+            cleaned[key] = row
+    return {"version": 1, "players": cleaned}
+
+
+def _persist_dossier_store(store: dict[str, Any]) -> None:
+    ensure_data_dirs()
+    payload = {"version": 1, "players": store.get("players") or {}}
+    temp_path = _DOSSIER_PATH.with_suffix(".json.tmp")
+    temp_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    temp_path.replace(_DOSSIER_PATH)
+
+
+def _clip_text(value: Any, limit: int = 8000) -> str:
+    return str(value or "")[:limit]
+
+
+def _dossier_section(raw: Any, keys: list[str]) -> dict[str, str]:
+    row = raw if isinstance(raw, dict) else {}
+    return {key: _clip_text(row.get(key)) for key in keys}
+
+
+def _normalize_dossier_doc(raw: Any, player_id: int) -> dict[str, Any]:
+    row = raw if isinstance(raw, dict) else {}
+    return {
+        "playerId": int(player_id),
+        "updatedAt": str(row.get("updatedAt") or ""),
+        "bio": _dossier_section(
+            row.get("bio"),
+            [
+                "name",
+                "dob",
+                "age",
+                "nationality",
+                "height",
+                "weight",
+                "foot",
+                "birthPlace",
+                "languages",
+                "positions",
+            ],
+        ),
+        "player": _dossier_section(
+            row.get("player"),
+            [
+                "playingHistory",
+                "technicalDataReport",
+                "benchmarkPvfc",
+                "scoutingSummary",
+                "backgroundNarrative",
+            ],
+        ),
+        "personal": _dossier_section(
+            row.get("personal"),
+            [
+                "character",
+                "references",
+                "socialMedia",
+                "locationFamily",
+                "maritalStatus",
+                "otherFamily",
+            ],
+        ),
+        "negotiations": _dossier_section(
+            row.get("negotiations"),
+            [
+                "transferType",
+                "contractStatus",
+                "agentDetails",
+                "currentSalary",
+                "salaryExpectations",
+                "atClubSince",
+                "workPermit",
+            ],
+        ),
+        "medical": _dossier_section(
+            row.get("medical"),
+            [
+                "availabilityHistory",
+                "physicalDataReport",
+                "benchmarkPvfc",
+                "riskAssessment",
+                "recommendations",
+            ],
+        ),
+        "summary": _dossier_section(
+            row.get("summary"),
+            [
+                "keyStrengths",
+                "areasToDevelop",
+                "overallRecommendation",
+                "thingsToConsider",
+            ],
+        ),
+        "scoutOverview": _dossier_section(
+            row.get("scoutOverview"),
+            ["totalReports", "liveReports", "videoReports", "averageGrade", "reportsNotes"],
+        ),
+    }
+
+
+def _history_lines_from_pack(pack: dict[str, Any]) -> str:
+    seasons = pack.get("availableSeasons") or []
+    lines: list[str] = []
+    for row in seasons:
+        if not isinstance(row, dict):
+            continue
+        label = str(row.get("label") or "").strip()
+        if label:
+            lines.append(f"• {label}")
+    return "\n".join(lines)
+
+
+def _technical_seed_from_pack(pack: dict[str, Any]) -> str:
+    bits: list[str] = []
+    profiles = pack.get("profiles") or []
+    scored = [p for p in profiles if isinstance(p, dict) and p.get("scorePct") is not None]
+    scored.sort(key=lambda p: float(p.get("scorePct") or 0), reverse=True)
+    if scored:
+        bits.append("Impect profile fit (selected season / position):")
+        for row in scored[:5]:
+            title = str(row.get("title") or row.get("label") or "Profile")
+            bits.append(f"• {title} — {int(round(float(row.get('scorePct') or 0)))}%")
+    summary = pack.get("dataSummary") if isinstance(pack.get("dataSummary"), dict) else {}
+    best_stats = summary.get("bestStats") or []
+    if best_stats:
+        bits.append("")
+        bits.append("Standout P90s:")
+        for row in best_stats[:5]:
+            if not isinstance(row, dict):
+                continue
+            label = str(row.get("label") or "Stat")
+            value = str(row.get("valueLabel") or "—")
+            bits.append(f"• {label} — {value} P90")
+    return "\n".join(bits).strip()
+
+
+def _season_year_key(label: Any) -> int:
+    text = str(label or "").strip()
+    if not text:
+        return 0
+    # "26/27", "2025-26", "2025/2026", "2025"
+    m = re.search(r"(20\d{2})", text)
+    if m:
+        return int(m.group(1))
+    m = re.search(r"(\d{2})\s*/\s*(\d{2})", text)
+    if m:
+        century = 2000
+        return century + int(m.group(1))
+    m = re.search(r"(\d{2})$", text)
+    if m:
+        return 2000 + int(m.group(1))
+    return 0
+
+
+def _auto_background_narrative(
+    *,
+    player: dict[str, Any],
+    appearance_rows: list[dict[str, Any]],
+    career: dict[str, Any],
+    summary: dict[str, Any],
+) -> str:
+    """Draft career narrative from Impect / web fields when scouts leave the box blank."""
+    name = str(player.get("name") or "This player").strip()
+    age = str(player.get("ageLine") or "").strip()
+    # ageLine often like "19 (01.01.2007)" — keep leading age token.
+    age_token = age.split()[0] if age else ""
+    role = str(player.get("positionLine") or "outfielder").strip()
+    club = str(player.get("club") or "").strip()
+    league = str(player.get("league") or "").strip()
+    season = str(player.get("season") or "").strip()
+    nationality = str(player.get("nationality") or "").strip()
+    foot = str(player.get("foot") or "").strip()
+    if foot in {"—", "-"}:
+        foot = ""
+
+    lead_bits = [name]
+    if age_token and age_token[0].isdigit():
+        lead_bits.append(f"is a {age_token}-year-old")
+    else:
+        lead_bits.append("is a")
+    lead_bits.append(role if role else "player")
+    if nationality:
+        lead_bits.append(f"({nationality})")
+    if club and club != "—":
+        lead_bits.append(f"currently with {club}")
+    if league:
+        lead_bits.append(f"in {league}")
+    if season:
+        lead_bits.append(f"({season})")
+    lead = " ".join(lead_bits).replace(" )", ")").strip()
+    if not lead.endswith("."):
+        lead += "."
+    if foot:
+        lead += f" Preferred foot: {foot}."
+
+    paragraphs = [lead]
+
+    # Pathway from appearance history (oldest → newest unique clubs).
+    club_order: list[str] = []
+    seen_clubs: set[str] = set()
+    ordered = sorted(
+        [r for r in appearance_rows if isinstance(r, dict)],
+        key=lambda r: (_season_year_key(r.get("season")), str(r.get("competition") or "")),
+    )
+    for row in ordered:
+        club_name = str(row.get("club") or "").strip()
+        if not club_name:
+            continue
+        key = club_name.casefold()
+        if key in seen_clubs:
+            continue
+        seen_clubs.add(key)
+        club_order.append(club_name)
+    if len(club_order) >= 2:
+        paragraphs.append("Pathway: " + " → ".join(club_order) + ".")
+    elif club_order:
+        paragraphs.append(f"Club history currently centres on {club_order[0]}.")
+
+    season_labels = []
+    for row in ordered:
+        label = str(row.get("season") or "").strip()
+        if label and label not in season_labels:
+            season_labels.append(label)
+    if len(season_labels) >= 2:
+        paragraphs.append(
+            f"Appearance sample spans {season_labels[0]} through {season_labels[-1]} "
+            f"across {len(appearance_rows)} competition season rows."
+        )
+    elif season_labels:
+        paragraphs.append(f"Current appearance sample is centred on {season_labels[0]}.")
+
+    games = career.get("games")
+    minutes = career.get("minutes")
+    goals = career.get("goals")
+    assists = career.get("assists")
+    career_bits: list[str] = []
+    if games is not None:
+        career_bits.append(f"{games} games")
+    if minutes is not None:
+        career_bits.append(f"{minutes}′")
+    if goals is not None:
+        career_bits.append(f"{goals} goals")
+    if assists is not None:
+        career_bits.append(f"{assists} assists")
+    if career_bits:
+        source = str(career.get("source") or "available data")
+        paragraphs.append(
+            "Headline sample: " + ", ".join(career_bits) + f" ({source.replace('_', ' ')})."
+        )
+
+    best_stats = summary.get("bestStats") if isinstance(summary, dict) else None
+    if isinstance(best_stats, list) and best_stats:
+        standouts = []
+        for row in best_stats[:3]:
+            if not isinstance(row, dict):
+                continue
+            label = str(row.get("label") or "").strip()
+            value = str(row.get("valueLabel") or "").strip()
+            if label and value:
+                standouts.append(f"{label} {value} P90")
+        if standouts:
+            paragraphs.append("Impect standouts in the selected sample: " + "; ".join(standouts) + ".")
+
+    profiles = summary.get("profiles") if isinstance(summary, dict) else None
+    if isinstance(profiles, list) and profiles:
+        top = next((p for p in profiles if isinstance(p, dict) and p.get("scorePct") is not None), None)
+        if top:
+            title = str(top.get("title") or top.get("label") or "Profile")
+            pct = int(round(float(top.get("scorePct") or 0)))
+            paragraphs.append(f"Strongest PV profile fit in this sample: {title} ({pct}%).")
+
+    paragraphs.append(
+        "Edit this narrative freely — it is drafted from Impect / public web fields and is not a final scout judgment."
+    )
+    return "\n\n".join(paragraphs)
+
+
+def _auto_cover_blurb(
+    *,
+    player: dict[str, Any],
+    appearance_rows: list[dict[str, Any]],
+    career: dict[str, Any],
+    summary: dict[str, Any],
+) -> str:
+    name = str(player.get("firstName") or "").strip() or str(player.get("name") or "Player").split()[0]
+    role = str(player.get("positionLine") or "Player").strip()
+    club = str(player.get("club") or "").strip()
+    league = str(player.get("league") or "").strip()
+    age = str(player.get("ageLine") or "").split()[0]
+    bits = []
+    if age and age[0].isdigit():
+        bits.append(f"{age}")
+    if role:
+        bits.append(role)
+    head = " · ".join(bits) if bits else role or "Recruitment target"
+    where = " · ".join([b for b in (club, league) if b and b != "—"])
+    line1 = f"{name} — {head}" + (f" at {where}." if where else ".")
+
+    clubs = []
+    for row in sorted(appearance_rows, key=lambda r: _season_year_key(r.get("season"))):
+        club_name = str(row.get("club") or "").strip()
+        if club_name and club_name not in clubs:
+            clubs.append(club_name)
+    line2 = ""
+    if len(clubs) >= 2:
+        line2 = "Pathway " + " → ".join(clubs[-4:]) + "."
+    elif career.get("minutes") is not None:
+        line2 = f"Sample workload {career.get('minutes')}′ across available seasons."
+    best = (summary.get("bestStats") or [None])[0] if isinstance(summary, dict) else None
+    line3 = ""
+    if isinstance(best, dict) and best.get("label"):
+        line3 = f"Impect flag: {best.get('label')} {best.get('valueLabel') or ''} P90.".strip()
+    return " ".join(x for x in (line1, line2, line3) if x).strip()
+
+
+def _merge_appearance_history(
+    *,
+    impect_rows: list[dict[str, Any]],
+    fbref_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Combine Impect catalog seasons with deeper FBref domestic season rows."""
+    merged: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+
+    def _key(season: str, club: str, competition: str) -> tuple[str, str, str]:
+        return (season.casefold(), club.casefold(), competition.casefold())
+
+    for row in impect_rows:
+        if not isinstance(row, dict):
+            continue
+        season = str(row.get("season") or "").strip()
+        club = str(row.get("club") or "").strip()
+        competition = str(row.get("competition") or "").strip()
+        seen.add(_key(season, club, competition))
+        merged.append({**row, "source": row.get("source") or "impect"})
+
+    for row in fbref_rows:
+        if not isinstance(row, dict):
+            continue
+        season = str(row.get("season") or "").strip()
+        club = str(row.get("club") or "").strip()
+        competition = str(row.get("competition") or "").strip()
+        key = _key(season, club, competition)
+        # Soft-dedupe: same season + club already from Impect → fill gaps.
+        soft = next(
+            (
+                item
+                for item in merged
+                if str(item.get("season") or "").casefold() == season.casefold()
+                and str(item.get("club") or "").casefold() == club.casefold()
+            ),
+            None,
+        )
+        if soft is not None:
+            for field in ("apps", "starts", "goals", "assists", "minutes"):
+                if soft.get(field) is None and row.get(field) is not None:
+                    soft[field] = row.get(field)
+            if not soft.get("competition") and competition:
+                soft["competition"] = competition
+            soft["source"] = "impect+fbref" if soft.get("source") == "impect" else soft.get("source")
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(
+            {
+                "season": season,
+                "club": club,
+                "competition": competition,
+                "label": " · ".join(b for b in (competition or None, season or None, club or None) if b),
+                "minutes": row.get("minutes"),
+                "apps": row.get("apps"),
+                "starts": row.get("starts"),
+                "goals": row.get("goals"),
+                "assists": row.get("assists"),
+                "avgPct": None,
+                "topTitle": None,
+                "topPct": None,
+                "source": "fbref",
+            }
+        )
+
+    merged.sort(
+        key=lambda r: (
+            -_season_year_key(r.get("season")),
+            str(r.get("competition") or ""),
+            str(r.get("club") or ""),
+        )
+    )
+    return merged
+
+
+def build_meeting_dossier(player_id: int, *, pack: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Merge saved scout dossier with pack/TM prefills for empty fields."""
+    if pack is None:
+        pack = build_meeting_front_pack(player_id)
+    player = pack.get("player") if isinstance(pack.get("player"), dict) else {}
+    with _DOSSIER_LOCK:
+        store = _load_dossier_store()
+        saved = _normalize_dossier_doc(store.get("players", {}).get(str(player_id)), player_id)
+
+    defaults = _normalize_dossier_doc(
+        {
+            "bio": {
+                "name": player.get("name") or "",
+                "dob": player.get("dateOfBirth") or "",
+                "age": player.get("ageLine") or "",
+                "nationality": player.get("nationality") or "",
+                "height": player.get("height") if player.get("height") not in (None, "—") else "",
+                "weight": player.get("weight") or "",
+                "foot": player.get("foot") if player.get("foot") not in (None, "—") else "",
+                "birthPlace": "",
+                "languages": "",
+                "positions": player.get("positionLine") or "",
+            },
+            "player": {
+                "playingHistory": _history_lines_from_pack(pack),
+                "technicalDataReport": _technical_seed_from_pack(pack),
+                "benchmarkPvfc": "",
+                "scoutingSummary": "",
+                "backgroundNarrative": "",
+            },
+            "personal": {
+                "character": "",
+                "references": "",
+                "socialMedia": "",
+                "locationFamily": "",
+                "maritalStatus": "",
+                "otherFamily": "",
+            },
+            "negotiations": {
+                "transferType": player.get("transferType")
+                if player.get("transferType") not in (None, "—")
+                else "",
+                "contractStatus": (
+                    f"Expires {player.get('contractExpires')}"
+                    if player.get("contractExpires")
+                    else ""
+                ),
+                "agentDetails": "",
+                "currentSalary": "",
+                "salaryExpectations": (
+                    f"Market value {player.get('marketValue')}"
+                    if player.get("marketValue")
+                    else ""
+                ),
+                "atClubSince": "",
+                "workPermit": "",
+            },
+            "medical": {
+                "availabilityHistory": "",
+                "physicalDataReport": "",
+                "benchmarkPvfc": "",
+                "riskAssessment": "",
+                "recommendations": "",
+            },
+            "summary": {
+                "keyStrengths": "",
+                "areasToDevelop": "",
+                "overallRecommendation": "",
+                "thingsToConsider": "",
+            },
+            "scoutOverview": {
+                "totalReports": "",
+                "liveReports": "",
+                "videoReports": "",
+                "averageGrade": "",
+                "reportsNotes": "",
+            },
+        },
+        player_id,
+    )
+
+    merged = _normalize_dossier_doc(defaults, player_id)
+    for section in (
+        "bio",
+        "player",
+        "personal",
+        "negotiations",
+        "medical",
+        "summary",
+        "scoutOverview",
+    ):
+        saved_section = saved.get(section) or {}
+        default_section = defaults.get(section) or {}
+        out_section: dict[str, str] = {}
+        for key, default_val in default_section.items():
+            saved_val = str(saved_section.get(key) or "").strip()
+            out_section[key] = saved_val if saved_val else str(default_val or "")
+        merged[section] = out_section
+    merged["updatedAt"] = saved.get("updatedAt") or ""
+    merged["source"] = {
+        "club": player.get("club") or "",
+        "positionLine": player.get("positionLine") or "",
+        "season": player.get("season") or "",
+        "league": player.get("league") or "",
+        "photoUrl": player.get("photoUrl") or "",
+        "marketValue": player.get("marketValue") or "",
+        "transfermarktUrl": player.get("transfermarktUrl") or "",
+    }
+    # Structured Impect slices for dossier deck pages (not free-text).
+    summary = pack.get("dataSummary") if isinstance(pack.get("dataSummary"), dict) else {}
+    seasons = pack.get("availableSeasons") if isinstance(pack.get("availableSeasons"), list) else []
+    by_season = summary.get("bySeason") if isinstance(summary.get("bySeason"), list) else []
+    mins_by_iter = {
+        int(row.get("iterationId")): row
+        for row in by_season
+        if isinstance(row, dict) and row.get("iterationId") is not None
+    }
+    appearance_rows: list[dict[str, Any]] = []
+    for row in seasons:
+        if not isinstance(row, dict):
+            continue
+        sid = row.get("iterationId")
+        try:
+            sid_i = int(sid) if sid is not None else None
+        except (TypeError, ValueError):
+            sid_i = None
+        scored = mins_by_iter.get(sid_i) if sid_i is not None else None
+        appearance_rows.append(
+            {
+                "season": row.get("season") or "",
+                "club": row.get("club") or "",
+                "competition": row.get("competition") or "",
+                "label": row.get("label") or "",
+                "minutes": (scored or {}).get("minutes"),
+                "apps": None,
+                "starts": None,
+                "goals": None,
+                "assists": None,
+                "avgPct": (scored or {}).get("avgPct"),
+                "topTitle": (scored or {}).get("topTitle"),
+                "topPct": (scored or {}).get("topPct"),
+                "source": "impect",
+                "iterationId": sid_i,
+            }
+        )
+
+    # Deeper FBref domestic season history (goes beyond Impect competition coverage).
+    web = pack.get("web") if isinstance(pack.get("web"), dict) else {}
+    fbref = web.get("fbref") if isinstance(web.get("fbref"), dict) else {}
+    fbref_rows = fbref.get("season_rows") if isinstance(fbref.get("season_rows"), list) else []
+    appearance_rows = _merge_appearance_history(
+        impect_rows=appearance_rows,
+        fbref_rows=fbref_rows,
+    )
+    appearance_rows = _enrich_impect_appearance_rows(
+        int(player_id),
+        appearance_rows,
+        primary=str(player.get("primaryPosition") or "") or None,
+    )
+
+    career = pack.get("careerStats") if isinstance(pack.get("careerStats"), dict) else {}
+    narrative = _auto_background_narrative(
+        player=player,
+        appearance_rows=appearance_rows,
+        career=career,
+        summary=summary,
+    )
+    cover_blurb = _auto_cover_blurb(
+        player=player,
+        appearance_rows=appearance_rows,
+        career=career,
+        summary=summary,
+    )
+    if not str((merged.get("player") or {}).get("backgroundNarrative") or "").strip():
+        merged.setdefault("player", {})["backgroundNarrative"] = narrative
+
+    merged["impect"] = {
+        "careerStats": career,
+        "profiles": pack.get("profiles") or [],
+        "dataSummary": {
+            "bestStats": summary.get("bestStats") or [],
+            "worstStats": summary.get("worstStats") or [],
+            "byPosition": summary.get("byPosition") or [],
+            "bySeason": by_season,
+            "profiles": summary.get("profiles") or [],
+            "note": summary.get("note") or "",
+        },
+        "appearanceRows": appearance_rows,
+        "coverBlurb": cover_blurb,
+        "autoNarrative": narrative,
+        "pitchRoles": pack.get("pitchRoles") or [],
+        "formations": pack.get("formations") or [],
+    }
+    merged["saved"] = bool(saved.get("updatedAt"))
+    return merged
+
+
+def save_meeting_dossier(player_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+    doc = _normalize_dossier_doc(payload, player_id)
+    doc["updatedAt"] = datetime.now(UTC).isoformat()
+    with _DOSSIER_LOCK:
+        store = _load_dossier_store()
+        players = store.setdefault("players", {})
+        players[str(player_id)] = doc
+        _persist_dossier_store(store)
+    return build_meeting_dossier(player_id)
 
 
 def _proxy_photo_url(url: str) -> str:
@@ -1589,13 +2354,30 @@ def _bing_photo_urls(
     query_extra: str = "football",
     limit: int = 10,
     loose: bool = False,
+    age_filter: str | None = None,
+    extra_qft: str | None = None,
 ) -> list[str]:
     """Bing image search — reliable from datacenter IPs where DDG/TM are blocked."""
     query = f"{player_name} {club_name or ''} {query_extra}".strip()
+    params: dict[str, str] = {"q": query, "form": "HDRSC2", "first": "1", "count": "35"}
+    qft_parts: list[str] = []
+    if age_filter:
+        token = str(age_filter).strip()
+        if token and not token.startswith(("lt-", "gt-")):
+            token = f"lt-{token}"
+        if token:
+            qft_parts.append(f"filterui:age-{token}")
+    if extra_qft:
+        for part in str(extra_qft).replace("+", " ").split():
+            part = part.strip().lstrip("+")
+            if part.startswith("filterui:"):
+                qft_parts.append(part)
+    if qft_parts:
+        params["qft"] = "+" + "+".join(qft_parts)
     try:
         response = requests.get(
             "https://www.bing.com/images/search",
-            params={"q": query, "form": "HDRSC2", "first": "1", "count": "35"},
+            params=params,
             timeout=25,
             headers={
                 **WEB_HEADERS,
@@ -1943,4 +2725,35 @@ def register_meeting_front_pages_routes(app: FastAPI) -> None:
             "slideSize": {"width": 1920, "height": 1080},
             "bulletDefaults": PROFILE_BULLET_DEFAULTS,
             "standaloneDir": str(STANDALONE_DIR),
+            "modes": ["meeting", "dossier"],
         }
+
+    @app.get("/api/meeting-front-pages/dossier")
+    def meeting_front_pages_dossier_get(
+        player_id: int = Query(..., alias="playerId"),
+        iteration_id: int | None = Query(None, alias="iterationId"),
+        position: str | None = Query(None),
+    ) -> JSONResponse:
+        try:
+            pack = build_meeting_front_pack(
+                player_id, iteration_id=iteration_id, position=position
+            )
+            payload = build_meeting_dossier(player_id, pack=pack)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Could not build dossier: {exc}") from exc
+        return JSONResponse(payload, headers={"Cache-Control": "no-store"})
+
+    @app.put("/api/meeting-front-pages/dossier")
+    def meeting_front_pages_dossier_put(
+        player_id: int = Query(..., alias="playerId"),
+        body: dict[str, Any] = Body(...),
+    ) -> JSONResponse:
+        try:
+            payload = save_meeting_dossier(player_id, body if isinstance(body, dict) else {})
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Could not save dossier: {exc}") from exc
+        return JSONResponse(payload, headers={"Cache-Control": "no-store"})

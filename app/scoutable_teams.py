@@ -176,23 +176,65 @@ def _player_scout_comment(player_id: int) -> str:
     return str(row.get("scout_comment") or "").strip()
 
 
-def _upsert_scout_notes(
-    request: Request,
+def scout_notes_for_player(player_id: int) -> dict[str, Any]:
+    """Latest Scoutable Teams comment / scores for one player."""
+    try:
+        pid = int(player_id)
+    except (TypeError, ValueError):
+        return {"player_id": 0, "scout_scores": {}, "scout_comment": ""}
+    row = _scout_notes_index().get(pid) or {}
+    return {
+        "player_id": pid,
+        "scout_scores": _clean_scout_scores(row.get("scout_scores")),
+        "scout_comment": str(row.get("scout_comment") or "").strip(),
+        "updated_by": str(row.get("updated_by") or ""),
+        "updated_at": str(row.get("updated_at") or ""),
+    }
+
+
+def attach_scout_notes_to_players(
+    players: list[dict[str, Any]] | None,
+    *,
+    id_keys: tuple[str, ...] = ("player_id", "playerId"),
+) -> list[dict[str, Any]]:
+    """Stamp the shared scout comment onto Who to Scout / team-sheet rows."""
+    rows = list(players or [])
+    index = _scout_notes_index()
+    for player in rows:
+        player_id = 0
+        for key in id_keys:
+            try:
+                player_id = int(player.get(key) or 0)
+            except (TypeError, ValueError):
+                player_id = 0
+            if player_id:
+                break
+        note = index.get(player_id) or {}
+        comment = str(note.get("scout_comment") or "").strip()
+        player["scout_comment"] = comment
+        player["scout_scores"] = _clean_scout_scores(note.get("scout_scores"))
+        player["has_scout_note"] = bool(comment)
+    return rows
+
+
+def save_scout_notes(
     *,
     player_id: int,
     scout_scores: dict[str, int | None] | None,
     scout_comment: str,
+    staff: str = "Staff",
 ) -> dict[str, Any]:
+    """Write the shared Scoutable Teams / Who to Scout comment field."""
     if not player_id:
         raise HTTPException(status_code=400, detail="player_id is required")
     cleaned_comment = " ".join(str(scout_comment or "").split())[:280]
+    staff_name = str(staff or "").strip() or "Staff"
 
     store = _load_scout_notes_store()
     notes = store.setdefault("notes", {})
     key = str(int(player_id))
     existing = notes.get(key) if isinstance(notes.get(key), dict) else {}
     merged_scores = _clean_scout_scores(scout_scores)
-    staff = _notes_staff(request)
     now = _notes_now()
 
     if not merged_scores and not cleaned_comment:
@@ -209,15 +251,15 @@ def _upsert_scout_notes(
     row = {
         "scout_scores": merged_scores,
         "scout_comment": cleaned_comment,
-        "updated_by": staff,
+        "updated_by": staff_name,
         "updated_at": now,
     }
     if existing.get("created_at"):
         row["created_at"] = existing["created_at"]
-        row["created_by"] = existing.get("created_by") or staff
+        row["created_by"] = existing.get("created_by") or staff_name
     else:
         row["created_at"] = now
-        row["created_by"] = staff
+        row["created_by"] = staff_name
     notes[key] = row
     _save_scout_notes_store(store)
     return {
@@ -226,6 +268,21 @@ def _upsert_scout_notes(
         "scout_comment": cleaned_comment,
         "removed": False,
     }
+
+
+def _upsert_scout_notes(
+    request: Request,
+    *,
+    player_id: int,
+    scout_scores: dict[str, int | None] | None,
+    scout_comment: str,
+) -> dict[str, Any]:
+    return save_scout_notes(
+        player_id=player_id,
+        scout_scores=scout_scores,
+        scout_comment=scout_comment,
+        staff=_notes_staff(request),
+    )
 
 
 def _attach_scout_notes(

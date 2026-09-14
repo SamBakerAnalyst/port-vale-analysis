@@ -212,7 +212,7 @@ FORMATION_TEMPLATES: dict[str, list[tuple[str, float, float, str]]] = {
         ("DEFENSE_MIDFIELD", 34.0, 50.0, "left"),
         ("DEFENSE_MIDFIELD", 66.0, 50.0, "right"),
         ("LEFT_WINGER", 10.0, 24.0, "left"),
-        ("ATTACKING_MIDFIELD", 50.0, 28.0, "center"),
+        ("ATTACKING_MIDFIELD", 50.0, 36.0, "center"),
         ("RIGHT_WINGER", 90.0, 24.0, "right"),
         ("CENTER_FORWARD", 50.0, 11.0, "center"),
     ],
@@ -1363,6 +1363,17 @@ def assign_lineup_formation_slots(
     return _assign_formation_slots(players, formation)
 
 
+def _formation_player_id(player: dict[str, Any]) -> int:
+    raw = player.get("player_id")
+    try:
+        if raw is not None and str(raw).strip() != "":
+            return int(raw)
+    except (TypeError, ValueError):
+        pass
+    key = f"{player.get('name') or ''}|{player.get('shirt_number') or ''}"
+    return abs(hash(key)) % 2_000_000_000
+
+
 def _assign_formation_slots(
     players: list[dict[str, Any]],
     formation: str | None,
@@ -1394,7 +1405,7 @@ def _assign_formation_slots(
         best_player: dict[str, Any] | None = None
         best_score = -10_000
         for player in pool:
-            player_id = int(player["player_id"])
+            player_id = _formation_player_id(player)
             if player_id in used_ids:
                 continue
             score = _slot_match_score(player, slot_position, slot_side)
@@ -1404,12 +1415,12 @@ def _assign_formation_slots(
         # Always fill every formation slot so the pitch never shows fewer than 11.
         if best_player is None:
             best_player = next(
-                (player for player in pool if int(player["player_id"]) not in used_ids),
+                (player for player in pool if _formation_player_id(player) not in used_ids),
                 None,
             )
         if best_player is None:
             continue
-        used_ids.add(int(best_player["player_id"]))
+        used_ids.add(_formation_player_id(best_player))
         assigned.append(
             {
                 **best_player,
@@ -1420,7 +1431,7 @@ def _assign_formation_slots(
             }
         )
 
-    leftovers = [player for player in pool if int(player["player_id"]) not in used_ids]
+    leftovers = [player for player in pool if _formation_player_id(player) not in used_ids]
     for player in leftovers:
         if len(assigned) >= PITCH_STARTER_LIMIT:
             break
@@ -1723,6 +1734,11 @@ def _beautify_pitch_layout(players: list[dict[str, Any]]) -> list[dict[str, Any]
             player["x_pct"] = 50.0
             player["y_pct"] = 94.0
             player["band"] = "gk"
+        elif slot == "ATTACKING_MIDFIELD":
+            # Keep the 10 in the hole — not on the double-pivot line.
+            y_val = float(player.get("y_pct") or 30.0)
+            player["y_pct"] = round(max(26.0, min(38.0, y_val)), 1)
+            player["band"] = "mid"
         else:
             y_val = float(player.get("y_pct") or 50.0)
             # Keep attackers high and defenders clear of the keeper.
@@ -3737,8 +3753,8 @@ def _build_two_match_brief(
         )
         result, score, venue = _match_result_score_venue(match, squad_id)
         raw_formation = str(squad.get("startingFormation") or "").strip() or None
-        players = _beautify_pitch_layout(players)
         formation = _coach_formation_from_lineup(raw_formation, players)
+        players = _slot_pitch_to_formation(players, formation)
         shirts = _shirt_map_from_squad_block(squad)
         featured = _player_kpis_for_match(
             match_id,
@@ -4480,6 +4496,17 @@ def _hydrate_fixture_row(row: dict[str, Any], iteration_id: int) -> dict[str, An
     return hydrated
 
 
+def _slot_pitch_to_formation(
+    players: list[dict[str, Any]] | None,
+    formation: str | None,
+) -> list[dict[str, Any]]:
+    """Put a starting XI on the formation template (10 in the hole, back four, etc.)."""
+    rows = [dict(player) for player in players or []]
+    if not rows:
+        return []
+    return _beautify_pitch_layout(assign_lineup_formation_slots(rows, formation))
+
+
 def _hydrate_pitch_photos(
     players: list[dict[str, Any]] | None,
     *,
@@ -4532,6 +4559,7 @@ def _hydrate_cached_pre_match_report(report: dict[str, Any]) -> dict[str, Any]:
 
     two = dict(hydrated.get("two_match") or {})
     two_matches: list[dict[str, Any]] = []
+    last_formation = two.get("last_formation")
     for match in two.get("matches") or []:
         row = dict(match)
         crest = hydrate_team_badge(
@@ -4543,17 +4571,22 @@ def _hydrate_cached_pre_match_report(report: dict[str, Any]) -> dict[str, Any]:
             or crest.get("image_url")
             or row.get("opponent_badge_url")
         )
+        formation = row.get("formation") or last_formation
         row["pitch_players"] = _hydrate_pitch_photos(
-            row.get("pitch_players"),
+            _slot_pitch_to_formation(row.get("pitch_players"), formation),
             club_name=club_name,
             season=season,
         )
         two_matches.append(row)
     if two_matches:
         two["matches"] = two_matches
-    if two.get("last_xi"):
+        last_formation = last_formation or two_matches[-1].get("formation")
+    if two.get("last_xi") or two_matches:
         two["last_xi"] = _hydrate_pitch_photos(
-            two.get("last_xi"),
+            _slot_pitch_to_formation(
+                two.get("last_xi") or two_matches[-1].get("pitch_players"),
+                last_formation,
+            ),
             club_name=club_name,
             season=season,
         )

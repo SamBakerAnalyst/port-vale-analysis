@@ -39,6 +39,9 @@ def test_every_role_has_home_tabs_and_groups():
         "watch-list",
         "player-pipelines",
         "scoutable-teams",
+        "transfer-centre",
+        "games-to-watch",
+        "video-watch",
         "squad-planner",
         "squad-balance",
         "player-comparison",
@@ -55,7 +58,7 @@ def test_scouts_can_open_the_scouting_workflow(app_id):
 
 @pytest.mark.parametrize(
     "app_id",
-    ["club-strategy", "win-drivers", "availability-tracker", "presentations"],
+    ["club-strategy", "win-drivers", "availability-tracker", "goals-analysis", "presentations"],
 )
 def test_scouts_cannot_open_strategy_or_presentations(app_id):
     assert "scouts" not in _app(app_id)["roles"], f"{app_id} leaked to scouts"
@@ -90,12 +93,28 @@ def test_recruitment_support_paths_reach_scouts_but_not_analysis():
 
 
 def test_scouts_are_blocked_from_analysis_and_strategy_endpoints():
-    for path in ("/api/post-match", "/post-match", "/api/club-strategy", "/club-strategy"):
+    for path in (
+        "/api/post-match",
+        "/post-match",
+        "/api/club-strategy",
+        "/club-strategy",
+        "/goals-analysis",
+        "/api/goals-analysis",
+        "/pa-meeting-slides",
+        "/api/pa-meeting-slides",
+    ):
         assert not _path_allowed_for_role(path, "scouts"), f"{path} leaked to scouts"
 
 
 def test_analysis_role_keeps_its_existing_tools():
-    for path in ("/pre-match", "/api/pre-match", "/api/schedule", "/blocks-analysis"):
+    for path in (
+        "/pre-match",
+        "/api/pre-match",
+        "/api/schedule",
+        "/blocks-analysis",
+        "/pa-meeting-slides",
+        "/api/pa-meeting-slides",
+    ):
         assert _path_allowed_for_role(path, "analysis"), f"analysis lost {path}"
 
 
@@ -107,6 +126,14 @@ def test_scouts_reach_their_own_tool_pages_and_apis():
         "/api/player-pipelines/targets",
         "/who-to-scout",
         "/scoutable-teams",
+        "/transfer-centre",
+        "/api/transfer-centre",
+        "/games-to-watch",
+        "/api/games-to-watch",
+        "/player-reports",
+        "/video-watch",
+        "/api/video-watch",
+        "/efl-transfer-report",
         "/fixture-planner",
     ):
         assert _path_allowed_for_role(path, "scouts"), f"scouts blocked from {path}"

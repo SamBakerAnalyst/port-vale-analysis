@@ -47,13 +47,18 @@ if [[ -z "$HUB_AUTH_SECRET" ]]; then
   echo "HUB_AUTH_SECRET=${HUB_AUTH_SECRET}" >> .env
 fi
 
-echo "Deploying (in-app login, IP-only)…"
+echo "Checking Live Caddyfile (Port Vale must not share DNS with LMS)…"
+bash "$ROOT/deploy/check-live-caddy.sh"
+
+echo "Deploying Port Vale Live (hostname + staff IP)…"
 mkdir -p /opt/port-vale-analysis/shared
 if [[ ! -f /opt/port-vale-analysis/shared/pre-match-two-pager.json && -f "$ROOT/data/pre-match-two-pager.json" ]]; then
   cp "$ROOT/data/pre-match-two-pager.json" /opt/port-vale-analysis/shared/pre-match-two-pager.json
 fi
 docker compose --project-directory "$ROOT" -f deploy/docker-compose.ip.yml build
 docker compose --project-directory "$ROOT" -f deploy/docker-compose.ip.yml up -d --remove-orphans
+# rsync replaces the Caddyfile inode; a running bind-mount keeps the old file.
+docker restart port-vale-analysis-caddy-1 >/dev/null 2>&1 || true
 
 echo "Waiting for health…"
 for _ in $(seq 1 30); do

@@ -6,6 +6,7 @@
 |---|---|---|
 | **Port Vale Live** | http://178.128.161.215/ | Staff / boss. Promote only when asked. |
 | **Port Vale Staging** | http://178.128.161.215:8080/ | Safe break/fix. Does not touch Live. |
+| **LMS Sports AI Consultancy** | https://lmsc.sportsanalysis.ai/ | Blank demo hub. Same tools, no club data. `deploy-lms-demo.sh`. Direct IP: http://178.128.161.215:8090/ |
 
 Hosting: existing DigitalOcean droplet (no App Platform).
 
@@ -30,11 +31,19 @@ Or double-click **`Deploy to Website.command`**.
 
 That pushes GitHub **and** updates Port Vale Live immediately. Details: `deploy/HOW-WE-DEPLOY.md`.
 
-Staging:
+## LMS Sports AI Consultancy (blank demo)
+
+Same codebase as Port Vale. Separate Docker stack, empty data volume, LMS branding, its own login cookie so it cannot overwrite Port Vale sessions on the same IP.
+
+Public URL: **https://lmsc.sportsanalysis.ai/**
 
 ```bash
-bash ~/impect-football-dashboard/deploy-staging.sh
+bash ~/impect-football-dashboard/deploy-lms-demo.sh
 ```
+
+Does not restart Port Vale Live or Staging. First deploy writes `/opt/lms-sports-ai/.env` (username `lms` + a generated password).
+
+**Isolation:** LMS must never use Docker service name `hub`. That name is Port Vale Live. A second `hub` on the shared network made `https://pvfc.sportsanalysis.ai/` and `http://178.128.161.215/` serve the LMS login. Caddy proxies the Vale container by name; LMS is only `lms` / `:8090` / `lmsc.sportsanalysis.ai`.
 
 ## Repo path (mandatory)
 

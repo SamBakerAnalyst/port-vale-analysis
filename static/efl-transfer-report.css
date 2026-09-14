@@ -479,8 +479,9 @@ select {
 }
 
 .slide--open .slide__body {
-  align-items: flex-start;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   padding: 2.1rem 2.4rem 2.5rem;
   background:
     linear-gradient(180deg, rgba(8, 8, 8, 0.12) 0%, rgba(8, 8, 8, 0.58) 52%, #080808 100%),
@@ -516,7 +517,7 @@ select {
 }
 
 .open-sub {
-  margin: 0.7rem 0 0;
+  margin: 0.7rem auto 0;
   font-size: 1.2rem;
   color: #d1d5db;
   max-width: 38rem;
@@ -526,13 +527,14 @@ select {
 .open-rule {
   width: 5.5rem;
   height: 3px;
-  margin-top: 1.05rem;
+  margin: 1.05rem auto 0;
   background: var(--gold);
 }
 
 .open-stats {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 1.7rem;
   margin-top: 1.25rem;
 }

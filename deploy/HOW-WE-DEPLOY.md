@@ -6,6 +6,7 @@ Product names (not ports): see [`docs/ENVIRONMENTS.md`](../docs/ENVIRONMENTS.md)
 |---|---|
 | **Port Vale Live** | http://178.128.161.215/ |
 | **Port Vale Staging** | http://178.128.161.215:8080/ |
+| **LMS Sports AI Consultancy** | https://lmsc.sportsanalysis.ai/ |
 
 ## Port Vale Live (staff)
 
@@ -29,6 +30,14 @@ bash ~/impect-football-dashboard/deploy-staging.sh
 ```
 
 Rebuilds the Staging Docker project. Staff on Port Vale Live stay uninterrupted.
+
+## LMS Sports AI Consultancy (blank demo)
+
+```bash
+bash ~/impect-football-dashboard/deploy-lms-demo.sh
+```
+
+Same code tree, separate compose project (`lms-sports-ai`), empty data volume, LMS branding. Does not restart Port Vale Live or Staging.
 
 ## Putting Live on HTTPS (not done yet)
 

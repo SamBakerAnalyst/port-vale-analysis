@@ -397,6 +397,9 @@ function formationParts(formation) {
 
 function unitBaselinesForFormation(formation) {
   const parts = formationParts(formation);
+  if (parts.length === 3 && parts[0] === 5 && parts[1] === 3 && parts[2] === 2) {
+    return { DEF: 5, MID: 3, ATT: 2 };
+  }
   if (parts.length === 3 && parts[0] === 5 && parts[1] === 2 && parts[2] === 3) {
     return { DEF: 5, MID: 2, ATT: 3 };
   }
@@ -424,21 +427,24 @@ function unitBenchValues(metricKey, unit, single, played, unitRow, stats) {
   const spec = state.payload?.benchmarks?.units?.[unit]?.[metricKey];
   if (!spec) return { team: null, top7: null, spec: null };
   const games = spec.rate ? 1 : (single ? 1 : Math.max(Number(played) || 0, 5));
-  const baselines = stats?.unitBaselines || unitBaselinesForFormation(stats?.formation);
-  const baseline = Number(
-    baselines?.[unit]
-    || spec.baselineStarters
+  // Top-7 Req is a 4/3/3 sample. Scale by who actually started — not the
+  // formation baseline, or a 2-man mid is asked to hit a 3-man total.
+  const sampleSize = Number(
+    spec.baselineStarters
     || { DEF: 4, MID: 3, ATT: 3 }[unit]
     || 3,
   );
-  const starters = Number(unitRow?.starters || 0) || baseline;
-  const scale = spec.rate ? 1 : (baseline > 0 ? starters / baseline : 1);
+  const starters = Number(unitRow?.starters || 0) || sampleSize;
+  // Scale down when the XI is short (2-man attack vs a 3-man sample).
+  // Do not scale up for extra starters — a back five still plays one game.
+  const rawScale = sampleSize > 0 ? starters / sampleSize : 1;
+  const scale = spec.rate ? 1 : Math.min(1, rawScale);
   return {
     team: spec.team == null ? null : spec.team * games,
     top7: spec.top7 == null ? null : spec.top7 * games * scale,
     spec,
     starters,
-    baseline,
+    baseline: sampleSize,
   };
 }
 

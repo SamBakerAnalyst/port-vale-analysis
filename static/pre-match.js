@@ -3667,7 +3667,9 @@ function twoPagerNotesKey(report = state.report) {
 function twoPagerXiShapeKey(report = state.report) {
   const iterationId = report?.iteration_id ?? Number(els.iterationId?.value || 0);
   const squadId = report?.opponent?.id ?? Number(els.opponentId?.value || 0);
-  return `pm-two-pager-xi-shape:${iterationId}:${squadId}`;
+  const lastMatch = report?.two_match?.matches?.at?.(-1);
+  const matchId = lastMatch?.match_id || lastMatch?.id || "last";
+  return `pm-two-pager-xi-shape:${iterationId}:${squadId}:${matchId}:v2`;
 }
 
 function twoPagerAvgShapeKey(report = state.report) {

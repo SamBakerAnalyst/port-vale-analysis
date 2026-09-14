@@ -1161,6 +1161,10 @@ def _warm_scouting_cache() -> None:
 
 def _ensure_scouting_warmup() -> None:
     global _scouting_warm_started
+    from app.brand import is_demo
+
+    if is_demo():
+        return
     with _scouting_warm_lock:
         if _scouting_warm_started:
             return

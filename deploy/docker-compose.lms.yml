@@ -1,0 +1,51 @@
+# LMS Sports AI Consultancy — blank demo hub.
+# Same codebase as Port Vale. Separate volume, login, and port.
+# Does not touch Port Vale Live (:80) or Port Vale Staging (:8080).
+#
+# Deploy: bash ~/impect-football-dashboard/deploy-lms-demo.sh
+# URL:    http://DROPLET_IP:8090/
+#
+# NEVER name this service "hub". Port Vale Live's Caddy and container both
+# use that DNS name on port-vale-analysis_default. A second "hub" on the
+# same network makes pvfc and the staff IP randomly serve the LMS demo.
+
+name: lms-sports-ai
+
+services:
+  lms:
+    image: lms-sports-ai-hub:latest
+    build: .
+    env_file: ${LMS_ENV_FILE:-/opt/lms-sports-ai/.env}
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8000
+      DATA_ROOT: /data
+      UVICORN_WORKERS: "1"
+      HUB_PROFILE: lms
+      HUB_ENV: demo
+      GI_LINK_BASE_URL: https://lmsc.sportsanalysis.ai
+    volumes:
+      - lms-demo-data:/data
+    ports:
+      - "8090:8000"
+    networks:
+      default: {}
+      edge:
+        aliases:
+          - lms
+    restart: unless-stopped
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+networks:
+  edge:
+    name: port-vale-analysis_default
+    external: true
+
+volumes:
+  lms-demo-data:

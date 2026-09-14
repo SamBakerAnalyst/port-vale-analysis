@@ -1089,6 +1089,34 @@ def _is_port_vale_name(name: str) -> bool:
     return "port vale" in str(name or "").casefold()
 
 
+def squad_entry_for_player(
+    player_name: str,
+    entries: dict[str, dict[str, str]],
+    *,
+    shirt_number: int | str | None = None,
+) -> dict[str, str] | None:
+    return _match_photo_entry(player_name, entries, shirt_number=shirt_number)
+
+
+def squad_meta_for_club(club_name: str) -> dict[str, dict[str, str]]:
+    """Shirt numbers and photo rows from club-site / FotMob caches."""
+    merged: dict[str, dict[str, str]] = {}
+    if not club_name:
+        return merged
+    for loader in (fetch_club_website_squad_photos, fetch_fotmob_squad_photos):
+        try:
+            entries = loader(club_name) or {}
+        except Exception:
+            continue
+        for key, entry in entries.items():
+            current = merged.get(key) or {}
+            if not current.get("shirt_number") and entry.get("shirt_number"):
+                merged[key] = {**current, **entry}
+            elif key not in merged:
+                merged[key] = dict(entry)
+    return merged
+
+
 def opponent_photo_api_url(
     player_name: str,
     *,

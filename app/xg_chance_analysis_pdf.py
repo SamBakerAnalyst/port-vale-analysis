@@ -142,6 +142,48 @@ class XgChanceAnalysisPDF(FPDF):
         self.cell(text_w, 4, text, align="C")
         return text_w + 2.5
 
+    def _penalty_copy(self, report: dict[str, Any]) -> tuple[str, bool]:
+        pen = report.get("penaltySummary") or {}
+        count = int(pen.get("count") or 0)
+        if count <= 0:
+            return "", False
+        bits = []
+        for shot in (pen.get("shots") or [])[:3]:
+            who = str(shot.get("playerName") or "Unknown")
+            team = "Vale" if shot.get("team") == "vale" else "Opp"
+            xg = _fmt(shot.get("xg"))
+            out = "GOAL" if shot.get("outcome") == "goal" else "MISS"
+            bits.append(f"{who} ({team}) {xg} xG {out}")
+        detail = "  |  ".join(bits)
+        if pen.get("excluded") or report.get("excludePenalties"):
+            return (f"PENALTIES REMOVED  |  {count} spot-kick{'s' if count != 1 else ''} excluded from xG. Score unchanged.  {detail}", False)
+        return (f"PENALTY INCLUDED  |  This xG includes {count} penal{'ty' if count == 1 else 'ties'}:  {detail}", True)
+
+    def _penalty_banner(self, x: float, y: float, w: float, report: dict[str, Any]) -> float:
+        text, included = self._penalty_copy(report)
+        if not text:
+            return 0.0
+        height = 8.2
+        self._fill((48, 38, 12) if included else SURFACE_2)
+        self._draw(GOLD if included else BORDER)
+        self.set_line_width(0.35)
+        self.rect(x, y, w, height, style="DF")
+        self.set_xy(x + 2.5, y + 1.8)
+        self.set_font("Helvetica", "B", 7)
+        self._text(GOLD if included else MUTED)
+        self.cell(w - 5, 4.5, pdf_safe(text)[:118])
+        return height + 2.0
+
+    def _hero_stat(self, x: float, y: float, w: float, label: str, value: str, *, accent: bool = False) -> None:
+        self.set_xy(x, y)
+        self.set_font("Helvetica", "B", 5.8)
+        self._text(MUTED)
+        self.cell(w, 3.2, pdf_safe(label.upper()))
+        self.set_xy(x, y + 3.1)
+        self.set_font("Helvetica", "B", 11)
+        self._text(GOLD if accent else TEXT)
+        self.cell(w, 5.2, pdf_safe(value))
+
     def _pill(self, x: float, y: float, w: float, h: float, label: str, color: tuple[int, int, int]) -> None:
         self._fill(color)
         self.rect(x, y, w, h, style="F")
@@ -358,14 +400,17 @@ class XgChanceAnalysisPDF(FPDF):
             goals = int(row.get("goals") or 0)
             avg = float(row.get("avgXg") or (xg / shots if shots else 0))
             counts = row.get("chanceCounts") or {}
+            pens = int(row.get("penalties") or 0)
+            if pens:
+                name = f"{name}  [PEN]"
 
             self.set_xy(x + pad + 0.5, card_y + 1.2)
             self.set_font("Helvetica", "B", 8)
             self._text(MUTED)
             self.cell(7, 4, f"#{index + 1}")
             self.set_font("Helvetica", "B", 8.5)
-            self._text(TEXT)
-            self.cell(w * 0.48, 4, name[:28])
+            self._text(GOLD if pens else TEXT)
+            self.cell(w * 0.48, 4, name[:30])
             self.set_font("Helvetica", "B", 10)
             self._text(ACCENT)
             self.cell(w * 0.28, 4, _fmt(xg), align="R")
@@ -374,7 +419,8 @@ class XgChanceAnalysisPDF(FPDF):
             self.set_font("Helvetica", "", 6.5)
             self._text(MUTED)
             goal_bit = f"  ·  {goals} goal{'s' if goals != 1 else ''}" if goals else ""
-            self.cell(w * 0.55, 3.2, pdf_safe(f"{shots} shots · {_fmt(avg)} avg xG{goal_bit}"))
+            pen_bit = f"  ·  includes {pens} penalt{'y' if pens == 1 else 'ies'}" if pens else ""
+            self.cell(w * 0.55, 3.2, pdf_safe(f"{shots} shots · {_fmt(avg)} avg xG{goal_bit}{pen_bit}"))
 
             bar_x = x + pad + 7.5
             bar_w = w - pad * 2 - 10
@@ -422,60 +468,81 @@ class XgChanceAnalysisPDF(FPDF):
         hero_x = MARGIN
         hero_y = content_top
         hero_w = SLIDE_WIDTH_MM - (MARGIN * 2)
-        hero_h = 58.0
+        stats = report.get("heroStats") or {}
+        has_pen_banner = bool((report.get("penaltySummary") or {}).get("count"))
+        hero_h = 70.0 if has_pen_banner else 62.0
         self._card(hero_x, hero_y, hero_w, hero_h)
 
         chip_x = hero_x + 5
-        chip_y = hero_y + 4
+        chip_y = hero_y + 3.5
         chip_x += self._chip(chip_x, chip_y, f"MD{match.get('matchDay') or '?'}", accent=True)
         if match.get("dateLabel"):
             chip_x += self._chip(chip_x, chip_y, str(match.get("dateLabel")))
         if match.get("venue"):
             self._chip(chip_x, chip_y, str(match.get("venue")))
 
-        self.set_xy(hero_x + hero_w * 0.55, hero_y + 4.5)
+        self.set_xy(hero_x + hero_w * 0.55, hero_y + 4)
         self.set_font("Helvetica", "B", 7)
         self._text(MUTED)
         self.cell(hero_w * 0.45 - 5, 4, pdf_safe(f"{competition} {season}").upper(), align="R")
 
-        crest_size = 18.0
-        score_y = hero_y + 14
-        mid = hero_x + hero_w / 2
+        banner_h = self._penalty_banner(hero_x + 4, hero_y + 11, hero_w - 8, report)
+        crest_size = 16.0
+        score_y = hero_y + 12 + banner_h
         vale_badge = _local_badge()
         opp_badge = _fetch_image_bytes(opponent.get("imageUrl"))
 
-        # Clean scoreboard: crest · name · goals | – | goals · name · crest
-        left_x = mid - 110
+        team_w = 72.0
+        mid_w = 118.0
+        mid_x = hero_x + (hero_w - mid_w) / 2
+        left_x = hero_x + 6
+        right_x = hero_x + hero_w - team_w - 6
+
         self._draw_crest(left_x, score_y, crest_size, vale_badge, "PV")
-        self.set_xy(left_x + crest_size + 3, score_y + 1)
-        self.set_font("Helvetica", "B", 13)
+        self.set_xy(left_x + crest_size + 2.5, score_y + 0.4)
+        self.set_font("Helvetica", "B", 12)
         self._text(TEXT)
-        self.cell(48, 6, "PORT VALE")
-        self.set_xy(left_x + crest_size + 3, score_y + 8)
-        self.set_font("Helvetica", "B", 28)
+        self.cell(50, 5.5, "PORT VALE")
+        self.set_xy(left_x + crest_size + 2.5, score_y + 6.5)
+        self.set_font("Helvetica", "B", 24)
         self._text(ACCENT if vale_won else TEXT)
-        self.cell(30, 12, pdf_safe(str(vale_goals if vale_goals is not None else "-")))
+        self.cell(28, 10, pdf_safe(str(vale_goals if vale_goals is not None else "-")))
 
-        self.set_xy(mid - 6, score_y + 6)
-        self.set_font("Helvetica", "B", 18)
-        self._text(MUTED)
-        self.cell(12, 10, "-", align="C")
+        self._fill(SURFACE_2)
+        self.rect(mid_x, score_y - 0.5, mid_w, 18.5, style="F")
+        if not stats.get("bestChance") and not stats.get("valeShots"):
+            from app.xg_chance_analysis import _build_hero_stats
 
-        right_goal_x = mid + 12
-        self.set_xy(right_goal_x, score_y + 8)
-        self.set_font("Helvetica", "B", 28)
+            stats = _build_hero_stats(report.get("shots") or [])
+        xg_diff = float(stats.get("xgDiff") if stats.get("xgDiff") is not None else (vale_xg - opp_xg))
+        best = stats.get("bestChance") or {}
+        best_label = _fmt(best.get("xg")) if best else "-"
+        if best.get("isPenalty"):
+            best_label = f"{best_label} PEN"
+        if best.get("playerName"):
+            best_label = f"{best_label}  {best.get('playerName')}"
+        hq = f"{int(stats.get('valeHighQuality') or 0)} of {int(stats.get('valeShots') or match.get('valeShots') or 0)}"
+        on_tgt = f"{int(stats.get('valeOnTarget') or 0)} of {int(stats.get('valeShots') or match.get('valeShots') or 0)}"
+        self._hero_stat(mid_x + 3, score_y, 54, "xG difference", f"{xg_diff:+.3f}")
+        self._hero_stat(mid_x + 61, score_y, 54, "Best chance", best_label, accent=bool(best.get("isPenalty")))
+        self._hero_stat(mid_x + 3, score_y + 8.6, 54, "High quality", hq)
+        self._hero_stat(mid_x + 61, score_y + 8.6, 54, "On target", on_tgt)
+
+        self.set_xy(right_x, score_y + 6.5)
+        self.set_font("Helvetica", "B", 24)
         self._text(ACCENT if opp_won else TEXT)
-        self.cell(30, 12, pdf_safe(str(opp_goals if opp_goals is not None else "-")), align="R")
-        self.set_xy(right_goal_x + 32, score_y + 1)
-        self.set_font("Helvetica", "B", 13)
+        self.cell(28, 10, pdf_safe(str(opp_goals if opp_goals is not None else "-")), align="R")
+        self.set_xy(right_x, score_y + 0.4)
+        self.set_font("Helvetica", "B", 11)
         self._text(TEXT)
-        self.cell(52, 6, pdf_safe(opponent_name.upper())[:18], align="R")
-        self._draw_crest(right_goal_x + 86, score_y, crest_size, opp_badge, opponent_name[:2])
+        self.cell(team_w - crest_size - 3, 5.5, pdf_safe(opponent_name.upper())[:16], align="R")
+        self._draw_crest(right_x + team_w - crest_size, score_y, crest_size, opp_badge, opponent_name[:2])
 
-        bar_x = hero_x + 28
-        bar_w = hero_w - 56
-        self._xg_bar(bar_x, hero_y + 38, bar_w, "Vale xG", vale_xg, max_xg, VALE)
-        self._xg_bar(bar_x, hero_y + 46, bar_w, "Opp xG", opp_xg, max_xg, ACCENT)
+        bar_y = hero_y + hero_h - 16.5
+        bar_x = hero_x + 18
+        bar_w = hero_w - 36
+        self._xg_bar(bar_x, bar_y, bar_w, "Vale xG", vale_xg, max_xg, VALE)
+        self._xg_bar(bar_x, bar_y + 7.2, bar_w, "Opp xG", opp_xg, max_xg, ACCENT)
 
         tables_y = hero_y + hero_h + GAP
         tables_h = SLIDE_HEIGHT_MM - tables_y - MARGIN - 8
@@ -503,9 +570,10 @@ class XgChanceAnalysisPDF(FPDF):
             ("OK >=0.09", CHANCE_COLORS["ok"]),
             ("Poor >=0.04", CHANCE_COLORS["poor"]),
             ("Very Poor <0.04", CHANCE_COLORS["very_poor"]),
+            ("PEN = penalty", GOLD),
         ]:
-            self._pill(key_x, key_y, 38, 4.5, label, color)
-            key_x += 40
+            self._pill(key_x, key_y, 36, 4.5, label, color)
+            key_x += 38
 
     def add_match_context_slide(self, report: dict[str, Any]) -> None:
         match = (report.get("matches") or [{}])[0]
@@ -516,19 +584,44 @@ class XgChanceAnalysisPDF(FPDF):
             "Game state & splits",
             f"MD{match.get('matchDay') or '?'} vs {opponent}  |  When Vale shot · half · manpower",
         )
+        stats = report.get("heroStats") or {}
+        snap_h = 18.0
+        snap_w = (SLIDE_WIDTH_MM - (MARGIN * 2) - GAP * 4) / 5
+        snap_items = [
+            ("xG difference", f"{float(stats.get('xgDiff') or 0):+.3f}"),
+            ("Vale avg xG", _fmt(stats.get("valeAvgXg"))),
+            ("In box", f"{int(stats.get('valeInBox') or 0)} / {int(stats.get('valeShots') or 0)}"),
+            ("On target", f"{int(stats.get('valeOnTarget') or 0)} / {int(stats.get('valeShots') or 0)}"),
+            ("HQ share", f"{float(stats.get('valeHighQualityPct') or 0):.0f}%"),
+        ]
+        for i, (label, value) in enumerate(snap_items):
+            x = MARGIN + i * (snap_w + GAP)
+            self._card(x, top, snap_w, snap_h)
+            self.set_xy(x + 2, top + 2.4)
+            self.set_font("Helvetica", "B", 6)
+            self._text(MUTED)
+            self.cell(snap_w - 4, 3.5, pdf_safe(label.upper()), align="C")
+            self.set_xy(x + 2, top + 7.2)
+            self.set_font("Helvetica", "B", 12)
+            self._text(TEXT)
+            self.cell(snap_w - 4, 7, pdf_safe(value), align="C")
+
+        panels_y = top + snap_h + GAP
+        banner_extra = self._penalty_banner(MARGIN, panels_y, SLIDE_WIDTH_MM - (MARGIN * 2), report)
+        panels_y += banner_extra
         panel_w = (SLIDE_WIDTH_MM - (MARGIN * 2) - GAP) / 2
-        panel_h = SLIDE_HEIGHT_MM - top - MARGIN
+        panel_h = SLIDE_HEIGHT_MM - panels_y - MARGIN
 
         # Left: game state
-        self._card(MARGIN, top, panel_w, panel_h)
-        self.set_xy(MARGIN + 4, top + 3)
+        self._card(MARGIN, panels_y, panel_w, panel_h)
+        self.set_xy(MARGIN + 4, panels_y + 3)
         self.set_font("Helvetica", "B", 9)
         self._text(TEXT)
         self.cell(panel_w - 8, 5, "GAME STATE WHEN SHOOTING (VALE)")
 
         headers = ["State", "Shots", "Goals", "xG"]
         widths = [panel_w * 0.42, panel_w * 0.16, panel_w * 0.16, panel_w * 0.26]
-        row_y = top + 11
+        row_y = panels_y + 11
         cursor = MARGIN + 4
         self.set_font("Helvetica", "B", 6.5)
         self._text(MUTED)
@@ -541,8 +634,7 @@ class XgChanceAnalysisPDF(FPDF):
 
         state_rows = (report.get("gameStateBreakdown") or {}).get("vale") or []
         body_y = row_y + 7
-        # Stretch game-state rows so the left panel doesn't look empty.
-        row_h = max(14.0, min(28.0, (panel_h - 22) / max(len(state_rows) or 1, 1)))
+        row_h = max(12.0, min(18.0, (panel_h - 22) / max(len(state_rows) or 1, 1)))
         state_colors = {
             "winning": GOOD,
             "drawing": GOLD,
@@ -568,8 +660,8 @@ class XgChanceAnalysisPDF(FPDF):
 
         # Right: half + manpower
         right_x = MARGIN + panel_w + GAP
-        self._card(right_x, top, panel_w, panel_h)
-        self.set_xy(right_x + 4, top + 3)
+        self._card(right_x, panels_y, panel_w, panel_h)
+        self.set_xy(right_x + 4, panels_y + 3)
         self.set_font("Helvetica", "B", 9)
         self._text(TEXT)
         self.cell(panel_w - 8, 5, "HALF & MANPOWER SPLITS")
@@ -579,7 +671,7 @@ class XgChanceAnalysisPDF(FPDF):
             ("BY HALF", period.get("halves") or []),
             ("BY MANPOWER", period.get("manpower") or []),
         ]
-        sec_y = top + 11
+        sec_y = panels_y + 11
         usable = panel_h - 16
         section_h = usable / max(len(sections), 1)
         for title, rows in sections:
@@ -784,6 +876,7 @@ class XgChanceAnalysisPDF(FPDF):
             "xG Chance Analysis",
             f"{report.get('competition') or ''} {report.get('season') or ''}  |  Last 6 average",
         )
+        top += self._penalty_banner(MARGIN, top, SLIDE_WIDTH_MM - (MARGIN * 2), report)
 
         kpis = [
             ("Games", _fmt(averages.get("games"), "int")),
@@ -914,6 +1007,7 @@ class XgChanceAnalysisPDF(FPDF):
             f"{report.get('competition') or ''} {report.get('season') or ''}  |  Full season  |  "
             f"{report.get('matchCount') or 0} completed matches",
         )
+        top += self._penalty_banner(MARGIN, top, SLIDE_WIDTH_MM - (MARGIN * 2), report)
         kpis = [
             ("Matches", _fmt(report.get("matchCount"), "int")),
             ("xG for /g", _fmt(averages.get("valeXg"), digits=2)),

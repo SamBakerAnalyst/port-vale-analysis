@@ -1,12 +1,18 @@
+# Live edge proxy on the droplet. Do not replace this with an IP-only file —
+# sportsanalysis.ai, pvfc, and the bare IP all share this Caddy.
+#
+#   sportsanalysis.ai / www  → landing site (sjb)
+#   pvfc.sportsanalysis.ai   → Port Vale Live
+#   lmsc.sportsanalysis.ai   → LMS Sports AI Consultancy demo
+#   :80 (bare IP)            → Port Vale Live (staff bookmarks)
+
 {
-	auto_https off
+	email hello@sportsanalysis.ai
 }
 
-# IP-only site: compress everything, serve static from disk, proxy the app.
-:80 {
+(vale_hub) {
 	encode zstd gzip
 
-	# Always revalidate assets. Prefer correctness over long browser cache.
 	handle /static/* {
 		root * /srv
 		header Cache-Control "no-store"
@@ -20,13 +26,42 @@
 		file_server
 	}
 
-	# Single upstream — no active health checker (was marking hub dead under load → 503).
 	handle {
-		reverse_proxy hub:8000 {
+		# Never proxy "hub:8000" — LMS used to join this network as service
+		# name "hub", so Docker DNS sent Port Vale Live traffic to the demo.
+		reverse_proxy port-vale-analysis-hub-1:8000 {
 			transport http {
 				read_timeout 120s
 				write_timeout 120s
 			}
 		}
 	}
+}
+
+sportsanalysis.ai, www.sportsanalysis.ai {
+	encode zstd gzip
+	reverse_proxy sjb:8080 {
+		transport http {
+			read_timeout 120s
+			write_timeout 120s
+		}
+	}
+}
+
+pvfc.sportsanalysis.ai {
+	import vale_hub
+}
+
+lmsc.sportsanalysis.ai {
+	encode zstd gzip
+	reverse_proxy lms:8000 {
+		transport http {
+			read_timeout 120s
+			write_timeout 120s
+		}
+	}
+}
+
+:80 {
+	import vale_hub
 }

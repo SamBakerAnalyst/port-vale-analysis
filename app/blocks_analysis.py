@@ -495,7 +495,12 @@ def _is_523_formation(formation: str | None) -> bool:
     return _formation_parts(formation) == [5, 2, 3]
 
 
+def _is_532_formation(formation: str | None) -> bool:
+    return _formation_parts(formation) == [5, 3, 2]
+
+
 LYNCH_PLAYER_ID = 239824
+BYERS_PLAYER_ID = 38521
 
 
 def _starter_positions_by_id(
@@ -524,6 +529,14 @@ def _am_second_striker_pair(
         for pid, pos in starters.items()
         if pid != LYNCH_PLAYER_ID
     )
+
+
+def _byers_starts_as_ten(
+    starting_positions: list[dict[str, Any]] | None,
+) -> bool:
+    """George Byers as the 10 behind two strikers → coaches' 5-3-2."""
+    starters = _starter_positions_by_id(starting_positions)
+    return starters.get(BYERS_PLAYER_ID) == "ATTACKING_MIDFIELD"
 
 
 _FORWARD_POSITION_CODES = frozenset(
@@ -560,7 +573,10 @@ def _coach_formation_from_lineup(
         n_cb = sum(1 for code in codes if code == "CENTRAL_DEFENDER")
         n_wb = sum(1 for code in codes if "WINGBACK" in code)
         # True five-at-the-back (Salford 5 Sep): 3 CBs + 2 WBs + double pivot → 5-2-3.
+        # Byers as the linking 10 behind two strikers (Exeter) → coaches' 5-3-2.
         if n_cb >= 3 and n_wb >= 2:
+            if _byers_starts_as_ten(starting_positions):
+                return "5-3-2"
             return "5-2-3"
         # Impect sometimes tags a back-four 4-2-3-1 as 5-2-2-1.
         if n_dm >= 2 and n_am >= 2 and n_cf >= 1:
@@ -603,6 +619,9 @@ def _unit_baselines_for_formation(formation: str | None) -> dict[str, int]:
     if _is_442_formation(formation):
         # Two pivots in MID; wide players + strikers in ATT — scale Req to four-man attack.
         return {"DEF": 4, "MID": 2, "ATT": 4}
+    if _is_532_formation(formation):
+        # Five-man defence, three-man midfield (Byers as the 10), two strikers.
+        return {"DEF": 5, "MID": 3, "ATT": 2}
     if _is_523_formation(formation):
         # Five-man defence (CBs + wing-backs), double pivot, front three.
         return {"DEF": 5, "MID": 2, "ATT": 3}
@@ -679,11 +698,12 @@ def _unit_for_position(
     formation: str | None = None,
     *,
     on_as_sub: bool = False,
+    player_id: int | None = None,
 ) -> str | None:
     text = _normalize_position(position)
     if _is_wingback_position(text):
         # Back four: Impect still labels LB/RB as wing-backs — they are DEF.
-        # Back five (5-2-3): wing-backs are part of the five-man defence.
+        # Back five (5-2-3 / 5-3-2): wing-backs are part of the five-man defence.
         # Back three only: genuine high wing-backs stay out of the CB unit.
         back = _formation_back_line(formation)
         if back == 3:
@@ -692,6 +712,13 @@ def _unit_for_position(
     # In 4-4-2 Impect often codes the second striker as ATTACKING_MIDFIELD — still ATT.
     if text == "ATTACKING_MIDFIELD" and _is_442_formation(formation) and not on_as_sub:
         return "ATT"
+    # In 5-3-2 Byers is the linking 8/10; the other AM is the second striker.
+    if text == "ATTACKING_MIDFIELD" and _is_532_formation(formation) and not on_as_sub:
+        try:
+            pid = int(player_id or 0)
+        except (TypeError, ValueError):
+            pid = 0
+        return "MID" if pid == BYERS_PLAYER_ID else "ATT"
     # In 5-2-3 the two 10s sit in the front three with the 9 (Garrity/Dempsey stay MID).
     if text == "ATTACKING_MIDFIELD" and _is_523_formation(formation) and not on_as_sub:
         return "ATT"
@@ -717,8 +744,12 @@ def _unit_for_position(
     return None
 
 
-def _unit_shares_for_position(position: Any, formation: str | None = None) -> list[tuple[str, float]]:
-    unit = _unit_for_position(position, formation)
+def _unit_shares_for_position(
+    position: Any,
+    formation: str | None = None,
+    player_id: int | None = None,
+) -> list[tuple[str, float]]:
+    unit = _unit_for_position(position, formation, player_id=player_id)
     if unit in UNITS:
         return [(unit, 1.0)]
     return []
@@ -766,7 +797,9 @@ def _lineup_roles(match_id: int, squad_id: int) -> dict[int, dict[str, Any]]:
             if not player_id:
                 continue
             roles[player_id] = {
-                "unit": _unit_for_position(row.get("position"), formation),
+                "unit": _unit_for_position(
+                    row.get("position"), formation, player_id=player_id
+                ),
                 "started": True,
                 "position": row.get("position"),
             }
@@ -780,7 +813,9 @@ def _lineup_roles(match_id: int, squad_id: int) -> dict[int, dict[str, Any]]:
             if not player_id:
                 continue
             to_pos = row.get("toPosition") or row.get("position")
-            unit = _unit_for_position(to_pos, formation, on_as_sub=True)
+            unit = _unit_for_position(
+                to_pos, formation, on_as_sub=True, player_id=player_id
+            )
             if unit not in UNITS and unit != "WB":
                 unit = roles.get(off_id, {}).get("unit")
             roles[player_id] = {
@@ -892,7 +927,9 @@ def _units_from_players(
     for row in _consolidate_player_match_rows(
         [item for item in players if int(item.get("squadId") or 0) == int(squad_id)]
     ):
-        shares = _unit_shares_for_position(row.get("position"), formation)
+        shares = _unit_shares_for_position(
+            row.get("position"), formation, player_id=row.get("playerId")
+        )
         if not shares:
             continue
         kpis = row.get("kpis") or {}
@@ -994,7 +1031,9 @@ def _player_match_report(
             {
                 "playerId": player_id,
                 "name": name,
-                "unit": _unit_for_position(row.get("position"), formation),
+                "unit": _unit_for_position(
+                    row.get("position"), formation, player_id=player_id
+                ),
                 "started": minutes >= 45,
                 "minutes": round(minutes, 1),
                 "xg": round(_kpi_value(kpis, KPI_SHOT_XG), 2),
@@ -1102,6 +1141,49 @@ def _units_from_report(players: list[dict[str, Any]]) -> dict[str, dict[str, Any
         result[unit]["starterNames"] = starter_names[unit]
         result[unit]["benchNames"] = bench_names[unit]
     return result
+
+
+def _retouch_byers_532_stats(stats: dict[str, Any]) -> bool:
+    """Cached 5-2-3 payloads still have Byers in ATT — retag without Impect."""
+    if not isinstance(stats, dict):
+        return False
+    players = stats.get("players") or []
+    byers = None
+    for player in players:
+        try:
+            pid = int(player.get("playerId") or 0)
+        except (TypeError, ValueError):
+            continue
+        if pid == BYERS_PLAYER_ID:
+            byers = player
+            break
+    if not byers or not byers.get("started"):
+        return False
+    if _is_532_formation(stats.get("formation")) and byers.get("unit") == "MID":
+        return False
+    formation = str(stats.get("formation") or "")
+    if not (
+        _is_523_formation(formation)
+        or _is_532_formation(formation)
+        or formation in {"5-2-2-1", "5-2-1-2"}
+    ):
+        return False
+    byers["unit"] = "MID"
+    stats["formation"] = "5-3-2"
+    stats["unitBaselines"] = _unit_baselines_for_formation("5-3-2")
+    stats["units"] = _units_from_report(players)
+    return True
+
+
+def _retouch_payload_lineups(payload: dict[str, Any] | None) -> bool:
+    if not payload:
+        return False
+    changed = False
+    for block in payload.get("blocks") or []:
+        for fixture in block.get("fixtures") or []:
+            if _retouch_byers_532_stats(fixture.get("stats") or {}):
+                changed = True
+    return changed
 
 
 def _kpi_value(kpis: dict[int, float] | dict[str, Any], kpi_id: int) -> float:
@@ -1811,12 +1893,18 @@ def _hydrate_lineup_units(stats: dict[str, Any], match_id: int, squad_id: int) -
     _apply_lineup_roles(players, roles)
     stats["players"] = players
     formation = _match_starting_formation(match_id, squad_id)
+    formation_changed = False
     if formation:
+        baselines = _unit_baselines_for_formation(formation)
+        formation_changed = (
+            stats.get("formation") != formation
+            or stats.get("unitBaselines") != baselines
+        )
         stats["formation"] = formation
-        stats["unitBaselines"] = _unit_baselines_for_formation(formation)
+        stats["unitBaselines"] = baselines
     stats["units"] = _units_from_report(players)
     after = [(player.get("playerId"), player.get("unit")) for player in players]
-    return before != after
+    return before != after or formation_changed
 
 
 def _apply_open_play_unit_count(
@@ -3255,6 +3343,8 @@ def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, A
             except Exception:
                 logger.exception("Blocks score refresh from Impect failed")
                 if payload:
+                    if _retouch_payload_lineups(payload):
+                        return _store_blocks_payload(payload)
                     return payload
             if matches:
                 played = [match for match in matches if match.get("outcome")]
@@ -3274,6 +3364,8 @@ def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, A
                 return _store_blocks_payload(rebuilt)
 
         if payload:
+            if _retouch_payload_lineups(payload):
+                return _store_blocks_payload(payload)
             return payload
         if not matches:
             matches = _fetch_season_matches()

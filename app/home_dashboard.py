@@ -14,6 +14,7 @@ from typing import Any
 
 from fastapi import FastAPI, Query
 
+from app.brand import current_brand, is_demo
 from app.fixture_planner import get_fixture_assignments, get_scouting_reports
 from app.paths import DATA_ROOT, STANDALONE_DIR, ensure_data_dirs
 
@@ -861,6 +862,8 @@ def _save_recruitment_disk(payload: dict[str, Any]) -> None:
 
 
 def _schedule_recruitment_refresh() -> None:
+    if is_demo():
+        return
     global _recruitment_refreshing
     with _recruitment_refresh_lock:
         if _recruitment_refreshing:
@@ -900,6 +903,8 @@ def build_recruitment_snapshot(
     _from_background: bool = False,
 ) -> dict[str, Any]:
     """Squad age + minutes-by-age recruitment KPIs, with league avg + rank tables."""
+    if is_demo():
+        return _demo_recruitment_payload()
     cache_key = "recruitment"
     cached = _recruitment_cache.get(cache_key)
     now = time.time()
@@ -1141,6 +1146,8 @@ def _save_strategy_disk(competition: str, payload: dict[str, Any]) -> None:
 
 
 def _schedule_strategy_refresh(competition: str) -> None:
+    if is_demo():
+        return
     with _strategy_refresh_lock:
         if competition in _strategy_refreshing:
             return
@@ -1173,6 +1180,8 @@ def build_strategy_snapshot(
     _from_background: bool = False,
 ) -> dict[str, Any]:
     """PPG pace + optional phase goals / first-goal game state for the Strategy tab."""
+    if is_demo():
+        return _demo_strategy_payload()
     cache_key = f"strategy:{competition}:{'full' if detail else 'fast'}"
     cached = _strategy_cache.get(cache_key)
     now = time.time()
@@ -1579,8 +1588,52 @@ def _fetch_team_fixtures_fotmob(team_id: str = PORT_VALE_FOTMOB_ID) -> list[dict
     return rows
 
 
+def _demo_fixtures_payload() -> dict[str, Any]:
+    brand = current_brand()
+    return {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "source": "demo",
+        "club": brand.org,
+        "demo": True,
+        "played_count": 0,
+        "upcoming_count": 0,
+        "played": [],
+        "upcoming": [],
+        "fixtures": [],
+        "form": [],
+        "next": None,
+        "last": None,
+        "calendar": [],
+        "matches": [],
+    }
+
+
+def _demo_strategy_payload() -> dict[str, Any]:
+    return {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "demo": True,
+        "season": "",
+        "competition": "",
+        "pace": {},
+        "pv": None,
+        "averages": None,
+        "phases": {"matches": 0, "scored": [], "conceded": []},
+        "game_state": {},
+    }
+
+
+def _demo_recruitment_payload() -> dict[str, Any]:
+    payload = _recruitment_building_payload()
+    payload["building"] = False
+    payload["demo"] = True
+    payload["empty"] = True
+    return payload
+
+
 def build_port_vale_fixtures(*, force_refresh: bool = False) -> dict[str, Any]:
     """Port Vale played + upcoming fixtures from FotMob (league seasons + team cups)."""
+    if is_demo():
+        return _demo_fixtures_payload()
     from app.analysis_cache import REPORT_TTL_SECONDS, read_json, write_json
 
     cache_key = "pv-fotmob"
@@ -2290,6 +2343,8 @@ def _schedule_standouts_refresh(
     year: int | None = None,
     month: int | None = None,
 ) -> None:
+    if is_demo():
+        return
     cache_key = _standouts_raw_cache_key(period, year=year, month=month)
     with _standouts_refresh_lock:
         if cache_key in _standouts_refreshing:

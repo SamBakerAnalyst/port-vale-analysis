@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.auth import register_auth
+from app.brand import apply_brand_html, current_brand
 from app.label_utils import humanize_metric_label, humanize_profile_name
 from app.logging_config import configure_logging
 from app.profile_resolve import (
@@ -49,7 +50,7 @@ load_dotenv()
 _LOG_LEVEL = configure_logging()
 
 logger = logging.getLogger("impect.dashboard")
-logger.info("Port Vale hub starting — log level %s", _LOG_LEVEL)
+logger.info("%s starting — log level %s", current_brand().product, _LOG_LEVEL)
 
 # Ignore HTTP_PROXY/HTTPS_PROXY — Cursor/shell proxies often point at a dead local forwarder.
 _http = requests.Session()
@@ -218,7 +219,7 @@ class PdfExportRequest(BaseModel):
     export_mode: str = "coach"
 
 
-app = FastAPI(title="Impect Football Dashboard")
+app = FastAPI(title=current_brand().product)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -4521,6 +4522,7 @@ def _hub_build_id() -> str:
         BASE_DIR / "standalone" / "hub-launcher.js",
         BASE_DIR / "app" / "auth.py",
         BASE_DIR / "app" / "apps_manifest.py",
+        BASE_DIR / "app" / "brand.py",
         BASE_DIR / "app" / "register_apps.py",
     ]
     latest = 0
@@ -4538,7 +4540,9 @@ def index() -> HTMLResponse:
     if not html_path.exists():
         raise HTTPException(status_code=503, detail="Hub page not found at standalone/hub.html")
     build = _hub_build_id()
-    html = html_path.read_text(encoding="utf-8").replace("__HUB_BUILD__", build)
+    html = apply_brand_html(html_path.read_text(encoding="utf-8")).replace(
+        "__HUB_BUILD__", build
+    )
     return HTMLResponse(
         html,
         headers={

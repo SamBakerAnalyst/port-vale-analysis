@@ -1473,9 +1473,17 @@
         const rowClass = rowClasses(p, scoutTotal);
         const loan = loanInfoForPlayer(p);
         const loanTitle = loan?.from ? `On loan from ${loan.from}` : "";
+        const comment = String(p.scout_comment || "").trim();
+        const noteMark = comment
+          ? `<span class="scout-note-mark" title="${escAttr(comment)}">Note</span>`
+          : "";
+        const noteLine =
+          comment && !compactLeague
+            ? `<div class="scout-player-note" title="${escAttr(comment)}">${escAttr(comment)}</div>`
+            : "";
         const nameCell = exportMode
-          ? `<td class="col-player"${loanTitle ? ` title="${loanTitle}"` : ""}>${p.name || "—"}</td>`
-          : `<td class="col-player"><a href="${href}"${loanTitle ? ` title="${loanTitle}"` : ""}>${p.name || "—"}</a></td>`;
+          ? `<td class="col-player"${loanTitle ? ` title="${loanTitle}"` : ""}>${p.name || "—"}${comment ? " · note" : ""}</td>`
+          : `<td class="col-player"><a href="${href}"${loanTitle ? ` title="${loanTitle}"` : ""}>${p.name || "—"}</a>${noteMark}${noteLine}</td>`;
         const profileCells = (profileCols || [])
           .map((profile) => {
             const value = p.profileScores?.[profile.apiName];

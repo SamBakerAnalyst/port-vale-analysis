@@ -104,6 +104,99 @@
   let selectedFormation = localStorage.getItem("mfp-formation") || "4-2-3-1";
   if (!FORMATION_KEYS.includes(selectedFormation)) selectedFormation = "4-2-3-1";
   let includeDataSlide = localStorage.getItem("mfp-data-slide") !== "0";
+  let appMode = localStorage.getItem("mfp-mode") === "dossier" ? "dossier" : "meeting";
+  let dossier = null;
+  let dossierDirty = false;
+  let dossierSaveTimer = null;
+  const saveDossierBtn = document.getElementById("saveDossierBtn");
+  const cutoutPanel = document.getElementById("cutoutPanel");
+
+  const DOSSIER_SECTIONS = [
+    {
+      key: "bio",
+      title: "Biographical",
+      fields: [
+        { key: "name", label: "Name", kind: "input" },
+        { key: "dob", label: "DOB", kind: "input" },
+        { key: "age", label: "Age", kind: "input" },
+        { key: "nationality", label: "Nationality", kind: "input" },
+        { key: "height", label: "Height", kind: "input" },
+        { key: "weight", label: "Weight", kind: "input" },
+        { key: "foot", label: "Preferred foot", kind: "input" },
+        { key: "birthPlace", label: "Birth place", kind: "input" },
+        { key: "languages", label: "Languages", kind: "input" },
+        { key: "positions", label: "Position(s)", kind: "input" },
+      ],
+    },
+    {
+      key: "player",
+      title: "Player",
+      fields: [
+        { key: "backgroundNarrative", label: "Background information (narrative)", kind: "textarea", rows: 7 },
+        { key: "playingHistory", label: "Playing history", kind: "textarea", rows: 5 },
+        { key: "technicalDataReport", label: "Technical data report", kind: "textarea", rows: 6 },
+        { key: "benchmarkPvfc", label: "Benchmark v PVFC", kind: "textarea", rows: 4 },
+        { key: "scoutingSummary", label: "Scouting summary", kind: "textarea", rows: 5 },
+      ],
+    },
+    {
+      key: "personal",
+      title: "Personal / Character",
+      fields: [
+        { key: "character", label: "Character", kind: "textarea", rows: 4 },
+        { key: "maritalStatus", label: "Marital status", kind: "input" },
+        { key: "otherFamily", label: "Other family / relationships", kind: "textarea", rows: 3 },
+        { key: "references", label: "References", kind: "textarea", rows: 3 },
+        { key: "socialMedia", label: "Social media profile", kind: "textarea", rows: 3 },
+        { key: "locationFamily", label: "Location / family situation", kind: "textarea", rows: 3 },
+      ],
+    },
+    {
+      key: "negotiations",
+      title: "Negotiations",
+      fields: [
+        { key: "transferType", label: "Transfer type", kind: "input" },
+        { key: "contractStatus", label: "Contract status", kind: "input" },
+        { key: "atClubSince", label: "At club since", kind: "input" },
+        { key: "workPermit", label: "Work permit", kind: "input" },
+        { key: "agentDetails", label: "Agent details", kind: "textarea", rows: 3 },
+        { key: "currentSalary", label: "Current salary", kind: "input" },
+        { key: "salaryExpectations", label: "Salary expectations / contributions", kind: "textarea", rows: 3 },
+      ],
+    },
+    {
+      key: "medical",
+      title: "Medical assessment & recommendation",
+      fields: [
+        { key: "availabilityHistory", label: "Availability history", kind: "textarea", rows: 3 },
+        { key: "physicalDataReport", label: "Physical data report", kind: "textarea", rows: 4 },
+        { key: "benchmarkPvfc", label: "Benchmark v PVFC", kind: "textarea", rows: 3 },
+        { key: "riskAssessment", label: "Medical risk assessment", kind: "textarea", rows: 4 },
+        { key: "recommendations", label: "Medical recommendations for integration / adaptation", kind: "textarea", rows: 4 },
+      ],
+    },
+    {
+      key: "summary",
+      title: "Summary & recruitment team recommendation",
+      fields: [
+        { key: "keyStrengths", label: "Key strengths", kind: "textarea", rows: 4 },
+        { key: "areasToDevelop", label: "Areas to develop → IDPs", kind: "textarea", rows: 4 },
+        { key: "thingsToConsider", label: "Things to consider", kind: "textarea", rows: 4 },
+        { key: "overallRecommendation", label: "Overall recommendation for adaptation & tactical fit", kind: "textarea", rows: 5 },
+      ],
+    },
+    {
+      key: "scoutOverview",
+      title: "Scout overview",
+      fields: [
+        { key: "totalReports", label: "Total reports", kind: "input" },
+        { key: "liveReports", label: "Live reports", kind: "input" },
+        { key: "videoReports", label: "Video reports", kind: "input" },
+        { key: "averageGrade", label: "Average grade", kind: "input" },
+        { key: "reportsNotes", label: "Report notes / log", kind: "textarea", rows: 5 },
+      ],
+    },
+  ];
 
   function setStatus(message, isError) {
     if (!message) {
@@ -417,7 +510,10 @@
       downloadBtn.disabled = false;
       refreshBtn.disabled = false;
       refreshPhotosBtn.disabled = false;
-      if (keepPhotos) {
+      if (saveDossierBtn) saveDossierBtn.disabled = false;
+      if (appMode === "dossier") {
+        await loadDossier({ keepStatus: true });
+      } else if (keepPhotos) {
         const seasonBit = [pack.player.league, pack.player.season].filter(Boolean).join(" ");
         const posBit = pack.player.positionLine || positionCode || "";
         setStatus(`Loaded ${[posBit, seasonBit].filter(Boolean).join(" · ")}`);
@@ -430,7 +526,617 @@
     }
   }
 
+  function applyModeChrome() {
+    document.querySelectorAll(".mfp-mode").forEach((btn) => {
+      btn.classList.toggle("is-active", btn.getAttribute("data-mode") === appMode);
+    });
+    document.body.classList.toggle("mfp-mode-dossier", appMode === "dossier");
+    document.body.classList.toggle("mfp-mode-meeting", appMode === "meeting");
+    if (cutoutPanel) cutoutPanel.hidden = appMode === "dossier";
+    if (photoPanel) photoPanel.hidden = appMode === "dossier" || !webPhotos.length;
+    if (downloadBtn) downloadBtn.hidden = appMode === "dossier";
+    if (refreshPhotosBtn) refreshPhotosBtn.hidden = appMode === "dossier";
+    if (saveDossierBtn) {
+      saveDossierBtn.hidden = appMode !== "dossier";
+      saveDossierBtn.disabled = !selectedPlayerId;
+    }
+  }
+
+  async function setAppMode(mode) {
+    appMode = mode === "dossier" ? "dossier" : "meeting";
+    try { localStorage.setItem("mfp-mode", appMode); } catch (_) { /* ignore */ }
+    applyModeChrome();
+    if (!pack) {
+      renderEditor();
+      renderPreview();
+      return;
+    }
+    if (appMode === "dossier") {
+      await loadDossier();
+    } else {
+      renderEditor();
+      renderPreview();
+      if (webPhotos.length) {
+        photoPanel.hidden = false;
+        renderPhotoGrid();
+      }
+    }
+  }
+
+  async function loadDossier(options = {}) {
+    if (!selectedPlayerId || !pack) return;
+    if (!options.keepStatus) setStatus("Loading dossier…");
+    try {
+      const qs = new URLSearchParams({ playerId: String(selectedPlayerId) });
+      if (pack.player && pack.player.iterationId) qs.set("iterationId", String(pack.player.iterationId));
+      if (pack.player && pack.player.primaryPosition) qs.set("position", String(pack.player.primaryPosition));
+      const res = await fetch(`/api/meeting-front-pages/dossier?${qs.toString()}`, {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(detail.detail || `Dossier failed (${res.status})`);
+      }
+      dossier = await res.json();
+      dossierDirty = false;
+      renderDossierEditor();
+      renderDossierPreview();
+      if (saveDossierBtn) {
+        saveDossierBtn.disabled = false;
+        saveDossierBtn.textContent = dossier.saved ? "Save dossier" : "Save dossier";
+      }
+      if (!options.keepStatus) {
+        setStatus(dossier.saved ? "Dossier loaded (saved notes found)" : "Dossier loaded — blanks are ready for scout notes");
+      }
+    } catch (err) {
+      setStatus(err.message || "Could not load dossier", true);
+    }
+  }
+
+  function scheduleDossierSave() {
+    dossierDirty = true;
+    if (saveDossierBtn) saveDossierBtn.textContent = "Save dossier*";
+    if (dossierSaveTimer) clearTimeout(dossierSaveTimer);
+    dossierSaveTimer = setTimeout(() => {
+      saveDossier().catch(() => {});
+    }, 900);
+  }
+
+  async function saveDossier() {
+    if (!selectedPlayerId || !dossier) return;
+    if (saveDossierBtn) {
+      saveDossierBtn.disabled = true;
+      saveDossierBtn.textContent = "Saving…";
+    }
+    try {
+      const res = await fetch(`/api/meeting-front-pages/dossier?playerId=${encodeURIComponent(selectedPlayerId)}`, {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(dossier),
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(detail.detail || `Save failed (${res.status})`);
+      }
+      dossier = await res.json();
+      dossierDirty = false;
+      renderDossierPreview();
+      setStatus("Dossier saved");
+      if (saveDossierBtn) saveDossierBtn.textContent = "Save dossier";
+    } catch (err) {
+      setStatus(err.message || "Could not save dossier", true);
+      if (saveDossierBtn) saveDossierBtn.textContent = "Save dossier*";
+    } finally {
+      if (saveDossierBtn) saveDossierBtn.disabled = !selectedPlayerId;
+    }
+  }
+
+  function dossierFieldValue(sectionKey, fieldKey) {
+    const section = dossier && dossier[sectionKey];
+    if (!section || typeof section !== "object") return "";
+    return section[fieldKey] || "";
+  }
+
+  function renderDossierEditor() {
+    if (!dossier) {
+      editor.innerHTML = `<p class="mfp-hint">Load a player to open the dossier.</p>`;
+      return;
+    }
+    const src = dossier.source || {};
+    editor.innerHTML = `
+      <h2>Player dossier</h2>
+      <p class="mfp-hint">Six-page deck (cover → scout). Cover + narrative auto-draft from Impect/FBref when blank — edit anytime. Appearance history merges Impect seasons with deeper FBref rows.</p>
+      <div class="mfp-dossier-meta">
+        <div><span>Club</span>${escapeHtml(src.club || "—")}</div>
+        <div><span>Role</span>${escapeHtml(src.positionLine || "—")}</div>
+        <div><span>Season</span>${escapeHtml([src.league, src.season].filter(Boolean).join(" · ") || "—")}</div>
+        <div><span>Market</span>${escapeHtml(src.marketValue || "—")}</div>
+      </div>
+      ${DOSSIER_SECTIONS.map((section) => `
+        <section class="mfp-dossier-section" data-section="${escapeAttr(section.key)}">
+          <h2>${escapeHtml(section.title)}</h2>
+          ${section.fields.map((field) => {
+            const val = dossierFieldValue(section.key, field.key);
+            if (field.kind === "textarea") {
+              return `<div class="mfp-field">
+                <label>${escapeHtml(field.label)}</label>
+                <textarea data-dossier-section="${escapeAttr(section.key)}" data-dossier-field="${escapeAttr(field.key)}" rows="${field.rows || 4}" placeholder="Add notes…">${escapeHtml(val)}</textarea>
+              </div>`;
+            }
+            return `<div class="mfp-field">
+              <label>${escapeHtml(field.label)}</label>
+              <input data-dossier-section="${escapeAttr(section.key)}" data-dossier-field="${escapeAttr(field.key)}" value="${escapeAttr(val)}" placeholder="—" />
+            </div>`;
+          }).join("")}
+        </section>
+      `).join("")}
+    `;
+    editor.querySelectorAll("[data-dossier-field]").forEach((el) => {
+      const handler = () => {
+        const section = el.getAttribute("data-dossier-section");
+        const field = el.getAttribute("data-dossier-field");
+        if (!dossier[section]) dossier[section] = {};
+        dossier[section][field] = el.value;
+        renderDossierPreview();
+        scheduleDossierSave();
+      };
+      el.addEventListener("input", handler);
+    });
+  }
+
+  function dossierVal(value, emptyLabel) {
+    const text = String(value || "").trim();
+    return {
+      text: text || (emptyLabel || "—"),
+      empty: !text,
+    };
+  }
+
+  function dossierCell(value, emptyLabel) {
+    const v = dossierVal(value, emptyLabel);
+    return `<span class="${v.empty ? "is-empty" : ""}">${escapeHtml(v.text)}</span>`;
+  }
+
+  function dossierBulletList(text, tone) {
+    const lines = String(text || "")
+      .split(/\n+/)
+      .map((s) => s.replace(/^[-•*]\s*/, "").trim())
+      .filter(Boolean);
+    if (!lines.length) {
+      return `<li class="is-empty">Add notes in the editor</li>`;
+    }
+    return lines.map((line) => `<li class="${tone || ""}">${escapeHtml(line)}</li>`).join("");
+  }
+
+  function dossierBrandHtml() {
+    return `<div class="mfp-slide__brand mfp-slide__brand--light">
+      <img src="${BADGE_URL}" alt="Port Vale FC" />
+      <div class="mfp-slide__brand-text">Port Vale FC<span>Recruitment dossier</span></div>
+    </div>`;
+  }
+
+  function dossierPitchHtml() {
+    if (!pack) return `<p class="mfp-dossier-empty">Load a player pack for the pitch map</p>`;
+    const dots = formationDots().map((dot) => {
+      const cls = dot.state === "primary" ? "is-primary" : dot.state === "secondary" ? "is-secondary" : "";
+      const label = (dot.state === "primary" || dot.state === "secondary")
+        ? escapeHtml(dot.label || dot.abbr)
+        : "";
+      return `<div class="mfp-pitch__dot ${cls}" style="left:${dot.x}%;top:${dot.y}%">${label}</div>`;
+    }).join("");
+    return `<div class="mfp-pitch-wrap mfp-dossier-pitch">
+      <div class="mfp-pitch-head">
+        <p class="mfp-pitch-label">Position map · ${escapeHtml(selectedFormation)}</p>
+      </div>
+      <div class="mfp-pitch">${dots}</div>
+    </div>`;
+  }
+
+  function dossierClubListHtml(rows) {
+    const clubs = [];
+    const seen = new Set();
+    (rows || []).forEach((row) => {
+      const club = String(row.club || "").trim();
+      if (!club) return;
+      const key = club.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      const seasons = (rows || [])
+        .filter((r) => String(r.club || "").trim().toLowerCase() === key)
+        .map((r) => r.season)
+        .filter(Boolean);
+      const range = seasons.length ? [...new Set(seasons)].slice(0, 4).join(" · ") : "";
+      clubs.push({ club, range });
+    });
+    if (!clubs.length) return `<p class="mfp-dossier-empty">No club history in Impect seasons yet</p>`;
+    return clubs.slice(0, 8).map((row) => `
+      <div class="mfp-dossier-club">
+        <span class="mfp-dossier-club__name">${escapeHtml(row.club)}</span>
+        <span class="mfp-dossier-club__years">${escapeHtml(row.range || "—")}</span>
+      </div>`).join("");
+  }
+
+  function dossierMinutesChartHtml(rows) {
+    const withMins = (rows || [])
+      .filter((r) => r && r.minutes != null && Number(r.minutes) > 0)
+      .slice()
+      .sort((a, b) => {
+        const ya = String(a.season || "");
+        const yb = String(b.season || "");
+        return ya.localeCompare(yb);
+      })
+      .slice(-10);
+    if (!withMins.length) {
+      return `<p class="mfp-dossier-empty">Minutes chart fills when season scores are available</p>`;
+    }
+    const max = Math.max(...withMins.map((r) => Number(r.minutes) || 0), 1);
+    return `<div class="mfp-dossier-mins" aria-label="League minutes">
+      ${withMins.map((row) => {
+        const mins = Number(row.minutes) || 0;
+        const pct = Math.max(8, Math.round((mins / max) * 100));
+        return `<div class="mfp-dossier-mins__col">
+          <div class="mfp-dossier-mins__bar" style="height:${pct}%">
+            <span>${escapeHtml(String(Math.round(mins)))}</span>
+          </div>
+          <p class="mfp-dossier-mins__label">${escapeHtml(row.season || "—")}</p>
+          <p class="mfp-dossier-mins__club">${escapeHtml(row.club || row.competition || "")}</p>
+        </div>`;
+      }).join("")}
+    </div>`;
+  }
+
+  function dossierCoverSlideHtml() {
+    const bio = dossier.bio || {};
+    const src = dossier.source || {};
+    const impect = dossier.impect || {};
+    const career = impect.careerStats || (pack && pack.careerStats) || {};
+    const p = (pack && pack.player) || {};
+    const photo = src.photoUrl || p.photoUrl || "";
+    const ghost = String(bio.name || p.lastName || p.name || "PLAYER").split(" ").pop() || "PLAYER";
+    const blurb = String(impect.coverBlurb || "").trim()
+      || String((dossier.player && dossier.player.backgroundNarrative) || "").split(/\n\n/)[0]
+      || "Recruitment dossier ready for scout notes.";
+    const best = ((impect.dataSummary || {}).bestStats || [])[0];
+    const rows = impect.appearanceRows || [];
+    const seasonSpan = (() => {
+      const seasons = [...new Set(rows.map((r) => r.season).filter(Boolean))];
+      if (seasons.length >= 2) return `${seasons[seasons.length - 1]} → ${seasons[0]}`;
+      return seasons[0] || src.season || "";
+    })();
+
+    return `<div class="mfp-slide mfp-slide--dossier mfp-slide--dossier-cover" data-slide="dossier-cover">
+      <div class="mfp-slide__atmosphere mfp-slide__atmosphere--cover" aria-hidden="true"></div>
+      <div class="mfp-dossier-cover__glow" aria-hidden="true"></div>
+      <div class="mfp-dossier-cover__ghost" aria-hidden="true">${escapeHtml(ghost.toUpperCase())}</div>
+      ${dossierBrandHtml()}
+      <div class="mfp-dossier-cover">
+        <div class="mfp-dossier-cover__copy">
+          <p class="mfp-dossier-cover__eyebrow">Port Vale recruitment · Player dossier</p>
+          <p class="mfp-dossier-cover__first">${escapeHtml(p.firstName || (bio.name || "").split(" ")[0] || "")}</p>
+          <h2 class="mfp-dossier-cover__last">${escapeHtml(p.lastName || ghost)}</h2>
+          <p class="mfp-dossier-cover__role">${escapeHtml([bio.positions || src.positionLine, src.club, src.league].filter(Boolean).join(" · "))}</p>
+          <p class="mfp-dossier-cover__blurb">${escapeHtml(blurb)}</p>
+          <div class="mfp-dossier-cover__pills">
+            <div><span>Age</span><strong>${escapeHtml(displayStat(bio.age || p.ageLine))}</strong></div>
+            <div><span>Foot</span><strong>${escapeHtml(displayStat(bio.foot || p.foot))}</strong></div>
+            <div><span>Height</span><strong>${escapeHtml(displayStat(bio.height || p.height))}</strong></div>
+            <div><span>Sample</span><strong>${escapeHtml(seasonSpan || "—")}</strong></div>
+          </div>
+          <div class="mfp-dossier-cover__stats">
+            <div><span>Games</span><strong>${escapeHtml(displayStat(career.games))}</strong></div>
+            <div><span>Mins</span><strong>${escapeHtml(displayStat(career.minutes))}</strong></div>
+            <div><span>Goals</span><strong>${escapeHtml(displayStat(career.goals))}</strong></div>
+            <div><span>Assists</span><strong>${escapeHtml(displayStat(career.assists))}</strong></div>
+          </div>
+          ${best ? `<p class="mfp-dossier-cover__flag">Impect flag · ${escapeHtml(best.label || "Stat")} · ${escapeHtml(best.valueLabel || "—")} P90</p>` : ""}
+        </div>
+        <div class="mfp-dossier-cover__media">
+          ${photo
+            ? `<div class="mfp-dossier-cover__photo"><img src="${escapeAttr(photo)}" alt="" /></div>`
+            : `<div class="mfp-dossier-cover__photo is-empty">Photo</div>`}
+          <div class="mfp-dossier-cover__frame" aria-hidden="true"></div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function dossierOverviewSlideHtml() {
+    const bio = dossier.bio || {};
+    const personal = dossier.personal || {};
+    const neg = dossier.negotiations || {};
+    const src = dossier.source || {};
+    const impect = dossier.impect || {};
+    const rows = impect.appearanceRows || [];
+    const photo = src.photoUrl || (pack && pack.player && pack.player.photoUrl) || "";
+    const infoRows = [
+      ["Name", bio.name],
+      ["Age", bio.age || bio.dob],
+      ["Position(s)", bio.positions || src.positionLine],
+      ["Leading foot", bio.foot],
+      ["Height", bio.height],
+      ["Birth place", bio.birthPlace],
+      ["Nationality", bio.nationality],
+      ["Languages", bio.languages],
+      ["Club", src.club],
+      ["Division", [src.league, src.season].filter(Boolean).join(" · ")],
+      ["Agent", neg.agentDetails],
+      ["Contract", neg.contractStatus],
+      ["At club since", neg.atClubSince],
+      ["Work permit", neg.workPermit],
+    ].map(([label, value]) => {
+      const v = dossierVal(value);
+      return `<tr><th>${escapeHtml(label)}</th><td class="${v.empty ? "is-empty" : ""}">${escapeHtml(v.text)}</td></tr>`;
+    }).join("");
+
+    return `<div class="mfp-slide mfp-slide--dossier mfp-slide--dossier-overview" data-slide="dossier-overview">
+      <div class="mfp-slide__atmosphere mfp-slide__atmosphere--data" aria-hidden="true"></div>
+      <div class="mfp-dossier-cover__ghost mfp-dossier-cover__ghost--soft" aria-hidden="true">${escapeHtml(String(bio.name || "PLAYER").split(" ").pop() || "PLAYER")}</div>
+      ${dossierBrandHtml()}
+      <div class="mfp-dossier-page">
+        <header class="mfp-dossier-page__head">
+          <div>
+            <p class="mfp-dossier-page__kicker">Player overview</p>
+            <h2>${escapeHtml(bio.name || (pack && pack.player && pack.player.name) || "Player")}</h2>
+            <p class="mfp-dossier-page__sub">${escapeHtml([src.positionLine, src.club, src.league, src.season].filter(Boolean).join(" · "))}</p>
+          </div>
+          ${photo ? `<img class="mfp-dossier-page__photo" src="${escapeAttr(photo)}" alt="" />` : ""}
+        </header>
+        <div class="mfp-dossier-overview">
+          <section class="mfp-dossier-panel">
+            <h3>Player information</h3>
+            <table class="mfp-dossier-table">${infoRows}</table>
+          </section>
+          <div class="mfp-dossier-overview__side">
+            <section class="mfp-dossier-panel">
+              <h3>Relationships</h3>
+              <div class="mfp-dossier-kv">
+                <div><span>Marital status</span>${dossierCell(personal.maritalStatus, "— editable")}</div>
+                <div><span>Other family</span>${dossierCell(personal.otherFamily || personal.locationFamily, "— editable")}</div>
+              </div>
+            </section>
+            <section class="mfp-dossier-panel mfp-dossier-panel--pitch">
+              <h3>Tactical map</h3>
+              ${dossierPitchHtml()}
+            </section>
+          </div>
+          <section class="mfp-dossier-panel mfp-dossier-panel--wide">
+            <h3>Previous clubs</h3>
+            <div class="mfp-dossier-clubs">${dossierClubListHtml(rows)}</div>
+          </section>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function dossierBackgroundSlideHtml() {
+    const player = dossier.player || {};
+    const src = dossier.source || {};
+    const rows = (dossier.impect && dossier.impect.appearanceRows) || [];
+    const narrative = dossierVal(player.backgroundNarrative, "Write the career pathway narrative here — academy, breakthroughs, moves.");
+    const autoNote = (dossier.impect && dossier.impect.autoNarrative)
+      && String(player.backgroundNarrative || "").trim() === String(dossier.impect.autoNarrative || "").trim();
+    const historyRows = rows.slice(0, 14).map((row) => `
+      <tr>
+        <td>${escapeHtml(row.season || "—")}</td>
+        <td>${escapeHtml(row.club || "—")}</td>
+        <td>${escapeHtml(row.competition || "—")}</td>
+        <td>${row.minutes != null ? escapeHtml(String(row.minutes)) + "′" : "—"}</td>
+        <td class="mfp-dossier-src">${escapeHtml(String(row.source || "").replace("+", " · ") || "—")}</td>
+      </tr>`).join("") || `<tr><td colspan="5" class="is-empty">No season rows yet</td></tr>`;
+
+    return `<div class="mfp-slide mfp-slide--dossier mfp-slide--dossier-background" data-slide="dossier-background">
+      <div class="mfp-slide__atmosphere mfp-slide__atmosphere--data" aria-hidden="true"></div>
+      ${dossierBrandHtml()}
+      <div class="mfp-dossier-page">
+        <header class="mfp-dossier-page__head">
+          <div>
+            <p class="mfp-dossier-page__kicker">Background &amp; pathway</p>
+            <h2>Background information</h2>
+            <p class="mfp-dossier-page__sub">${escapeHtml(src.club || "")}${autoNote ? " · Auto-drafted from available data" : ""}</p>
+          </div>
+        </header>
+        <div class="mfp-dossier-split">
+          <section class="mfp-dossier-panel">
+            <h3>Narrative ${autoNote ? "<small>auto</small>" : ""}</h3>
+            <p class="mfp-dossier-narrative ${narrative.empty ? "is-empty" : ""}">${escapeHtml(narrative.text)}</p>
+            <h3 class="mfp-dossier-subhead">Scouting summary</h3>
+            <p class="mfp-dossier-narrative ${String(player.scoutingSummary || "").trim() ? "" : "is-empty"}">${escapeHtml(String(player.scoutingSummary || "").trim() || "Add a short scouting summary")}</p>
+          </section>
+          <section class="mfp-dossier-panel">
+            <h3>Season pathway <small>Impect + FBref</small></h3>
+            <table class="mfp-dossier-table mfp-dossier-table--grid">
+              <thead><tr><th>Season</th><th>Club</th><th>Competition</th><th>Mins</th><th>Src</th></tr></thead>
+              <tbody>${historyRows}</tbody>
+            </table>
+          </section>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function dossierAppearancesSlideHtml() {
+    const rows = (dossier.impect && dossier.impect.appearanceRows) || [];
+    const career = (dossier.impect && dossier.impect.careerStats) || (pack && pack.careerStats) || {};
+    const sources = [...new Set(rows.map((r) => r.source).filter(Boolean))];
+    const tableRows = rows.slice(0, 18).map((row) => `
+      <tr>
+        <td>${escapeHtml(row.season || "—")}</td>
+        <td>${escapeHtml(row.club || "—")}</td>
+        <td>${escapeHtml(row.competition || "—")}</td>
+        <td>${row.apps != null ? escapeHtml(String(row.apps)) : "—"}</td>
+        <td>${row.starts != null ? escapeHtml(String(row.starts)) : "—"}</td>
+        <td>${row.minutes != null ? escapeHtml(String(row.minutes)) : "—"}</td>
+        <td>${row.goals != null ? escapeHtml(String(row.goals)) : "—"}</td>
+        <td>${row.assists != null ? escapeHtml(String(row.assists)) : "—"}</td>
+        <td>${row.avgPct != null ? escapeHtml(String(row.avgPct)) + "%" : "—"}</td>
+        <td class="mfp-dossier-src">${escapeHtml(String(row.source || "impect").replace("+", " · "))}</td>
+      </tr>`).join("") || `<tr><td colspan="10" class="is-empty">No appearance seasons yet</td></tr>`;
+
+    return `<div class="mfp-slide mfp-slide--dossier mfp-slide--dossier-apps" data-slide="dossier-apps">
+      <div class="mfp-slide__atmosphere mfp-slide__atmosphere--data" aria-hidden="true"></div>
+      ${dossierBrandHtml()}
+      <div class="mfp-dossier-page">
+        <header class="mfp-dossier-page__head">
+          <div>
+            <p class="mfp-dossier-page__kicker">League appearance history</p>
+            <h2>Appearance history</h2>
+            <p class="mfp-dossier-page__sub">${escapeHtml(career.title || "Career sample")} · ${rows.length} rows · ${escapeHtml(sources.join(" + ") || "impect")}</p>
+          </div>
+          <div class="mfp-dossier-career-pills">
+            <div><span>Games</span><strong>${escapeHtml(displayStat(career.games))}</strong></div>
+            <div><span>Mins</span><strong>${escapeHtml(displayStat(career.minutes))}</strong></div>
+            <div><span>Goals</span><strong>${escapeHtml(displayStat(career.goals))}</strong></div>
+            <div><span>Assists</span><strong>${escapeHtml(displayStat(career.assists))}</strong></div>
+          </div>
+        </header>
+        <div class="mfp-dossier-apps">
+          <section class="mfp-dossier-panel">
+            <table class="mfp-dossier-table mfp-dossier-table--grid mfp-dossier-table--dense">
+              <thead>
+                <tr>
+                  <th>Season</th><th>Club</th><th>Competition</th><th>Apps</th><th>Starts</th><th>Mins</th><th>G</th><th>A</th><th>Fit</th><th>Src</th>
+                </tr>
+              </thead>
+              <tbody>${tableRows}</tbody>
+            </table>
+          </section>
+          <section class="mfp-dossier-panel">
+            <h3>Minutes by season</h3>
+            ${dossierMinutesChartHtml(rows)}
+          </section>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function dossierPerformanceSlideHtml() {
+    const src = dossier.source || {};
+    const summary = (dossier.impect && dossier.impect.dataSummary) || (pack && pack.dataSummary) || {};
+    const profiles = summary.profiles || (dossier.impect && dossier.impect.profiles) || (pack && pack.profiles) || [];
+    const bestStats = (summary.bestStats || []).slice(0, 5);
+    const worstStats = (summary.worstStats || []).slice(0, 5);
+    const byPos = (summary.byPosition || []).slice(0, 2);
+    const overlayPos = byPos.length > 1 ? byPos[1] : null;
+    const bestHtml = bestStats.map((row, i) => `
+      <div class="mfp-data__chip mfp-data__chip--best mfp-data__chip--stat">
+        <span class="mfp-data__chip-idx">${String(i + 1).padStart(2, "0")}</span>
+        <span class="mfp-data__chip-name">${escapeHtml(row.label || "STAT")}</span>
+        <span class="mfp-data__chip-pct">${escapeHtml(row.valueLabel || "—")}<small>P90</small></span>
+      </div>`).join("") || `<p class="mfp-dossier-empty">No P90s yet — pick a season with minutes</p>`;
+    const worstHtml = worstStats.map((row, i) => `
+      <div class="mfp-data__chip mfp-data__chip--worst mfp-data__chip--stat">
+        <span class="mfp-data__chip-idx">${String(i + 1).padStart(2, "0")}</span>
+        <span class="mfp-data__chip-name">${escapeHtml(row.label || "STAT")}</span>
+        <span class="mfp-data__chip-pct">${escapeHtml(row.valueLabel || "—")}<small>P90</small></span>
+      </div>`).join("") || `<p class="mfp-dossier-empty">—</p>`;
+
+    return `<div class="mfp-slide mfp-slide--dossier mfp-slide--dossier-perf" data-slide="dossier-perf">
+      <div class="mfp-slide__atmosphere mfp-slide__atmosphere--data" aria-hidden="true"></div>
+      ${dossierBrandHtml()}
+      <div class="mfp-dossier-page">
+        <header class="mfp-dossier-page__head">
+          <div>
+            <p class="mfp-dossier-page__kicker">Performance data</p>
+            <h2>Impect performance</h2>
+            <p class="mfp-dossier-page__sub">${escapeHtml([src.positionLine, src.league, src.season].filter(Boolean).join(" · "))}</p>
+          </div>
+          <p class="mfp-dossier-page__note">${escapeHtml(summary.note || "Statistics P90 where appropriate · Impect")}</p>
+        </header>
+        <div class="mfp-dossier-perf">
+          <section class="mfp-dossier-panel mfp-dossier-panel--radar">
+            <h3>Profile shape</h3>
+            ${dataRadarHtml(
+              profiles,
+              overlayPos && overlayPos.profiles,
+              byPos[0] ? [byPos[0].label, byPos[0].season].filter(Boolean).join(" · ") : "Primary",
+              overlayPos ? [overlayPos.label, overlayPos.season].filter(Boolean).join(" · ") : ""
+            )}
+          </section>
+          <div class="mfp-dossier-perf__stats">
+            <section class="mfp-dossier-panel">
+              <h3>Best stats</h3>
+              <div class="mfp-data__chips">${bestHtml}</div>
+            </section>
+            <section class="mfp-dossier-panel">
+              <h3>Room to grow</h3>
+              <div class="mfp-data__chips">${worstHtml}</div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function dossierScoutSlideHtml() {
+    const summary = dossier.summary || {};
+    const scout = dossier.scoutOverview || {};
+    const medical = dossier.medical || {};
+    const player = dossier.player || {};
+    const photo = (dossier.source && dossier.source.photoUrl) || (pack && pack.player && pack.player.photoUrl) || "";
+
+    return `<div class="mfp-slide mfp-slide--dossier mfp-slide--dossier-scout" data-slide="dossier-scout">
+      <div class="mfp-slide__atmosphere mfp-slide__atmosphere--data" aria-hidden="true"></div>
+      ${dossierBrandHtml()}
+      <div class="mfp-dossier-page">
+        <header class="mfp-dossier-page__head">
+          <div>
+            <p class="mfp-dossier-page__kicker">Scout overview</p>
+            <h2>Recruitment judgment</h2>
+          </div>
+          <div class="mfp-dossier-scout-stats">
+            <div><span>Total</span><strong>${dossierCell(scout.totalReports, "—")}</strong></div>
+            <div><span>Live</span><strong>${dossierCell(scout.liveReports, "—")}</strong></div>
+            <div><span>Video</span><strong>${dossierCell(scout.videoReports, "—")}</strong></div>
+            <div><span>Avg grade</span><strong>${dossierCell(scout.averageGrade, "—")}</strong></div>
+          </div>
+        </header>
+        <div class="mfp-dossier-scout">
+          <section class="mfp-dossier-panel">
+            <h3 class="is-good">Strengths</h3>
+            <ul class="mfp-dossier-list">${dossierBulletList(summary.keyStrengths, "is-good")}</ul>
+            <h3 class="mfp-dossier-subhead">Technical seed</h3>
+            <p class="mfp-dossier-narrative ${String(player.technicalDataReport || "").trim() ? "" : "is-empty"}">${escapeHtml(String(player.technicalDataReport || "").trim() || "Impect technical seed appears once seasons load")}</p>
+          </section>
+          <section class="mfp-dossier-panel">
+            <h3 class="is-warn">Things to consider</h3>
+            <ul class="mfp-dossier-list">${dossierBulletList(summary.thingsToConsider || summary.areasToDevelop, "is-warn")}</ul>
+            <h3 class="mfp-dossier-subhead">Overall recommendation</h3>
+            <p class="mfp-dossier-narrative ${String(summary.overallRecommendation || "").trim() ? "" : "is-empty"}">${escapeHtml(String(summary.overallRecommendation || "").trim() || "Add the recruitment recommendation")}</p>
+            <h3 class="mfp-dossier-subhead">Medical risk</h3>
+            <p class="mfp-dossier-narrative ${String(medical.riskAssessment || "").trim() ? "" : "is-empty"}">${escapeHtml(String(medical.riskAssessment || "").trim() || "Medical assessment still blank")}</p>
+          </section>
+          ${photo ? `<img class="mfp-dossier-scout__photo" src="${escapeAttr(photo)}" alt="" />` : ""}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function renderDossierPreview() {
+    if (!dossier) {
+      preview.innerHTML = "";
+      return;
+    }
+    const parts = [
+      ["00 · Cover", dossierCoverSlideHtml()],
+      ["01 · Player overview", dossierOverviewSlideHtml()],
+      ["02 · Background", dossierBackgroundSlideHtml()],
+      ["03 · Appearances", dossierAppearancesSlideHtml()],
+      ["04 · Performance", dossierPerformanceSlideHtml()],
+      ["05 · Scout overview", dossierScoutSlideHtml()],
+    ];
+    preview.innerHTML = parts.map(([caption, html]) =>
+      `<div class="mfp-slide-wrap"><p class="mfp-slide-caption">${escapeHtml(caption)}</p>${html}</div>`
+    ).join("");
+    requestAnimationFrame(scaleSlides);
+  }
+
   function renderEditor() {
+    if (appMode === "dossier") {
+      renderDossierEditor();
+      return;
+    }
     const p = pack.player;
     const c = pack.careerStats || {};
     const profilesHtml = (pack.profiles || []).map((prof, idx) => {
@@ -1071,6 +1777,10 @@
   }
 
   function renderPreview() {
+    if (appMode === "dossier") {
+      renderDossierPreview();
+      return;
+    }
     if (!pack) return;
     const parts = [];
     let n = 1;
@@ -1264,6 +1974,19 @@
     renderPreview();
     setStatus(`Set ${slideLabel(activeSlideKey)} photo → ${web ? web.label : "selected"}.`);
   });
+
+  document.querySelectorAll(".mfp-mode").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const mode = btn.getAttribute("data-mode") || "meeting";
+      setAppMode(mode);
+    });
+  });
+  if (saveDossierBtn) {
+    saveDossierBtn.addEventListener("click", () => {
+      saveDossier().catch(() => {});
+    });
+  }
+  applyModeChrome();
 
   refreshBtn.addEventListener("click", () => {
     if (!selectedPlayerId) return;

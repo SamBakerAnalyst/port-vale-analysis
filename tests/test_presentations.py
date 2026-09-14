@@ -17,7 +17,6 @@ DECK_TITLES = {
     "Values Report",
     "Hub Origin Story",
     "Summer Window Review",
-    "EFL Transfer Report",
 }
 
 
@@ -43,6 +42,7 @@ def test_strategy_rail_is_dashboards_only():
         "Season Progress Report",
         "What Wins Games",
         "Club Strategy",
+        "Goals Analysis",
     ]
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
@@ -292,8 +293,77 @@ STAFF_NAMES = {
 }
 
 
+FIRST_NAME_CANON = {
+    "alexander": "alexander",
+    "alex": "alexander",
+    "andrew": "andrew",
+    "andy": "andrew",
+    "benjamin": "benjamin",
+    "ben": "benjamin",
+    "christopher": "christopher",
+    "chris": "christopher",
+    "daniel": "daniel",
+    "dan": "daniel",
+    "danny": "daniel",
+    "james": "james",
+    "jamie": "james",
+    "jim": "james",
+    "jimmy": "james",
+    "joseph": "joseph",
+    "joe": "joseph",
+    "josef": "joseph",
+    "jonathan": "jonathan",
+    "jon": "jonathan",
+    "johnny": "jonathan",
+    "matthew": "matthew",
+    "matt": "matthew",
+    "matty": "matthew",
+    "mattie": "matthew",
+    "michael": "michael",
+    "mike": "michael",
+    "mick": "michael",
+    "nicholas": "nicholas",
+    "nick": "nicholas",
+    "nicky": "nicholas",
+    "oliver": "oliver",
+    "olly": "oliver",
+    "ollie": "oliver",
+    "oli": "oliver",
+    "ismael": "ismael",
+    "ismeal": "ismael",
+    "ruari": "ruari",
+    "ruiri": "ruari",
+    "shumaira": "shumaira",
+    "shim": "shumaira",
+    "richard": "richard",
+    "rich": "richard",
+    "rick": "richard",
+    "ricky": "richard",
+    "robert": "robert",
+    "rob": "robert",
+    "bobby": "robert",
+    "samuel": "samuel",
+    "sam": "samuel",
+    "thomas": "thomas",
+    "tom": "thomas",
+    "tommy": "thomas",
+    "timothy": "timothy",
+    "tim": "timothy",
+    "william": "william",
+    "will": "william",
+    "billy": "william",
+    "joshua": "joshua",
+    "josh": "joshua",
+}
+
+
+def _fold_accents(value: str) -> str:
+    text = unicodedata.normalize("NFKD", value or "")
+    return "".join(char for char in text if not unicodedata.combining(char))
+
+
 def _norm(value: str) -> str:
-    text = (value or "").strip().lower()
+    text = _fold_accents(value or "").strip().lower()
     text = text.replace("&", "and")
     text = re.sub(r"\s+", " ", text)
     text = re.sub(r"\b(afc|fc|a\.f\.c\.)$", "", text).strip()
@@ -369,10 +439,107 @@ def clean_player(name: str) -> str:
     return text
 
 
+CLUB_DISPLAY = {
+    "man city": "Manchester City",
+    "manchester city": "Manchester City",
+    "hull": "Hull City",
+    "hull city": "Hull City",
+    "qpr": "Queens Park Rangers",
+    "queens park rangers": "Queens Park Rangers",
+    "wolves": "Wolves",
+    "wolverhampton": "Wolves",
+    "wolverhampton wanderers": "Wolves",
+    "spurs": "Tottenham",
+    "tottenham": "Tottenham",
+    "tottenham hotspur": "Tottenham",
+    "man utd": "Manchester United",
+    "man united": "Manchester United",
+    "manchester united": "Manchester United",
+    "nottingham forest": "Nottingham Forest",
+    "notts forest": "Nottingham Forest",
+    "forest": "Nottingham Forest",
+}
+
+
 def clean_club_token(raw: str) -> str:
     text = re.sub(r"\s+", " ", (raw or "").strip())
     text = text.replace("Botlon", "Bolton")
-    return text
+    mapped = CLUB_DISPLAY.get(_norm(text))
+    return mapped or text
+
+
+def _player_key(name: str) -> str:
+    return re.sub(r"[^a-z]", "", _norm(name))
+
+
+def _name_parts(name: str) -> list[str]:
+    return [part for part in re.split(r"[\s-]+", _norm(name)) if part]
+
+
+def same_player(left: str, right: str) -> bool:
+    """True when two BBC/preview spellings are the same incoming."""
+    if not left or not right:
+        return False
+    left_key, right_key = _player_key(left), _player_key(right)
+    if left_key == right_key:
+        return True
+    if len(left_key) > 6 and len(right_key) > 6 and (left_key in right_key or right_key in left_key):
+        return True
+    left_parts, right_parts = _name_parts(left), _name_parts(right)
+    if len(left_parts) < 2 or len(right_parts) < 2:
+        return False
+    if left_parts[-1] != right_parts[-1]:
+        return False
+    first_left, first_right = left_parts[0], right_parts[0]
+    if FIRST_NAME_CANON.get(first_left, first_left) == FIRST_NAME_CANON.get(first_right, first_right):
+        return True
+    if min(len(first_left), len(first_right)) >= 3 and (
+        first_left.startswith(first_right) or first_right.startswith(first_left)
+    ):
+        return True
+    if _first_name_distance(first_left, first_right) <= 2:
+        return True
+    return False
+
+
+def _first_name_distance(left: str, right: str) -> int:
+    if left == right:
+        return 0
+    if abs(len(left) - len(right)) > 2:
+        return 99
+    previous = list(range(len(right) + 1))
+    for index, left_char in enumerate(left, start=1):
+        current = [index]
+        for other_index, right_char in enumerate(right, start=1):
+            current.append(
+                min(
+                    previous[other_index] + 1,
+                    current[other_index - 1] + 1,
+                    previous[other_index - 1] + (left_char != right_char),
+                )
+            )
+        previous = current
+    return previous[-1]
+
+
+def _prefer_name(new: str, old: str) -> str:
+    if len(_player_key(new)) > len(_player_key(old)):
+        return new
+    if len(_player_key(new)) < len(_player_key(old)):
+        return old
+    if any(ord(char) > 127 for char in new) and not any(ord(char) > 127 for char in old):
+        return new
+    return old
+
+
+def _merge_move(row: dict, player: str, other: str, kind: str, fee: str) -> None:
+    row["player"] = _prefer_name(player, row.get("player") or "")
+    if len(other or "") > len(row.get("other") or ""):
+        row["other"] = other
+    if fee and (not row.get("fee") or len(fee) > len(str(row.get("fee") or ""))):
+        row["fee"] = fee
+    if kind and (not row.get("kind") or row.get("kind") == "undisclosed"):
+        row["kind"] = kind
 
 
 def add_move(
@@ -387,20 +554,23 @@ def add_move(
     player = clean_player(player)
     if not player or club_id not in CLUB_BY_ID:
         return
+    other = clean_club_token(other)
+    fee = fee[:1].upper() + fee[1:] if fee else fee
     role = _norm(other)
     if role in SKIP_ROLES:
         return
-    pkey = _player_key(player)
     for row in bucket[club_id]:
-        same = _player_key(row["player"]) == pkey or (
-            len(pkey) > 6 and (pkey in _player_key(row["player"]) or _player_key(row["player"]) in pkey)
-        )
-        if not same:
+        if not same_player(row["player"], player):
             continue
-        if row.get("kind") == kind or _norm(row.get("other") or "") == _norm(other):
+        if (
+            row.get("kind") == kind
+            or _norm(row.get("other") or "") == _norm(other)
+            or bucket_name == "signed"
+        ):
+            _merge_move(row, player, other, kind, fee)
             return
-        if bucket_name == "signed":
-            return
+        _merge_move(row, player, other, kind, fee)
+        return
     bucket[club_id].append(
         {
             "player": player,
@@ -411,8 +581,44 @@ def add_move(
     )
 
 
-def _player_key(name: str) -> str:
-    return re.sub(r"[^a-z]", "", _norm(name))
+def dedupe_rows(rows: list[dict]) -> list[dict]:
+    kept: list[dict] = []
+    for row in rows:
+        incoming = dict(row)
+        incoming["other"] = clean_club_token(str(incoming.get("other") or ""))
+        match = next((item for item in kept if same_player(item.get("player") or "", incoming.get("player") or "")), None)
+        if match is None:
+            kept.append(incoming)
+            continue
+        _merge_move(
+            match,
+            str(incoming.get("player") or ""),
+            str(incoming.get("other") or ""),
+            str(incoming.get("kind") or ""),
+            str(incoming.get("fee") or ""),
+        )
+    drop: set[int] = set()
+    by_last: dict[str, list[dict]] = defaultdict(list)
+    for row in kept:
+        parts = _name_parts(str(row.get("player") or ""))
+        if len(parts) >= 2:
+            by_last[parts[-1]].append(row)
+    for group in by_last.values():
+        if len(group) != 2:
+            continue
+        first_a = _name_parts(group[0]["player"])[0]
+        first_b = _name_parts(group[1]["player"])[0]
+        if first_a[:2] != first_b[:2]:
+            continue
+        _merge_move(
+            group[0],
+            group[1]["player"],
+            str(group[1].get("other") or ""),
+            str(group[1].get("kind") or ""),
+            str(group[1].get("fee") or ""),
+        )
+        drop.add(id(group[1]))
+    return [row for row in kept if id(row) not in drop]
 
 
 def parse_bbc_deals(text: str, signed: dict, released: dict, left: dict) -> None:
@@ -512,7 +718,7 @@ def parse_preview_players(blob: str) -> list[tuple[str, str, str, str]]:
         if not name or _norm(name) in SKIP_ROLES or "among a number" in _norm(name):
             continue
         kind, fee = classify_fee(fee_txt or other)
-        if "released" in low:
+        if "released" in low or (not other and not fee_txt):
             kind, fee, other = "released", "Released", "Released"
         elif "retired" in low:
             kind, fee, other = "retired", "Retired", "Retired"
@@ -635,6 +841,122 @@ def parse_scottish_ins_outs(text: str, signed: dict, released: dict, left: dict)
             add_move(left, club_id, name, dest_name, "loan", "Loan", "left")
 
 
+RETAINED_STOP_TITLES = {
+    "jamie ward",
+    "callum moseley",
+    "related news",
+    "headline",
+    "never miss a story",
+    "hot daily news right into your inbox",
+    "more interesting news",
+    "cookie policy",
+}
+
+RETAINED_RELEASE_HEAD = re.compile(r"^(released|release|retired)\s*:?\s*$", re.I)
+RETAINED_LEAVE_HEAD = re.compile(
+    r"^(ongoing|under contract|returning|returned|additional year|offered|"
+    r"transfer listed|invited|new contract|signed professional|available for|"
+    r"loan deal|out of contract|tbc|\*full|\* club|\*club)",
+    re.I,
+)
+
+
+def split_retained_names(blob: str) -> list[tuple[str, str]]:
+    text = re.sub(r"\s+", " ", (blob or "").strip(" .;"))
+    low = text.lower()
+    if not text or low in {"tbc", "tbc."}:
+        return []
+    if low.startswith(("club confirm", "full list", "*full list", "* club")):
+        return []
+    if re.search(r"\b(the club|would like|confirmed that|following the)\b", low):
+        return []
+    parts = re.split(r",|\s+&\s+| and ", text)
+    rows: list[tuple[str, str]] = []
+    for part in parts:
+        chunk = part.strip(" .;")
+        if not chunk or len(chunk) < 3:
+            continue
+        kind = "retired" if re.search(r"\bretir", chunk, re.I) else "released"
+        name = re.sub(r"\s*\([^)]*\)\s*$", "", chunk).strip()
+        name = clean_player(name)
+        if not name or _norm(name) in SKIP_ROLES:
+            continue
+        rows.append((name, kind))
+    return rows
+
+
+def parse_retained_lists(text: str, released: dict) -> None:
+    club_id: str | None = None
+    in_released = False
+    pending: list[str] = []
+
+    def flush() -> None:
+        nonlocal pending
+        if club_id and pending:
+            for name, kind in split_retained_names(" ".join(pending)):
+                label = "Retired" if kind == "retired" else "Released"
+                add_move(released, club_id, name, label, kind, label, "released")
+        pending = []
+
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.upper() == "ADVERTISEMENT":
+            continue
+        heading = re.match(r"^##\s+(.+)$", line)
+        if heading:
+            flush()
+            title = heading.group(1).strip()
+            if _norm(title) in RETAINED_STOP_TITLES:
+                club_id = None
+                in_released = False
+                continue
+            club_id = resolve_club(title)
+            in_released = False
+            continue
+        if not club_id:
+            continue
+        if RETAINED_RELEASE_HEAD.match(line):
+            flush()
+            in_released = True
+            continue
+        if RETAINED_LEAVE_HEAD.match(line):
+            flush()
+            in_released = False
+            continue
+        if in_released:
+            pending.append(line)
+    flush()
+
+
+def attach_release_destinations(released: dict, left: dict) -> None:
+    """A free move after a retained-list release stays under Released."""
+    for club_id, rows in released.items():
+        keep: list[dict] = []
+        for out in left.get(club_id, []):
+            match = next(
+                (
+                    row
+                    for row in rows
+                    if _player_key(row["player"]) == _player_key(out["player"])
+                    or (
+                        len(_player_key(out["player"])) > 6
+                        and (
+                            _player_key(out["player"]) in _player_key(row["player"])
+                            or _player_key(row["player"]) in _player_key(out["player"])
+                        )
+                    )
+                ),
+                None,
+            )
+            if match and out.get("kind") in {"free", "released", "retired", "other"}:
+                dest = (out.get("other") or "").strip()
+                if dest and dest.lower() not in {"released", "retired", "free"}:
+                    match["other"] = dest
+                continue
+            keep.append(out)
+        left[club_id] = keep
+
+
 def parse_spfl(text: str, signed: dict) -> None:
     club_id: str | None = None
     for raw in text.splitlines():
@@ -709,6 +1031,7 @@ def build() -> dict:
         "bbc-june-2026.txt",
         "bbc-feb-may-2026.txt",
         "bbc-done-deals.txt",
+        "transfer-extras.txt",
     ):
         path = SRC / name
         if path.is_file():
@@ -731,15 +1054,30 @@ def build() -> dict:
     if wiki.is_file():
         parse_wikipedia_loans(wiki.read_text(encoding="utf-8"), signed, left)
 
+    for name in (
+        "lowdown-championship-retained.txt",
+        "lowdown-league-one-retained.txt",
+        "lowdown-league-two-retained.txt",
+        "lowdown-national-league-retained.txt",
+        "lowdown-national-league-north-retained.txt",
+        "lowdown-national-league-south-retained.txt",
+        "retained-list-extras.txt",
+    ):
+        path = SRC / name
+        if path.is_file():
+            parse_retained_lists(path.read_text(encoding="utf-8"), released)
+
+    attach_release_destinations(released, left)
+
     leagues = []
     for league_id, league_name in LEAGUES:
         teams = []
         for _league, club_id, club_name in CLUBS:
             if _league != league_id:
                 continue
-            ins = sort_rows(signed.get(club_id, []))
-            rel = sort_rows(released.get(club_id, []))
-            outs = sort_rows(left.get(club_id, []))
+            ins = sort_rows(dedupe_rows(signed.get(club_id, [])))
+            rel = sort_rows(dedupe_rows(released.get(club_id, [])))
+            outs = sort_rows(dedupe_rows(left.get(club_id, [])))
             teams.append(
                 {
                     "id": club_id,
@@ -767,19 +1105,21 @@ def build() -> dict:
         "title": "EFL Transfer Report",
         "season": "2026/27",
         "window": "Summer 2026 (15 June – 1/3 September)",
-        "updated": "2026-09-04",
+        "updated": "2026-09-08",
         "sources": [
             "BBC Sport done-deal lists (June–deadline day 2026)",
             "BBC League One and League Two 2026-27 club-by-club previews (key ins / released)",
             "BBC Scottish Premiership ins and outs — summer 2026",
+            "Football Lowdown retained lists (Championship, League One, League Two, National League)",
             "SPFL confirmed Premiership arrivals",
             "Wikipedia summer 2026 loan table (EFL-touching deals)",
+            "Confirmed extras the BBC / retained-list scrape missed",
         ],
         "notes": [
-            "Released = players listed as released/retired, or leaving with no destination.",
+            "Released = club retained-list releases/retirements. A later free signing still counts as released.",
             "Signed = confirmed arrivals (permanent and loan) during the summer window.",
-            "Transferred = sold or free to another club. End of loan = returned to the parent club.",
-            "National League coverage is BBC/EFL-touching deals; intra-NL business is thinner on those pages.",
+            "Transferred = sold or free to another club without a retained-list release. End of loan = returned to the parent club.",
+            "National League retained lists cover last season’s NL / NL North / NL South clubs.",
             "January 2026 deadline-day deals are excluded.",
         ],
         "leagues": leagues,

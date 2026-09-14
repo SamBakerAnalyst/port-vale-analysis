@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Goals Analysis</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/goals-analysis.css?v=2" />
+</head>
+<body>
+  <div class="ga">
+    <header class="ga-header">
+      <div class="ga-brand">
+        <img class="ga-badge" src="/standalone/port-vale-badge.png?v=2" width="56" height="68" alt="Port Vale FC crest" />
+        <div>
+          <p class="ga-eyebrow">Strategy · <a href="/">← All apps</a></p>
+          <h1>Goals Analysis</h1>
+          <p class="ga-sub">Log Wyscout clips, code possession / transition / set play, then league, team and player summaries.</p>
+        </div>
+      </div>
+      <div class="ga-kpis" id="gaKpis"></div>
+      <div class="ga-header__actions no-print">
+        <button type="button" class="btn btn--ghost" id="gaRefreshBtn">Load League Two goals</button>
+      </div>
+    </header>
+
+    <p id="gaStatus" class="ga-status hidden no-print" role="status"></p>
+
+    <nav class="ga-tabs no-print" id="gaTabs" role="tablist" aria-label="Goals Analysis sections">
+      <button type="button" class="ga-tab is-active" data-tab="log" role="tab" aria-selected="true">Log goals</button>
+      <button type="button" class="ga-tab" data-tab="league" role="tab" aria-selected="false">League</button>
+      <button type="button" class="ga-tab" data-tab="team" role="tab" aria-selected="false">Team</button>
+      <button type="button" class="ga-tab" data-tab="player" role="tab" aria-selected="false">Player</button>
+    </nav>
+
+    <section class="ga-panel" data-panel="log">
+      <div class="ga-videos no-print">
+        <div class="card ga-drop" id="gaDrop">
+          <h2>Clips</h2>
+          <p>Drop Wyscout cuts here, or scan the folder. Names like <code>C. Caton - Goal - Head-1.mov</code> match the scorer, then zip <code>-1</code> / <code>-2</code> onto that player’s goals in date order.</p>
+          <div class="ga-drop__row">
+            <input id="gaFileInput" type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.m4v,.webm" multiple hidden />
+            <button type="button" class="btn btn--gold" id="gaPickFiles">Choose files</button>
+            <button type="button" class="btn btn--ghost" id="gaScanBtn">Scan folder</button>
+          </div>
+          <label class="ga-filter ga-search">
+            Folder (optional, under hub data)
+            <input id="gaScanPath" type="text" placeholder="inbox/goals-analysis" autocomplete="off" />
+          </label>
+          <div class="ga-import">
+            <h3>Import coding</h3>
+            <p>CSV for origin / type. Impect JSON stamps XY onto the same records.</p>
+            <div class="ga-drop__row">
+              <input id="gaCsvInput" type="file" accept=".csv,text/csv" hidden />
+              <input id="gaJsonInput" type="file" accept="application/json,.json" hidden />
+              <button type="button" class="btn btn--ghost" id="gaCsvBtn">Upload CSV</button>
+              <button type="button" class="btn btn--ghost" id="gaJsonBtn">Upload Impect JSON</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Stored clips</h2>
+          <div id="gaVideoList" class="ga-video-list"></div>
+        </div>
+      </div>
+
+      <div class="ga-filters card no-print">
+        <div class="ga-filter">
+          <span class="ga-filter__label">Week</span>
+          <div class="ga-chips" id="gaWeekChips" role="group" aria-label="Match week"></div>
+        </div>
+        <div class="ga-filter-row">
+          <div class="ga-filter">
+            <span class="ga-filter__label">Status</span>
+            <div class="ga-chips" id="gaStatusChips" role="group" aria-label="Coding status">
+              <button type="button" class="ga-chip" data-status="all">All</button>
+              <button type="button" class="ga-chip is-active" data-status="uncoded">Queue</button>
+              <button type="button" class="ga-chip" data-status="coded">Coded</button>
+              <button type="button" class="ga-chip" data-status="clips">Has clip</button>
+            </div>
+          </div>
+          <label class="ga-filter ga-search">
+            Club or player
+            <input id="gaClubFilter" type="search" placeholder="Any League Two club" autocomplete="off" />
+          </label>
+          <label class="ga-check">
+            <input type="checkbox" id="gaValeOnly" />
+            Port Vale games
+          </label>
+        </div>
+      </div>
+
+      <div class="ga-code">
+        <aside class="card ga-queue" aria-label="Goals to code">
+          <div class="ga-queue__head">
+            <h2>Goals</h2>
+            <p id="gaQueueCount"></p>
+          </div>
+          <div id="gaQueueList" class="ga-queue__list"></div>
+        </aside>
+        <div class="ga-coder card" id="gaCoder">
+          <p class="ga-empty">Load League Two goals, drop the Wyscout folder, then pick a goal to code.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="ga-panel hidden" data-panel="league">
+      <div class="ga-toolbar no-print">
+        <h2>League Two</h2>
+        <div class="ga-toolbar__actions">
+          <button type="button" class="btn btn--gold" id="gaLeagueExport">Export CSV</button>
+          <button type="button" class="btn btn--ghost" id="gaLeaguePrint">Print / PDF</button>
+        </div>
+      </div>
+      <div class="card ga-table-wrap" id="gaLeaguePrintArea">
+        <table class="ga-table" id="gaLeagueTable">
+          <thead>
+            <tr>
+              <th>Club</th>
+              <th>Scored</th>
+              <th>Conceded</th>
+              <th>GD</th>
+              <th>Poss for</th>
+              <th>Trans for</th>
+              <th>Set for</th>
+              <th>Poss ag</th>
+              <th>Trans ag</th>
+              <th>Set ag</th>
+            </tr>
+          </thead>
+          <tbody id="gaLeagueBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="ga-panel hidden" data-panel="team">
+      <div class="ga-toolbar no-print">
+        <label class="ga-filter ga-search">
+          Club
+          <select id="gaTeamSelect"></select>
+        </label>
+        <div class="ga-toolbar__actions">
+          <button type="button" class="btn btn--gold" id="gaTeamExport">Export CSV</button>
+          <button type="button" class="btn btn--ghost" id="gaTeamPrint">Print / PDF</button>
+        </div>
+      </div>
+      <div class="card ga-team" id="gaTeam">
+        <p class="ga-empty">Pick a club.</p>
+      </div>
+    </section>
+
+    <section class="ga-panel hidden" data-panel="player">
+      <div class="ga-toolbar no-print">
+        <label class="ga-filter ga-search">
+          Search
+          <input id="gaPlayerSearch" type="search" placeholder="Player or club" autocomplete="off" />
+        </label>
+        <div class="ga-toolbar__actions">
+          <button type="button" class="btn btn--gold" id="gaPlayerExport">Export CSV</button>
+          <button type="button" class="btn btn--ghost" id="gaPlayerPrint">Print / PDF</button>
+        </div>
+      </div>
+      <div class="card ga-table-wrap" id="gaPlayerPrintArea">
+        <table class="ga-table">
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>Club</th>
+              <th>Goals</th>
+              <th>Coded</th>
+              <th>Clips</th>
+            </tr>
+          </thead>
+          <tbody id="gaPlayerBody"></tbody>
+        </table>
+        <div id="gaPlayerDetail" class="ga-player-detail"></div>
+      </div>
+    </section>
+  </div>
+
+  <script defer src="/static/goals-analysis.js?v=2"></script>
+  <script defer src="/static/hub-feedback.js?v=1"></script>
+</body>
+</html>

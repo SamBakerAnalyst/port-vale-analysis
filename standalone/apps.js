@@ -68,6 +68,20 @@ window.IMPECT_APPS = [
     ]
   },
   {
+    "id": "pa-meeting-slides",
+    "group": "analysis",
+    "title": "PA Meeting Slides",
+    "description": "Video title cards for analysis meetings — opponent badges, set-play topics such as attacking and defensive corners, and high-quality Port Vale photos. Download a PNG pack.",
+    "href": "/pa-meeting-slides",
+    "icon": "🎬",
+    "accent": "#34d399",
+    "tags": [
+      "Meetings",
+      "Set pieces",
+      "PNG"
+    ]
+  },
+  {
     "id": "player-cards",
     "group": "analysis",
     "title": "Player Cards",
@@ -327,6 +341,38 @@ window.IMPECT_APPS = [
     ]
   },
   {
+    "id": "transfer-centre",
+    "group": "recruitment",
+    "title": "Transfer Centre",
+    "description": "Summer market board — every club's incomings, with ticks for manager liked, recruitment liked, too expensive, and turned down. Transfer reports live here too.",
+    "href": "/transfer-centre",
+    "icon": "🔁",
+    "accent": "#38bdf8",
+    "tags": ["Transfers", "Market", "CMS"],
+    "comingSoon": true,
+    "note": "Coming soon"
+  },
+  {
+    "id": "games-to-watch",
+    "group": "recruitment",
+    "title": "Games to Watch",
+    "description": "Rank played and upcoming fixtures by young, high-scoring players so scouts know which video to watch first. Open a team sheet and assign into Fixture Planner.",
+    "href": "/games-to-watch",
+    "icon": "📺",
+    "accent": "#22c55e",
+    "tags": ["Transfers", "Video", "Fixtures", "U27"]
+  },
+  {
+    "id": "video-watch",
+    "group": "recruitment",
+    "title": "Player Reports",
+    "description": "Watch a game with both team sheets. Open a player, write comments, notes, or a report — they stay on Scoutable Teams, Who to Scout, and the player page. This is becoming the scouting hub.",
+    "href": "/player-reports",
+    "icon": "📝",
+    "accent": "#a78bfa",
+    "tags": ["Reports", "Notes", "Scouting", "Team sheet"]
+  },
+  {
     "id": "squad-planner",
     "group": "recruitment",
     "title": "Squad Planner",
@@ -512,6 +558,18 @@ window.IMPECT_APPS = [
     ]
   },
   {
+    "id": "goals-analysis",
+    "group": "strategy",
+    "title": "Goals Analysis",
+    "description": "Log Wyscout clips, code origin, then exportable league / team / player summaries.",
+    "href": "/goals-analysis",
+    "icon": "⚽",
+    "accent": "#f5c518",
+    "tags": ["League Two", "Goals", "Video"],
+    "comingSoon": true,
+    "note": "Coming soon"
+  },
+  {
     "id": "presentations",
     "group": "presentations",
     "title": "Presentations",
@@ -626,7 +684,7 @@ window.IMPECT_APPS = [
   },
   {
     "id": "efl-transfer-report",
-    "group": "presentations",
+    "group": "recruitment",
     "title": "EFL Transfer Report",
     "description": "Summer 2026 window — every League One, League Two, National League and Scottish Prem club: who they signed and who they released. Present or PDF.",
     "href": "/efl-transfer-report",

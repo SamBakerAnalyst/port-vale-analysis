@@ -80,5 +80,8 @@ def ensure_data_dirs() -> None:
         STATIC_DIR / "post-match-badges",
         STATIC_DIR / "handout-badges",
         DATA_ROOT / "feedback-screenshots",
+        DATA_ROOT / "goals-analysis",
+        DATA_ROOT / "videos" / "goals-analysis",
+        DATA_ROOT / "inbox" / "goals-analysis",
     ):
         path.mkdir(parents=True, exist_ok=True)

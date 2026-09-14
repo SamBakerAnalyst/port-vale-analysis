@@ -106,6 +106,17 @@ def name_key(value: str | None) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def name_keys(value: str | None) -> list[str]:
+    """Ar'Jany and Arjany have to hit the same index row."""
+    key = name_key(value)
+    if not key:
+        return []
+    compact = key.replace(" ", "").replace("-", "")
+    if compact == key:
+        return [key]
+    return [key, compact]
+
+
 def club_key(value: str | None) -> str:
     """A club reduced to its identifying words."""
     text = _strip_accents(str(value or "")).lower()
@@ -129,6 +140,16 @@ def _clubs_match(seller: str | None, pool_club: str | None) -> bool:
     return left == right or left in right or right in left
 
 
+def _index_record(index: dict[str, list[dict[str, Any]]], name: str, record: dict[str, Any]) -> None:
+    keys = name_keys(name)
+    if not keys:
+        return
+    bucket = index.setdefault(keys[0], [])
+    bucket.append(record)
+    for key in keys[1:]:
+        index[key] = bucket
+
+
 def _build_index(report: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     index: dict[str, list[dict[str, Any]]] = {}
     for league in report.get("leagues") or []:
@@ -136,10 +157,9 @@ def _build_index(report: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
         for team in league.get("teams") or []:
             team_name = str(team.get("name") or "").strip()
             for signing in team.get("signed") or []:
-                key = name_key(signing.get("player"))
-                if not key:
-                    continue
-                index.setdefault(key, []).append(
+                _index_record(
+                    index,
+                    signing.get("player"),
                     {
                         "club": team_name,
                         "league": league_name,
@@ -149,7 +169,21 @@ def _build_index(report: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
                         # this field is what put Max Merrick — at Hartlepool on
                         # loan from Chelsea — through the permanent-move path.
                         "loan": str(signing.get("kind") or "").strip().lower() == "loan",
-                    }
+                    },
+                )
+            for departure in team.get("left") or []:
+                # Moves to clubs outside the report (Championship, abroad) never
+                # appear as a signing. The selling club still knows they left.
+                _index_record(
+                    index,
+                    departure.get("player"),
+                    {
+                        "club": str(departure.get("other") or "").strip(),
+                        "league": league_name,
+                        "from": team_name,
+                        "fee": str(departure.get("fee") or "").strip(),
+                        "loan": str(departure.get("kind") or "").strip().lower() == "loan",
+                    },
                 )
     return index
 
@@ -221,10 +255,11 @@ def _resolve(name: str | None, club: str | None) -> tuple[dict[str, Any] | None,
     player of the same name matched the record's club, this row is demonstrably
     not the man who moved.
     """
-    key = name_key(name)
-    if not key:
-        return None, False
-    matches = _load_index().get(key)
+    matches = None
+    for key in name_keys(name):
+        matches = _load_index().get(key)
+        if matches:
+            break
     if not matches:
         return None, False
 

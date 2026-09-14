@@ -1,4 +1,6 @@
-# IP-only deploy — http://YOUR_IP/
+# IP + HTTPS edge — Caddy owns :80 and :443.
+# Hostnames are in deploy/Caddyfile.ip (sportsanalysis.ai, pvfc, lmsc, bare IP).
+# Do not drop the 443 mappings — that is how the public hostnames get certificates.
 services:
   hub:
     build: .
@@ -15,6 +17,10 @@ services:
     restart: unless-stopped
     expose:
       - "8000"
+    networks:
+      default:
+        aliases:
+          - vale
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -26,10 +32,14 @@ services:
     image: caddy:2-alpine
     ports:
       - "80:80"
+      - "443:443"
+      - "443:443/udp"
     volumes:
       - ./deploy/Caddyfile.ip:/etc/caddy/Caddyfile:ro
       - ./static:/srv/static:ro
       - ./standalone:/srv/standalone:ro
+      - caddy-data:/data
+      - caddy-config:/config
     depends_on:
       hub:
         condition: service_healthy
@@ -37,3 +47,5 @@ services:
 
 volumes:
   pv-data:
+  caddy-data:
+  caddy-config:

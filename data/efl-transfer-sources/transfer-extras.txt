@@ -1,0 +1,14 @@
+# Confirmed deals the BBC / retained-list scrape missed.
+# Same line shape as the BBC done-deal lists so rebuilds keep them.
+
+## 3 August
+
+English Football League
+
+Danny Cashman [Crawley Town - Boreham Wood] Loan
+
+## 30 August
+
+English Football League
+
+Abdul Abdulmalik [Boreham Wood - Djurgardens IF] Undisclosed

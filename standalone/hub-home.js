@@ -75,6 +75,12 @@
     { id: "martin", label: "Martin" },
   ];
 
+  function focusClubLabel() {
+    const brand = global.HUB_BRAND;
+    if (brand && brand.demo) return "club";
+    return (brand && brand.club) || "Port Vale";
+  }
+
   function fmt(n, digits = 1) {
     if (n == null || Number.isNaN(Number(n))) return "—";
     return Number(n).toFixed(digits);
@@ -571,7 +577,7 @@
     const upcoming = fixtures?.upcoming || (cachedMatches || []).filter((m) => !m.outcome);
     const rows = (upcoming || []).slice(0, 6);
     if (!rows.length) {
-      setHtml("homePvUpcoming", `<p class="home-empty">No upcoming Port Vale fixtures on FotMob yet.</p>`);
+      setHtml("homePvUpcoming", `<p class="home-empty">No upcoming ${focusClubLabel()} fixtures yet.</p>`);
       return;
     }
     const html = rows
@@ -596,7 +602,7 @@
   function renderPvPlayed(fixtures) {
     const played = (fixtures?.played || []).slice(-6).reverse();
     if (!played.length) {
-      setHtml("homePvPlayed", `<p class="home-empty">No recent Port Vale results on FotMob yet.</p>`);
+      setHtml("homePvPlayed", `<p class="home-empty">No recent ${focusClubLabel()} results yet.</p>`);
       return;
     }
     const html = played
@@ -1239,6 +1245,7 @@
   }
 
   async function loadHubNotice() {
+    if (global.HUB_BRAND && global.HUB_BRAND.demo) return;
     try {
       const data = await fetchJson("/standalone/hub-uptime-joke.json");
       showHubNotice(data.notice);

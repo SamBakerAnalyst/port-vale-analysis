@@ -16,6 +16,13 @@ data/cache/*
 !data/cache/.gitkeep
 data/uploads/*
 !data/uploads/.gitkeep
+data/videos/*
+!data/videos/.gitkeep
+data/inbox/*
+!data/inbox/.gitkeep
+data/goals-analysis/*
+!data/goals-analysis/.gitkeep
+data/pa-meeting-slides.json
 
 strategy-reports/.cache_*
 

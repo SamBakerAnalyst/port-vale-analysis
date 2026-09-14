@@ -49,6 +49,10 @@ GAME_STATE_LABELS = {
 }
 
 RED_CARD_ACTIONS = frozenset({"RED_CARD", "SECOND_YELLOW_CARD", "SECOND_YELLOW"})
+PENALTY_ACTIONS = frozenset({"PENALTY", "PENALTY_KICK"})
+# Cached reports built before isPenalty existed: typical spot-kick xG sits in this band.
+PENALTY_XG_MIN = 0.72
+PENALTY_XG_MAX = 0.83
 
 ALLOWED_SEASONS = ("26/27", "25/26")
 
@@ -259,6 +263,209 @@ def _in_box(event: dict[str, Any]) -> bool:
     return zone in {"OPP_CBC", "OPP_GKC"}
 
 
+def _event_action(event: dict[str, Any]) -> str:
+    return str(event.get("action") or event.get("actionType") or "").upper()
+
+
+def _is_penalty_event(event: dict[str, Any]) -> bool:
+    action = _event_action(event)
+    if action in PENALTY_ACTIONS:
+        return True
+    payload = event.get("setPiece") or event.get("inferredSetPiece") or {}
+    if not isinstance(payload, dict):
+        return False
+    category = str(
+        payload.get("category")
+        or payload.get("setPieceCategory")
+        or payload.get("type")
+        or ""
+    ).upper()
+    return "PENALTY" in category
+
+
+def _shot_in_box(shot: dict[str, Any]) -> bool:
+    if shot.get("inBox") is True:
+        return True
+    if shot.get("inBox") is False:
+        return False
+    return str(shot.get("inBoxLabel") or "").upper() == "IN"
+
+
+def _looks_like_penalty_xg(shot: dict[str, Any]) -> bool:
+    try:
+        xg = float(shot.get("xg") or 0)
+    except (TypeError, ValueError):
+        return False
+    return _shot_in_box(shot) and PENALTY_XG_MIN <= xg <= PENALTY_XG_MAX
+
+
+def _is_penalty_shot(shot: dict[str, Any]) -> bool:
+    if shot.get("isPenalty") is True:
+        return True
+    action = str(shot.get("action") or "").upper()
+    if action in PENALTY_ACTIONS:
+        return True
+    if shot.get("isPenalty") is False:
+        return False
+    return _looks_like_penalty_xg(shot)
+
+
+def _annotate_shot_penalties(shots: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    for shot in shots:
+        flagged = _is_penalty_shot(shot)
+        shot["isPenalty"] = flagged
+        if flagged and not shot.get("action"):
+            shot["action"] = "PENALTY_KICK"
+    return shots
+
+
+def _penalty_summary(shots: list[dict[str, Any]]) -> dict[str, Any]:
+    pens = [shot for shot in shots if _is_penalty_shot(shot)]
+    vale = [shot for shot in pens if shot.get("team") == "vale"]
+    opp = [shot for shot in pens if shot.get("team") != "vale"]
+
+    def _row(shot: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "eventId": shot.get("eventId"),
+            "matchId": shot.get("matchId"),
+            "team": shot.get("team"),
+            "playerName": shot.get("playerName"),
+            "minute": shot.get("minute"),
+            "xg": shot.get("xg"),
+            "outcome": shot.get("outcome"),
+            "outcomeLabel": shot.get("outcomeLabel") or ("GOAL" if shot.get("outcome") == "goal" else "MISS"),
+        }
+
+    return {
+        "count": len(pens),
+        "valeCount": len(vale),
+        "oppCount": len(opp),
+        "valeXg": round(sum(float(shot.get("xg") or 0) for shot in vale), 3),
+        "oppXg": round(sum(float(shot.get("xg") or 0) for shot in opp), 3),
+        "valeGoals": sum(1 for shot in vale if shot.get("outcome") == "goal"),
+        "oppGoals": sum(1 for shot in opp if shot.get("outcome") == "goal"),
+        "shots": [_row(shot) for shot in pens],
+        "excluded": False,
+    }
+
+
+def _resequence_shots(shots: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    counters: dict[tuple[Any, str], dict[str, Any]] = {}
+    ordered = sorted(
+        shots,
+        key=lambda shot: (
+            int(shot.get("matchId") or 0),
+            float(shot.get("seconds") or 0),
+            int(shot.get("eventId") or 0),
+        ),
+    )
+    for shot in ordered:
+        key = (shot.get("matchId"), str(shot.get("team") or ""))
+        bucket = counters.setdefault(key, {"n": 0, "xg": 0.0})
+        bucket["n"] += 1
+        bucket["xg"] += float(shot.get("xg") or 0)
+        shot["shotNumber"] = bucket["n"]
+        shot["cumulativeXg"] = round(bucket["xg"], 3)
+    return ordered
+
+
+def _build_hero_stats(shots: list[dict[str, Any]]) -> dict[str, Any]:
+    vale = [shot for shot in shots if shot.get("team") == "vale"]
+    opp = [shot for shot in shots if shot.get("team") != "vale"]
+    vale_xg = round(sum(float(shot.get("xg") or 0) for shot in vale), 3)
+    opp_xg = round(sum(float(shot.get("xg") or 0) for shot in opp), 3)
+    hq = [
+        shot
+        for shot in vale
+        if str((shot.get("chanceRating") or {}).get("id") or "") in {"excellent", "very_good"}
+    ]
+    on_target = [shot for shot in vale if shot.get("onTarget")]
+    in_box = [shot for shot in vale if _shot_in_box(shot)]
+    best = max(vale, key=lambda shot: float(shot.get("xg") or 0), default=None)
+    vale_n = len(vale)
+    return {
+        "xgDiff": round(vale_xg - opp_xg, 3),
+        "valeXg": vale_xg,
+        "oppXg": opp_xg,
+        "valeShots": vale_n,
+        "oppShots": len(opp),
+        "valeOnTarget": len(on_target),
+        "valeOnTargetPct": round((len(on_target) / vale_n) * 100) if vale_n else 0,
+        "valeInBox": len(in_box),
+        "valeInBoxPct": round((len(in_box) / vale_n) * 100) if vale_n else 0,
+        "valeHighQuality": len(hq),
+        "valeHighQualityPct": round((len(hq) / vale_n) * 100, 1) if vale_n else 0.0,
+        "valeAvgXg": round(vale_xg / vale_n, 3) if vale_n else 0.0,
+        "bestChance": {
+            "playerName": best.get("playerName"),
+            "xg": best.get("xg"),
+            "isPenalty": _is_penalty_shot(best),
+            "outcome": best.get("outcome"),
+            "team": best.get("team"),
+        }
+        if best
+        else None,
+    }
+
+
+def apply_penalty_filter(report: dict[str, Any], *, exclude_penalties: bool = False) -> dict[str, Any]:
+    """Copy a report, flag penalties, optionally drop them, then rebuild summaries."""
+    out = dict(report or {})
+    shots = [dict(shot) for shot in (out.get("shots") or [])]
+    _annotate_shot_penalties(shots)
+    penalty = _penalty_summary(shots)
+    penalty["excluded"] = bool(exclude_penalties)
+
+    if exclude_penalties:
+        shots = _resequence_shots([shot for shot in shots if not shot.get("isPenalty")])
+    else:
+        shots = _resequence_shots(shots)
+
+    vale_shots = [shot for shot in shots if shot.get("team") == "vale"]
+    opp_shots = [shot for shot in shots if shot.get("team") != "vale"]
+    xg_created = _summarize_buckets(vale_shots)
+    xg_against = _summarize_buckets(opp_shots)
+
+    matches = [dict(row) for row in (out.get("matches") or [])]
+    for match in matches:
+        mid = match.get("matchId")
+        match_shots = [shot for shot in shots if shot.get("matchId") == mid] if mid is not None else shots
+        match_vale = [shot for shot in match_shots if shot.get("team") == "vale"]
+        match_opp = [shot for shot in match_shots if shot.get("team") != "vale"]
+        match["shotCount"] = len(match_shots)
+        match["valeShots"] = len(match_vale)
+        match["oppShots"] = len(match_opp)
+        match["valeXg"] = round(sum(float(shot.get("xg") or 0) for shot in match_vale), 3)
+        match["oppXg"] = round(sum(float(shot.get("xg") or 0) for shot in match_opp), 3)
+
+    match_trend_rows = [
+        _build_match_trend_row(match, [shot for shot in shots if shot.get("matchId") == match.get("matchId")])
+        for match in matches
+    ]
+
+    out["shots"] = shots
+    out["matches"] = matches
+    out["matchTrends"] = match_trend_rows
+    out["averages"] = _build_averages(match_trend_rows)
+    out["trends"] = _build_trends(match_trend_rows)
+    out["xgCreated"] = xg_created
+    out["xgAgainst"] = xg_against
+    out["gameStateBreakdown"] = {
+        "vale": _summarize_game_states(shots, vale_only=True),
+        "opp": _summarize_game_states(shots, vale_only=False),
+    }
+    out["playerBreakdown"] = {
+        "vale": _summarize_players(shots, vale_only=True),
+        "opp": _summarize_players(shots, vale_only=False),
+    }
+    out["periodBreakdown"] = _summarize_periods(shots)
+    out["penaltySummary"] = penalty
+    out["heroStats"] = _build_hero_stats(shots)
+    out["excludePenalties"] = bool(exclude_penalties)
+    out["shotCount"] = len(shots)
+    return out
+
+
 def _game_state_for_team(team_goals: int, opponent_goals: int) -> str:
     if team_goals > opponent_goals:
         return "winning"
@@ -326,6 +533,8 @@ def _empty_bucket_summary() -> dict[str, dict[str, Any]]:
             "goals": 0,
             "count": 0,
             "cumulativeXg": 0.0,
+            "penaltyCount": 0,
+            "penaltyXg": 0.0,
         }
         for bucket in CHANCE_BUCKETS
     }
@@ -338,14 +547,24 @@ def _summarize_buckets(shots: list[dict[str, Any]]) -> dict[str, Any]:
     total_goals = 0
 
     for shot in shots:
-        bucket_id = shot["chanceRating"]["id"]
+        rating = shot.get("chanceRating") if isinstance(shot.get("chanceRating"), dict) else {}
+        bucket_id = str(rating.get("id") or "")
+        if bucket_id not in buckets:
+            try:
+                bucket_id = _classify_chance(float(shot.get("xg") or 0))["id"]
+            except (TypeError, ValueError):
+                bucket_id = CHANCE_BUCKETS[-1]["id"]
         buckets[bucket_id]["count"] += 1
-        buckets[bucket_id]["cumulativeXg"] += shot["xg"]
-        if shot["outcome"] == "goal":
+        xg_value = float(shot.get("xg") or 0)
+        buckets[bucket_id]["cumulativeXg"] += xg_value
+        if _is_penalty_shot(shot):
+            buckets[bucket_id]["penaltyCount"] += 1
+            buckets[bucket_id]["penaltyXg"] += xg_value
+        if shot.get("outcome") == "goal":
             buckets[bucket_id]["goals"] += 1
             total_goals += 1
         total_shots += 1
-        total_xg += shot["xg"]
+        total_xg += xg_value
 
     rows = []
     for bucket in CHANCE_BUCKETS:
@@ -355,6 +574,8 @@ def _summarize_buckets(shots: list[dict[str, Any]]) -> dict[str, Any]:
             {
                 **row,
                 "cumulativeXg": round(row["cumulativeXg"], 3),
+                "penaltyCount": int(row.get("penaltyCount") or 0),
+                "penaltyXg": round(float(row.get("penaltyXg") or 0), 3),
                 "pct": round((count / total_shots) * 100) if total_shots else 0,
             }
         )
@@ -390,7 +611,7 @@ def _summarize_buckets(shots: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _summarize_game_states(shots: list[dict[str, Any]], *, vale_only: bool = True) -> list[dict[str, Any]]:
-    filtered = [s for s in shots if (s["team"] == "vale") == vale_only] if vale_only else shots
+    filtered = [s for s in shots if (s.get("team") == "vale") == vale_only] if vale_only else shots
     by_state: dict[str, dict[str, Any]] = {
         key: {"id": key, "label": GAME_STATE_LABELS[key], "shots": 0, "xg": 0.0, "goals": 0}
         for key in GAME_STATE_LABELS
@@ -400,8 +621,8 @@ def _summarize_game_states(shots: list[dict[str, Any]], *, vale_only: bool = Tru
         if state not in by_state:
             continue
         by_state[state]["shots"] += 1
-        by_state[state]["xg"] += shot["xg"]
-        if shot["outcome"] == "goal":
+        by_state[state]["xg"] += float(shot.get("xg") or 0)
+        if shot.get("outcome") == "goal":
             by_state[state]["goals"] += 1
 
     return [
@@ -414,10 +635,10 @@ def _summarize_game_states(shots: list[dict[str, Any]], *, vale_only: bool = Tru
 
 
 def _summarize_players(shots: list[dict[str, Any]], *, vale_only: bool = True) -> list[dict[str, Any]]:
-    filtered = [s for s in shots if s["team"] == "vale"] if vale_only else [s for s in shots if s["team"] == "opp"]
+    filtered = [s for s in shots if s.get("team") == "vale"] if vale_only else [s for s in shots if s.get("team") == "opp"]
     players: dict[str, dict[str, Any]] = {}
     for shot in filtered:
-        name = shot["playerName"]
+        name = shot.get("playerName") or "Unknown"
         row = players.setdefault(
             name,
             {
@@ -427,6 +648,8 @@ def _summarize_players(shots: list[dict[str, Any]], *, vale_only: bool = True) -
                 "goals": 0,
                 "highQualityShots": 0,
                 "lowQualityShots": 0,
+                "penalties": 0,
+                "penaltyXg": 0.0,
                 "avgXg": 0.0,
                 "chanceCounts": {
                     "excellent": 0,
@@ -438,10 +661,14 @@ def _summarize_players(shots: list[dict[str, Any]], *, vale_only: bool = True) -
             },
         )
         row["shots"] += 1
-        row["xg"] += shot["xg"]
-        if shot["outcome"] == "goal":
+        row["xg"] += float(shot.get("xg") or 0)
+        if _is_penalty_shot(shot):
+            row["penalties"] += 1
+            row["penaltyXg"] += float(shot.get("xg") or 0)
+        if shot.get("outcome") == "goal":
             row["goals"] += 1
-        rating_id = shot["chanceRating"]["id"]
+        rating = shot.get("chanceRating") if isinstance(shot.get("chanceRating"), dict) else {}
+        rating_id = str(rating.get("id") or "")
         if rating_id in row["chanceCounts"]:
             row["chanceCounts"][rating_id] += 1
         if rating_id in {"excellent", "very_good"}:
@@ -452,6 +679,7 @@ def _summarize_players(shots: list[dict[str, Any]], *, vale_only: bool = True) -
     rows = sorted(players.values(), key=lambda r: (-r["xg"], -r["shots"], r["playerName"]))
     for row in rows:
         row["xg"] = round(row["xg"], 3)
+        row["penaltyXg"] = round(row["penaltyXg"], 3)
         row["avgXg"] = round(row["xg"] / row["shots"], 3) if row["shots"] else 0.0
     return rows
 
@@ -468,23 +696,23 @@ def _summarize_periods(shots: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
     for shot in shots:
-        half_key = "first" if shot["half"] == "first" else "second"
-        team_key = "vale" if shot["team"] == "vale" else "opp"
+        half_key = "first" if shot.get("half") == "first" else "second"
+        team_key = "vale" if shot.get("team") == "vale" else "opp"
+        xg_value = float(shot.get("xg") or 0)
         halves[half_key][f"{team_key}Shots"] += 1
-        halves[half_key][f"{team_key}Xg"] += shot["xg"]
+        halves[half_key][f"{team_key}Xg"] += xg_value
 
         mp = shot.get("manpower") or "11 v 11"
         if mp == "11 v 11":
             bucket = manpower["elevenEleven"]
-        elif shot["team"] == "vale" and mp.startswith("10"):
+        elif shot.get("team") == "vale" and str(mp).startswith("10"):
             bucket = manpower["valeDown"]
-        elif shot["team"] == "opp" and mp.endswith("10"):
+        elif shot.get("team") == "opp" and str(mp).endswith("10"):
             bucket = manpower["oppDown"]
         else:
             bucket = manpower["elevenEleven"]
-        team_key = "vale" if shot["team"] == "vale" else "opp"
         bucket[f"{team_key}Shots"] += 1
-        bucket[f"{team_key}Xg"] += shot["xg"]
+        bucket[f"{team_key}Xg"] += xg_value
 
     for group in (halves, manpower):
         for row in group.values():
@@ -588,6 +816,7 @@ def _build_match_shots(
 
         minute_int = int(minute)
         second_int = int(round((minute - minute_int) * 60))
+        is_penalty = _is_penalty_event(event)
 
         shots.append(
             {
@@ -614,6 +843,8 @@ def _build_match_shots(
                 "cumulativeXg": cumulative_xg,
                 "manpower": _manpower_label(vale_on, opp_on),
                 "seconds": seconds,
+                "action": action,
+                "isPenalty": is_penalty,
             }
         )
 
@@ -931,6 +1162,7 @@ def build_xg_chance_report(
     match_ids: list[int] | None = None,
     scope: str | None = None,
     refresh: bool = False,
+    exclude_penalties: bool = False,
 ) -> dict[str, Any]:
     from app.analysis_cache import REPORT_TTL_SECONDS, read_json, write_json
 
@@ -957,8 +1189,7 @@ def build_xg_chance_report(
         if cached:
             cached = dict(cached)
             cached["cache"] = {"hit": True, "refreshed": False}
-            cached["shotCount"] = cached.get("shotCount") or len(cached.get("shots") or [])
-            return cached
+            return apply_penalty_filter(cached, exclude_penalties=exclude_penalties)
 
     report = _build_xg_chance_report_uncached(
         season=season,
@@ -970,8 +1201,7 @@ def build_xg_chance_report(
     write_json("xg-report", cache_key, report)
     report = dict(report)
     report["cache"] = {"hit": False, "refreshed": bool(refresh)}
-    report["shotCount"] = len(report.get("shots") or [])
-    return report
+    return apply_penalty_filter(report, exclude_penalties=exclude_penalties)
 
 
 def _build_xg_chance_report_uncached(
@@ -1132,6 +1362,9 @@ def _build_xg_chance_report_uncached(
         },
         "periodBreakdown": _summarize_periods(all_shots),
         "updatedAt": datetime.now(UTC).isoformat(),
+        "penaltySummary": _penalty_summary(all_shots),
+        "heroStats": _build_hero_stats(all_shots),
+        "excludePenalties": False,
     }
 
 
@@ -1156,6 +1389,7 @@ class XgChanceReportRequest(BaseModel):
     match_ids: list[int] | None = Field(default=None, alias="matchIds")
     scope: str | None = None
     refresh: bool = False
+    exclude_penalties: bool = Field(default=False, alias="excludePenalties")
 
     model_config = {"populate_by_name": True}
 
@@ -1256,6 +1490,7 @@ def register_xg_chance_analysis_routes(app: FastAPI) -> None:
         match_id: int | None = Query(None, alias="matchId"),
         scope: str | None = Query(None),
         refresh: bool = Query(False),
+        exclude_penalties: bool = Query(False, alias="excludePenalties"),
     ) -> JSONResponse:
         try:
             payload = build_xg_chance_report(
@@ -1263,6 +1498,7 @@ def register_xg_chance_analysis_routes(app: FastAPI) -> None:
                 match_id=match_id,
                 scope=scope,
                 refresh=False,
+                exclude_penalties=exclude_penalties,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1277,6 +1513,7 @@ def register_xg_chance_analysis_routes(app: FastAPI) -> None:
                 match_ids=body.match_ids,
                 scope=body.scope,
                 refresh=False,
+                exclude_penalties=body.exclude_penalties,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1287,6 +1524,7 @@ def register_xg_chance_analysis_routes(app: FastAPI) -> None:
         scope: str | None = Query("match"),
         match_id: int | None = Query(None, alias="matchId"),
         match_ids: str | None = Query(None, alias="matchIds"),
+        exclude_penalties: bool = Query(False, alias="excludePenalties"),
     ) -> Response:
         from app.xg_chance_analysis_pdf import build_xg_chance_analysis_pdf
 
@@ -1312,6 +1550,7 @@ def register_xg_chance_analysis_routes(app: FastAPI) -> None:
                 match_id=match_id if not selected_ids else None,
                 match_ids=selected_ids,
                 scope=None if selected_ids else normalized,
+                exclude_penalties=exclude_penalties,
             )
             pdf_scope = "match" if int(report.get("matchCount") or 0) <= 1 else "last6"
             if normalized == "season" and not selected_ids:

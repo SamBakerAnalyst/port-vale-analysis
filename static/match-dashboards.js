@@ -648,6 +648,24 @@ function renderXgHero(xg) {
     const opponentCrest = match.opponent?.imageUrl
       ? `<img class="xca-match-hero__crest" src="${esc(match.opponent.imageUrl)}" alt="" />`
       : `<div class="xca-match-hero__crest xca-match-hero__crest--placeholder">${esc((match.opponent?.name || "Opp").slice(0, 2))}</div>`;
+    const valeShots = (xg.shots || []).filter((shot) => shot.team === "vale");
+    const stats = xg.heroStats && (xg.heroStats.valeShots || xg.heroStats.bestChance)
+      ? xg.heroStats
+      : {
+          xgDiff: valeXg - oppXg,
+          valeShots: valeShots.length || match.valeShots || 0,
+          valeHighQuality: valeShots.filter((shot) => ["excellent", "very_good"].includes(shot.chanceRating?.id)).length,
+          valeOnTarget: valeShots.filter((shot) => shot.onTarget || shot.onTargetLabel === "YES").length,
+          bestChance: valeShots.reduce((top, shot) => (!top || Number(shot.xg || 0) > Number(top.xg || 0) ? shot : top), null),
+        };
+    const best = stats.bestChance || {};
+    const xgDiff = Number(stats.xgDiff ?? (valeXg - oppXg));
+    const pen = xg.penaltySummary || {};
+    const penCount = Number(pen.count || 0);
+    const penBits = (pen.shots || []).map((shot) => `${shot.playerName || "Unknown"} ${Number(shot.xg || 0).toFixed(3)} xG`).join(" · ");
+    const penBanner = penCount
+      ? `<div class="xca-pen-banner${xg.excludePenalties ? " xca-pen-banner--off" : ""}"><span class="xca-pen-banner__tag">${xg.excludePenalties ? "PEN OFF" : "PENALTY INCLUDED"}</span> ${esc(penBits)}</div>`
+      : "";
     return `<section class="card">
       <div class="xca-match-hero">
         <div class="xca-match-hero__top">
@@ -658,13 +676,19 @@ function renderXgHero(xg) {
           </div>
           <div class="xca-match-hero__comp">${esc(xg.competition || "")} ${esc(xg.season || "")}</div>
         </div>
+        ${penBanner}
         <div class="xca-match-hero__scoreboard">
           <div class="xca-match-hero__team xca-match-hero__team--vale ${valeWon ? "xca-match-hero__team--winner" : ""}">
             <img class="xca-match-hero__crest" src="/standalone/port-vale-badge.png?v=2" alt="Port Vale" />
             <div class="xca-match-hero__team-name">Port Vale</div>
             <div class="xca-match-hero__goals">${esc(valeGoals)}</div>
           </div>
-          <div class="xca-match-hero__versus">–</div>
+          <div class="xca-match-hero__mid">
+            <div class="xca-match-hero__stat"><div class="xca-match-hero__stat-label">xG difference</div><div class="xca-match-hero__stat-value">${xgDiff > 0 ? "+" : ""}${xgDiff.toFixed(3)}</div></div>
+            <div class="xca-match-hero__stat"><div class="xca-match-hero__stat-label">Best chance</div><div class="xca-match-hero__stat-value ${best.isPenalty ? "xca-match-hero__stat-value--pen" : ""}">${best.xg != null ? Number(best.xg).toFixed(3) : "—"}${best.isPenalty ? ' <span class="xca-pen-pill">PEN</span>' : ""}${best.playerName ? `<span class="xca-match-hero__stat-sub">${esc(best.playerName)}</span>` : ""}</div></div>
+            <div class="xca-match-hero__stat"><div class="xca-match-hero__stat-label">High quality</div><div class="xca-match-hero__stat-value">${stats.valeHighQuality ?? 0} of ${stats.valeShots ?? match.valeShots ?? 0}</div></div>
+            <div class="xca-match-hero__stat"><div class="xca-match-hero__stat-label">On target</div><div class="xca-match-hero__stat-value">${stats.valeOnTarget ?? 0} of ${stats.valeShots ?? match.valeShots ?? 0}</div></div>
+          </div>
           <div class="xca-match-hero__team xca-match-hero__team--opp ${oppWon ? "xca-match-hero__team--winner" : ""}">
             ${opponentCrest}
             <div class="xca-match-hero__team-name">${esc(match.opponent?.name || "Opponent")}</div>
@@ -768,7 +792,7 @@ function renderPlayerCards(title, players, variant) {
         <div class="xca-player-card__identity">
           <span class="xca-player-card__rank">#${index + 1}</span>
           <div>
-            <div class="xca-player-card__name">${esc(row.playerName)}</div>
+            <div class="xca-player-card__name">${esc(row.playerName)}${row.penalties ? ' <span class="xca-pen-pill">PEN</span>' : ""}</div>
             <div class="xca-player-card__sub">${esc(row.shots)} shots · ${Number(row.avgXg || 0).toFixed(3)} avg xG ${goals}</div>
           </div>
         </div>
@@ -811,10 +835,10 @@ function renderShotLog(xg) {
     const matchCols = showMatch ? `<td class="col-left">MD${esc(shot.matchDay ?? "")}</td><td class="col-left">${esc(shot.opponentName || "")}</td>` : "";
     const teamClass = shot.team === "vale" ? "xca-team-pill--vale" : "xca-team-pill--opp";
     const outcomeClass = shot.outcome === "goal" ? "xca-outcome--goal" : "xca-outcome--miss";
-    rows.push(`<tr>
+    rows.push(`<tr class="${shot.isPenalty ? "xca-shot--pen" : ""}">
       ${matchCols}
       <td>${gameStatePill(shot.gameState, shot.gameStateLabel)}</td>
-      <td class="col-left">${esc(shot.playerName)}</td>
+      <td class="col-left">${esc(shot.playerName)}${shot.isPenalty ? ' <span class="xca-pen-pill">PEN</span>' : ""}</td>
       <td><span class="xca-team-pill ${teamClass}">${shot.team === "vale" ? "VALE" : "OPP"}</span></td>
       <td>${esc(shot.minute)}</td>
       <td>${String(shot.second ?? 0).padStart(2, "0")}</td>

@@ -43,6 +43,7 @@ PUBLIC_PATHS = frozenset(
 )
 PUBLIC_PREFIXES = (
     "/standalone/port-vale-badge",
+    "/standalone/lms-badge",
     "/standalone/stadiums.json",
     "/standalone/stadiums-de.json",
     "/static/stadiums.json",
@@ -74,6 +75,7 @@ def _role_allowed_prefixes(role: str) -> tuple[str, ...]:
             "/pre-match",
             "/set-piece-pre-match",
             "/player-cards",
+            "/pa-meeting-slides",
             "/xg-chance-analysis",
             "/post-match",
             "/blocks-analysis",
@@ -82,6 +84,7 @@ def _role_allowed_prefixes(role: str) -> tuple[str, ...]:
             "/api/team-badge",
             "/api/set-piece-pre-match",
             "/api/player-cards",
+            "/api/pa-meeting-slides",
             "/api/xg-chance-analysis",
             "/api/post-match",
             "/api/blocks-analysis",
@@ -278,10 +281,12 @@ class HubAuthMiddleware(BaseHTTPMiddleware):
 
 def register_auth(app: FastAPI, login_html_path: Path) -> None:
     app.add_middleware(HubAuthMiddleware)
+    from app.brand import apply_brand_html, current_brand
+
     app.add_middleware(
         SessionMiddleware,
         secret_key=session_secret(),
-        session_cookie="pv_hub_session",
+        session_cookie=current_brand().session_cookie,
         max_age=60 * 60 * 24 * 14,
         same_site="lax",
         https_only=False,
@@ -294,7 +299,7 @@ def register_auth(app: FastAPI, login_html_path: Path) -> None:
         if not login_html_path.exists():
             raise HTTPException(status_code=503, detail="Login page not found")
         return HTMLResponse(
-            login_html_path.read_text(encoding="utf-8"),
+            apply_brand_html(login_html_path.read_text(encoding="utf-8")),
             headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"},
         )
 

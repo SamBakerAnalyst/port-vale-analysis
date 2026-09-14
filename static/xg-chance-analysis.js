@@ -9,6 +9,7 @@ const state = {
   matchId: "",
   scope: "match",
   view: "summary",
+  excludePenalties: false,
   loading: false,
   loadToken: 0,
   abort: null,
@@ -24,6 +25,7 @@ const els = {
   statusBar: document.getElementById("statusBar"),
   refreshBtn: document.getElementById("refreshBtn"),
   exportPdfBtn: document.getElementById("exportPdfBtn"),
+  penaltiesBtn: document.getElementById("penaltiesBtn"),
   matchHeader: document.getElementById("matchHeader"),
   trendsPanel: document.getElementById("trendsPanel"),
   summaryView: document.getElementById("summaryView"),
@@ -203,6 +205,49 @@ function renderScopeToggle() {
   }
 }
 
+function penaltyPill(count) {
+  const n = Number(count);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  return `<span class="xca-pen-pill">${n > 1 ? `${n}× ` : ""}PEN</span>`;
+}
+
+function renderPenaltiesToggle() {
+  const btn = els.penaltiesBtn;
+  if (!btn) return;
+  const count = Number(state.report?.penaltySummary?.count || 0);
+  btn.disabled = count <= 0 && !state.excludePenalties;
+  btn.classList.toggle("xca-scope-btn--active", state.excludePenalties);
+  btn.setAttribute("aria-pressed", state.excludePenalties ? "true" : "false");
+  if (count <= 0 && !state.excludePenalties) {
+    btn.textContent = "No penalties";
+    btn.title = "No penalties in this selection";
+    return;
+  }
+  btn.textContent = state.excludePenalties ? "Penalties off" : "Remove penalties";
+  btn.title = state.excludePenalties
+    ? "Penalties are excluded from xG and shot totals. Scoreline is unchanged."
+    : "Hide penalty shots from xG, buckets, and the shot log. Scoreline stays as played.";
+}
+
+function penaltyBannerHtml(report) {
+  const pen = report?.penaltySummary || {};
+  const count = Number(pen.count || 0);
+  if (!count) return "";
+  const shots = (pen.shots || [])
+    .map((shot) => {
+      const who = shot.playerName || "Unknown";
+      const team = shot.team === "vale" ? "Vale" : "Opp";
+      const xg = Number(shot.xg || 0).toFixed(3);
+      const out = shot.outcome === "goal" || shot.outcomeLabel === "GOAL" ? "GOAL" : "MISS";
+      return `${who} (${team}) ${xg} xG · ${out}`;
+    })
+    .join("  ·  ");
+  if (pen.excluded || report.excludePenalties) {
+    return `<div class="xca-pen-banner xca-pen-banner--off"><span class="xca-pen-pill">PEN OFF</span> ${count} penalt${count === 1 ? "y" : "ies"} removed from xG. Scoreline unchanged. ${escapeHtml(shots)}</div>`;
+  }
+  return `<div class="xca-pen-banner"><span class="xca-pen-banner__tag">PENALTY INCLUDED</span> This xG includes ${count} penal${count === 1 ? "ty" : "ties"}: ${escapeHtml(shots)}</div>`;
+}
+
 function renderBucketPanel(container, title, summary) {
   if (!summary) {
     container.innerHTML = "";
@@ -357,6 +402,56 @@ function xgBarWidth(value, maxValue) {
   return Math.max(8, Math.round((Number(value) / max) * 100));
 }
 
+function shotIsPenalty(shot) {
+  return Boolean(shot?.isPenalty || String(shot?.action || "").toUpperCase().includes("PENALTY"));
+}
+
+function chanceId(shot) {
+  return String(shot?.chanceRating?.id || "");
+}
+
+function buildMatchHeroStats(report, match = {}) {
+  const shots = report?.shots || [];
+  const vale = shots.filter((shot) => shot.team === "vale");
+  const opp = shots.filter((shot) => shot.team === "opp");
+  const valeXg = vale.length
+    ? vale.reduce((sum, shot) => sum + Number(shot.xg || 0), 0)
+    : Number(match.valeXg || 0);
+  const oppXg = opp.length
+    ? opp.reduce((sum, shot) => sum + Number(shot.xg || 0), 0)
+    : Number(match.oppXg || 0);
+  const valeShots = vale.length || Number(match.valeShots || 0);
+  const created = report?.xgCreated || {};
+  const hqFromBuckets = Number(created.grouped?.highQuality?.count);
+  const hqFromShots = vale.filter((shot) => ["excellent", "very_good"].includes(chanceId(shot))).length;
+  const hq = vale.length ? hqFromShots : (Number.isFinite(hqFromBuckets) ? hqFromBuckets : 0);
+  const onTarget = vale.filter((shot) => shot.onTarget || shot.onTargetLabel === "YES").length;
+  const inBox = vale.filter((shot) => shot.inBox || shot.inBoxLabel === "IN").length;
+  const best = vale.reduce((top, shot) => {
+    if (!top || Number(shot.xg || 0) > Number(top.xg || 0)) return shot;
+    return top;
+  }, null);
+  return {
+    xgDiff: valeXg - oppXg,
+    valeXg,
+    oppXg,
+    valeShots,
+    oppShots: opp.length || Number(match.oppShots || 0),
+    valeHighQuality: hq,
+    valeOnTarget: vale.length ? onTarget : null,
+    valeInBox: vale.length ? inBox : null,
+    valeAvgXg: valeShots ? valeXg / valeShots : 0,
+    bestChance: best
+      ? {
+          playerName: best.playerName,
+          xg: Number(best.xg || 0),
+          isPenalty: shotIsPenalty(best),
+          outcome: best.outcome,
+        }
+      : null,
+  };
+}
+
 function renderMatchHeader() {
   const report = state.report;
   if (!report) {
@@ -376,6 +471,17 @@ function renderMatchHeader() {
     const opponentCrest = match.opponent?.imageUrl
       ? `<img class="xca-match-hero__crest" src="${escapeHtml(match.opponent.imageUrl)}" alt="" />`
       : `<div class="xca-match-hero__crest xca-match-hero__crest--placeholder" aria-hidden="true">${escapeHtml((match.opponent?.name || "Opp").slice(0, 2))}</div>`;
+    const stats = buildMatchHeroStats(report, match);
+    const best = stats.bestChance;
+    const xgDiff = Number(stats.xgDiff);
+    const diffLabel = `${xgDiff > 0 ? "+" : ""}${xgDiff.toFixed(3)}`;
+    const bestBits = best
+      ? `${Number(best.xg).toFixed(3)}${best.isPenalty ? penaltyPill(1) : ""}${best.playerName ? `<span class="xca-match-hero__stat-sub">${escapeHtml(best.playerName)}</span>` : ""}`
+      : "—";
+    const hq = `${stats.valeHighQuality} of ${stats.valeShots}`;
+    const onTgt = stats.valeOnTarget == null ? "—" : `${stats.valeOnTarget} of ${stats.valeShots}`;
+    const inBoxLabel = stats.valeInBox == null ? null : `${stats.valeInBox} in the box`;
+    const avgLabel = stats.valeShots ? `${stats.valeAvgXg.toFixed(3)} avg xG` : null;
 
     els.matchHeader.classList.remove("hidden");
     els.matchHeader.innerHTML = `
@@ -388,6 +494,7 @@ function renderMatchHeader() {
           </div>
           <div class="xca-match-hero__comp">${escapeHtml(report.competition || "")} ${escapeHtml(report.season || "")}</div>
         </div>
+        ${penaltyBannerHtml(report)}
 
         <div class="xca-match-hero__scoreboard">
           <div class="xca-match-hero__team xca-match-hero__team--vale ${valeWon ? "xca-match-hero__team--winner" : ""}">
@@ -396,7 +503,24 @@ function renderMatchHeader() {
             <div class="xca-match-hero__goals">${escapeHtml(valeGoals)}</div>
           </div>
 
-          <div class="xca-match-hero__versus" aria-hidden="true">–</div>
+          <div class="xca-match-hero__mid">
+            <div class="xca-match-hero__stat">
+              <div class="xca-match-hero__stat-label">xG difference</div>
+              <div class="xca-match-hero__stat-value">${diffLabel}</div>
+            </div>
+            <div class="xca-match-hero__stat">
+              <div class="xca-match-hero__stat-label">Best chance</div>
+              <div class="xca-match-hero__stat-value ${best?.isPenalty ? "xca-match-hero__stat-value--pen" : ""}">${bestBits}</div>
+            </div>
+            <div class="xca-match-hero__stat">
+              <div class="xca-match-hero__stat-label">High quality</div>
+              <div class="xca-match-hero__stat-value">${hq}</div>
+            </div>
+            <div class="xca-match-hero__stat">
+              <div class="xca-match-hero__stat-label">On target</div>
+              <div class="xca-match-hero__stat-value">${onTgt}</div>
+            </div>
+          </div>
 
           <div class="xca-match-hero__team xca-match-hero__team--opp ${oppWon ? "xca-match-hero__team--winner" : ""}">
             ${opponentCrest}
@@ -423,9 +547,10 @@ function renderMatchHeader() {
         </div>
 
         <div class="xca-match-hero__footer">
-          <span><strong>${match.valeShots ?? 0}</strong> Vale shots</span>
-          <span><strong>${match.shotCount ?? 0}</strong> total shots</span>
-          <span><strong>${match.oppShots ?? 0}</strong> Opp shots</span>
+          <span><strong>${stats.valeShots}</strong> Vale shots</span>
+          <span><strong>${stats.oppShots}</strong> Opp shots</span>
+          ${inBoxLabel ? `<span><strong>${stats.valeInBox}</strong> in the box</span>` : ""}
+          ${avgLabel ? `<span><strong>${stats.valeAvgXg.toFixed(3)}</strong> avg Vale xG</span>` : ""}
         </div>
       </div>`;
     return;
@@ -442,6 +567,7 @@ function renderMatchHeader() {
         </div>
         <div class="xca-match-hero__comp">${escapeHtml(report.competition || "")} ${escapeHtml(report.season || "")}</div>
       </div>
+      ${penaltyBannerHtml(report)}
       <div class="xca-avg-grid">
         <div class="xca-avg-card">
           <div class="xca-avg-card__label">xG for / game</div>
@@ -613,10 +739,10 @@ function renderShotTable() {
       : "";
 
     rows.push(`
-      <tr>
+      <tr class="${shot.isPenalty ? "xca-shot--pen" : ""}">
         ${matchCols}
         <td>${gameStatePill(shot.gameState, shot.gameStateLabel)}</td>
-        <td class="col-left">${shot.playerName}</td>
+        <td class="col-left">${shot.playerName}${shot.isPenalty ? penaltyPill(1) : ""}</td>
         <td><span class="xca-team-pill ${teamClass}">${shot.team === "vale" ? "VALE" : "OPP"}</span></td>
         <td>${shot.minute}</td>
         <td>${String(shot.second).padStart(2, "0")}</td>
@@ -625,7 +751,7 @@ function renderShotTable() {
         <td><span class="xca-rating-pill" style="background:${shot.chanceRating.color}">${shot.chanceRating.label}</span></td>
         <td>${shot.inBoxLabel}</td>
         <td>${shot.onTargetLabel}</td>
-        <td class="${outcomeClass}">${shot.outcomeLabel}</td>
+        <td class="${outcomeClass}">${shot.outcomeLabel}${shot.isPenalty ? " · PEN" : ""}</td>
         <td>${shot.cumulativeXg.toFixed(3)}</td>
         <td>${shot.halfLabel}</td>
         <td>${shot.manpower}</td>
@@ -679,6 +805,7 @@ function renderPlayerPanel(container, title, players, variant = "vale") {
       const goalsBadge = row.goals
         ? `<span class="xca-player-card__goal">${row.goals} goal${row.goals === 1 ? "" : "s"}</span>`
         : "";
+      const penBadge = row.penalties ? penaltyPill(row.penalties) : "";
       const tags = CHANCE_TAG_SPECS.map(
         (spec) =>
           `<span class="xca-player-tag ${spec.className}">${chanceCount(row, spec.id)} ${spec.label}</span>`
@@ -690,10 +817,11 @@ function renderPlayerPanel(container, title, players, variant = "vale") {
             <div class="xca-player-card__identity">
               <span class="xca-player-card__rank">#${index + 1}</span>
               <div>
-                <div class="xca-player-card__name">${escapeHtml(row.playerName)}</div>
+                <div class="xca-player-card__name">${escapeHtml(row.playerName)}${penBadge}</div>
                 <div class="xca-player-card__sub">
                   ${pluralShots(row.shots)} · ${Number(row.avgXg || 0).toFixed(3)} avg xG
                   ${goalsBadge}
+                  ${row.penalties ? `<span class="xca-player-card__goal">includes ${row.penalties} penalt${row.penalties === 1 ? "y" : "ies"}</span>` : ""}
                 </div>
               </div>
             </div>
@@ -758,8 +886,14 @@ function renderAll() {
   renderPeriodPanel();
   renderShotTable();
   renderPlayersView();
+  renderPenaltiesToggle();
 
-  els.statusBar.textContent = `Updated ${new Date(report.updatedAt).toLocaleString("en-GB")} · ${report.shots?.length || 0} shots`;
+  const penNote = report.penaltySummary?.count
+    ? report.excludePenalties
+      ? ` · ${report.penaltySummary.count} penalt${report.penaltySummary.count === 1 ? "y" : "ies"} removed`
+      : ` · includes ${report.penaltySummary.count} penalt${report.penaltySummary.count === 1 ? "y" : "ies"}`
+    : "";
+  els.statusBar.textContent = `Updated ${new Date(report.updatedAt).toLocaleString("en-GB")} · ${report.shots?.length || 0} shots${penNote}`;
 }
 
 async function loadFixtures(signal) {
@@ -802,6 +936,9 @@ async function loadReport() {
     const params = new URLSearchParams({ season: state.season, scope: state.scope });
     if (state.scope === "match" && state.matchId) {
       params.set("matchId", state.matchId);
+    }
+    if (state.excludePenalties) {
+      params.set("excludePenalties", "true");
     }
     const report = await fetchJson(`/api/xg-chance-analysis/report?${params}`, { signal });
     if (token !== state.loadToken) return;
@@ -853,6 +990,9 @@ async function exportPdf() {
     });
     if (state.scope === "match" && state.matchId) {
       params.set("matchId", state.matchId);
+    }
+    if (state.excludePenalties) {
+      params.set("excludePenalties", "true");
     }
     const res = await fetch(`/api/xg-chance-analysis/export-pdf?${params}`, { cache: "no-store" });
     if (!res.ok) {
@@ -966,6 +1106,13 @@ els.refreshBtn.addEventListener("click", async () => {
 });
 
 els.exportPdfBtn?.addEventListener("click", () => exportPdf());
+
+els.penaltiesBtn?.addEventListener("click", async () => {
+  if (els.penaltiesBtn.disabled) return;
+  state.excludePenalties = !state.excludePenalties;
+  renderPenaltiesToggle();
+  await loadReport();
+});
 
 document.querySelectorAll(".xca-view-btn").forEach((btn) => {
   btn.addEventListener("click", () => setView(btn.dataset.view));

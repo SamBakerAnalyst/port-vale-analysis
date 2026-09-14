@@ -583,6 +583,35 @@
       background: #5ec8ff;
     }
 
+    .hub__build.is-demo {
+      color: #0c0f14;
+      background: #f5c518;
+    }
+
+    .hub-demo-banner {
+      display: none;
+      margin: 0 0 0.9rem;
+      padding: 0.7rem 0.9rem;
+      border: 1px solid rgba(245, 197, 24, 0.35);
+      border-radius: 10px;
+      background: rgba(245, 197, 24, 0.08);
+      color: var(--text);
+      font-size: 0.82rem;
+      line-height: 1.45;
+    }
+
+    body.is-demo-hub .hub-demo-banner {
+      display: block;
+    }
+
+    body.is-demo-hub .hub__broke-joke,
+    body.is-demo-hub #restartServerBtn,
+    body.is-demo-hub #forceRefreshDataBtn,
+    body.is-demo-hub #cacheHealthWrap,
+    body.is-demo-hub #startServerLink {
+      display: none;
+    }
+
     .hub__broke-joke {
       font-family: var(--mono);
       font-size: 0.68rem;
@@ -2303,7 +2332,11 @@
         <button type="button" class="hub__feedback-link" id="feedbackOpenBtn">Suggestion / bug</button>
       </div>
 
-      <section id="homeDashboard" aria-label="Home dashboard">
+        <section id="homeDashboard" aria-label="Home dashboard">
+        <div class="hub-demo-banner" id="hubDemoBanner" hidden>
+          <strong>LMS Sports AI Consultancy</strong>
+          — blank demo of the analysis hub. Same tools. No club data loaded yet.
+        </div>
         <div class="home-tabs" role="tablist" aria-label="Home sections">
           <button type="button" class="home-tab is-active" data-tab="home" role="tab">Home</button>
           <button type="button" class="home-tab" data-tab="performance" role="tab">Performance analysis</button>
@@ -2454,6 +2487,7 @@
               </div>
               <div id="homeAvail"><p class="home-empty">Loading…</p></div>
               <div class="home-quick">
+                <a href="/pa-meeting-slides">PA Meeting Slides</a>
                 <a href="/match-dashboards?view=story">Match story</a>
                 <a href="/match-dashboards?view=progression">Ball progression</a>
                 <a href="/match-dashboards?view=crosses">Crosses</a>
@@ -2501,6 +2535,9 @@
             <button type="button" class="home-subtab" data-recruit-sub="watchlist" role="tab">Watch list</button>
             <a class="home-subtab home-subtab--link" href="/who-to-scout">Who To Scout →</a>
             <a class="home-subtab home-subtab--link" href="/player-pipelines">Pipelines →</a>
+            <a class="home-subtab home-subtab--link" href="/transfer-centre">Transfer Centre →</a>
+            <a class="home-subtab home-subtab--link" href="/games-to-watch">Games to Watch →</a>
+            <a class="home-subtab home-subtab--link" href="/player-reports">Player Reports →</a>
           </div>
 
           <div class="home-subpanel" data-recruit-panel="league">
@@ -2545,6 +2582,9 @@
                 <a href="/who-to-scout">Who To Scout</a>
                 <a href="/watch-list">Watch list</a>
                 <a href="/player-pipelines">Player Pipelines</a>
+                <a href="/transfer-centre">Transfer Centre</a>
+                <a href="/games-to-watch">Games to Watch</a>
+                <a href="/player-reports">Player Reports</a>
                 <a href="/studio">Player Comparison</a>
                 <a href="/squad-balance">Squad Balance</a>
                 <a href="/fixture-planner">Fixture Planner</a>
@@ -2694,6 +2734,7 @@
               <div id="homeVsLeague"><p class="home-empty">Loading comparison…</p></div>
               <div class="home-quick" style="margin-top:0.85rem">
                 <a href="/strategy-tracker">Season Progress</a>
+                <a href="/goals-analysis">Goals Analysis</a>
                 <a href="/squad-review">Squad Comparison</a>
                 <a href="/availability-tracker">Availability</a>
                 <a href="/strategy">L2 Strategy Report</a>
@@ -2815,10 +2856,12 @@
       }
 
       // Cache health is an admin concern — scouts should not have to care.
+      // The LMS demo is empty by design, so a "data issues" badge is noise.
       const healthWrap = document.getElementById("cacheHealthWrap");
       if (healthWrap) {
-        healthWrap.hidden = !isAdmin;
-        if (isAdmin) loadCacheHealth();
+        const showHealth = isAdmin && !(window.HUB_BRAND && window.HUB_BRAND.demo);
+        healthWrap.hidden = !showHealth;
+        if (showHealth) loadCacheHealth();
       }
 
       // Player search reads the dossier, so anyone with Recruitment gets it.
@@ -2976,11 +3019,46 @@
       if (window.HubHome && canLoadHomeDashboard()) HubHome.load();
     }
 
-    document.getElementById("greeting").textContent = `${greeting()} — Port Vale`;
-    document.title = "Port Vale Hub";
+    const isDemoHub = document.body.classList.contains("is-demo-hub");
+    document.getElementById("greeting").textContent = `${greeting()} — ${isDemoHub ? "LMS Sports" : "Port Vale"}`;
+    document.title = isDemoHub ? "LMS Sports AI Consultancy" : "Port Vale Hub";
     updateClock();
     setInterval(updateClock, 30_000);
     document.getElementById("restartServerBtn").addEventListener("click", restartServer);
+
+    function applyHubBrand(brand) {
+      if (!brand || typeof brand !== "object") return;
+      window.HUB_BRAND = brand;
+      document.body.classList.toggle("is-demo-hub", !!brand.demo);
+      const club = document.querySelector(".rail__club");
+      if (club) club.textContent = brand.org_short || brand.org || club.textContent;
+      const badge = document.querySelector(".rail__badge");
+      if (badge && brand.badge) {
+        badge.src = brand.badge;
+        badge.alt = brand.org || badge.alt;
+      }
+      const banner = document.getElementById("hubDemoBanner");
+      if (banner) {
+        banner.hidden = !brand.demo;
+        if (brand.demo) {
+          banner.innerHTML = `<strong>${brand.org || "LMS Sports AI Consultancy"}</strong> — blank demo of the analysis hub. Same tools. No club data loaded yet.`;
+        }
+      }
+      const season = document.getElementById("homeOverviewSeason");
+      if (season && brand.demo) season.textContent = `${brand.org} · Demo`;
+      document.querySelectorAll(".home-card__title").forEach((el) => {
+        if (!brand.demo) return;
+        const text = el.textContent || "";
+        if (text.includes("Port Vale fixtures")) el.textContent = "Club fixtures";
+        if (text.includes("Port Vale vs")) el.textContent = text.replace("Port Vale vs", "Squad vs");
+      });
+      if (brand.greeting) {
+        const greetEl = document.getElementById("greeting");
+        if (greetEl && !window.__HUB_DISPLAY_NAME__) {
+          greetEl.textContent = `${greeting()} — ${brand.greeting}`;
+        }
+      }
+    }
 
     async function signOut() {
       const btn = document.getElementById("signOutBtn");
@@ -3139,6 +3217,7 @@
             display_name: me.display_name || me.username || "",
           };
           if (me.display_name) {
+            window.__HUB_DISPLAY_NAME__ = me.display_name;
             document.getElementById("greeting").textContent = `${greeting()} — ${me.display_name}`;
           }
         } else if (res.status === 401) {
@@ -3164,15 +3243,19 @@
             window.IMPECT_APPS = payload.apps;
           }
           const stamp = document.getElementById("hubBuildStamp");
+          if (payload.brand) applyHubBrand(payload.brand);
           if (stamp) {
             const build = (stamp.textContent || "").split("·").pop()?.trim() || "__HUB_BUILD__";
             const product = payload.product || (payload.staging ? "Port Vale Staging" : "Port Vale Live");
             stamp.textContent = `${product} · ${build}`;
-            stamp.classList.toggle("is-staging", !!payload.staging);
-            stamp.title = payload.staging
-              ? "Port Vale Staging — safe break/fix sandbox (not staff)"
-              : "Port Vale Live — staff / boss product";
-            document.title = payload.staging ? "Port Vale Staging" : "Port Vale Live";
+            stamp.classList.toggle("is-staging", payload.product_id === "staging");
+            stamp.classList.toggle("is-demo", payload.product_id === "demo");
+            stamp.title = (payload.brand && payload.brand.stamp_title) || (
+              payload.staging
+                ? "Port Vale Staging — safe break/fix sandbox (not staff)"
+                : "Port Vale Live — staff / boss product"
+            );
+            document.title = payload.product || (payload.staging ? "Port Vale Staging" : "Port Vale Live");
           }
         }
       } catch (_) {
