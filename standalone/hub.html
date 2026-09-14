@@ -2333,10 +2333,7 @@
       </div>
 
         <section id="homeDashboard" aria-label="Home dashboard">
-        <div class="hub-demo-banner" id="hubDemoBanner" hidden>
-          <strong>LMS Sports AI Consultancy</strong>
-          — blank demo of the analysis hub. Same tools. No club data loaded yet.
-        </div>
+        <div class="hub-demo-banner" id="hubDemoBanner" hidden></div>
         <div class="home-tabs" role="tablist" aria-label="Home sections">
           <button type="button" class="home-tab is-active" data-tab="home" role="tab">Home</button>
           <button type="button" class="home-tab" data-tab="performance" role="tab">Performance analysis</button>
@@ -3019,9 +3016,8 @@
       if (window.HubHome && canLoadHomeDashboard()) HubHome.load();
     }
 
-    const isDemoHub = document.body.classList.contains("is-demo-hub");
-    document.getElementById("greeting").textContent = `${greeting()} — ${isDemoHub ? "LMS Sports" : "Port Vale"}`;
-    document.title = isDemoHub ? "LMS Sports AI Consultancy" : "Port Vale Hub";
+    document.getElementById("greeting").textContent = `${greeting()} — Port Vale`;
+    document.title = "Port Vale Hub";
     updateClock();
     setInterval(updateClock, 30_000);
     document.getElementById("restartServerBtn").addEventListener("click", restartServer);
@@ -3041,7 +3037,7 @@
       if (banner) {
         banner.hidden = !brand.demo;
         if (brand.demo) {
-          banner.innerHTML = `<strong>${brand.org || "LMS Sports AI Consultancy"}</strong> — blank demo of the analysis hub. Same tools. No club data loaded yet.`;
+          banner.innerHTML = `<strong>${brand.org || ""}</strong> — ${brand.login_subtitle || ""}`;
         }
       }
       const season = document.getElementById("homeOverviewSeason");
