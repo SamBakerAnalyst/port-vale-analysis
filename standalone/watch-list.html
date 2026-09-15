@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/watch-list.css?v=4" />
+  <link rel="stylesheet" href="/static/watch-list.css?v=6" />
 </head>
 <body>
   <div class="wl">
@@ -31,6 +31,25 @@
     </header>
 
     <p id="wlStatus" class="wl-status hidden" role="status"></p>
+
+    <section class="wl-panel card" id="wlPanel" hidden>
+      <div class="wl-legend" id="wlLegend"></div>
+      <div class="wl-filters">
+        <div class="wl-filter">
+          <span class="wl-filter__label">League</span>
+          <div class="wl-filter__control" id="wlLeagueGroup" role="group" aria-label="League"></div>
+        </div>
+        <div class="wl-filter">
+          <span class="wl-filter__label">Position</span>
+          <div class="wl-filter__control" id="wlPositionGroup" role="group" aria-label="Position"></div>
+        </div>
+        <div class="wl-filter">
+          <span class="wl-filter__label">Situation</span>
+          <div class="wl-filter__control" id="wlSituationGroup" role="group" aria-label="Situation"></div>
+        </div>
+      </div>
+    </section>
+
     <p class="wl-count" id="wlCount">Loading…</p>
     <div id="wlList" class="wl-list">
       <p class="wl-empty">Loading watch list…</p>
@@ -38,6 +57,6 @@
   </div>
 
   <script defer src="/static/hub-feedback.js?v=1"></script>
-  <script defer src="/static/watch-list.js?v=7"></script>
+  <script defer src="/static/watch-list.js?v=10"></script>
 </body>
 </html>

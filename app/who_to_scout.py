@@ -576,17 +576,37 @@ def register_who_to_scout_routes(app: FastAPI) -> None:
     def who_to_scout_loans_route(
         club: list[str] = Query(default_factory=list),
         season: str | None = Query(None),
+        squad_only: bool = Query(False),
     ) -> dict[str, Any]:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
         from app.opponent_photos import transfermarkt_loan_ins
 
         clubs = [str(name).strip() for name in club if str(name).strip()]
-        by_club: dict[str, list[dict[str, str]]] = {}
-        for name in clubs:
-            loans = transfermarkt_loan_ins(name, season=season)
-            by_club[name] = [
-                {"name": row["name"], "from": row["on_loan_from"]}
-                for row in loans.values()
-            ]
+        by_club: dict[str, list[dict[str, str]]] = {name: [] for name in clubs}
+        if not clubs:
+            return {"clubs": by_club}
+        workers = min(8, len(clubs))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {
+                pool.submit(
+                    transfermarkt_loan_ins,
+                    name,
+                    season=season,
+                    squad_only=squad_only,
+                ): name
+                for name in clubs
+            }
+            for fut in as_completed(futures):
+                name = futures[fut]
+                try:
+                    loans = fut.result() or {}
+                except Exception:
+                    loans = {}
+                by_club[name] = [
+                    {"name": row["name"], "from": row["on_loan_from"]}
+                    for row in loans.values()
+                ]
         return {"clubs": by_club}
 
     @app.get("/api/who-to-scout/squad")

@@ -456,6 +456,19 @@ def test_no_loan_in_the_shipped_report_is_read_as_a_sale(monkeypatch):
     assert loans > 100, "loans have stopped being marked in the source"
 
 
+def test_academy_loans_are_in_the_shipped_report(monkeypatch):
+    """Ramell Carter at Worthing never made the BBC scrape. He has to be in the report."""
+    monkeypatch.setattr(ts, "TRANSFER_REPORT_CANDIDATES", SHIPPED_CANDIDATES)
+    ts.reset_cache()
+    moved = ts.lookup("Ramell Carter", "FC Worthing")
+    assert moved is not None
+    assert moved["status"] == ts.LOAN_IN
+    assert "worthing" in str(moved.get("club") or "").lower()
+    jayden = ts.lookup("Jayden Moore", "Worthing")
+    assert jayden is not None
+    assert jayden["status"] == ts.LOAN_IN
+
+
 def test_loan_arrivals_are_at_many_clubs_not_just_exeter(monkeypatch):
     """On loan in Who To Scout used to show Exeter and nobody else."""
     monkeypatch.setattr(ts, "TRANSFER_REPORT_CANDIDATES", SHIPPED_CANDIDATES)
@@ -521,3 +534,39 @@ def test_the_index_reloads_when_the_report_changes(_report):
     # A transfer correction must not have to wait on the four-minute
     # standouts rebuild.
     assert ts.lookup("Gbemi Arubi", "Dundalk")["club"] == "Burton Albion Reserves"
+
+
+def test_transfermarkt_loans_flag_academy_arrivals_the_report_missed():
+    """Hull U21 to Worthing never made the BBC pages the report is built from."""
+    rows = [
+        {"name": "Ramell Carter", "club": "FC Worthing"},
+        {"name": "Gbemi Arubi", "club": "Dundalk FC", "transfer": {
+            "club": "Burton Albion",
+            "status": ts.GONE,
+        }},
+    ]
+    added = ts.apply_loan_ins(
+        rows,
+        {
+            "FC Worthing": {
+                "ramellcarter": {
+                    "name": "Ramell Carter",
+                    "on_loan_from": "Hull City U21",
+                }
+            }
+        },
+    )
+    assert added == 1
+    assert rows[0]["transfer"]["status"] == ts.LOAN_IN
+    assert rows[0]["transfer"]["from"] == "Hull City U21"
+    assert rows[1]["transfer"]["status"] == ts.GONE
+
+
+def test_loans_endpoint_looks_up_clubs_in_parallel():
+    import inspect
+
+    from app.who_to_scout import register_who_to_scout_routes
+
+    source = inspect.getsource(register_who_to_scout_routes)
+    assert "ThreadPoolExecutor" in source
+    assert "squad_only" in source

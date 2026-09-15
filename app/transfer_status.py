@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from app.efl_transfer_report import REPORT_CANDIDATES
+from app.paths import DATA_ROOT, HUB_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,12 @@ logger = logging.getLogger(__name__)
 # inside the image at HUB_ROOT/data, so picking one of the two silently found
 # nothing on Staging and every player came back unflagged.
 TRANSFER_REPORT_CANDIDATES = REPORT_CANDIDATES
+
+LOAN_SNAPSHOT_NAME = "transfermarkt-loans-2026.json"
+LOAN_SNAPSHOT_CANDIDATES = (
+    HUB_ROOT / "data" / LOAN_SNAPSHOT_NAME,
+    DATA_ROOT / LOAN_SNAPSHOT_NAME,
+)
 
 # Sold or signed permanently, and no longer at the club on the row.
 GONE = "gone"
@@ -92,6 +99,8 @@ _lock = threading.Lock()
 _index: dict[str, list[dict[str, Any]]] | None = None
 _index_mtime: float | None = None
 _meta: dict[str, Any] = {}
+_loan_snapshot: dict[str, Any] | None = None
+_loan_snapshot_mtime: float | None = None
 
 
 def _strip_accents(value: str) -> str:
@@ -349,6 +358,161 @@ def annotate_all(
             continue
         row["transfer"] = status
     return rows
+
+
+def _loan_entries(payload: Any) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    values: list[Any]
+    if isinstance(payload, dict):
+        values = list(payload.values())
+    elif isinstance(payload, list):
+        values = payload
+    else:
+        return rows
+    for item in values:
+        if not isinstance(item, dict):
+            continue
+        player = str(item.get("name") or "").strip()
+        parent = str(item.get("on_loan_from") or item.get("from") or "").strip()
+        if player and parent:
+            rows.append({"name": player, "from": parent})
+    return rows
+
+
+def _match_loan_name(player: str, maps: list[list[dict[str, str]]]) -> dict[str, str] | None:
+    keys = set(name_keys(player))
+    last = name_key(player).split()[-1] if name_key(player) else ""
+    last_hits: list[dict[str, str]] = []
+    for entries in maps:
+        for entry in entries:
+            if set(name_keys(entry.get("name"))) & keys:
+                return entry
+            entry_last = name_key(entry.get("name")).split()[-1] if name_key(entry.get("name")) else ""
+            if last and entry_last == last:
+                last_hits.append(entry)
+    unique: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for hit in last_hits:
+        stamp = name_key(hit.get("name"))
+        if stamp in seen:
+            continue
+        seen.add(stamp)
+        unique.append(hit)
+    return unique[0] if len(unique) == 1 else None
+
+
+def apply_loan_ins(
+    rows: list[dict[str, Any]],
+    loans_by_club: dict[str, Any] | None,
+    *,
+    name_key_: str = "name",
+    club_key_: str = "club",
+) -> int:
+    """Fill loan_in from Transfermarkt when the hand-built report has no move.
+
+    Ramell Carter sat on the Watch list as a Worthing striker. Hull U21 to
+    National League never made the BBC/retained-list pages the report is built
+    from, so the report had nothing to flag. Transfermarkt's squad badge does.
+    A confirmed sale still wins: we do not paint a gone player as a loanee.
+    """
+    normalized: dict[str, list[dict[str, str]]] = {}
+    for club, payload in (loans_by_club or {}).items():
+        label = str(club or "").strip()
+        entries = _loan_entries(payload)
+        if label and entries:
+            normalized[label] = entries
+
+    flagged = 0
+    protected = {GONE, LOAN_IN, LOAN_OUT}
+    for row in rows:
+        existing = row.get("transfer") or {}
+        if existing.get("status") in protected:
+            continue
+        club = str(row.get(club_key_) or "").strip()
+        player = str(row.get(name_key_) or "").strip()
+        if not club or not player:
+            continue
+        maps = [
+            entries
+            for key, entries in normalized.items()
+            if key == club or _clubs_match(key, club)
+        ]
+        hit = _match_loan_name(player, maps)
+        if not hit:
+            continue
+        row["transfer"] = {
+            "club": club,
+            "from": hit["from"],
+            "loan": True,
+            "status": LOAN_IN,
+            "fee": "Loan",
+        }
+        flagged += 1
+    return flagged
+
+
+def load_loan_snapshot() -> dict[str, Any]:
+    """Shipped Transfermarkt loan badges. Built on the Mac; the droplet cannot fetch them."""
+    global _loan_snapshot, _loan_snapshot_mtime
+    path = next((candidate for candidate in LOAN_SNAPSHOT_CANDIDATES if candidate.is_file()), None)
+    if path is None:
+        return {}
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return {}
+    with _lock:
+        if _loan_snapshot is not None and _loan_snapshot_mtime == mtime:
+            return _loan_snapshot
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            logger.exception("Could not read Transfermarkt loan snapshot")
+            _loan_snapshot, _loan_snapshot_mtime = {}, mtime
+            return _loan_snapshot
+        clubs = payload.get("clubs") if isinstance(payload, dict) else {}
+        _loan_snapshot = clubs if isinstance(clubs, dict) else {}
+        _loan_snapshot_mtime = mtime
+        return _loan_snapshot
+
+
+def annotate_transfermarkt_loans(
+    rows: list[dict[str, Any]],
+    *,
+    name_key_: str = "name",
+    club_key_: str = "club",
+    timeout_s: float = 8.0,
+    squad_only: bool = True,
+) -> int:
+    """Look up Transfermarkt loan badges for the clubs on these rows."""
+    from concurrent.futures import ThreadPoolExecutor, wait
+
+    from app.opponent_photos import transfermarkt_loan_ins
+
+    clubs = sorted(
+        {
+            str(row.get(club_key_) or "").strip()
+            for row in rows
+            if str(row.get(club_key_) or "").strip()
+        }
+    )
+    if not clubs:
+        return 0
+    loans_by_club: dict[str, Any] = {}
+    workers = min(8, len(clubs))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(transfermarkt_loan_ins, club, squad_only=squad_only): club
+            for club in clubs
+        }
+        done, _pending = wait(futures, timeout=timeout_s)
+        for fut in done:
+            club = futures[fut]
+            try:
+                loans_by_club[club] = fut.result() or {}
+            except Exception:
+                logger.exception("Transfermarkt loans failed for %s", club)
+    return apply_loan_ins(rows, loans_by_club, name_key_=name_key_, club_key_=club_key_)
 
 
 def _open_window(today: date) -> tuple[str, date] | None:

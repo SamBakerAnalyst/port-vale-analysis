@@ -79,6 +79,9 @@ KNOWN_CLUB_IDS: dict[str, int] = {
     "shrewsburytown": 1082,
     "walsall": 1230,
     "yorkcity": 2803,
+    "worthing": 8123,
+    "fcworthing": 8123,
+    "worthingfc": 8123,
 }
 
 _club_id_cache: dict[str, tuple[float, int | None]] = {}
@@ -330,15 +333,26 @@ def current_transfermarkt_season_year() -> int:
     return today.year if today.month >= 7 else today.year - 1
 
 
-def transfermarkt_loan_ins(club_name: str, *, season: str | None = None) -> dict[str, dict[str, str]]:
-    """Players on loan at this club (current squad badge + TM loan arrivals)."""
+def transfermarkt_loan_ins(
+    club_name: str,
+    *,
+    season: str | None = None,
+    squad_only: bool = False,
+) -> dict[str, dict[str, str]]:
+    """Players on loan at this club (current squad badge + TM loan arrivals).
+
+    `squad_only` skips previous seasons and the arrivals table. Watch list uses
+    that path so 20 clubs do not each make four Transfermarkt round-trips.
+    """
     club_id = resolve_transfermarkt_club_id(club_name)
     if not club_id:
         return {}
     current_year = current_transfermarkt_season_year()
-    years = {current_year, current_year - 1}
-    if season:
-        years.add(_season_year(season))
+    years = {current_year}
+    if not squad_only:
+        years.add(current_year - 1)
+        if season:
+            years.add(_season_year(season))
 
     loans: dict[str, dict[str, str]] = {}
     for year in sorted(years, reverse=True):
@@ -351,7 +365,8 @@ def transfermarkt_loan_ins(club_name: str, *, season: str | None = None) -> dict
                     "name": name,
                     "on_loan_from": parent,
                 }
-        loans.update(_fetch_loan_arrivals(club_id, year))
+        if not squad_only:
+            loans.update(_fetch_loan_arrivals(club_id, year))
     return loans
 
 

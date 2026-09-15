@@ -71,7 +71,9 @@ def test_efl_transfer_report_html_and_data():
     report = load_report()
     assert report["title"] == "EFL Transfer Report"
     leagues = {league["id"]: league for league in report["leagues"]}
-    assert set(leagues) == {"league-one", "league-two", "national-league", "scottish-prem"}
+    core = {"league-one", "league-two", "national-league", "scottish-prem"}
+    assert core <= set(leagues)
+    assert set(leagues) <= core | {"irish-prem"}
     assert len(leagues["league-one"]["teams"]) == 24
     assert len(leagues["league-two"]["teams"]) == 24
     assert len(leagues["national-league"]["teams"]) == 24
@@ -101,7 +103,7 @@ def test_efl_transfer_report_html_and_data():
     empty_released = [
         team["name"]
         for league in report["leagues"]
-        if league["id"] != "scottish-prem"
+        if league["id"] not in {"scottish-prem", "irish-prem"}
         for team in league["teams"]
         if team["released_count"] == 0
     ]
@@ -110,7 +112,12 @@ def test_efl_transfer_report_html_and_data():
     assert wimbledon["badge_url"] == "/static/transfer-badges/afc-wimbledon.png"
 
     badge_dir = STANDALONE_DIR.parent / "static" / "transfer-badges"
-    clubs = [team["id"] for league in report["leagues"] for team in league["teams"]]
+    clubs = [
+        team["id"]
+        for league in report["leagues"]
+        if league["id"] != "irish-prem"
+        for team in league["teams"]
+    ]
     assert len(clubs) == 84
     missing = [club_id for club_id in clubs if not (badge_dir / f"{club_id}.png").is_file()]
     assert missing == []
@@ -213,7 +220,9 @@ def test_efl_transfer_report_per_league_pdf_export():
     assert 'file: "League-Two"' in js
     report = load_report()
     expected = {
-        league["id"]: 1 + 1 + len(league["teams"]) + 1 for league in report["leagues"]
+        league["id"]: 1 + 1 + len(league["teams"]) + 1
+        for league in report["leagues"]
+        if league["id"] != "irish-prem"
     }
     assert expected == {
         "league-one": 27,

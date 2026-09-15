@@ -2,7 +2,7 @@
   "title": "EFL Transfer Report",
   "season": "2026/27",
   "window": "Summer 2026 (15 June – 1/3 September)",
-  "updated": "2026-09-08",
+  "updated": "2026-09-15",
   "sources": [
     "BBC Sport done-deal lists (June–deadline day 2026)",
     "BBC League One and League Two 2026-27 club-by-club previews (key ins / released)",
@@ -10,7 +10,8 @@
     "Football Lowdown retained lists (Championship, League One, League Two, National League)",
     "SPFL confirmed Premiership arrivals",
     "Wikipedia summer 2026 loan table (EFL-touching deals)",
-    "Confirmed extras the BBC / retained-list scrape missed"
+    "Confirmed extras the BBC / retained-list scrape missed",
+    "Transfermarkt current-squad on-loan badges (academy loans the BBC scrape missed)"
   ],
   "notes": [
     "Released = club retained-list releases/retirements. A later free signing still counts as released.",
@@ -99,6 +100,12 @@
               "other": "Released",
               "kind": "released",
               "fee": "Released"
+            },
+            {
+              "player": "Donnell McNeilly",
+              "other": "Nottingham Forest U21",
+              "kind": "loan",
+              "fee": "Loan"
             }
           ],
           "released": [
@@ -171,7 +178,7 @@
               "fee": "Loan"
             }
           ],
-          "signed_count": 12,
+          "signed_count": 13,
           "released_count": 4,
           "left_count": 7
         },
@@ -2762,6 +2769,12 @@
               "other": "Leyton Orient",
               "kind": "loan",
               "fee": "Loan"
+            },
+            {
+              "player": "Oliver Irow",
+              "other": "Tottenham Hotspur U21",
+              "kind": "loan",
+              "fee": "Loan"
             }
           ],
           "released": [
@@ -2840,7 +2853,7 @@
               "fee": "Free"
             }
           ],
-          "signed_count": 8,
+          "signed_count": 9,
           "released_count": 9,
           "left_count": 3
         },
@@ -3203,6 +3216,12 @@
               "other": "Arsenal",
               "kind": "loan",
               "fee": "Loan"
+            },
+            {
+              "player": "Tuğra Turhan",
+              "other": "Basaksehir FK",
+              "kind": "loan",
+              "fee": "Loan"
             }
           ],
           "released": [
@@ -3287,7 +3306,7 @@
               "fee": "Loan"
             }
           ],
-          "signed_count": 9,
+          "signed_count": 10,
           "released_count": 7,
           "left_count": 6
         },
@@ -3686,6 +3705,12 @@
               "other": "Swansea City",
               "kind": "loan",
               "fee": "Loan"
+            },
+            {
+              "player": "Malik Mothersille",
+              "other": "Stockport County",
+              "kind": "loan",
+              "fee": "Loan"
             }
           ],
           "released": [
@@ -3746,7 +3771,7 @@
               "fee": "Loan"
             }
           ],
-          "signed_count": 8,
+          "signed_count": 9,
           "released_count": 3,
           "left_count": 6
         }
@@ -5331,6 +5356,30 @@
               "other": "Notts County",
               "kind": "loan",
               "fee": "Loan"
+            },
+            {
+              "player": "Lewis Temple",
+              "other": "Bolton Wanderers",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Zain Tahir",
+              "other": "Sheffield United U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Kai Payne",
+              "other": "Wigan Athletic",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Favour Fawunmi",
+              "other": "Stoke City U21",
+              "kind": "loan",
+              "fee": "Loan"
             }
           ],
           "released": [
@@ -5379,7 +5428,7 @@
               "fee": "Undisclosed"
             }
           ],
-          "signed_count": 11,
+          "signed_count": 15,
           "released_count": 6,
           "left_count": 1
         },
@@ -5452,6 +5501,12 @@
               "other": "Watford",
               "kind": "loan",
               "fee": "Loan"
+            },
+            {
+              "player": "Daniel Svancara",
+              "other": "SK Artis Brno",
+              "kind": "loan",
+              "fee": "Loan"
             }
           ],
           "released": [
@@ -5512,7 +5567,7 @@
               "fee": "Undisclosed"
             }
           ],
-          "signed_count": 11,
+          "signed_count": 12,
           "released_count": 7,
           "left_count": 2
         },
@@ -6056,6 +6111,12 @@
               "other": "Brighton & Hove Albion",
               "kind": "loan",
               "fee": "Loan"
+            },
+            {
+              "player": "Asuma Ikari",
+              "other": "Mito HollyHock",
+              "kind": "loan",
+              "fee": "Loan"
             }
           ],
           "released": [
@@ -6140,7 +6201,7 @@
               "fee": "Free"
             }
           ],
-          "signed_count": 15,
+          "signed_count": 16,
           "released_count": 10,
           "left_count": 3
         },
@@ -6557,6 +6618,12 @@
               "other": "Aston Villa",
               "kind": "loan",
               "fee": "Loan"
+            },
+            {
+              "player": "Dilane Bakwa",
+              "other": "Nottingham Forest",
+              "kind": "loan",
+              "fee": "Loan"
             }
           ],
           "released": [
@@ -6641,7 +6708,7 @@
               "fee": "Loan ended"
             }
           ],
-          "signed_count": 11,
+          "signed_count": 12,
           "released_count": 10,
           "left_count": 3
         },
@@ -7088,6 +7155,18 @@
               "other": "Coventry City",
               "kind": "loan",
               "fee": "Loan"
+            },
+            {
+              "player": "Lotfi Madjer",
+              "other": "Al-Duhail SC",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Youssef Snana",
+              "other": "Al-Shamal SC",
+              "kind": "loan",
+              "fee": "Loan"
             }
           ],
           "released": [
@@ -7184,7 +7263,7 @@
               "fee": "Loan"
             }
           ],
-          "signed_count": 15,
+          "signed_count": 17,
           "released_count": 12,
           "left_count": 3
         },
@@ -7338,7 +7417,32 @@
         {
           "id": "afc-fylde",
           "name": "AFC Fylde",
-          "signed": [],
+          "signed": [
+            {
+              "player": "Harvey Broad",
+              "other": "Coventry City U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Luke Butterfield",
+              "other": "Chesterfield FC",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Theo Upton",
+              "other": "Blackpool FC",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Millar Matthews-Lewis",
+              "other": "Burton Albion",
+              "kind": "loan",
+              "fee": "Loan"
+            }
+          ],
           "released": [
             {
               "player": "Charlie Jolley",
@@ -7397,14 +7501,27 @@
               "fee": "£600k"
             }
           ],
-          "signed_count": 0,
+          "signed_count": 4,
           "released_count": 8,
           "left_count": 1
         },
         {
           "id": "aldershot-town",
           "name": "Aldershot Town",
-          "signed": [],
+          "signed": [
+            {
+              "player": "Jonathan Macaulay",
+              "other": "Watford FC U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Jack Matton",
+              "other": "Wycombe Wanderers",
+              "kind": "loan",
+              "fee": "Loan"
+            }
+          ],
           "released": [
             {
               "player": "Cameron Hargreaves",
@@ -7510,14 +7627,21 @@
             }
           ],
           "left": [],
-          "signed_count": 0,
+          "signed_count": 2,
           "released_count": 17,
           "left_count": 0
         },
         {
           "id": "altrincham",
           "name": "Altrincham",
-          "signed": [],
+          "signed": [
+            {
+              "player": "Reuben Lopata-White",
+              "other": "Leeds United U21",
+              "kind": "loan",
+              "fee": "Loan"
+            }
+          ],
           "released": [
             {
               "player": "Billy Sass-Davies",
@@ -7551,14 +7675,39 @@
             }
           ],
           "left": [],
-          "signed_count": 0,
+          "signed_count": 1,
           "released_count": 5,
           "left_count": 0
         },
         {
           "id": "barrow",
           "name": "Barrow",
-          "signed": [],
+          "signed": [
+            {
+              "player": "Fawaz Al-Sqoor",
+              "other": "Al-Ittihad Club",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Fahad Al-Rashidi",
+              "other": "Al-Taawoun FC",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Mateo Benegas",
+              "other": "Club Ferro Carril Oeste",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Thamer Al-Khaibri",
+              "other": "NEOM SC",
+              "kind": "loan",
+              "fee": "Loan"
+            }
+          ],
           "released": [
             {
               "player": "Angus MacDonald",
@@ -7629,7 +7778,7 @@
               "fee": "Undisclosed"
             }
           ],
-          "signed_count": 0,
+          "signed_count": 4,
           "released_count": 6,
           "left_count": 5
         },
@@ -7640,6 +7789,30 @@
             {
               "player": "Danny Cashman",
               "other": "Crawley Town",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Ted Curd",
+              "other": "Chelsea FC U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Luca Gunter",
+              "other": "Tottenham Hotspur U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Farhaan Ali Wahid",
+              "other": "Fulham FC U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Jay Bird",
+              "other": "Salford City",
               "kind": "loan",
               "fee": "Loan"
             }
@@ -7696,14 +7869,39 @@
               "fee": "Loan"
             }
           ],
-          "signed_count": 1,
+          "signed_count": 5,
           "released_count": 6,
           "left_count": 2
         },
         {
           "id": "boston-united",
           "name": "Boston United",
-          "signed": [],
+          "signed": [
+            {
+              "player": "Luke Faxon",
+              "other": "Sheffield United",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Sai Sachdev",
+              "other": "Sheffield United U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Ollie Bostock",
+              "other": "West Bromwich Albion U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Ken Aboh",
+              "other": "Norwich City U21",
+              "kind": "loan",
+              "fee": "Loan"
+            }
+          ],
           "released": [
             {
               "player": "Greg Sloggett",
@@ -7762,7 +7960,7 @@
               "fee": "Undisclosed"
             }
           ],
-          "signed_count": 0,
+          "signed_count": 4,
           "released_count": 8,
           "left_count": 1
         },
@@ -7866,7 +8064,38 @@
         {
           "id": "eastleigh",
           "name": "Eastleigh",
-          "signed": [],
+          "signed": [
+            {
+              "player": "Tommy Dobson-Ventura",
+              "other": "Southampton FC U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Reece Johnson",
+              "other": "Sheffield Wednesday",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Nelson Khumbeni",
+              "other": "Gillingham FC",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Harry Sidwell",
+              "other": "AFC Wimbledon",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Dion Rankine",
+              "other": "Crewe Alexandra",
+              "kind": "loan",
+              "fee": "Loan"
+            }
+          ],
           "released": [
             {
               "player": "Angel Waruih",
@@ -7918,7 +8147,7 @@
             }
           ],
           "left": [],
-          "signed_count": 0,
+          "signed_count": 5,
           "released_count": 8,
           "left_count": 0
         },
@@ -7929,6 +8158,18 @@
             {
               "player": "True Grant",
               "other": "Stoke City",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Cruz Allen",
+              "other": "Derby County U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Arian Allen",
+              "other": "Stockport County U21",
               "kind": "loan",
               "fee": "Loan"
             }
@@ -8003,14 +8244,51 @@
               "fee": "Free"
             }
           ],
-          "signed_count": 1,
+          "signed_count": 3,
           "released_count": 10,
           "left_count": 1
         },
         {
           "id": "forest-green-rovers",
           "name": "Forest Green Rovers",
-          "signed": [],
+          "signed": [
+            {
+              "player": "Filozofe Mabete",
+              "other": "Swindon Town",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Kelvin Abrefa",
+              "other": "Reading FC",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Sydney Agina",
+              "other": "Stoke City U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Preston Fearon",
+              "other": "West Ham United U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Kyle Kelly",
+              "other": "Liverpool FC U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "James Berry",
+              "other": "Wycombe Wanderers",
+              "kind": "loan",
+              "fee": "Loan"
+            }
+          ],
           "released": [
             {
               "player": "Christian Doidge",
@@ -8081,7 +8359,7 @@
               "fee": "Undisclosed"
             }
           ],
-          "signed_count": 0,
+          "signed_count": 6,
           "released_count": 9,
           "left_count": 2
         },
@@ -8135,6 +8413,30 @@
               "other": "Chesterfield",
               "kind": "free",
               "fee": "Free"
+            },
+            {
+              "player": "Luke Hutchinson",
+              "other": "Bolton Wanderers",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Oliver Pimlott",
+              "other": "Burnley FC U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Michael Craig",
+              "other": "Leyton Orient",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Brayden Johnson",
+              "other": "Middlesbrough FC U21",
+              "kind": "loan",
+              "fee": "Loan"
             }
           ],
           "released": [
@@ -8213,7 +8515,7 @@
               "fee": "Free"
             }
           ],
-          "signed_count": 1,
+          "signed_count": 5,
           "released_count": 8,
           "left_count": 4
         },
@@ -8224,6 +8526,12 @@
             {
               "player": "Max Merrick",
               "other": "Chelsea",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Cole Deeming",
+              "other": "West Bromwich Albion U21",
               "kind": "loan",
               "fee": "Loan"
             }
@@ -8309,14 +8617,21 @@
             }
           ],
           "left": [],
-          "signed_count": 1,
+          "signed_count": 2,
           "released_count": 13,
           "left_count": 0
         },
         {
           "id": "hornchurch",
           "name": "Hornchurch",
-          "signed": [],
+          "signed": [
+            {
+              "player": "Miles Bracking",
+              "other": "Norwich City U21",
+              "kind": "loan",
+              "fee": "Loan"
+            }
+          ],
           "released": [
             {
               "player": "Dave Winfield",
@@ -8356,14 +8671,45 @@
             }
           ],
           "left": [],
-          "signed_count": 0,
+          "signed_count": 1,
           "released_count": 6,
           "left_count": 0
         },
         {
           "id": "kidderminster-harriers",
           "name": "Kidderminster Harriers",
-          "signed": [],
+          "signed": [
+            {
+              "player": "Jack Wint",
+              "other": "Manchester City U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Cian Harries",
+              "other": "Forest Green Rovers",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Luey Giles",
+              "other": "Cardiff City U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Callum Stewart",
+              "other": "Shrewsbury Town",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Levi Amantchi",
+              "other": "Gateshead FC",
+              "kind": "loan",
+              "fee": "Loan"
+            }
+          ],
           "released": [
             {
               "player": "Alex Penny",
@@ -8433,14 +8779,33 @@
             }
           ],
           "left": [],
-          "signed_count": 0,
+          "signed_count": 5,
           "released_count": 11,
           "left_count": 0
         },
         {
           "id": "scunthorpe-united",
           "name": "Scunthorpe United",
-          "signed": [],
+          "signed": [
+            {
+              "player": "Stanley Ashbee",
+              "other": "Hull City U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Tyrell Sellars-Fleming",
+              "other": "Hull City U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Hugh Parker",
+              "other": "Hull City U21",
+              "kind": "loan",
+              "fee": "Loan"
+            }
+          ],
           "released": [
             {
               "player": "Andrew Boyce",
@@ -8487,14 +8852,33 @@
               "fee": "Free"
             }
           ],
-          "signed_count": 0,
+          "signed_count": 3,
           "released_count": 6,
           "left_count": 1
         },
         {
           "id": "solihull-moors",
           "name": "Solihull Moors",
-          "signed": [],
+          "signed": [
+            {
+              "player": "Craig Farquhar",
+              "other": "Barnet FC",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Ryan Woods",
+              "other": "Oldham Athletic",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Henry Rylah",
+              "other": "Charlton Athletic U21",
+              "kind": "loan",
+              "fee": "Loan"
+            }
+          ],
           "released": [
             {
               "player": "Aaron Flahavan",
@@ -8541,7 +8925,7 @@
               "fee": "Undisclosed"
             }
           ],
-          "signed_count": 0,
+          "signed_count": 3,
           "released_count": 6,
           "left_count": 1
         },
@@ -8552,6 +8936,24 @@
             {
               "player": "Rayan Oyebade",
               "other": "West Ham United",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Joe Duncan",
+              "other": "Bristol City U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Ryan Battrum",
+              "other": "West Ham United U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Promise Omochere",
+              "other": "Bristol Rovers",
               "kind": "loan",
               "fee": "Loan"
             }
@@ -8626,7 +9028,7 @@
               "fee": "Free"
             }
           ],
-          "signed_count": 1,
+          "signed_count": 4,
           "released_count": 8,
           "left_count": 3
         },
@@ -8637,6 +9039,24 @@
             {
               "player": "Spike Brits",
               "other": "Manchester City",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Ben Brookes",
+              "other": "York City",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Bobby Amartey",
+              "other": "Leicester City U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Joe Knight",
+              "other": "Stevenage FC",
               "kind": "loan",
               "fee": "Loan"
             }
@@ -8723,14 +9143,21 @@
               "fee": "Undisclosed"
             }
           ],
-          "signed_count": 1,
+          "signed_count": 4,
           "released_count": 12,
           "left_count": 1
         },
         {
           "id": "tamworth",
           "name": "Tamworth",
-          "signed": [],
+          "signed": [
+            {
+              "player": "Ryan Howley",
+              "other": "Bristol Rovers",
+              "kind": "loan",
+              "fee": "Loan"
+            }
+          ],
           "released": [
             {
               "player": "Callum Cockerill-Mollett",
@@ -8753,7 +9180,7 @@
               "fee": "Undisclosed"
             }
           ],
-          "signed_count": 0,
+          "signed_count": 1,
           "released_count": 2,
           "left_count": 1
         },
@@ -8791,7 +9218,26 @@
         {
           "id": "woking",
           "name": "Woking",
-          "signed": [],
+          "signed": [
+            {
+              "player": "Jaiden Putman",
+              "other": "Queens Park Rangers U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Steven Turner",
+              "other": "Ipswich Town U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Taylan Harris",
+              "other": "Luton Town U21",
+              "kind": "loan",
+              "fee": "Loan"
+            }
+          ],
           "released": [
             {
               "player": "Aaron Drewe",
@@ -8843,7 +9289,7 @@
             }
           ],
           "left": [],
-          "signed_count": 0,
+          "signed_count": 3,
           "released_count": 8,
           "left_count": 0
         },
@@ -8854,6 +9300,36 @@
             {
               "player": "Cory Adjetey-Brew",
               "other": "Queens Park Rangers",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Charlie Waller",
+              "other": "Milton Keynes Dons",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Jayden Moore",
+              "other": "Southampton FC U21",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Harvey Boddy",
+              "other": "Queens Park Rangers U18",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Jose Marquez",
+              "other": "Forest Green Rovers",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Ramell Carter",
+              "other": "Hull City U21",
               "kind": "loan",
               "fee": "Loan"
             }
@@ -8915,14 +9391,33 @@
             }
           ],
           "left": [],
-          "signed_count": 1,
+          "signed_count": 6,
           "released_count": 9,
           "left_count": 0
         },
         {
           "id": "yeovil-town",
           "name": "Yeovil Town",
-          "signed": [],
+          "signed": [
+            {
+              "player": "Ben Radcliffe",
+              "other": "Crawley Town",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Loick Ayina",
+              "other": "Salford City",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Charlie Lennon",
+              "other": "Barnsley FC",
+              "kind": "loan",
+              "fee": "Loan"
+            }
+          ],
           "released": [
             {
               "player": "Aaron Jarvis",
@@ -8986,7 +9481,7 @@
             }
           ],
           "left": [],
-          "signed_count": 0,
+          "signed_count": 3,
           "released_count": 10,
           "left_count": 0
         }
@@ -9374,6 +9869,12 @@
               "other": "Paderborn",
               "kind": "other",
               "fee": "Undisclosed"
+            },
+            {
+              "player": "Oliver Sørensen",
+              "other": "Parma Calcio 1913",
+              "kind": "loan",
+              "fee": "Loan"
             }
           ],
           "released": [
@@ -9590,7 +10091,7 @@
               "fee": "Loan ended"
             }
           ],
-          "signed_count": 11,
+          "signed_count": 12,
           "released_count": 1,
           "left_count": 34
         },
@@ -9669,6 +10170,30 @@
               "other": "ND Primorje",
               "kind": "other",
               "fee": "ND Primorje"
+            },
+            {
+              "player": "Lyall Cameron",
+              "other": "Rangers FC",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Abdoulaye Yoro",
+              "other": "Basaksehir FK",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Daniel Bennie",
+              "other": "Queens Park Rangers",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Idjessi Metsoko",
+              "other": "FC Viktoria Plzen",
+              "kind": "loan",
+              "fee": "Loan"
             }
           ],
           "released": [],
@@ -9788,7 +10313,7 @@
               "fee": "Loan ended"
             }
           ],
-          "signed_count": 12,
+          "signed_count": 16,
           "released_count": 0,
           "left_count": 19
         },
@@ -11934,6 +12459,81 @@
       ],
       "signed_count": 154,
       "released_count": 33
+    },
+    {
+      "id": "irish-prem",
+      "name": "Irish Prem",
+      "teams": [
+        {
+          "id": "bohemian-football-club",
+          "name": "Bohemian FC",
+          "signed": [
+            {
+              "player": "Paul Walters",
+              "other": "FC Cincinnati",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Senan Mullen",
+              "other": "Torino FC",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Dominik Javorcek",
+              "other": "SK Slavia Prague",
+              "kind": "loan",
+              "fee": "Loan"
+            },
+            {
+              "player": "Samuel Obinaya",
+              "other": "FK Jablonec",
+              "kind": "loan",
+              "fee": "Loan"
+            }
+          ],
+          "released": [],
+          "left": [],
+          "signed_count": 4,
+          "released_count": 0,
+          "left_count": 0
+        },
+        {
+          "id": "derry-city",
+          "name": "Derry City",
+          "signed": [
+            {
+              "player": "Tom Norcott",
+              "other": "Reading FC U21",
+              "kind": "loan",
+              "fee": "Loan"
+            }
+          ],
+          "released": [],
+          "left": [],
+          "signed_count": 1,
+          "released_count": 0,
+          "left_count": 0
+        },
+        {
+          "id": "shelbourne-fc",
+          "name": "Shelbourne FC",
+          "signed": [
+            {
+              "player": "Murray Johnson",
+              "other": "Hibernian FC",
+              "kind": "loan",
+              "fee": "Loan"
+            }
+          ],
+          "released": [],
+          "left": [],
+          "signed_count": 1,
+          "released_count": 0,
+          "left_count": 0
+        }
+      ]
     }
   ]
 }

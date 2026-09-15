@@ -1,0 +1,1171 @@
+{
+  "updated": "2026-09-15",
+  "clubs": {
+    "Accrington Stanley": [],
+    "Barnet": [
+      {
+        "name": "Matthew Cox",
+        "from": "Brentford FC"
+      },
+      {
+        "name": "Jake Reeves",
+        "from": "AFC Wimbledon"
+      },
+      {
+        "name": "Oisín Gallagher",
+        "from": "Lincoln City"
+      },
+      {
+        "name": "Damola Ajayi",
+        "from": "Tottenham Hotspur U21"
+      }
+    ],
+    "Barnsley": [
+      {
+        "name": "Cieran Slicker",
+        "from": "Ipswich Town"
+      },
+      {
+        "name": "Connor O'Riordan",
+        "from": "Blackburn Rovers"
+      },
+      {
+        "name": "Ziyad Larkeche",
+        "from": "Queens Park Rangers"
+      },
+      {
+        "name": "Makenzie Kirk",
+        "from": "Portsmouth FC"
+      }
+    ],
+    "AFC Wimbledon": [
+      {
+        "name": "Josef Bursik",
+        "from": "Portsmouth FC"
+      },
+      {
+        "name": "Freddie Simmonds",
+        "from": "Brighton &amp; Hove Albion U21"
+      },
+      {
+        "name": "Ollie Harrison",
+        "from": "Chelsea FC U21"
+      },
+      {
+        "name": "Dujuan Richards",
+        "from": "Chelsea FC U21"
+      },
+      {
+        "name": "Donnell McNeilly",
+        "from": "Nottingham Forest U21"
+      }
+    ],
+    "AFC Fylde": [
+      {
+        "name": "Harvey Broad",
+        "from": "Coventry City U21"
+      },
+      {
+        "name": "Luke Butterfield",
+        "from": "Chesterfield FC"
+      },
+      {
+        "name": "Theo Upton",
+        "from": "Blackpool FC"
+      },
+      {
+        "name": "Millar Matthews-Lewis",
+        "from": "Burton Albion"
+      }
+    ],
+    "Blackpool": [
+      {
+        "name": "Finley Munroe",
+        "from": "Middlesbrough FC"
+      },
+      {
+        "name": "Jordan Williams",
+        "from": "Portsmouth FC"
+      },
+      {
+        "name": "Jerry Yates",
+        "from": "Luton Town"
+      },
+      {
+        "name": "Dion Charles",
+        "from": "Huddersfield Town"
+      }
+    ],
+    "Aberdeen": [],
+    "Aldershot Town": [
+      {
+        "name": "Jonathan Macaulay",
+        "from": "Watford FC U21"
+      },
+      {
+        "name": "Jack Matton",
+        "from": "Wycombe Wanderers"
+      }
+    ],
+    "Altrincham": [
+      {
+        "name": "Reuben Lopata-White",
+        "from": "Leeds United U21"
+      }
+    ],
+    "Barrow": [
+      {
+        "name": "Fawaz Al-Sqoor",
+        "from": "Al-Ittihad Club"
+      },
+      {
+        "name": "Fahad Al-Rashidi",
+        "from": "Al-Taawoun FC"
+      },
+      {
+        "name": "Mateo Benegas",
+        "from": "Club Ferro Carril Oeste"
+      },
+      {
+        "name": "Thamer Al-Khaibri",
+        "from": "NEOM SC"
+      }
+    ],
+    "Bradford City": [
+      {
+        "name": "Hayden Matthews",
+        "from": "Portsmouth FC"
+      },
+      {
+        "name": "George Pratt",
+        "from": "Blackburn Rovers"
+      },
+      {
+        "name": "Kieran Morgan",
+        "from": "Queens Park Rangers"
+      }
+    ],
+    "Bohemian Football Club": [
+      {
+        "name": "Paul Walters",
+        "from": "FC Cincinnati"
+      },
+      {
+        "name": "Senan Mullen",
+        "from": "Torino FC"
+      }
+    ],
+    "Boston United": [
+      {
+        "name": "Luke Faxon",
+        "from": "Sheffield United"
+      },
+      {
+        "name": "Sai Sachdev",
+        "from": "Sheffield United U21"
+      },
+      {
+        "name": "Ollie Bostock",
+        "from": "West Bromwich Albion U21"
+      },
+      {
+        "name": "Ken Aboh",
+        "from": "Norwich City U21"
+      }
+    ],
+    "Bohemians": [
+      {
+        "name": "Dominik Javorcek",
+        "from": "SK Slavia Prague"
+      },
+      {
+        "name": "Samuel Obinaya",
+        "from": "FK Jablonec"
+      }
+    ],
+    "Burton Albion": [
+      {
+        "name": "Corey Addai",
+        "from": "Stockport County"
+      },
+      {
+        "name": "Emeka Adiele",
+        "from": "FC Utrecht"
+      },
+      {
+        "name": "Will Collar",
+        "from": "Milton Keynes Dons"
+      },
+      {
+        "name": "Raphael Borges Rodrigues",
+        "from": "Coventry City"
+      },
+      {
+        "name": "Mark O'Mahony",
+        "from": "Brighton &amp; Hove Albion U21"
+      }
+    ],
+    "Boreham Wood": [
+      {
+        "name": "Ted Curd",
+        "from": "Chelsea FC U21"
+      },
+      {
+        "name": "Luca Gunter",
+        "from": "Tottenham Hotspur U21"
+      },
+      {
+        "name": "Farhaan Ali Wahid",
+        "from": "Fulham FC U21"
+      },
+      {
+        "name": "Danny Cashman",
+        "from": "Crawley Town"
+      },
+      {
+        "name": "Jay Bird",
+        "from": "Salford City"
+      }
+    ],
+    "Cheltenham Town": [],
+    "Cambridge United": [
+      {
+        "name": "Callum Perry",
+        "from": "Coventry City U21"
+      },
+      {
+        "name": "Sam Curtis",
+        "from": "Sheffield United"
+      },
+      {
+        "name": "Owen Moxon",
+        "from": "Stockport County"
+      },
+      {
+        "name": "Ra'ees Bangura-Williams",
+        "from": "Millwall FC"
+      },
+      {
+        "name": "Gassan Ahadme",
+        "from": "Charlton Athletic"
+      }
+    ],
+    "Celtic": [
+      {
+        "name": "Sam Johnstone",
+        "from": "Wolverhampton Wanderers"
+      },
+      {
+        "name": "Landon Emenalo",
+        "from": "Chelsea FC U21"
+      },
+      {
+        "name": "Oliver Sørensen",
+        "from": "Parma Calcio 1913"
+      },
+      {
+        "name": "Shumaira Mheuka",
+        "from": "Chelsea FC U21"
+      }
+    ],
+    "Crewe Alexandra": [
+      {
+        "name": "Josh Stephenson",
+        "from": "Brentford FC"
+      },
+      {
+        "name": "Kyle Ure",
+        "from": "Celtic FC B"
+      },
+      {
+        "name": "Charlie McNeill",
+        "from": "Sheffield Wednesday"
+      }
+    ],
+    "Bromley": [],
+    "Chesterfield": [],
+    "Crawley Town": [],
+    "Colchester United": [
+      {
+        "name": "Thimothée Lo-Tutala",
+        "from": "Hull City"
+      },
+      {
+        "name": "Moses Sesay",
+        "from": "Southampton FC U21"
+      },
+      {
+        "name": "Oscar Thorn",
+        "from": "Lincoln City"
+      },
+      {
+        "name": "Leon Chiwome",
+        "from": "Wolverhampton Wanderers U21"
+      },
+      {
+        "name": "Bradley Ihionvien",
+        "from": "Peterborough United"
+      }
+    ],
+    "Carlisle United": [
+      {
+        "name": "Toby Mullarkey",
+        "from": "Fleetwood Town"
+      }
+    ],
+    "Cork City": [],
+    "Drogheda United": [],
+    "Exeter City": [
+      {
+        "name": "Jack Taylor",
+        "from": "Stevenage FC"
+      },
+      {
+        "name": "Lakyle Samuel",
+        "from": "Manchester City U21"
+      },
+      {
+        "name": "Daniel Watts",
+        "from": "Swansea City U21"
+      },
+      {
+        "name": "Vincent Harper",
+        "from": "Walsall FC"
+      },
+      {
+        "name": "Ethan Sutherland",
+        "from": "Wolverhampton Wanderers U21"
+      },
+      {
+        "name": "Ajay Matthews",
+        "from": "Millwall FC"
+      }
+    ],
+    "Derry City": [
+      {
+        "name": "Tom Norcott",
+        "from": "Reading FC U21"
+      }
+    ],
+    "Dundalk FC": [],
+    "Doncaster Rovers": [
+      {
+        "name": "Tommy Simkin",
+        "from": "Stoke City"
+      },
+      {
+        "name": "Josh Clarke",
+        "from": "Partick Thistle FC"
+      },
+      {
+        "name": "Tommi O'Reilly",
+        "from": "Aston Villa U21"
+      },
+      {
+        "name": "Alfie May",
+        "from": "Huddersfield Town"
+      },
+      {
+        "name": "James Collins",
+        "from": "Lincoln City"
+      }
+    ],
+    "FC Worthing": [
+      {
+        "name": "Charlie Waller",
+        "from": "Milton Keynes Dons"
+      },
+      {
+        "name": "Jayden Moore",
+        "from": "Southampton FC U21"
+      },
+      {
+        "name": "Cory Adjetey-Brew",
+        "from": "Queens Park Rangers U21"
+      },
+      {
+        "name": "Harvey Boddy",
+        "from": "Queens Park Rangers U18"
+      },
+      {
+        "name": "Jose Marquez",
+        "from": "Forest Green Rovers"
+      },
+      {
+        "name": "Ramell Carter",
+        "from": "Hull City U21"
+      }
+    ],
+    "Eastleigh": [
+      {
+        "name": "Tommy Dobson-Ventura",
+        "from": "Southampton FC U21"
+      },
+      {
+        "name": "Reece Johnson",
+        "from": "Sheffield Wednesday"
+      },
+      {
+        "name": "Nelson Khumbeni",
+        "from": "Gillingham FC"
+      },
+      {
+        "name": "Harry Sidwell",
+        "from": "AFC Wimbledon"
+      },
+      {
+        "name": "Dion Rankine",
+        "from": "Crewe Alexandra"
+      }
+    ],
+    "Dundee": [
+      {
+        "name": "Lyall Cameron",
+        "from": "Rangers FC"
+      },
+      {
+        "name": "Abdoulaye Yoro",
+        "from": "Basaksehir FK"
+      },
+      {
+        "name": "Daniel Bennie",
+        "from": "Queens Park Rangers"
+      },
+      {
+        "name": "Idjessi Metsoko",
+        "from": "FC Viktoria Plzen"
+      }
+    ],
+    "Dundee United": [
+      {
+        "name": "Lyall Cameron",
+        "from": "Rangers FC"
+      },
+      {
+        "name": "Abdoulaye Yoro",
+        "from": "Basaksehir FK"
+      },
+      {
+        "name": "Daniel Bennie",
+        "from": "Queens Park Rangers"
+      },
+      {
+        "name": "Idjessi Metsoko",
+        "from": "FC Viktoria Plzen"
+      }
+    ],
+    "FC Galway United": [],
+    "Fleetwood Town": [],
+    "FC Waterford": [],
+    "FC Halifax Town": [
+      {
+        "name": "True Grant",
+        "from": "Stoke City"
+      },
+      {
+        "name": "Cruz Allen",
+        "from": "Derby County U21"
+      },
+      {
+        "name": "Arian Allen",
+        "from": "Stockport County U21"
+      }
+    ],
+    "Galway United": [],
+    "Gillingham": [],
+    "Falkirk": [
+      {
+        "name": "Finley Barbrook",
+        "from": "Ipswich Town U21"
+      },
+      {
+        "name": "Ben Krauhaus",
+        "from": "Brentford FC B"
+      },
+      {
+        "name": "Owen Eames",
+        "from": "Derby County"
+      },
+      {
+        "name": "Conor McLeod",
+        "from": "Wolverhampton Wanderers U21"
+      },
+      {
+        "name": "CJ Fodrey",
+        "from": "Austin FC"
+      },
+      {
+        "name": "Aodhan Doherty",
+        "from": "Blackburn Rovers U21"
+      }
+    ],
+    "Grimsby Town": [
+      {
+        "name": "Lewis Temple",
+        "from": "Bolton Wanderers"
+      },
+      {
+        "name": "Zain Tahir",
+        "from": "Sheffield United U21"
+      },
+      {
+        "name": "Kai Payne",
+        "from": "Wigan Athletic"
+      },
+      {
+        "name": "Favour Fawunmi",
+        "from": "Stoke City U21"
+      }
+    ],
+    "Gateshead": [],
+    "Forest Green Rovers": [
+      {
+        "name": "Filozofe Mabete",
+        "from": "Swindon Town"
+      },
+      {
+        "name": "Kelvin Abrefa",
+        "from": "Reading FC"
+      },
+      {
+        "name": "Sydney Agina",
+        "from": "Stoke City U21"
+      },
+      {
+        "name": "Preston Fearon",
+        "from": "West Ham United U21"
+      },
+      {
+        "name": "Kyle Kelly",
+        "from": "Liverpool FC U21"
+      },
+      {
+        "name": "James Berry",
+        "from": "Wycombe Wanderers"
+      }
+    ],
+    "Harrogate Town": [
+      {
+        "name": "Luke Hutchinson",
+        "from": "Bolton Wanderers"
+      },
+      {
+        "name": "Oliver Pimlott",
+        "from": "Burnley FC U21"
+      },
+      {
+        "name": "Michael Craig",
+        "from": "Leyton Orient"
+      },
+      {
+        "name": "Brayden Johnson",
+        "from": "Middlesbrough FC U21"
+      }
+    ],
+    "Heart of Midlothian": [],
+    "Huddersfield Town": [
+      {
+        "name": "Matty Young",
+        "from": "Sunderland AFC U21"
+      },
+      {
+        "name": "Cameron Humphreys",
+        "from": "Ipswich Town"
+      }
+    ],
+    "Hornchurch": [
+      {
+        "name": "Miles Bracking",
+        "from": "Norwich City U21"
+      }
+    ],
+    "Hibernian": [
+      {
+        "name": "Alex Williams",
+        "from": "West Bromwich Albion"
+      },
+      {
+        "name": "Jacob Devaney",
+        "from": "Manchester United U21"
+      },
+      {
+        "name": "Nathan Lowe",
+        "from": "Stoke City"
+      }
+    ],
+    "Hartlepool United": [
+      {
+        "name": "Max Merrick",
+        "from": "Chelsea FC U21"
+      },
+      {
+        "name": "Cole Deeming",
+        "from": "West Bromwich Albion U21"
+      }
+    ],
+    "Kidderminster Harriers": [
+      {
+        "name": "Jack Wint",
+        "from": "Manchester City U21"
+      },
+      {
+        "name": "Cian Harries",
+        "from": "Forest Green Rovers"
+      },
+      {
+        "name": "Luey Giles",
+        "from": "Cardiff City U21"
+      },
+      {
+        "name": "Callum Stewart",
+        "from": "Shrewsbury Town"
+      },
+      {
+        "name": "Levi Amantchi",
+        "from": "Gateshead FC"
+      }
+    ],
+    "Leicester City": [],
+    "Bristol Rovers": [],
+    "Leyton Orient": [
+      {
+        "name": "Oliver Dovin",
+        "from": "Coventry City"
+      },
+      {
+        "name": "Somto Boniface",
+        "from": "Ipswich Town"
+      },
+      {
+        "name": "Alfie Gilchrist",
+        "from": "West Bromwich Albion"
+      },
+      {
+        "name": "Yusuf Akhamrich",
+        "from": "Tottenham Hotspur U21"
+      },
+      {
+        "name": "Nicholas Oyekunle",
+        "from": "Southampton FC"
+      }
+    ],
+    "Luton Town": [
+      {
+        "name": "Harrison Ashby",
+        "from": "Newcastle United"
+      },
+      {
+        "name": "Dan Gore",
+        "from": "Manchester United U21"
+      },
+      {
+        "name": "Jamie Donley",
+        "from": "Tottenham Hotspur U21"
+      },
+      {
+        "name": "Emilio Lawrence",
+        "from": "Manchester City U21"
+      },
+      {
+        "name": "Tudor Mendel",
+        "from": "Ipswich Town U21"
+      }
+    ],
+    "Mansfield Town": [
+      {
+        "name": "Owen Dodgson",
+        "from": "Stockport County"
+      },
+      {
+        "name": "George Abbott",
+        "from": "Tottenham Hotspur U21"
+      }
+    ],
+    "Kilmarnock": [
+      {
+        "name": "Cathal McCarthy",
+        "from": "Hull City U21"
+      },
+      {
+        "name": "MJ Kamson-Kamara",
+        "from": "Heart of Midlothian FC"
+      },
+      {
+        "name": "Bailey Rice",
+        "from": "Rangers FC"
+      }
+    ],
+    "Oldham Athletic": [],
+    "MK Dons": [
+      {
+        "name": "Elijah Campbell",
+        "from": "Everton FC U21"
+      },
+      {
+        "name": "Ryan Barnett",
+        "from": "Wrexham AFC"
+      },
+      {
+        "name": "Ibrahim Fullah",
+        "from": "Charlton Athletic"
+      }
+    ],
+    "Northampton Town": [
+      {
+        "name": "Zach Jeacock",
+        "from": "Lincoln City"
+      },
+      {
+        "name": "Josh Powell",
+        "from": "Nottingham Forest U21"
+      },
+      {
+        "name": "Sam Chambers",
+        "from": "Leeds United U21"
+      },
+      {
+        "name": "Logan Briggs",
+        "from": "Leicester City U21"
+      }
+    ],
+    "Motherwell": [],
+    "Newport County": [
+      {
+        "name": "Daniel Svancara",
+        "from": "SK Artis Brno"
+      }
+    ],
+    "Peterborough United": [
+      {
+        "name": "Josh Feeney",
+        "from": "Aston Villa U21"
+      }
+    ],
+    "Rangers": [],
+    "Notts County": [
+      {
+        "name": "Ishé Samuels-Smith",
+        "from": "Chelsea FC U21"
+      },
+      {
+        "name": "Rory Finneran",
+        "from": "Newcastle United U21"
+      },
+      {
+        "name": "Oliver Cooper",
+        "from": "Swansea City"
+      },
+      {
+        "name": "Hindolo Mustapha",
+        "from": "Crystal Palace U21"
+      },
+      {
+        "name": "Daniel Kanu",
+        "from": "Charlton Athletic"
+      }
+    ],
+    "Plymouth Argyle": [
+      {
+        "name": "Tyreeq Bakinson",
+        "from": "Leyton Orient"
+      },
+      {
+        "name": "Oliver Irow",
+        "from": "Tottenham Hotspur U21"
+      }
+    ],
+    "Port Vale": [
+      {
+        "name": "Maleace Asamoah",
+        "from": "Wigan Athletic"
+      },
+      {
+        "name": "Keyrol Figueroa",
+        "from": "Liverpool FC U21"
+      },
+      {
+        "name": "Mo Faal",
+        "from": "Wrexham AFC"
+      },
+      {
+        "name": "Oliver Lynch",
+        "from": "Luton Town"
+      }
+    ],
+    "Reading": [
+      {
+        "name": "Josh Knight",
+        "from": "Portsmouth FC"
+      },
+      {
+        "name": "Josh Stokes",
+        "from": "Bristol City"
+      }
+    ],
+    "Oxford United": [
+      {
+        "name": "Kai Andrews",
+        "from": "Coventry City"
+      },
+      {
+        "name": "Luka Lynch",
+        "from": "Aston Villa U21"
+      }
+    ],
+    "Rochdale": [
+      {
+        "name": "Asuma Ikari",
+        "from": "Mito HollyHock"
+      }
+    ],
+    "Rotherham United": [
+      {
+        "name": "Julian Eyestone",
+        "from": "Brentford FC"
+      },
+      {
+        "name": "Jayce Fitzgerald",
+        "from": "Manchester United U21"
+      },
+      {
+        "name": "Jili Buyabu",
+        "from": "Sheffield United U21"
+      },
+      {
+        "name": "Klaidi Lolos",
+        "from": "Peterborough United"
+      },
+      {
+        "name": "George Sebine",
+        "from": "Huddersfield Town"
+      }
+    ],
+    "Salford City": [
+      {
+        "name": "Taylor Allen",
+        "from": "Wycombe Wanderers"
+      },
+      {
+        "name": "Nathan Asiimwe",
+        "from": "Charlton Athletic"
+      }
+    ],
+    "Shrewsbury Town": [
+      {
+        "name": "Dilane Bakwa",
+        "from": "Nottingham Forest"
+      }
+    ],
+    "Sligo Rovers": [],
+    "Scunthorpe United": [
+      {
+        "name": "Stanley Ashbee",
+        "from": "Hull City U21"
+      },
+      {
+        "name": "Tyrell Sellars-Fleming",
+        "from": "Hull City U21"
+      },
+      {
+        "name": "Hugh Parker",
+        "from": "Hull City U21"
+      }
+    ],
+    "St Johnstone": [],
+    "Shamrock Rovers": [],
+    "Shelbourne FC": [
+      {
+        "name": "Murray Johnson",
+        "from": "Hibernian FC"
+      }
+    ],
+    "Sheffield Wednesday": [
+      {
+        "name": "Jaden Heskey",
+        "from": "Manchester City U21"
+      },
+      {
+        "name": "Kieran Morrison",
+        "from": "Liverpool FC U21"
+      },
+      {
+        "name": "Mason Burstow",
+        "from": "Hull City"
+      },
+      {
+        "name": "Ali Al-Hamadi",
+        "from": "Ipswich Town"
+      },
+      {
+        "name": "Davis Keillor-Dunn",
+        "from": "Wrexham AFC"
+      },
+      {
+        "name": "Harry Gray",
+        "from": "Leeds United U21"
+      }
+    ],
+    "St Patrick's Athletic": [],
+    "Swindon Town": [
+      {
+        "name": "Sam Inwood",
+        "from": "Bolton Wanderers"
+      },
+      {
+        "name": "James Debayo",
+        "from": "Hull City U21"
+      },
+      {
+        "name": "Dan Butler",
+        "from": "Stevenage FC"
+      },
+      {
+        "name": "Anthony Munda",
+        "from": "Newcastle United U21"
+      },
+      {
+        "name": "Jaylan Pearman",
+        "from": "Queens Park Rangers U21"
+      },
+      {
+        "name": "Joseph Hungbo",
+        "from": "Wigan Athletic"
+      }
+    ],
+    "Southend United": [
+      {
+        "name": "Joe Duncan",
+        "from": "Bristol City U21"
+      },
+      {
+        "name": "Rayan Oyebade",
+        "from": "West Ham United U21"
+      },
+      {
+        "name": "Ryan Battrum",
+        "from": "West Ham United U21"
+      },
+      {
+        "name": "Promise Omochere",
+        "from": "Bristol Rovers"
+      }
+    ],
+    "Stockport County": [
+      {
+        "name": "Oliver Whatmuff",
+        "from": "Manchester City U21"
+      }
+    ],
+    "Solihull Moors": [
+      {
+        "name": "Craig Farquhar",
+        "from": "Barnet FC"
+      },
+      {
+        "name": "Ryan Woods",
+        "from": "Oldham Athletic"
+      },
+      {
+        "name": "Henry Rylah",
+        "from": "Charlton Athletic U21"
+      }
+    ],
+    "Stevenage": [
+      {
+        "name": "Tommy Setford",
+        "from": "Arsenal FC"
+      },
+      {
+        "name": "Kaelan Casey",
+        "from": "West Ham United"
+      },
+      {
+        "name": "Ben Broggio",
+        "from": "Aston Villa U21"
+      },
+      {
+        "name": "Tuğra Turhan",
+        "from": "Basaksehir FK"
+      }
+    ],
+    "St. Patrick's Athletic": [],
+    "St Mirren": [],
+    "Wealdstone": [],
+    "Worthing": [
+      {
+        "name": "Charlie Waller",
+        "from": "Milton Keynes Dons"
+      },
+      {
+        "name": "Jayden Moore",
+        "from": "Southampton FC U21"
+      },
+      {
+        "name": "Cory Adjetey-Brew",
+        "from": "Queens Park Rangers U21"
+      },
+      {
+        "name": "Harvey Boddy",
+        "from": "Queens Park Rangers U18"
+      },
+      {
+        "name": "Jose Marquez",
+        "from": "Forest Green Rovers"
+      },
+      {
+        "name": "Ramell Carter",
+        "from": "Hull City U21"
+      }
+    ],
+    "Worthing FC": [
+      {
+        "name": "Charlie Waller",
+        "from": "Milton Keynes Dons"
+      },
+      {
+        "name": "Jayden Moore",
+        "from": "Southampton FC U21"
+      },
+      {
+        "name": "Cory Adjetey-Brew",
+        "from": "Queens Park Rangers U21"
+      },
+      {
+        "name": "Harvey Boddy",
+        "from": "Queens Park Rangers U18"
+      },
+      {
+        "name": "Jose Marquez",
+        "from": "Forest Green Rovers"
+      },
+      {
+        "name": "Ramell Carter",
+        "from": "Hull City U21"
+      }
+    ],
+    "Waterford FC": [],
+    "Tranmere Rovers": [
+      {
+        "name": "George Nevett",
+        "from": "Peterborough United"
+      },
+      {
+        "name": "Bobby Faulkner",
+        "from": "Doncaster Rovers"
+      },
+      {
+        "name": "Zane Okoro",
+        "from": "Lincoln City"
+      },
+      {
+        "name": "David Kamara",
+        "from": "Peterborough United"
+      },
+      {
+        "name": "Dylan Jones",
+        "from": "Norwich City U21"
+      }
+    ],
+    "Sutton United": [
+      {
+        "name": "Spike Brits",
+        "from": "Manchester City U21"
+      },
+      {
+        "name": "Ben Brookes",
+        "from": "York City"
+      },
+      {
+        "name": "Bobby Amartey",
+        "from": "Leicester City U21"
+      },
+      {
+        "name": "Joe Knight",
+        "from": "Stevenage FC"
+      }
+    ],
+    "Wigan Athletic": [
+      {
+        "name": "Joe Walsh",
+        "from": "Queens Park Rangers"
+      },
+      {
+        "name": "Charlie Gray",
+        "from": "Manchester City U21"
+      },
+      {
+        "name": "Luke Harris",
+        "from": "Fulham FC U21"
+      },
+      {
+        "name": "Reggie Walsh",
+        "from": "Chelsea FC U21"
+      },
+      {
+        "name": "Bradley Burrowes",
+        "from": "Aston Villa U21"
+      }
+    ],
+    "Walsall": [
+      {
+        "name": "Lotfi Madjer",
+        "from": "Al-Duhail SC"
+      },
+      {
+        "name": "Youssef Snana",
+        "from": "Al-Shamal SC"
+      }
+    ],
+    "York City": [],
+    "Wycombe Wanderers": [
+      {
+        "name": "Sam Parker",
+        "from": "Swansea City"
+      },
+      {
+        "name": "Malik Mothersille",
+        "from": "Stockport County"
+      },
+      {
+        "name": "Emre Tezgel",
+        "from": "Stoke City"
+      }
+    ],
+    "Tamworth": [
+      {
+        "name": "Ryan Howley",
+        "from": "Bristol Rovers"
+      }
+    ],
+    "Woking": [
+      {
+        "name": "Jaiden Putman",
+        "from": "Queens Park Rangers U21"
+      },
+      {
+        "name": "Steven Turner",
+        "from": "Ipswich Town U21"
+      },
+      {
+        "name": "Taylan Harris",
+        "from": "Luton Town U21"
+      }
+    ],
+    "Yeovil Town": [
+      {
+        "name": "Ben Radcliffe",
+        "from": "Crawley Town"
+      },
+      {
+        "name": "Loick Ayina",
+        "from": "Salford City"
+      },
+      {
+        "name": "Charlie Lennon",
+        "from": "Barnsley FC"
+      }
+    ]
+  },
+  "club_count": 101,
+  "loan_count": 248
+}

@@ -136,6 +136,7 @@ RSYNC_EXCLUDES=(
   # developer's copy up only risks overwriting good data with a local stub.
   --include 'data/squad-planner.json'
   --include 'data/efl-transfer-report-2026.json'
+  --include 'data/transfermarkt-loans-2026.json'
   --include 'data/efl-transfer-badges.json'
   --include 'data/transfer-centre-positions.json'
   --include 'data/pre-match-two-pager.json'

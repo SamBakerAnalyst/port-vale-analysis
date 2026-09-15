@@ -9,7 +9,21 @@
     refreshBtn: document.getElementById("wlRefreshBtn"),
     sub: document.getElementById("wlSub"),
     pipelinesLink: document.getElementById("wlPipelinesLink"),
+    panel: document.getElementById("wlPanel"),
+    legend: document.getElementById("wlLegend"),
+    leagueGroup: document.getElementById("wlLeagueGroup"),
+    positionGroup: document.getElementById("wlPositionGroup"),
+    situationGroup: document.getElementById("wlSituationGroup"),
   };
+
+  const LEAGUE_ORDER = [
+    "League One",
+    "League Two",
+    "National League",
+    "Scottish Prem",
+    "PL2",
+    "Irish Prem",
+  ];
 
   let state = {
     targets: [],
@@ -17,8 +31,15 @@
     pipelineStageIds: [],
     positionSections: [],
     snapshot: null,
+    transferCheck: null,
+    statsMissing: 0,
     // Pipelines is held back until every scout has a personal login.
     pipelinesLive: false,
+    filters: {
+      league: "all",
+      position: "all",
+      situation: "all",
+    },
   };
   let refreshPollTimer = null;
 
@@ -158,6 +179,208 @@
       return move?.status === "loan_in" || move?.status === "loan_out";
     }
 
+    function situationOf(target) {
+      const move = target?.transfer;
+      if (!move?.club) return "";
+      if (isLoanMove(move)) return "loan";
+      if (move.status === "gone") return "gone";
+      return "check";
+    }
+
+    function matchesFilters(target) {
+      const { league, position, situation } = state.filters;
+      if (league !== "all" && String(target.league || "") !== league) return false;
+      if (position !== "all") {
+        const code = String(target.position || "").trim() || "OTHER";
+        if (code !== position) return false;
+      }
+      if (situation !== "all" && situationOf(target) !== situation) return false;
+      return true;
+    }
+
+    function situationCounts(targets) {
+      const counts = { loan: 0, gone: 0, check: 0 };
+      for (const row of targets || []) {
+        const key = situationOf(row);
+        if (key) counts[key] += 1;
+      }
+      return counts;
+    }
+
+    function uniqueLeagues(targets) {
+      const present = new Set(
+        (targets || []).map((row) => String(row.league || "").trim()).filter(Boolean),
+      );
+      const ranked = LEAGUE_ORDER.filter((name) => present.has(name));
+      const rest = [...present].filter((name) => !LEAGUE_ORDER.includes(name)).sort((a, b) => a.localeCompare(b));
+      return [...ranked, ...rest];
+    }
+
+    function uniquePositions(targets) {
+      const present = new Set(
+        (targets || []).map((row) => String(row.position || "").trim() || "OTHER"),
+      );
+      const sections = state.positionSections || [];
+      const ordered = [];
+      for (const section of sections) {
+        if (present.has(section.id)) ordered.push(section);
+      }
+      if (present.has("OTHER") && !ordered.some((row) => row.id === "OTHER")) {
+        ordered.push({ id: "OTHER", label: "Other", title: "Other" });
+      }
+      for (const code of present) {
+        if (!ordered.some((row) => row.id === code)) {
+          ordered.push({ id: code, label: code, title: code });
+        }
+      }
+      return ordered;
+    }
+
+    function filterBtn(value, label, { group, extraClass = "", count = null, title = "" } = {}) {
+      const active = state.filters[group] === value;
+      const classes = ["wl-filter__btn", extraClass, active ? "is-active" : ""]
+        .filter(Boolean)
+        .join(" ");
+      const shown = count == null ? label : `${label} ${count}`;
+      return `<button type="button" class="${classes}" data-filter="${esc(group)}" data-value="${esc(value)}"${
+        title ? ` title="${esc(title)}"` : ""
+      }>${esc(shown)}</button>`;
+    }
+
+    function filtersActive() {
+      return (
+        state.filters.league !== "all" ||
+        state.filters.position !== "all" ||
+        state.filters.situation !== "all"
+      );
+    }
+
+    function renderLegend(targets) {
+      if (!els.legend) return;
+      const total = (targets || []).length;
+      const counts = situationCounts(targets);
+      const chips = [];
+      if (counts.loan) {
+        chips.push(
+          `<li><button type="button" class="wl-legend__chip wl-legend__chip--loan${
+            state.filters.situation === "loan" ? " is-active" : ""
+          }" data-filter="situation" data-value="loan" title="Show players on loan">
+            <span class="wl-legend__dot" aria-hidden="true"></span>
+            ${counts.loan} on loan
+          </button></li>`,
+        );
+      }
+      if (counts.gone) {
+        chips.push(
+          `<li><button type="button" class="wl-legend__chip wl-legend__chip--moved${
+            state.filters.situation === "gone" ? " is-active" : ""
+          }" data-filter="situation" data-value="gone" title="Show players who have signed elsewhere">
+            <span class="wl-legend__dot" aria-hidden="true"></span>
+            ${counts.gone} signed elsewhere
+          </button></li>`,
+        );
+      }
+      if (counts.check) {
+        chips.push(
+          `<li><button type="button" class="wl-legend__chip wl-legend__chip--check${
+            state.filters.situation === "check" ? " is-active" : ""
+          }" data-filter="situation" data-value="check" title="Name matched a signing — check it is the same player">
+            <span class="wl-legend__dot" aria-hidden="true"></span>
+            ${counts.check} to check
+          </button></li>`,
+        );
+      }
+      const hint =
+        "Blue names are on loan — any deal is with the parent club. Red names have already signed elsewhere.";
+      const check = state.transferCheck || {};
+      const metaClass = check.stale ? "wl-legend__meta is-stale" : "wl-legend__meta";
+      const meta = check.detail
+        ? `<p class="${metaClass}">${esc(check.detail)}</p>`
+        : "";
+      const missing = state.statsMissing
+        ? `<p class="wl-legend__meta">${state.statsMissing} still need a data refresh — click Refresh data.</p>`
+        : "";
+      els.legend.innerHTML = `
+        <p class="wl-legend__lead">${total} player${total === 1 ? "" : "s"} on the watch list</p>
+        ${chips.length ? `<ul class="wl-legend__keys">${chips.join("")}</ul>` : ""}
+        <p class="wl-legend__hint">${esc(hint)}</p>
+        ${meta}
+        ${missing}
+      `;
+    }
+
+    function renderFilterControls(targets) {
+      if (els.leagueGroup) {
+        const leagues = uniqueLeagues(targets);
+        if (state.filters.league !== "all" && !leagues.includes(state.filters.league)) {
+          state.filters.league = "all";
+        }
+        els.leagueGroup.innerHTML = [
+          filterBtn("all", "All", { group: "league" }),
+          ...leagues.map((name) =>
+            filterBtn(name, name, {
+              group: "league",
+              count: targets.filter((row) => String(row.league || "") === name).length,
+            }),
+          ),
+        ].join("");
+      }
+      if (els.positionGroup) {
+        const positions = uniquePositions(targets);
+        if (
+          state.filters.position !== "all" &&
+          !positions.some((row) => row.id === state.filters.position)
+        ) {
+          state.filters.position = "all";
+        }
+        els.positionGroup.innerHTML = [
+          filterBtn("all", "All", { group: "position" }),
+          ...positions.map((row) =>
+            filterBtn(row.id, row.label || row.title || row.id, {
+              group: "position",
+              count: targets.filter((item) => (String(item.position || "").trim() || "OTHER") === row.id)
+                .length,
+              title: row.title || "",
+            }),
+          ),
+        ].join("");
+      }
+      if (els.situationGroup) {
+        const counts = situationCounts(targets);
+        const buttons = [
+          filterBtn("all", "All", { group: "situation" }),
+          filterBtn("loan", "On loan", {
+            group: "situation",
+            extraClass: "wl-filter__btn--loan",
+            count: counts.loan || null,
+            title: "Players on loan at their current club, or out on loan",
+          }),
+          filterBtn("gone", "Signed elsewhere", {
+            group: "situation",
+            extraClass: "wl-filter__btn--moved",
+            count: counts.gone || null,
+            title: "Players who have already signed for another club",
+          }),
+        ];
+        if (counts.check) {
+          buttons.push(
+            filterBtn("check", "Check", {
+              group: "situation",
+              extraClass: "wl-filter__btn--check",
+              count: counts.check,
+              title: "Name matched a signing — check it is the same player",
+            }),
+          );
+        }
+        if (filtersActive()) {
+          buttons.push(
+            `<button type="button" class="wl-filter__clear" data-filter-clear="1">Clear</button>`,
+          );
+        }
+        els.situationGroup.innerHTML = buttons.join("");
+      }
+    }
+
     // A tracked player who has moved is the costliest stale row on the hub —
     // someone may be planning a trip. A tracked player who is on loan is the
     // second costliest: he is signable, but not from the club on the row.
@@ -264,13 +487,34 @@
   }
 
   function render(targets) {
-    els.count.textContent = `${targets.length} player${targets.length === 1 ? "" : "s"} on the watch list`;
-    if (!targets.length) {
+    const all = targets || [];
+    const visible = all.filter(matchesFilters);
+    if (els.panel) els.panel.hidden = !all.length;
+    if (all.length) {
+      renderLegend(all);
+      renderFilterControls(all);
+    }
+
+    const filtered = filtersActive();
+    if (els.count) {
+      if (filtered && all.length) {
+        els.count.hidden = false;
+        els.count.textContent = `Showing ${visible.length} of ${all.length}`;
+      } else {
+        els.count.hidden = true;
+      }
+    }
+
+    if (!all.length) {
       els.list.innerHTML = `<p class="wl-empty">Nobody on the watch list yet. Tick players on <a href="/who-to-scout">Who To Scout</a> or Hub Stand outs.</p>`;
       return;
     }
+    if (!visible.length) {
+      els.list.innerHTML = `<p class="wl-empty">Nobody matches these filters. Clear league, position or situation to see the full list.</p>`;
+      return;
+    }
 
-    const groups = groupTargets(targets);
+    const groups = groupTargets(visible);
     els.list.innerHTML = groups
       .map(
         (group) => `<section class="wl-section" data-position="${esc(group.code)}">
@@ -340,32 +584,11 @@
       state.pipelineStageIds = data.pipeline_stage_ids || [];
       state.positionSections = data.position_sections || data.positions || [];
       state.pipelinesLive = Boolean(data.pipelines_live);
+      state.transferCheck = data.transfer_check || null;
+      state.statsMissing = Number(data.stats_missing) || 0;
       applyPipelinesVisibility();
       setUpdated(data.snapshot || null);
       render(state.targets);
-        // A player who has moved outranks a stale stat: one wastes a trip, the
-        // other just looks untidy. A transfer check that is behind outranks
-        // both, because it makes every clean row mean less than it appears to.
-        const stale = data.transfer_check?.stale ? data.transfer_check.detail : "";
-        if (stale) {
-          setStatus(stale, true);
-        } else if (data.stats_moved || data.stats_loaned) {
-          const parts = [];
-          if (data.stats_moved) {
-            const n = data.stats_moved;
-            parts.push(`${n} ${n === 1 ? "has" : "have"} signed elsewhere (red)`);
-          }
-          if (data.stats_loaned) {
-            const n = data.stats_loaned;
-            parts.push(`${n} ${n === 1 ? "is" : "are"} on loan (blue)`);
-          }
-          setStatus(`Of the players you track, ${parts.join(", ")}.`, false);
-        } else if (data.stats_missing) {
-          setStatus(
-            `${data.stats_missing} player${data.stats_missing === 1 ? "" : "s"} still need a data refresh — click Refresh data.`,
-            false,
-          );
-        }
     } catch (err) {
       els.list.innerHTML = `<p class="wl-empty">${esc(err.message || "Failed to load")}</p>`;
       setStatus(err.message || "Failed to load watch list.", true);
@@ -468,6 +691,33 @@
       button.disabled = false;
     }
   }
+
+  function setFilter(group, value) {
+    if (!["league", "position", "situation"].includes(group)) return;
+    const next = String(value || "all");
+    if (next !== "all" && state.filters[group] === next) {
+      state.filters[group] = "all";
+    } else {
+      state.filters[group] = next;
+    }
+    render(state.targets);
+  }
+
+  function clearFilters() {
+    state.filters = { league: "all", position: "all", situation: "all" };
+    render(state.targets);
+  }
+
+  els.panel?.addEventListener("click", (event) => {
+    const clearBtn = event.target.closest("[data-filter-clear]");
+    if (clearBtn) {
+      clearFilters();
+      return;
+    }
+    const btn = event.target.closest("[data-filter]");
+    if (!btn) return;
+    setFilter(btn.dataset.filter, btn.dataset.value);
+  });
 
   els.list.addEventListener("change", (event) => {
     const select = event.target.closest("[data-stage-for]");

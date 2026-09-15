@@ -45,6 +45,7 @@ RSYNC_EXCLUDES=(
   # developer's copy up only risks overwriting good data with a local stub.
   --include 'data/squad-planner.json'
   --include 'data/efl-transfer-report-2026.json'
+  --include 'data/transfermarkt-loans-2026.json'
   --include 'data/efl-transfer-badges.json'
   --include 'data/transfer-centre-positions.json'
   --include 'data/pre-match-two-pager.json'
@@ -79,6 +80,8 @@ mkdir -p /opt/port-vale-analysis/shared
 if [[ ! -f /opt/port-vale-analysis/shared/pre-match-two-pager.json && -f data/pre-match-two-pager.json ]]; then
   cp data/pre-match-two-pager.json /opt/port-vale-analysis/shared/pre-match-two-pager.json
 fi
+# Compose can leave a hash-prefixed name after a failed recreate.
+docker ps -a --format '{{.Names}}' | grep -E '^[0-9a-f]+_port-vale-staging-hub-1$' | xargs -r docker rm -f || true
 docker compose --project-directory /opt/port-vale-analysis \
   -f deploy/docker-compose.staging.yml \
   -p port-vale-staging \

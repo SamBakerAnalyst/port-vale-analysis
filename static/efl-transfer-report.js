@@ -50,8 +50,14 @@
     return `<img class="${cls}" src="${esc(url)}" alt="${esc(alt || "")}" />`;
   }
 
+  const MARKET_IDS = new Set(LEAGUE_PDF.map((row) => row.id));
+
+  function marketLeagues(data) {
+    return (data.leagues || []).filter((league) => MARKET_IDS.has(league.id));
+  }
+
   function totals(data) {
-    return (data.leagues || []).reduce(
+    return marketLeagues(data).reduce(
       (acc, league) => {
         acc.clubs += league.teams.length;
         acc.signed += league.signed_count;
@@ -240,7 +246,7 @@
 
   function buildDeck(data) {
     const parts = [titleSlide(data)];
-    for (const league of data.leagues || []) {
+    for (const league of marketLeagues(data)) {
       parts.push(leagueSlide(league));
       for (const team of league.teams) {
         parts.push(clubSlide(league, team));

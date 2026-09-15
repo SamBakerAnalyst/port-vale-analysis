@@ -348,12 +348,17 @@ def _club_position_index(club_name: str) -> dict[str, dict[str, Any]]:
     return out
 
 
+MARKET_LEAGUE_IDS = frozenset({"league-one", "league-two", "national-league", "scottish-prem"})
+
+
 def report_club_names(report: dict[str, Any] | None = None) -> list[str]:
     payload = report if isinstance(report, dict) else load_report()
     names: list[str] = []
     seen: set[str] = set()
     for league in payload.get("leagues") or []:
         if not isinstance(league, dict):
+            continue
+        if str(league.get("id") or "") not in MARKET_LEAGUE_IDS:
             continue
         for team in league.get("teams") or []:
             if not isinstance(team, dict):
@@ -884,6 +889,8 @@ def build_market_board(
         if not isinstance(league, dict):
             continue
         league_id = str(league.get("id") or "").strip()
+        if league_id not in MARKET_LEAGUE_IDS:
+            continue
         league_name = str(league.get("name") or league_id).strip()
         teams_out: list[dict[str, Any]] = []
         for team in league.get("teams") or []:
@@ -958,6 +965,8 @@ def transfer_reports(report: dict[str, Any] | None = None) -> list[dict[str, Any
     league_bits: list[str] = []
     for league in payload.get("leagues") or []:
         if not isinstance(league, dict):
+            continue
+        if str(league.get("id") or "") not in MARKET_LEAGUE_IDS:
             continue
         teams = league.get("teams") or []
         clubs += len(teams)
