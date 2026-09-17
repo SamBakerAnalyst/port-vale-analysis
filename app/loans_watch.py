@@ -384,7 +384,7 @@ def _match_impect_player(
 def _player_id(row: dict[str, Any] | None) -> int | None:
     if not isinstance(row, dict):
         return None
-    return _as_int(row.get("playerId") or row.get("player_id") or row.get("id"))
+    return _as_int(row.get("playerId") or row.get("player_id"))
 
 
 def _related_impect_rows(

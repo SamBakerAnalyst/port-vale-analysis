@@ -8,6 +8,7 @@ from app.loans_watch import (
     build_loans_watch,
     infer_matches,
     infer_starts,
+    loan_playing_minutes,
     loan_position_group,
     loan_watch_score,
     playing_time,
@@ -60,6 +61,8 @@ def test_page_lists_age_starts_matches_minutes_and_score():
     assert ".lw-col.is-asc" in css
     assert ".lw-col.is-desc" in css
     assert ".lw-ranked .lw-table__head" in css
+    assert "row.profile_minutes" in js
+    assert "lw-score__mins" in js
     assert "html2canvas" not in js
     assert ".lw-row" in css
     assert ".lw-score.is-hot" in css
@@ -91,6 +94,18 @@ def test_position_group_maps_impect_codes_and_labels():
     assert loan_position_group("GOALKEEPER", "") == "gk"
     assert loan_position_group("", "Attacking midfield") == "am"
     assert loan_position_group("", "") == ""
+
+
+def test_minutes_are_total_played_and_score_keeps_profile_minutes():
+    total, profile = loan_playing_minutes(
+        [
+            {"position": "CENTER_FORWARD", "minutes": 219, "overall": 56.2},
+            {"position": "LEFT_WINGER", "minutes": 410, "overall": 48.0},
+        ],
+        {"position": "CENTER_FORWARD", "minutes": 219, "overall": 56.2},
+    )
+    assert total == 629
+    assert profile == 219
 
 
 def test_playing_time_and_watch_score_reward_regulars():
@@ -133,6 +148,19 @@ def test_board_lists_every_teams_loans_with_port_vale_stats():
             "overall": 58.0,
             "playerId": 1001,
             "position": "W",
+        },
+        {
+            "name": "Mo Faal",
+            "club": "Port Vale",
+            "league": "League Two",
+            "age": 23,
+            "minutes": 200,
+            "matchCount": 4,
+            "starts": 2,
+            "overall": 49.0,
+            "playerId": 922,
+            "position": "W",
+            "positionLabel": "Right winger",
         },
     ]
     board = build_loans_watch(report=report, snapshot=snapshot, players=players)
