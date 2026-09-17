@@ -90,9 +90,11 @@
     return `${Number(value).toLocaleString("en-GB")}′`;
   }
 
-  function formatScore(value) {
-    if (value == null || value === "") return "—";
-    return Number(value).toFixed(Number(value) % 1 ? 1 : 0);
+  function formatScore(row) {
+    if (row.overall == null || row.overall === "") return "—";
+    const score = Number(row.overall).toFixed(Number(row.overall) % 1 ? 1 : 0);
+    if (row.profile_minutes == null || row.profile_minutes === "") return score;
+    return `${score}<span class="lw-score__mins"> (${formatMinutes(row.profile_minutes)})</span>`;
   }
 
   function matchesFilters(row) {
@@ -194,7 +196,7 @@
       <span class="lw-num${row.starts_estimated ? " is-est" : ""}">${formatNum(row.starts, row.starts_estimated)}</span>
       <span class="lw-num${row.matches_estimated ? " is-est" : ""}">${formatNum(row.matches, row.matches_estimated)}</span>
       <span class="lw-num">${formatMinutes(row.minutes)}</span>
-      <span class="lw-score ${scoreClass(row.overall)}">${formatScore(row.overall)}</span>
+      <span class="lw-score ${scoreClass(row.overall)}">${formatScore(row)}</span>
     `;
   }
 

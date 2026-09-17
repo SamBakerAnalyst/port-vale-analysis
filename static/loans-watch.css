@@ -418,6 +418,13 @@ a:hover { text-decoration: underline; }
   text-align: right;
   font-weight: 800;
   font-size: 1.12rem;
+  white-space: nowrap;
+}
+
+.lw-score__mins {
+  font-size: 0.78em;
+  font-weight: 600;
+  color: var(--muted);
 }
 
 .lw-score.is-hot { color: #4ade80; }
