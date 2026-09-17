@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Loans Watch</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/loans-watch.css?v=6" />
+</head>
+<body>
+  <div class="lw">
+    <header class="lw-toolbar card">
+      <div class="lw-brand">
+        <p class="lw-eyebrow">Recruitment · <a href="/">← All apps</a> · <a href="/transfer-centre">Transfer Centre</a> · <a href="/who-to-scout">Who To Scout</a></p>
+        <h1>Loans Watch</h1>
+        <p class="lw-sub" id="lwSub">Every club’s current loanees — age, starts, matches, minutes, and Impect score.</p>
+      </div>
+      <div class="lw-kpis" id="lwKpis"></div>
+    </header>
+
+    <p id="lwStatus" class="lw-status hidden" role="status"></p>
+
+    <section class="lw-filters card" id="lwFilters">
+      <div class="lw-filter lw-filter--league">
+        <span class="lw-filter__label">League</span>
+        <div class="lw-chips" id="lwLeagues" role="group" aria-label="League filter"></div>
+      </div>
+      <div class="lw-filter lw-filter--position">
+        <span class="lw-filter__label">Position</span>
+        <div class="lw-chips" id="lwPositions" role="group" aria-label="Position filter">
+          <button type="button" class="lw-chip is-active" data-position="all">All</button>
+          <button type="button" class="lw-chip" data-position="gk">GK</button>
+          <button type="button" class="lw-chip" data-position="cb">CB</button>
+          <button type="button" class="lw-chip" data-position="fb">FB</button>
+          <button type="button" class="lw-chip" data-position="dm">DM</button>
+          <button type="button" class="lw-chip" data-position="cm">CM</button>
+          <button type="button" class="lw-chip" data-position="am">AM</button>
+          <button type="button" class="lw-chip" data-position="w">W</button>
+          <button type="button" class="lw-chip" data-position="st">ST</button>
+          <button type="button" class="lw-chip" data-position="none">No pos</button>
+        </div>
+      </div>
+      <div class="lw-filter-row">
+        <div class="lw-filter">
+          <span class="lw-filter__label">Look</span>
+          <div class="lw-chips" id="lwView" role="group" aria-label="By club or ranked list">
+            <button type="button" class="lw-chip is-active" data-view="club">By club</button>
+            <button type="button" class="lw-chip" data-view="ranked">Ranked</button>
+          </div>
+        </div>
+        <div class="lw-filter">
+          <span class="lw-filter__label">Playing</span>
+          <div class="lw-chips" id="lwUsage" role="group" aria-label="Playing time">
+            <button type="button" class="lw-chip is-active" data-usage="all">All</button>
+            <button type="button" class="lw-chip" data-usage="regular">Regulars</button>
+            <button type="button" class="lw-chip" data-usage="rotation">Rotation</button>
+            <button type="button" class="lw-chip" data-usage="unused">Unused</button>
+          </div>
+        </div>
+        <div class="lw-filter">
+          <span class="lw-filter__label">Age</span>
+          <div class="lw-chips" id="lwAge" role="group" aria-label="Age filter">
+            <button type="button" class="lw-chip is-active" data-age="all">All</button>
+            <button type="button" class="lw-chip" data-age="u21">U21</button>
+            <button type="button" class="lw-chip" data-age="u23">U23</button>
+            <button type="button" class="lw-chip" data-age="u25">U25</button>
+          </div>
+        </div>
+        <div class="lw-filter">
+          <span class="lw-filter__label">Sort</span>
+          <div class="lw-chips" id="lwSort" role="group" aria-label="Sort by">
+            <button type="button" class="lw-chip is-active" data-sort="score">Score</button>
+            <button type="button" class="lw-chip" data-sort="player">Player</button>
+            <button type="button" class="lw-chip" data-sort="club">Club</button>
+            <button type="button" class="lw-chip" data-sort="from">From</button>
+            <button type="button" class="lw-chip" data-sort="age">Age</button>
+            <button type="button" class="lw-chip" data-sort="starts">Starts</button>
+            <button type="button" class="lw-chip" data-sort="matches">Matches</button>
+            <button type="button" class="lw-chip" data-sort="minutes">Minutes</button>
+          </div>
+        </div>
+        <div class="lw-filter">
+          <span class="lw-filter__label">Order</span>
+          <div class="lw-chips" id="lwSortDir" role="group" aria-label="Sort direction">
+            <button type="button" class="lw-chip is-active" data-dir="desc">Desc</button>
+            <button type="button" class="lw-chip" data-dir="asc">Asc</button>
+          </div>
+        </div>
+        <label class="lw-filter lw-search">
+          Search
+          <input id="lwSearch" type="search" placeholder="Player, club, or parent club" autocomplete="off" />
+        </label>
+      </div>
+    </section>
+
+    <section class="lw-board card" aria-label="Loans">
+      <div class="lw-board__head">
+        <h2 id="lwListTitle">By club</h2>
+        <p id="lwListCount"></p>
+      </div>
+      <div id="lwBoard" class="lw-board__body"></div>
+    </section>
+  </div>
+
+  <script defer src="/static/loans-watch.js?v=6"></script>
+  <script defer src="/static/hub-feedback.js"></script>
+</body>
+</html>

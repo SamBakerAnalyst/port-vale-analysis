@@ -62,6 +62,15 @@ def _scouting_position_label(position: str) -> str:
     return impect.POSITION_LABELS.get(position, position)
 
 
+def _optional_int(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(round(float(value)))
+    except (TypeError, ValueError):
+        return None
+
+
 SCOUTING_SEASON_MODES: dict[str, tuple[int, bool]] = {
     "current": (0, False),
     "previous": (1, False),
@@ -1085,6 +1094,8 @@ def build_scouting_long_list(body: ScoutingLongListRequest) -> dict[str, Any]:
                 "club": club,
                 "season": str(row.get("_seasonLabel", "")),
                 "minutes": int(round(float(row.get("_combinedMinutes") or 0))),
+                "matchCount": _optional_int(row.get("matchCount") or row.get("matches")),
+                "starts": _optional_int(row.get("starts") or row.get("gamesStarted")),
                 "profileScores": profile_scores,
                 **chart_bundle,
             }

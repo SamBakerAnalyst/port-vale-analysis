@@ -429,6 +429,25 @@ APPS: list[dict[str, Any]] = [
         "router": "transfer_centre",
     },
     {
+        "id": "loans-watch",
+        "group": "recruitment",
+        "title": "Loans Watch",
+        "description": (
+            "Every club's current loanees — age, starts, matches, minutes, and Impect score. "
+            "See who is actually playing."
+        ),
+        "href": "/loans-watch",
+        "icon": "📥",
+        "accent": "#f59e0b",
+        "tags": ["Transfers", "Loans", "Market"],
+        "roles": ("scouts", "admin"),
+        "api_prefixes": (
+            "/loans-watch",
+            "/api/loans-watch",
+        ),
+        "router": "loans_watch",
+    },
+    {
         "id": "games-to-watch",
         "group": "recruitment",
         "title": "Games to Watch",
@@ -857,6 +876,7 @@ LIVE_ESSENTIAL_IDS = frozenset(
         "scoutable-teams",
         "games-to-watch",
         "video-watch",
+        "loans-watch",
         # Scouts
         "fixture-planner",
         "played-fixtures",

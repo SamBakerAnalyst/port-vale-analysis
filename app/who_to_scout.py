@@ -65,6 +65,15 @@ def _club_key(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", str(name or "").casefold())
 
 
+def _as_int(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(round(float(value)))
+    except (TypeError, ValueError):
+        return None
+
+
 def _pick_squad(names: dict[int, str], needle: str) -> tuple[int, str] | None:
     key = _club_key(needle)
     if not key:
@@ -118,6 +127,16 @@ def _score_row_to_sheet_player(
         "league": league,
         "season": season,
         "minutes": impect._play_duration_minutes(row),
+        "matchCount": _as_int(
+            row.get("matchCount")
+            or row.get("matches")
+            or row.get("numberOfMatches")
+        ),
+        "starts": _as_int(
+            row.get("starts")
+            or row.get("gamesStarted")
+            or row.get("numberOfStarts")
+        ),
         "position": position,
         "positionLabel": _scouting_position_label(position) if position else "",
         "overall": overall,
@@ -377,6 +396,7 @@ def _who_to_scout_player(row: dict[str, Any]) -> dict[str, Any]:
         "season",
         "minutes",
         "matchCount",
+        "starts",
         "position",
         "positionLabel",
         "overall",

@@ -353,6 +353,18 @@ window.IMPECT_APPS = [
     "note": "Coming soon"
   },
   {
+    "id": "loans-watch",
+    "group": "recruitment",
+    "title": "Loans Watch",
+    "description": "Every club's current loanees — age, starts, matches, minutes, and Impect score. See who is actually playing.",
+    "href": "/loans-watch",
+    "icon": "📥",
+    "accent": "#f59e0b",
+    "tags": ["Transfers", "Loans", "Market"],
+    "comingSoon": true,
+    "note": "Coming soon"
+  },
+  {
     "id": "games-to-watch",
     "group": "recruitment",
     "title": "Games to Watch",
