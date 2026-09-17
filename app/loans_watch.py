@@ -149,9 +149,10 @@ _POSITION_LABEL_HINTS: tuple[tuple[str, str], ...] = (
 )
 
 SCORING_NOTE = (
-    "Current squad loans from Transfermarkt. Age, minutes and Score are Impect "
-    "(same overall as Who To Scout). Starts and matches come from Impect when "
-    "the feed has them; otherwise they are estimated from minutes."
+    "Current squad loans from Transfermarkt. Minutes are total played. "
+    "Score is the Impect profile (same overall as Who To Scout), with that "
+    "profile's minutes in brackets. Starts and matches come from Impect when "
+    "the feed has them; otherwise they are estimated from total minutes."
 )
 
 _payload_mem: tuple[float, dict[str, Any]] | None = None
@@ -380,6 +381,75 @@ def _match_impect_player(
     return None
 
 
+def _player_id(row: dict[str, Any] | None) -> int | None:
+    if not isinstance(row, dict):
+        return None
+    return _as_int(row.get("playerId") or row.get("player_id") or row.get("id"))
+
+
+def _related_impect_rows(
+    primary: dict[str, Any] | None,
+    players: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not isinstance(primary, dict):
+        return []
+    player_id = _player_id(primary)
+    if player_id is not None:
+        hits = [row for row in players if _player_id(row) == player_id]
+        if hits:
+            return hits
+    keys = primary.get("_name_keys") or set(transfer_status.name_keys(primary.get("name")))
+    if not keys:
+        return [primary]
+    hits = [
+        row
+        for row in players
+        if (row.get("_name_keys") or set(transfer_status.name_keys(row.get("name")))) & keys
+    ]
+    return hits or [primary]
+
+
+def _primary_profile_row(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    return max(
+        rows,
+        key=lambda row: (
+            float(row.get("overall")) if row.get("overall") is not None else -1.0,
+            float(row.get("minutes") or 0),
+        ),
+    )
+
+
+def _best_count(rows: list[dict[str, Any]], keys: tuple[str, ...]) -> int | None:
+    best: int | None = None
+    for row in rows:
+        number = _row_count(row, keys)
+        if number is None:
+            continue
+        if best is None or number > best:
+            best = number
+    return best
+
+
+def loan_playing_minutes(
+    rows: list[dict[str, Any]],
+    primary: dict[str, Any],
+) -> tuple[int | None, int | None]:
+    """Total played minutes, plus the minutes behind the shown profile score."""
+    by_position: dict[str, int] = {}
+    for index, row in enumerate(rows):
+        minutes = _as_int(row.get("minutes"))
+        if minutes is None:
+            continue
+        position = str(row.get("position") or row.get("positionLabel") or "").strip()
+        key = position or f"row-{index}"
+        by_position[key] = max(by_position.get(key, 0), minutes)
+    profile_minutes = _as_int(primary.get("minutes"))
+    total = sum(by_position.values()) if by_position else profile_minutes
+    if profile_minutes is not None and (total is None or total < profile_minutes):
+        total = profile_minutes
+    return total, profile_minutes
+
+
 def _loans_for_club(
     snapshot: dict[str, Any],
     club_name: str,
@@ -473,20 +543,22 @@ def _enrich_loan(
     players: list[dict[str, Any]],
 ) -> dict[str, Any]:
     matched = _match_impect_player(name, club, players)
-    minutes = _as_int((matched or {}).get("minutes"))
-    age = _as_int((matched or {}).get("age"))
-    overall = _as_float((matched or {}).get("overall"))
+    related = _related_impect_rows(matched, players)
+    primary = _primary_profile_row(related) if related else matched
+    total_minutes, profile_minutes = loan_playing_minutes(related, primary or {})
+    age = _as_int((primary or {}).get("age"))
+    overall = _as_float((primary or {}).get("overall"))
     if overall is not None:
         overall = round(overall, 1)
     time_row = playing_time(
-        minutes=minutes,
-        match_count=_row_count(matched, MATCH_KEYS),
-        starts=_row_count(matched, START_KEYS),
+        minutes=total_minutes,
+        match_count=_best_count(related, MATCH_KEYS),
+        starts=_best_count(related, START_KEYS),
     )
-    player_id = _as_int((matched or {}).get("playerId") or (matched or {}).get("player_id"))
-    position_code = str((matched or {}).get("position") or "").strip()
+    player_id = _player_id(primary)
+    position_code = str((primary or {}).get("position") or "").strip()
     position = str(
-        (matched or {}).get("positionLabel")
+        (primary or {}).get("positionLabel")
         or position_code
         or ""
     ).strip()
@@ -520,6 +592,7 @@ def _enrich_loan(
         "position": position,
         "position_group": position_group,
         "minutes": time_row["minutes"],
+        "profile_minutes": profile_minutes,
         "matches": time_row["matches"],
         "starts": time_row["starts"],
         "matches_estimated": time_row["matches_estimated"],
