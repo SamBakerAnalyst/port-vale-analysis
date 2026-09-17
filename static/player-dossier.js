@@ -3,6 +3,7 @@
   const errorEl = document.getElementById("pdError");
   const heroEl = document.getElementById("pdHero");
   const gridEl = document.getElementById("pdGrid");
+  const shellEl = document.getElementById("pdShell");
   const actionsEl = document.getElementById("pdActions");
   const keyStatsCard = document.getElementById("pdKeyStatsCard");
 
@@ -76,7 +77,11 @@
   function renderAbility(ability) {
     const root = document.getElementById("pdAbility");
     if (!root) return;
-    if (!ability || (ability.current == null && ability.potential == null)) {
+    if (
+      !ability ||
+      ability.source === "example" ||
+      (ability.current == null && ability.potential == null)
+    ) {
       root.hidden = true;
       root.innerHTML = "";
       return;
@@ -110,14 +115,25 @@
     playerId: null,
     iterationId: null,
     selectedPosition: null,
+    selectedProfile: null,
+    profilesByPosition: {},
+    factorsByPosition: {},
   };
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
 
   function setProfileSubtitle(label) {
     const card = document.querySelector(".pd-card--radar .pd-card__sub");
     if (!card) return;
     card.textContent = label
-      ? `Port Vale Impect · ${label}`
-      : "Port Vale Impect profiles";
+      ? `PV profiles · ${label}`
+      : "Port Vale profile scores";
   }
 
   function renderPositions(player) {
@@ -128,14 +144,23 @@
       return;
     }
     const selected = chartState.selectedPosition || player.primary_position;
+    const maxMins = Math.max(
+      ...positions.map((pos) => Number(pos.minutes) || 0),
+      1
+    );
     root.innerHTML = positions
       .map((pos) => {
         const active = pos.code === selected;
-        const mins =
-          pos.minutes != null && !Number.isNaN(Number(pos.minutes))
-            ? `${fmt(pos.minutes)}′`
-            : "—";
-        return `<button type="button" class="pd-pos${active ? " is-primary" : ""}" data-position="${pos.code}" title="${pos.label || pos.code} · ${mins}" aria-pressed="${active ? "true" : "false"}">${pos.abbrev} · ${mins}</button>`;
+        const minsNum = Number(pos.minutes);
+        const mins = Number.isFinite(minsNum) ? `${fmt(minsNum)}′` : "—";
+        const width = Math.max(6, Math.round(((Number.isFinite(minsNum) ? minsNum : 0) / maxMins) * 100));
+        const label = pos.label || pos.code;
+        return `<button type="button" class="pd-pos${active ? " is-primary" : ""}" data-position="${escapeHtml(pos.code)}" data-label="${escapeHtml(label)}" title="${escapeHtml(label)} · ${mins}" aria-pressed="${active ? "true" : "false"}">
+          <span class="pd-pos__code">${escapeHtml(pos.abbrev || pos.code)}</span>
+          <span class="pd-pos__label">${escapeHtml(label)}</span>
+          <span class="pd-pos__mins">${mins}</span>
+          <span class="pd-pos__bar"><i style="width:${width}%"></i></span>
+        </button>`;
       })
       .join("");
   }
@@ -144,14 +169,27 @@
     if (!chartState.playerId || !positionCode) return;
     const legend = document.getElementById("pdProfiles");
     const radarEl = document.getElementById("pdRadar");
-    legend.innerHTML = `<p class="pd-empty">Loading profiles…</p>`;
-    radarEl.innerHTML = "";
     chartState.selectedPosition = positionCode;
     document.querySelectorAll("#pdPositions .pd-pos").forEach((btn) => {
       const active = btn.getAttribute("data-position") === positionCode;
       btn.classList.toggle("is-primary", active);
       btn.setAttribute("aria-pressed", active ? "true" : "false");
     });
+    const cached = chartState.profilesByPosition[positionCode];
+    if (cached) {
+      const activeBtn = document.querySelector(`#pdPositions [data-position="${CSS.escape(positionCode)}"]`);
+      const label = activeBtn?.getAttribute("data-label") || "";
+      setProfileSubtitle(label || positionCode);
+      renderProfiles(cached);
+      return;
+    }
+    const bars = document.getElementById("pdProfileBars");
+    if (legend) {
+      legend.hidden = true;
+      legend.innerHTML = "";
+    }
+    if (bars) bars.innerHTML = `<p class="pd-empty">Loading profiles…</p>`;
+    radarEl.innerHTML = "";
     try {
       const url =
         `/api/player/${chartState.playerId}/profiles?position=${encodeURIComponent(positionCode)}` +
@@ -160,11 +198,33 @@
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
       setProfileSubtitle(data.position_label || positionCode);
+      chartState.profilesByPosition[positionCode] = data.profiles || [];
       renderProfiles(data.profiles || []);
     } catch (err) {
-      legend.innerHTML = `<p class="pd-empty">Could not load profiles (${err.message || err}).</p>`;
+      if (legend) {
+        legend.hidden = false;
+        legend.innerHTML = `<p class="pd-empty">Could not load profiles (${err.message || err}).</p>`;
+      }
       radarEl.innerHTML = "";
+      if (bars) bars.innerHTML = "";
     }
+  }
+
+  function wireProfileFilters() {
+    document.getElementById("pdProfileBars")?.addEventListener("click", (event) => {
+      const btn = event.target.closest("[data-profile]");
+      if (!btn) return;
+      const name = btn.getAttribute("data-profile");
+      if (!name || name === chartState.selectedProfile) return;
+      selectProfile(name);
+    });
+    document.getElementById("pdRadar")?.addEventListener("click", (event) => {
+      const hit = event.target.closest("[data-profile]");
+      if (!hit) return;
+      const name = hit.getAttribute("data-profile");
+      if (!name || name === chartState.selectedProfile) return;
+      selectProfile(name);
+    });
   }
 
   function wirePositionButtons() {
@@ -187,9 +247,8 @@
         ? player.primary_position_label
         : null,
       player.age != null ? `Age ${player.age}` : null,
-      player.foot && player.foot !== "—" ? `Foot ${player.foot}` : null,
+      player.foot && player.foot !== "—" ? player.foot : null,
       player.height && player.height !== "—" ? player.height : null,
-      `ID ${player.id}`,
     ]
       .filter(Boolean)
       .join(" · ");
@@ -216,27 +275,27 @@
     };
     photo.src = player.photo_url;
 
+    const scoreEl = document.getElementById("pdScore");
+    const scoreNum = document.getElementById("pdScoreNum");
+    if (scoreEl && scoreNum) {
+      if (player.overall != null && !Number.isNaN(Number(player.overall))) {
+        scoreNum.textContent = Number(player.overall).toFixed(0);
+        scoreEl.hidden = false;
+      } else {
+        scoreEl.hidden = true;
+      }
+    }
+
     document.getElementById("pdBioStats").innerHTML = [
-      { label: "Height", value: player.height || "—" },
-      { label: "Minutes", value: fmt(player.minutes) },
-      { label: "Matches", value: fmt(player.matches) },
-      { label: "Positions", value: String((player.positions || []).length || "—") },
+      { label: "Age", value: player.age != null ? String(player.age) : "" },
+      { label: "Height", value: player.height && player.height !== "—" ? player.height : "" },
+      { label: "Foot", value: player.foot && player.foot !== "—" ? player.foot : "" },
     ]
+      .filter((stat) => stat.value)
       .map(
         (stat) => `<div class="pd-stat">
           <span class="pd-stat__label">${stat.label}</span>
-          <span class="pd-stat__value">${stat.value}</span>
-        </div>`
-      )
-      .join("");
-
-    const metrics = heroStats || [];
-    document.getElementById("pdHeroMetrics").innerHTML = metrics
-      .map(
-        (stat) => `<div class="pd-metric">
-          <span class="pd-metric__source">${stat.source || "Data"}</span>
-          <span class="pd-metric__label">${stat.label}</span>
-          <span class="pd-metric__value">${formatStat(stat)}</span>
+          <span class="pd-stat__value">${escapeHtml(stat.value)}</span>
         </div>`
       )
       .join("");
@@ -246,8 +305,6 @@
     if (player.primary_position_label) {
       setProfileSubtitle(player.primary_position_label);
     }
-
-    heroEl.hidden = false;
   }
 
   function positionsFirstCode(player) {
@@ -259,7 +316,16 @@
       keyStatsCard.hidden = true;
       return;
     }
-    document.getElementById("pdKeyStats").innerHTML = stats
+    const visible = stats.filter((stat) => {
+      if (stat.value == null || stat.value === "") return false;
+      if (stat.source === "FBRef" && Number(stat.value) === 0) return false;
+      return true;
+    });
+    if (!visible.length) {
+      keyStatsCard.hidden = true;
+      return;
+    }
+    document.getElementById("pdKeyStats").innerHTML = visible
       .map(
         (stat) => `<div class="pd-keystat">
           <span class="pd-keystat__label">${stat.label}${stat.source ? ` · ${stat.source}` : ""}</span>
@@ -270,30 +336,32 @@
     keyStatsCard.hidden = false;
   }
 
-  function renderFbref(fbref, link) {
-    const card = document.getElementById("pdFbrefCard");
-    if (!fbref) {
+  function renderFotmob(fotmob, link) {
+    const card = document.getElementById("pdFotmobCard");
+    if (!card) return;
+    if (!fotmob) {
       card.hidden = true;
       return;
     }
-    const linkEl = document.getElementById("pdFbrefLink");
-    if (link || fbref.profile_url) {
-      linkEl.href = link || fbref.profile_url;
+    const linkEl = document.getElementById("pdFotmobLink");
+    const href = link || fotmob.profile_url;
+    if (href) {
+      linkEl.href = href;
       linkEl.hidden = false;
     } else {
       linkEl.hidden = true;
     }
+    const sub = document.getElementById("pdFotmobSub");
+    if (sub) {
+      sub.textContent = [fotmob.squad, fotmob.league, fotmob.season].filter(Boolean).join(" · ");
+    }
     const stats = [
-      { label: "Season", value: fbref.season, format: "text", source: "FBRef" },
-      { label: "Squad", value: fbref.squad, format: "text", source: "FBRef" },
-      { label: "Mins", value: fbref.minutes, format: "int", source: "FBRef" },
-      { label: "Goals", value: fbref.goals, format: "int", source: "FBRef" },
-      { label: "Assists", value: fbref.assists, format: "int", source: "FBRef" },
-      { label: "xG", value: fbref.xg, format: "2", source: "FBRef" },
-      { label: "xA", value: fbref.xg_assist, format: "2", source: "FBRef" },
-      { label: "npxG", value: fbref.npxg, format: "2", source: "FBRef" },
+      { label: "Games", value: fotmob.games, format: "int" },
+      { label: "Minutes", value: fotmob.minutes, format: "int" },
+      { label: "Goals", value: fotmob.goals, format: "int" },
+      { label: "Assists", value: fotmob.assists, format: "int" },
     ].filter((row) => row.value != null && row.value !== "");
-    document.getElementById("pdFbrefStats").innerHTML = stats
+    document.getElementById("pdFotmobStats").innerHTML = stats
       .map(
         (stat) => `<div class="pd-keystat">
           <span class="pd-keystat__label">${stat.label}</span>
@@ -301,83 +369,203 @@
         </div>`
       )
       .join("");
-    const pips = fbref.scout_pips || [];
-    document.getElementById("pdFbrefPips").innerHTML = pips
-      .map(
-        (row) => `<span class="pd-profile-chip">${row.label}<strong>${row.pct}</strong></span>`
-      )
+    card.hidden = !stats.length;
+  }
+
+  function wrapRadarLabel(label) {
+    const text = String(label || "");
+    if (text.length <= 16) return [text];
+    const parts = text.split(/[\/·]/).map((part) => part.trim()).filter(Boolean);
+    if (parts.length > 1) return parts.slice(0, 2);
+    const words = text.split(/\s+/);
+    if (words.length < 2) return [text];
+    const mid = Math.ceil(words.length / 2);
+    return [words.slice(0, mid).join(" "), words.slice(mid).join(" ")];
+  }
+
+  function renderRadarSvg(el, profiles) {
+    const n = profiles.length;
+    const width = 440;
+    const height = 400;
+    const cx = 220;
+    const cy = 200;
+    const radius = 118;
+    const xy = (index, frac) => {
+      const angle = -Math.PI / 2 + (index / n) * Math.PI * 2;
+      return [cx + radius * frac * Math.cos(angle), cy + radius * frac * Math.sin(angle)];
+    };
+    const rings = [0.2, 0.4, 0.6, 0.8, 1]
+      .map((frac) => {
+        const pts = Array.from({ length: n }, (_, i) => xy(i, frac).join(",")).join(" ");
+        return `<polygon points="${pts}" fill="none" stroke="rgba(148,163,184,0.18)" stroke-width="1"/>`;
+      })
       .join("");
-    card.hidden = !stats.length && !pips.length;
+    const axes = Array.from({ length: n }, (_, i) => {
+      const [x, y] = xy(i, 1);
+      return `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="rgba(148,163,184,0.14)"/>`;
+    }).join("");
+    const poly = profiles
+      .map((row, i) => xy(i, Math.max(0, Math.min(100, Number(row.pct) || 0)) / 100).join(","))
+      .join(" ");
+    const dots = profiles
+      .map((row, i) => {
+        const [x, y] = xy(i, Math.max(0, Math.min(100, Number(row.pct) || 0)) / 100);
+        return `<circle cx="${x}" cy="${y}" r="4.5" fill="#34d399"/>`;
+      })
+      .join("");
+    const labels = profiles
+      .map((row, i) => {
+        const [x, y] = xy(i, 1.28);
+        const lines = wrapRadarLabel(row.label);
+        const startDy = -((lines.length - 1) * 6);
+        const tspans = lines
+          .map(
+            (line, li) =>
+              `<tspan x="${x.toFixed(1)}" dy="${li === 0 ? startDy : 13}">${escapeHtml(line)}</tspan>`
+          )
+          .join("");
+        return `<g class="pd-radar-hit${row.name === chartState.selectedProfile ? " is-selected" : ""}" data-profile="${escapeHtml(row.name || "")}" data-label="${escapeHtml(row.label || "")}">
+          <text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" class="pd-radar-label">${tspans}</text>
+        </g>`;
+      })
+      .join("");
+    el.innerHTML = `<svg class="pd-radar-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="PV profile radar">${rings}${axes}<polygon points="${poly}" fill="rgba(61,139,253,0.22)" stroke="#3d8bfd" stroke-width="2.5" stroke-linejoin="round"/>${dots}${labels}</svg>`;
   }
 
   function renderProfiles(profiles) {
     const legend = document.getElementById("pdProfiles");
     const radarEl = document.getElementById("pdRadar");
+    const barsEl = document.getElementById("pdProfileBars");
     if (!profiles?.length) {
-      legend.innerHTML = `<p class="pd-empty">No PV profiles for this season / position yet.</p>`;
+      if (legend) {
+        legend.hidden = false;
+        legend.innerHTML = `<p class="pd-empty">No PV profiles for this season / position yet.</p>`;
+      }
       radarEl.innerHTML = "";
+      if (barsEl) barsEl.innerHTML = "";
+      const factors = document.getElementById("pdFactorStats");
+      if (factors) factors.innerHTML = `<p class="pd-empty">No PV profiles for this season / position yet.</p>`;
       return;
     }
 
-    legend.innerHTML = profiles
+    if (legend) {
+      legend.hidden = true;
+      legend.innerHTML = "";
+    }
+
+    const names = profiles.map((row) => row.name).filter(Boolean);
+    if (!names.includes(chartState.selectedProfile)) {
+      chartState.selectedProfile = names[0] || null;
+    }
+
+    if (barsEl) {
+      barsEl.innerHTML = profiles
+        .map((row) => {
+          const selected = row.name === chartState.selectedProfile;
+          return `<button type="button" class="pd-profile${selected ? " is-selected" : ""}" data-profile="${escapeHtml(row.name || "")}" data-label="${escapeHtml(row.label || "")}" aria-pressed="${selected ? "true" : "false"}">
+            <span class="pd-profile__label">${escapeHtml(row.label)}</span>
+            <span class="pd-profile__pct">${escapeHtml(row.pct)}</span>
+            <div class="pd-profile__bar"><div class="pd-profile__fill" style="width:${Math.max(0, Math.min(100, Number(row.pct) || 0))}%"></div></div>
+          </button>`;
+        })
+        .join("");
+    }
+
+    renderRadarSvg(radarEl, profiles);
+    renderFactorStats();
+    loadFactors(chartState.selectedPosition);
+  }
+
+  function currentProfiles() {
+    const position = chartState.selectedPosition;
+    if (position && chartState.profilesByPosition[position]) {
+      return chartState.profilesByPosition[position];
+    }
+    return [];
+  }
+
+  function selectedFactorPack() {
+    const packs = chartState.factorsByPosition[chartState.selectedPosition] || [];
+    const wanted = String(chartState.selectedProfile || "").toLowerCase();
+    return (
+      packs.find((row) => String(row.name || "").toLowerCase() === wanted) ||
+      packs.find((row) => String(row.label || "").toLowerCase() === wanted) ||
+      null
+    );
+  }
+
+  function renderFactorStats() {
+    const root = document.getElementById("pdFactorStats");
+    const heading = document.getElementById("pdFactorHeading");
+    const sub = document.getElementById("pdFactorSub");
+    if (!root) return;
+    const pack = selectedFactorPack();
+    const label =
+      pack?.label ||
+      currentProfiles().find((row) => row.name === chartState.selectedProfile)?.label ||
+      "";
+    if (heading) heading.textContent = label ? `${label}` : "Impect stats";
+    if (sub) sub.textContent = label ? "Impect factors that feed this profile" : "Select a profile";
+    if (!chartState.selectedProfile) {
+      root.innerHTML = `<p class="pd-empty">Select a profile.</p>`;
+      return;
+    }
+    if (chartState.factorsByPosition[chartState.selectedPosition] == null) {
+      root.innerHTML = `<p class="pd-empty">Fetching Impect stats…</p>`;
+      return;
+    }
+    const factors = pack?.factors || [];
+    if (!factors.length) {
+      root.innerHTML = `<p class="pd-empty">No Impect factors for this profile yet.</p>`;
+      return;
+    }
+    root.innerHTML = factors
       .map(
-        (row) => `<span class="pd-profile-chip">${row.label}<strong>${row.pct}</strong></span>`
+        (row) => `<div class="pd-factor">
+          <span class="pd-factor__label">${escapeHtml(row.label)}</span>
+          <span class="pd-factor__value">${escapeHtml(row.valueLabel ?? row.value ?? "—")}</span>
+          <div class="pd-factor__bar"><div class="pd-factor__fill" style="width:${Math.max(0, Math.min(100, Number(row.barPct) || 0))}%"></div></div>
+        </div>`
       )
       .join("");
+  }
 
-    if (!window.Plotly) {
-      radarEl.innerHTML = `<p class="pd-empty">Radar chart library failed to load.</p>`;
+  function selectProfile(profileName, { silent = false } = {}) {
+    if (!profileName) return;
+    chartState.selectedProfile = profileName;
+    document.querySelectorAll("#pdProfileBars .pd-profile").forEach((btn) => {
+      const active = btn.getAttribute("data-profile") === profileName;
+      btn.classList.toggle("is-selected", active);
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+    document.querySelectorAll("#pdRadar .pd-radar-hit").forEach((hit) => {
+      hit.classList.toggle("is-selected", hit.getAttribute("data-profile") === profileName);
+    });
+    if (!silent) renderFactorStats();
+  }
+
+  async function loadFactors(positionCode) {
+    if (!chartState.playerId || !positionCode) return;
+    if (chartState.factorsByPosition[positionCode]) {
+      renderFactorStats();
       return;
     }
-
-    const labels = profiles.map((row) => row.label);
-    const values = profiles.map((row) => row.pct);
-    const closedLabels = [...labels, labels[0]];
-    const closedValues = [...values, values[0]];
-
-    window.Plotly.newPlot(
-      radarEl,
-      [
-        {
-          type: "scatterpolar",
-          mode: "lines+markers",
-          r: closedValues,
-          theta: closedLabels,
-          fill: "toself",
-          name: "PV profiles",
-          line: { color: "#3d8bfd", width: 2.5, shape: "spline", smoothing: 0.7 },
-          marker: { color: "#34d399", size: 6 },
-          fillcolor: "rgba(61, 139, 253, 0.22)",
-          hovertemplate: "<b>%{theta}</b><br>%{r:.0f}<extra></extra>",
-        },
-      ],
-      {
-        margin: { t: 36, r: 48, b: 36, l: 48 },
-        paper_bgcolor: "rgba(0,0,0,0)",
-        plot_bgcolor: "rgba(0,0,0,0)",
-        showlegend: false,
-        font: { family: '"Manrope", system-ui, sans-serif', color: "#e8edf4", size: 12 },
-        polar: {
-          bgcolor: "rgba(0,0,0,0)",
-          radialaxis: {
-            visible: true,
-            range: [0, 100],
-            tickvals: [20, 40, 60, 80, 100],
-            tickfont: { size: 10, color: "#8b9bb0" },
-            gridcolor: "rgba(148, 163, 184, 0.18)",
-            linecolor: "rgba(148, 163, 184, 0.12)",
-          },
-          angularaxis: {
-            direction: "clockwise",
-            rotation: 90,
-            tickfont: { size: labels.length > 6 ? 10 : 12, color: "#e8edf4" },
-            gridcolor: "rgba(148, 163, 184, 0.14)",
-            linecolor: "rgba(148, 163, 184, 0.08)",
-          },
-        },
-      },
-      { responsive: true, displayModeBar: false }
-    );
+    renderFactorStats();
+    const url =
+      `/api/player/${chartState.playerId}/factors?position=${encodeURIComponent(positionCode)}` +
+      (chartState.iterationId ? `&iteration=${chartState.iterationId}` : "");
+    try {
+      const res = await fetch(url, { cache: "no-store", credentials: "same-origin", signal: AbortSignal.timeout(45000) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      chartState.factorsByPosition[positionCode] = data.profiles || [];
+      if (positionCode === chartState.selectedPosition) renderFactorStats();
+    } catch (_err) {
+      if (chartState.factorsByPosition[positionCode] == null) {
+        chartState.factorsByPosition[positionCode] = [];
+      }
+      if (positionCode === chartState.selectedPosition) renderFactorStats();
+    }
   }
 
   function renderEntryList(rootId, rows, emptyMessage) {
@@ -712,10 +900,13 @@
 
   function renderGames(games, columns) {
     const root = document.getElementById("pdGames");
+    const card = document.getElementById("pdGamesCard");
     if (!games?.length) {
-      root.innerHTML = `<p class="pd-empty">No recent appearances found for this season.</p>`;
+      if (card) card.hidden = true;
+      if (root) root.innerHTML = "";
       return;
     }
+    if (card) card.hidden = false;
     const preferred = [
       { key: "pxt_attack", label: "PXT att" },
       { key: "pxt_defend", label: "PXT def" },
@@ -761,13 +952,15 @@
 
   function renderUpcoming(games) {
     const root = document.getElementById("pdUpcoming");
+    const card = document.getElementById("pdUpcomingCard");
     const sub = document.getElementById("pdUpcomingSub");
     if (!root) return;
     if (!games?.length) {
-      if (sub) sub.textContent = "FotMob · next for this club";
-      root.innerHTML = `<p class="pd-empty">No upcoming fixtures scheduled for this club.</p>`;
+      if (card) card.hidden = true;
+      root.innerHTML = "";
       return;
     }
+    if (card) card.hidden = false;
     const source = String(games[0]?.source || "fotmob").toLowerCase();
     if (sub) {
       sub.textContent =
@@ -792,32 +985,47 @@
       .join("")}</div>`;
   }
 
-  function setGamesLoading() {
-    const games = document.getElementById("pdGames");
-    const upcoming = document.getElementById("pdUpcoming");
-    if (games) games.innerHTML = `<p class="pd-empty">Loading recent games…</p>`;
-    if (upcoming) upcoming.innerHTML = `<p class="pd-empty">Loading fixtures…</p>`;
-  }
-
   async function loadGames(playerId, iteration, columns) {
-    setGamesLoading();
     const url =
       `/api/player/${playerId}/games` + (iteration ? `?iteration=${iteration}` : "");
     try {
       const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(180000) });
-      if (!res.ok) {
-        const detail = await res.json().catch(() => ({}));
-        throw new Error(detail.detail || `HTTP ${res.status}`);
-      }
+      if (!res.ok) return;
       const data = await res.json();
       renderGames(data.recent_games, data.impect_columns || columns);
       renderUpcoming(data.upcoming_games);
-    } catch (err) {
-      const games = document.getElementById("pdGames");
-      const upcoming = document.getElementById("pdUpcoming");
-      const msg = err.message || String(err);
-      if (games) games.innerHTML = `<p class="pd-empty">Could not load recent games (${msg}).</p>`;
-      if (upcoming) upcoming.innerHTML = `<p class="pd-empty">Could not load fixtures (${msg}).</p>`;
+    } catch (_err) {
+      // Fixtures are extra; don't stall the page with a hanging loader.
+    }
+  }
+
+  async function loadWeb(url) {
+    try {
+      const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(45000) });
+      if (!res.ok) return;
+      const data = await res.json();
+      const player = data.player || {};
+      document.querySelectorAll("#pdBioStats .pd-stat").forEach((stat) => {
+        const label = stat.querySelector(".pd-stat__label")?.textContent;
+        const valueEl = stat.querySelector(".pd-stat__value");
+        if (!valueEl) return;
+        if (label === "Height" && player.height) valueEl.textContent = player.height;
+        if (label === "Foot" && player.foot) valueEl.textContent = player.foot;
+      });
+      if (data.hero_stats?.length) renderKeyStats(data.hero_stats);
+      renderFotmob(data.web?.fotmob, data.links?.fotmob);
+      const tags = [];
+      if (player.citizenship) tags.push({ text: player.citizenship, gold: false });
+      if (player.market_value) tags.push({ text: player.market_value, gold: true });
+      if (player.on_loan_from) tags.push({ text: `Loan from ${player.on_loan_from}`, gold: true });
+      const tagsEl = document.getElementById("pdTags");
+      if (tagsEl && tags.length) {
+        tagsEl.innerHTML = tags
+          .map((tag) => `<span class="pd-tag${tag.gold ? " pd-tag--gold" : ""}">${tag.text}</span>`)
+          .join("");
+      }
+    } catch (_err) {
+      // TM / FBRef is extra; the local page already painted.
     }
   }
 
@@ -831,7 +1039,9 @@
       .map((season) => {
         const label = season.label || `${season.competition_name || ""} ${season.season || ""}`.trim();
         const club = season.club ? ` · ${season.club}` : "";
-        const href = `/player/${playerId}?iteration=${season.iteration_id}`;
+        const href = season.iteration_id
+          ? `/player/${playerId}?iteration=${season.iteration_id}`
+          : `/player/${playerId}`;
         return `<div class="pd-season-row">
           <a href="${href}">${label}</a>
           <span class="pd-season-row__meta">${club}${season.chartable ? "" : " · limited data"}</span>
@@ -850,10 +1060,9 @@
     const iteration = seasonFromQuery();
     const url =
       `/api/player/${playerId}` + (iteration ? `?iteration=${iteration}` : "");
-    setStatus("Loading player dossier from Impect…");
     setError("");
     try {
-      const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(120000) });
+      const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(20000) });
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}));
         throw new Error(detail.detail || `HTTP ${res.status}`);
@@ -864,9 +1073,13 @@
       chartState.playerId = data.player.id;
       chartState.iterationId = data.player.iteration_id || iteration;
       chartState.selectedPosition = data.player.primary_position || null;
+      chartState.profilesByPosition = data.profiles_by_position || {};
+      if (chartState.selectedPosition && data.profiles?.length) {
+        chartState.profilesByPosition[chartState.selectedPosition] = data.profiles;
+      }
       renderHero(data.player, data.hero_stats, data.ability);
       renderKeyStats(data.hero_stats?.length ? data.hero_stats : data.key_stats);
-      renderFbref(data.web?.fbref, data.links?.fbref);
+      renderFotmob(data.web?.fotmob, data.links?.fotmob);
       renderProfiles(data.profiles);
       renderNotes(data.notes);
       renderReports(data.reports);
@@ -874,10 +1087,16 @@
 
       const charts = document.getElementById("pdChartsLink");
       const compare = document.getElementById("pdCompareLink");
-      if (data.links?.charts) charts.href = data.links.charts;
+      if (data.links?.charts) {
+        charts.href = data.links.charts;
+        charts.hidden = false;
+      } else {
+        charts.hidden = true;
+      }
       if (data.links?.compare) compare.href = data.links.compare;
       wirePipelineButton(data.player);
       actionsEl.hidden = false;
+      if (shellEl) shellEl.hidden = false;
       gridEl.hidden = false;
       setStatus("");
 
@@ -887,6 +1106,9 @@
         renderGames(data.recent_games, data.impect_columns);
         renderUpcoming(data.upcoming_games);
       }
+      if (data.links?.web && !data.web?.fotmob) {
+        loadWeb(data.links.web);
+      }
     } catch (err) {
       setStatus("");
       setError(err.message || String(err));
@@ -895,5 +1117,6 @@
 
   wireNotesUi();
   wirePositionButtons();
+  wireProfileFilters();
   load();
 })();

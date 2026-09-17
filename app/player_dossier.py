@@ -1,4 +1,4 @@
-"""Player dossier — one page per Impect player (photo, profiles, reports, recent games)."""
+"""Player dossier — one page per player from the local database (photo, profiles, reports)."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 import json
 import re
 import threading
+import time
 import uuid
 from typing import Any
 from urllib.parse import quote
@@ -15,7 +16,8 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
-from app.label_utils import humanize_profile_name, strip_pv_prefix
+from app.label_utils import humanize_metric_label, humanize_profile_name, strip_pv_prefix
+from app.profile_resolve import resolve_factor_inverted, resolve_factor_label
 from app.paths import DATA_ROOT, STANDALONE_DIR
 from app.opponent_photos import _normalize_name_key
 
@@ -44,6 +46,37 @@ _MATCH_KPI_CACHE_TTL = 600.0
 PLAYER_NOTES_PATH = DATA_ROOT / "player-notes.json"
 _player_notes_lock = threading.Lock()
 ABILITY_STAR_MAX = 5
+
+POSITION_ABBREV = {
+    "GOALKEEPER": "GK",
+    "LEFT_WINGBACK_DEFENDER": "LWB",
+    "RIGHT_WINGBACK_DEFENDER": "RWB",
+    "CENTRAL_DEFENDER": "CB",
+    "DEFENSE_MIDFIELD": "DM",
+    "CENTRAL_MIDFIELD": "CM",
+    "ATTACKING_MIDFIELD": "AM",
+    "LEFT_WINGER": "LW",
+    "RIGHT_WINGER": "RW",
+    "CENTER_FORWARD": "CF",
+}
+POSITION_LABELS = {
+    "GOALKEEPER": "Goalkeeper",
+    "LEFT_WINGBACK_DEFENDER": "Left back",
+    "RIGHT_WINGBACK_DEFENDER": "Right back",
+    "CENTRAL_DEFENDER": "Centre-back",
+    "DEFENSE_MIDFIELD": "Defensive midfield",
+    "CENTRAL_MIDFIELD": "Central midfield",
+    "ATTACKING_MIDFIELD": "Attacking midfield",
+    "LEFT_WINGER": "Left winger",
+    "RIGHT_WINGER": "Right winger",
+    "CENTER_FORWARD": "Centre-forward",
+}
+
+_standouts_cache_lock = threading.Lock()
+_standouts_cache: dict[str, Any] = {"mtime": None, "by_id": {}, "rows": []}
+_FACTORS_CACHE: dict[tuple[int, int, str], tuple[float, dict[str, Any]]] = {}
+_FACTORS_CACHE_TTL = 600.0
+MAX_PROFILE_FACTORS = 6
 
 
 class PlayerNoteCreate(BaseModel):
@@ -1293,12 +1326,524 @@ def _charts_url(
     return "/scouting/player?" + "&".join(params)
 
 
+def _coerce_impect_player_id(value: Any) -> int:
+    if value is None or value == "":
+        return 0
+    text = str(value).strip()
+    if ":" in text:
+        text = text.rsplit(":", 1)[-1]
+    try:
+        return int(float(text))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _score_to_pct(value: Any) -> int | None:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    if numeric <= 1.5:
+        return int(round(numeric * 100))
+    return int(round(numeric))
+
+
+def _profiles_from_score_map(scores: Any) -> list[dict[str, Any]]:
+    if not isinstance(scores, dict):
+        return []
+    from app.label_utils import humanize_profile_name
+
+    profiles: list[dict[str, Any]] = []
+    for name, value in scores.items():
+        label_name = str(name or "").strip()
+        if not label_name:
+            continue
+        pct = _score_to_pct(value)
+        if pct is None:
+            continue
+        label = humanize_profile_name(label_name) or strip_pv_prefix(label_name)
+        if label.isupper():
+            label = label.title()
+        profiles.append(
+            {
+                "name": label_name,
+                "label": label,
+                "score": round(pct / 100, 3),
+                "pct": max(0, min(100, pct)),
+            }
+        )
+    profiles.sort(key=lambda item: item["pct"], reverse=True)
+    return profiles
+
+
+def _standouts_store() -> dict[str, Any]:
+    """Parse the standouts file once; player pages then hit an in-memory index."""
+    try:
+        from app.home_dashboard import STANDOUTS_DISK_CACHE, _load_standouts_disk, _standouts_raw_cache_key
+    except Exception:
+        return _standouts_cache
+
+    path = STANDOUTS_DISK_CACHE
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        mtime = None
+    with _standouts_cache_lock:
+        if mtime is not None and _standouts_cache["mtime"] == mtime and _standouts_cache["by_id"]:
+            return _standouts_cache
+        disk = _load_standouts_disk(_standouts_raw_cache_key("season"))
+        players = [
+            row
+            for row in ((disk[1].get("players") if disk else None) or [])
+            if isinstance(row, dict)
+        ]
+        by_id: dict[int, list[dict[str, Any]]] = {}
+        for row in players:
+            pid = _coerce_impect_player_id(
+                row.get("playerId") or row.get("player_id") or row.get("id")
+            )
+            if not pid:
+                continue
+            by_id.setdefault(pid, []).append(row)
+        for rows in by_id.values():
+            rows.sort(
+                key=lambda item: (
+                    float(item.get("minutes") or 0),
+                    float(item.get("overall") or 0),
+                ),
+                reverse=True,
+            )
+        _standouts_cache["mtime"] = mtime
+        _standouts_cache["by_id"] = by_id
+        _standouts_cache["rows"] = players
+        return _standouts_cache
+
+
+def _standouts_player_rows() -> list[dict[str, Any]]:
+    return _standouts_store().get("rows") or []
+
+
+def _cached_rows_for_player(player_id: int) -> list[dict[str, Any]]:
+    wanted = int(player_id)
+    rows = _standouts_player_rows()
+    indexed = _standouts_cache.get("by_id") or {}
+    if indexed and rows is _standouts_cache.get("rows"):
+        return list(indexed.get(wanted) or [])
+    found: list[dict[str, Any]] = []
+    for row in rows:
+        pid = _coerce_impect_player_id(row.get("playerId") or row.get("player_id") or row.get("id"))
+        if pid == wanted:
+            found.append(row)
+    found.sort(
+        key=lambda item: (
+            float(item.get("minutes") or 0),
+            float(item.get("overall") or 0),
+        ),
+        reverse=True,
+    )
+    return found
+
+
+def _pipeline_row_for_player(player_id: int) -> dict[str, Any] | None:
+    try:
+        from app.player_pipelines import _find_by_player, _load
+    except Exception:
+        return None
+    try:
+        store = _load()
+        return _find_by_player(store.get("targets") or [], int(player_id))
+    except Exception:
+        return None
+
+
+def _cached_player_name(player_id: int) -> str:
+    rows = _cached_rows_for_player(player_id)
+    if rows:
+        return str(rows[0].get("name") or "").strip()
+    pipeline = _pipeline_row_for_player(player_id)
+    if pipeline:
+        return str(pipeline.get("name") or "").strip()
+    return ""
+
+
+def _position_abbrev(code: str | None) -> str:
+    if not code:
+        return "—"
+    return POSITION_ABBREV.get(code, str(code)[:3])
+
+
+def _position_label(code: str | None) -> str:
+    if not code:
+        return "—"
+    return POSITION_LABELS.get(code, str(code).replace("_", " ").title())
+
+
+def _positions_from_cached_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[str] = set()
+    positions: list[dict[str, Any]] = []
+    for row in rows:
+        code = str(row.get("position") or "").strip()
+        if not code or code in seen:
+            continue
+        seen.add(code)
+        minutes = row.get("minutes")
+        try:
+            minutes_val = round(float(minutes), 0) if minutes is not None else None
+        except (TypeError, ValueError):
+            minutes_val = None
+        positions.append(
+            {
+                "code": code,
+                "label": row.get("positionLabel") or _position_label(code),
+                "abbrev": _position_abbrev(code),
+                "minutes": minutes_val,
+                "match_share": None,
+                "overall": row.get("overall"),
+            }
+        )
+    meaningful = [row for row in positions if float(row.get("minutes") or 0) >= 10]
+    return meaningful or positions[:1]
+
+
+def _pick_cached_row(
+    rows: list[dict[str, Any]],
+    *,
+    iteration_id: int | None = None,
+    position: str | None = None,
+) -> dict[str, Any] | None:
+    if not rows:
+        return None
+    if position:
+        wanted = str(position).strip().upper()
+        match = next(
+            (row for row in rows if str(row.get("position") or "").strip().upper() == wanted),
+            None,
+        )
+        if match is not None:
+            return match
+    if iteration_id is not None:
+        match = next(
+            (
+                row
+                for row in rows
+                if int(row.get("iterationId") or row.get("iteration_id") or 0) == int(iteration_id)
+            ),
+            None,
+        )
+        if match is not None:
+            return match
+    return rows[0]
+
+
+def _seasons_from_cached_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[tuple[str, str, str]] = set()
+    seasons: list[dict[str, Any]] = []
+    for row in rows:
+        season = str(row.get("season") or "").strip()
+        league = str(row.get("league") or "").strip()
+        club = str(row.get("club") or "").strip()
+        key = (season, league, club)
+        if key in seen:
+            continue
+        seen.add(key)
+        seasons.append(
+            {
+                "season": season,
+                "competition_name": league,
+                "club": club,
+                "label": " · ".join(part for part in (league, season) if part),
+                "iteration_id": row.get("iterationId") or row.get("iteration_id"),
+                "chartable": True,
+            }
+        )
+    return seasons
+
+
+def _cache_hero_stats(
+    *,
+    row: dict[str, Any],
+    profiles: list[dict[str, Any]],
+    tm: dict[str, Any] | None,
+    fbref: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    minutes = row.get("minutes")
+    matches = row.get("matchCount") or row.get("matches")
+    overall = row.get("overall")
+    top = profiles[0] if profiles else None
+    stats: list[dict[str, Any]] = [
+        {
+            "key": "overall",
+            "label": "Overall",
+            "value": round(float(overall), 1) if overall is not None else None,
+            "format": "1",
+            "source": "PV profiles",
+        },
+        {
+            "key": "minutes",
+            "label": "Minutes",
+            "value": round(float(minutes), 0) if minutes is not None else None,
+            "format": "int",
+            "source": "Database",
+        },
+        {
+            "key": "matches",
+            "label": "Matches",
+            "value": matches,
+            "format": "int",
+            "source": "Database",
+        },
+    ]
+    if top:
+        stats.append(
+            {
+                "key": "top_profile",
+                "label": top["label"],
+                "value": top["pct"],
+                "format": "int",
+                "source": "PV profiles",
+            }
+        )
+    if tm and tm.get("market_value"):
+        stats.append(
+            {
+                "key": "market_value",
+                "label": "Market value",
+                "value": tm["market_value"],
+                "format": "text",
+                "source": "TM",
+            }
+        )
+    if fbref:
+        for key, label, fmt in (
+            ("goals", "Goals", "int"),
+            ("assists", "Assists", "int"),
+            ("xg", "xG", "2"),
+            ("xg_assist", "xA", "2"),
+        ):
+            if fbref.get(key) is None:
+                continue
+            stats.append(
+                {
+                    "key": f"fbref_{key}",
+                    "label": label,
+                    "value": fbref.get(key),
+                    "format": fmt,
+                    "source": "FBRef",
+                }
+            )
+    return stats[:8]
+
+
+def build_player_dossier_from_cache(
+    player_id: int,
+    *,
+    iteration_id: int | None = None,
+    include_web: bool = False,
+) -> dict[str, Any] | None:
+    rows = _cached_rows_for_player(player_id)
+    pipeline = _pipeline_row_for_player(player_id)
+    if not rows and pipeline is None:
+        return None
+
+    primary = _pick_cached_row(rows, iteration_id=iteration_id) or dict(pipeline or {})
+    name = str(primary.get("name") or (pipeline or {}).get("name") or "Player")
+    club = str(primary.get("club") or (pipeline or {}).get("club") or "").strip() or None
+    league = str(primary.get("league") or (pipeline or {}).get("league") or "").strip() or None
+    season = str(primary.get("season") or "").strip() or None
+    primary_position = str(primary.get("position") or (pipeline or {}).get("position") or "").strip() or None
+    minutes = primary.get("minutes")
+    try:
+        minutes_val = round(float(minutes), 0) if minutes is not None else None
+    except (TypeError, ValueError):
+        minutes_val = None
+    matches = primary.get("matchCount") or primary.get("matches")
+    height = primary.get("height") or (pipeline or {}).get("height")
+    foot = primary.get("foot") or (pipeline or {}).get("foot")
+    age = primary.get("age") if primary.get("age") is not None else (pipeline or {}).get("age")
+    iter_id = primary.get("iterationId") or primary.get("iteration_id") or iteration_id
+    squad_id = primary.get("squadId") or primary.get("squad_id")
+
+    positions = _positions_from_cached_rows(rows)
+    if not positions and primary_position:
+        positions = [
+            {
+                "code": primary_position,
+                "label": _position_label(primary_position),
+                "abbrev": _position_abbrev(primary_position),
+                "minutes": minutes_val,
+                "match_share": None,
+                "overall": primary.get("overall") or (pipeline or {}).get("overall_score"),
+            }
+        ]
+
+    profiles_by_position: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        code = str(row.get("position") or "").strip()
+        if not code:
+            continue
+        profiles_by_position[code] = _profiles_from_score_map(row.get("profileScores"))
+    profiles = profiles_by_position.get(primary_position or "", [])
+    if not profiles and profiles_by_position:
+        first_code = next(iter(profiles_by_position))
+        profiles = profiles_by_position[first_code]
+        if not primary_position:
+            primary_position = first_code
+
+    tm = None
+    fotmob = None
+    fbref = None
+    if include_web:
+        from app.player_web_enrichment import enrich_player_web
+
+        club_lookup = re.sub(
+            r"\s*(U\d{2}|Under[-\s]?\d{2}|Youth|Academy|Reserves?|II|B)\s*$",
+            "",
+            club or "",
+            flags=re.I,
+        ).strip(" -–—") or club
+        web = enrich_player_web(name, club_name=club_lookup, include_fbref=False)
+        tm = web.get("transfermarkt") if isinstance(web, dict) else None
+        fotmob = web.get("fotmob") if isinstance(web, dict) else None
+        if tm and tm.get("height"):
+            height = tm["height"]
+        if tm and tm.get("foot"):
+            foot = tm["foot"]
+        if not height and fotmob and fotmob.get("height_cm"):
+            height = _height_label_from_cm(int(fotmob["height_cm"]))
+
+    if height:
+        text = str(height).strip()
+        if text in {"—", "-", "0'0", "0'0\"", "0'0\" (0cm)"} or text.startswith("0'0"):
+            height = None
+
+    notes, scout_reports = _split_player_activity(player_id, name)
+    ability = _ability_from_reports(scout_reports)
+    hero_stats = _cache_hero_stats(row=primary, profiles=profiles, tm=tm, fbref=None)
+    key_stats = [
+        {"key": "minutes", "label": "Minutes", "value": minutes_val, "format": "int"},
+        {"key": "matches", "label": "Matches", "value": matches, "format": "int"},
+        {
+            "key": "overall",
+            "label": "Overall",
+            "value": round(float(primary["overall"]), 1) if primary.get("overall") is not None else None,
+            "format": "1",
+        },
+    ]
+
+    return {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "source": "database",
+        "games_deferred": True,
+        "player": {
+            "id": player_id,
+            "key": None,
+            "name": name,
+            "age": age,
+            "birthdate": (tm or {}).get("date_of_birth") if tm else None,
+            "height": height or "—",
+            "foot": foot or "—",
+            "citizenship": (tm or {}).get("citizenship") if tm else None,
+            "market_value": (tm or {}).get("market_value") if tm else None,
+            "on_loan_from": (tm or {}).get("on_loan_from") if tm else None,
+            "club": club or "—",
+            "league": league or "—",
+            "season": season or "—",
+            "iteration_id": int(iter_id) if iter_id else None,
+            "squad_id": int(squad_id) if squad_id else None,
+            "photo_url": _photo_url(name, club, season),
+            "primary_position": primary_position,
+            "primary_position_label": _position_label(primary_position) if primary_position else "—",
+            "positions": positions,
+            "minutes": minutes_val,
+            "matches": matches,
+            "overall": primary.get("overall"),
+        },
+        "hero_stats": hero_stats,
+        "key_stats": key_stats,
+        "web": {
+            "transfermarkt": tm,
+            "fotmob": fotmob,
+            "fbref": None,
+        },
+        "seasons": _seasons_from_cached_rows(rows),
+        "profiles": profiles,
+        "profiles_by_position": profiles_by_position,
+        "reports": scout_reports,
+        "notes": notes,
+        "ability": ability,
+        "recent_games": [],
+        "upcoming_games": [],
+        "impect_columns": [
+            {"key": key.lower(), "label": label}
+            for key, label in DOSSIER_KPI_KEYS
+            if key not in {"ASSISTS"}
+        ],
+        "links": {
+            "charts": _charts_url(
+                name=name,
+                player_id=player_id,
+                iteration_id=int(iter_id) if iter_id else 0,
+                squad_id=int(squad_id) if squad_id else None,
+                position=primary_position,
+                club=club,
+                league=league,
+                season=season,
+            )
+            if iter_id and primary_position
+            else None,
+            "compare": "/studio",
+            "transfermarkt": (tm or {}).get("profile_url") if tm else None,
+            "fotmob": (fotmob or {}).get("profile_url") if fotmob else None,
+            "fbref": None,
+            "home": "/",
+            "games": f"/api/player/{player_id}/games",
+            "web": f"/api/player/{player_id}/web",
+        },
+    }
+
+
 def build_player_games(
     player_id: int,
     *,
     iteration_id: int | None = None,
 ) -> dict[str, Any]:
-    """Heavy recent/upcoming payload — loaded async so the main dossier stays snappy."""
+    """Upcoming fixtures from FotMob. Match KPIs stay off the click path."""
+    cached = build_player_dossier_from_cache(player_id, iteration_id=iteration_id)
+    if cached is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Player {player_id} is not in the local player database.",
+        )
+    club = str((cached.get("player") or {}).get("club") or "").strip() or None
+    league = str((cached.get("player") or {}).get("league") or "").strip() or None
+    upcoming_games: list[dict[str, Any]] = []
+    try:
+        upcoming_games = _upcoming_from_fotmob(
+            club,
+            limit=UPCOMING_GAMES_LIMIT,
+            preferred_competition=league,
+        )
+    except Exception:
+        upcoming_games = []
+    return {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "source": "database",
+        "player_id": player_id,
+        "iteration_id": (cached.get("player") or {}).get("iteration_id"),
+        "squad_id": (cached.get("player") or {}).get("squad_id"),
+        "club": club,
+        "recent_games": [],
+        "upcoming_games": upcoming_games,
+        "impect_columns": cached.get("impect_columns") or [],
+    }
+
+
+def _legacy_build_player_games(
+    player_id: int,
+    *,
+    iteration_id: int | None = None,
+) -> dict[str, Any]:
+    """Impect scan kept for tests / refresh jobs — not used on the player page."""
     player = _resolve_catalog_player(player_id)
     if player is None:
         raise HTTPException(status_code=404, detail=f"Player {player_id} not found in Impect catalog.")
@@ -1348,7 +1893,266 @@ def build_player_games(
     }
 
 
+def _season_tokens(value: str) -> set[str]:
+    years = re.findall(r"\d{2,4}", str(value or ""))
+    return {year[-2:] for year in years if year}
+
+
+def _resolve_impect_context(
+    player_id: int,
+    player: dict[str, Any],
+) -> tuple[int | None, int | None]:
+    """Find iteration + squad for Impect player-scores. Cache page stays iteration-free."""
+    iter_id = player.get("iteration_id")
+    squad_id = player.get("squad_id")
+    if iter_id and squad_id:
+        try:
+            return int(iter_id), int(squad_id)
+        except (TypeError, ValueError):
+            pass
+    try:
+        impect = _impect()
+        iterations = impect._fetch_iterations()
+    except Exception:
+        return None, None
+    league = str(player.get("league") or "").strip().casefold()
+    season = str(player.get("season") or "").strip()
+    season_bits = _season_tokens(season)
+    ranked: list[dict[str, Any]] = []
+    for row in iterations or []:
+        if not isinstance(row, dict) or row.get("id") is None:
+            continue
+        comp = str(row.get("competition_name") or "").strip().casefold()
+        seas = str(row.get("season") or "").strip()
+        league_ok = not league or league in comp or comp in league
+        season_ok = not season_bits or bool(season_bits & _season_tokens(seas))
+        if not league_ok or not season_ok:
+            continue
+        ranked.append(row)
+    if not ranked:
+        latest = []
+        try:
+            latest = impect._latest_iteration_ids(iterations)
+        except Exception:
+            latest = []
+        ranked = [row for row in iterations or [] if row.get("id") in set(latest or [])]
+    ranked.sort(key=lambda row: int(row.get("id") or 0), reverse=True)
+    preferred = player.get("iteration_id")
+    if preferred:
+        ranked.sort(key=lambda row: 0 if int(row.get("id") or 0) == int(preferred) else 1)
+    for row in ranked:
+        try:
+            iid = int(row["id"])
+            people = impect._fetch_players_for_iteration(iid)
+        except Exception:
+            continue
+        hit = next(
+            (item for item in people if int(item.get("id") or item.get("playerId") or 0) == int(player_id)),
+            None,
+        )
+        if not hit:
+            continue
+        raw_squad = hit.get("currentSquadId") or hit.get("squadId") or hit.get("squad_id")
+        if raw_squad is None:
+            continue
+        try:
+            return iid, int(raw_squad)
+        except (TypeError, ValueError):
+            continue
+    return None, None
+
+
+def _format_factor_value(value: float) -> str:
+    abs_v = abs(value)
+    if abs_v >= 100:
+        return str(int(round(value)))
+    if abs_v >= 10:
+        return f"{value:.1f}".rstrip("0").rstrip(".")
+    if abs_v >= 1:
+        return f"{value:.2f}".rstrip("0").rstrip(".")
+    return f"{value:.2f}".rstrip("0").rstrip(".")
+
+
+def _factor_rows_for_profile(
+    *,
+    profile_name: str,
+    score_row: dict[str, Any],
+    score_rows: list[dict[str, Any]],
+    definitions: dict[str, dict[str, Any]],
+    scores_by_name: dict[str, dict[str, Any]],
+    scores_by_id: dict[int, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    impect = _impect()
+    definition = impect._resolve_profile_definition(profile_name, definitions)
+    if not definition:
+        return []
+    rows: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for factor in definition.get("factors") or []:
+        if not isinstance(factor, dict):
+            continue
+        score_id = impect._resolve_factor_score_id(factor, scores_by_name)
+        if score_id is None or int(score_id) in seen:
+            continue
+        value = impect._player_score_value(score_row, int(score_id))
+        if value is None:
+            continue
+        factor_name = str(factor.get("name") or "").strip()
+        catalog = scores_by_id.get(int(score_id)) or {}
+        raw_label = resolve_factor_label(factor, catalog)
+        if not raw_label or raw_label.casefold() in {"none", "n/a", "null", "-"}:
+            raw_label = factor_name
+        if not raw_label:
+            continue
+        label = (
+            humanize_metric_label(raw_label)
+            if not factor_name.casefold().startswith("bypassed_")
+            else raw_label
+        )
+        weight = float(factor.get("weight") or 0.0)
+        inverted = bool(resolve_factor_inverted(factor, catalog))
+        standing = None
+        try:
+            cohort = impect._cohort_values_for_key(
+                score_rows, "playerScoreId", int(score_id), "playerScores"
+            )
+            standing = impect._factor_standing(value, cohort, inverted=inverted)
+        except Exception:
+            standing = None
+        seen.add(int(score_id))
+        rows.append(
+            {
+                "scoreId": int(score_id),
+                "label": label,
+                "value": round(float(value), 4),
+                "valueLabel": _format_factor_value(float(value)),
+                "weight": weight,
+                "inverted": inverted,
+                "standingPct": round(standing) if standing is not None else None,
+            }
+        )
+    rows.sort(key=lambda item: float(item.get("weight") or 0), reverse=True)
+    top = rows[:MAX_PROFILE_FACTORS]
+    total_weight = sum(float(item.get("weight") or 0) for item in top) or 1.0
+    for item in top:
+        weight_pct = round((float(item.get("weight") or 0) / total_weight) * 100.0, 1)
+        item["weightPct"] = weight_pct
+        standing = item.get("standingPct")
+        item["barPct"] = (
+            int(standing)
+            if standing is not None and len(score_rows) >= 5
+            else int(round(max(8.0, min(100.0, weight_pct * 1.6))))
+        )
+    return top
+
+
+def build_player_profile_factors(
+    player_id: int,
+    *,
+    position: str | None = None,
+    iteration_id: int | None = None,
+) -> dict[str, Any]:
+    """Impect factors that feed each PV profile — loaded after the page paints."""
+    cached = build_player_dossier_from_cache(player_id, iteration_id=iteration_id)
+    if cached is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Player {player_id} is not in the local player database.",
+        )
+    player = dict(cached.get("player") or {})
+    if iteration_id is not None:
+        if int(player.get("iteration_id") or 0) != int(iteration_id):
+            player["squad_id"] = None
+        player["iteration_id"] = iteration_id
+    position_code = str(position or player.get("primary_position") or "").strip().upper()
+    iter_id, squad_id = _resolve_impect_context(player_id, player)
+    empty = {
+        "player_id": player_id,
+        "position": position_code or None,
+        "iteration_id": iter_id,
+        "squad_id": squad_id,
+        "source": "impect",
+        "profiles": [],
+    }
+    if not position_code or not iter_id or not squad_id:
+        return empty
+
+    cache_key = (int(player_id), int(iter_id), position_code)
+    cached_hit = _FACTORS_CACHE.get(cache_key)
+    if cached_hit and time.time() - cached_hit[0] < _FACTORS_CACHE_TTL:
+        return cached_hit[1]
+
+    profiles = (cached.get("profiles_by_position") or {}).get(position_code) or cached.get("profiles") or []
+    try:
+        impect = _impect()
+        score_rows, _ = impect._fetch_player_scores(int(iter_id), int(squad_id), [position_code], 0)
+        score_row = next(
+            (row for row in score_rows if int(row.get("playerId") or 0) == int(player_id)),
+            None,
+        )
+        if score_row is None:
+            return empty
+        definitions = impect._fetch_player_profile_definitions()
+        scores_by_id, scores_by_name = impect._fetch_player_score_catalog()
+    except Exception:
+        return empty
+
+    packed: list[dict[str, Any]] = []
+    for profile in profiles:
+        api_name = str(profile.get("name") or "").strip()
+        if not api_name:
+            continue
+        factors = _factor_rows_for_profile(
+            profile_name=api_name,
+            score_row=score_row,
+            score_rows=score_rows,
+            definitions=definitions,
+            scores_by_name=scores_by_name,
+            scores_by_id=scores_by_id,
+        )
+        packed.append(
+            {
+                "name": api_name,
+                "label": profile.get("label") or humanize_profile_name(api_name),
+                "pct": profile.get("pct"),
+                "factors": factors,
+            }
+        )
+
+    payload = {
+        "player_id": player_id,
+        "position": position_code,
+        "position_label": _position_label(position_code),
+        "iteration_id": int(iter_id),
+        "squad_id": int(squad_id),
+        "source": "impect",
+        "profiles": packed,
+    }
+    _FACTORS_CACHE[cache_key] = (time.time(), payload)
+    return payload
+
+
 def build_player_dossier(
+    player_id: int,
+    *,
+    iteration_id: int | None = None,
+    include_games: bool = False,
+) -> dict[str, Any]:
+    cached = build_player_dossier_from_cache(player_id, iteration_id=iteration_id)
+    if cached is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Player {player_id} is not in the local player database.",
+        )
+    if include_games:
+        games = build_player_games(player_id, iteration_id=iteration_id)
+        cached["recent_games"] = games.get("recent_games") or []
+        cached["upcoming_games"] = games.get("upcoming_games") or []
+        cached["games_deferred"] = False
+    return cached
+
+
+def _legacy_build_player_dossier(
     player_id: int,
     *,
     iteration_id: int | None = None,
@@ -1543,6 +2347,8 @@ def build_player_dossier(
 
 
 def register_player_dossier_routes(app: FastAPI) -> None:
+    threading.Thread(target=_standouts_store, daemon=True, name="standouts-index").start()
+
     @app.get("/api/player/{player_id}")
     def player_dossier_api(
         player_id: int,
@@ -1557,49 +2363,73 @@ def register_player_dossier_routes(app: FastAPI) -> None:
     ) -> dict[str, Any]:
         return build_player_games(player_id, iteration_id=iteration)
 
+    @app.get("/api/player/{player_id}/factors")
+    def player_factors_api(
+        player_id: int,
+        position: str | None = Query(None),
+        iteration: int | None = Query(None),
+    ) -> dict[str, Any]:
+        return build_player_profile_factors(
+            player_id,
+            position=position,
+            iteration_id=iteration,
+        )
+
     @app.get("/api/player/{player_id}/profiles")
     def player_profiles_api(
         player_id: int,
         position: str = Query(..., min_length=1),
         iteration: int | None = Query(None),
     ) -> dict[str, Any]:
-        player = _resolve_catalog_player(player_id)
-        if player is None:
-            raise HTTPException(status_code=404, detail=f"Player {player_id} not found.")
-        season_row = _pick_season(player, iteration)
-        if season_row is None:
-            raise HTTPException(status_code=404, detail="No season data for this player.")
-        iter_id = int(season_row["iteration_id"])
-        squad_map = player.get("squad_ids_by_iteration") or {}
-        squad_raw = squad_map.get(str(iter_id))
-        if squad_raw is None:
-            raise HTTPException(status_code=404, detail="No squad for this player season.")
-        squad_id = int(squad_raw)
+        cached = build_player_dossier_from_cache(player_id, iteration_id=iteration)
+        if cached is None:
+            raise HTTPException(status_code=404, detail=f"Player {player_id} is not in the local player database.")
         position_code = str(position or "").strip().upper()
-        profiles, minutes, scored_position = _profile_rows(iter_id, squad_id, player_id, position_code)
+        by_position = cached.get("profiles_by_position") or {}
+        profiles = by_position.get(position_code) or []
+        if not profiles:
+            row = _pick_cached_row(_cached_rows_for_player(player_id), position=position_code)
+            profiles = _profiles_from_score_map((row or {}).get("profileScores"))
+        player = cached.get("player") or {}
+        minutes = None
+        for pos in player.get("positions") or []:
+            if str(pos.get("code") or "").upper() == position_code:
+                minutes = pos.get("minutes")
+                break
         return {
             "player_id": player_id,
-            "iteration_id": iter_id,
-            "squad_id": squad_id,
-            "position": scored_position or position_code,
-            "position_label": _impect().POSITION_LABELS.get(
-                scored_position or position_code,
-                (scored_position or position_code).replace("_", " ").title(),
-            ),
-            "minutes": round(float(minutes), 0) if minutes is not None else None,
+            "iteration_id": player.get("iteration_id"),
+            "squad_id": player.get("squad_id"),
+            "position": position_code,
+            "position_label": _position_label(position_code),
+            "minutes": minutes,
             "profiles": profiles,
+        }
+
+    @app.get("/api/player/{player_id}/web")
+    def player_web_api(player_id: int) -> dict[str, Any]:
+        cached = build_player_dossier_from_cache(player_id, include_web=True)
+        if cached is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Player {player_id} is not in the local player database.",
+            )
+        return {
+            "player_id": player_id,
+            "player": cached.get("player") or {},
+            "web": cached.get("web") or {},
+            "hero_stats": cached.get("hero_stats") or [],
+            "links": cached.get("links") or {},
         }
 
     @app.get("/api/player/{player_id}/notes")
     def player_notes_list_api(player_id: int) -> dict[str, Any]:
-        player = _resolve_catalog_player(player_id)
-        name = str((player or {}).get("name") or "")
+        name = _cached_player_name(player_id)
         return {"player_id": player_id, **_activity_payload(player_id, name or str(player_id))}
 
     @app.post("/api/player/{player_id}/notes")
     def player_notes_create_api(player_id: int, body: PlayerNoteCreate) -> dict[str, Any]:
-        player = _resolve_catalog_player(player_id)
-        name = str((player or {}).get("name") or "")
+        name = _cached_player_name(player_id)
         note = create_player_note(player_id, body, player_name=name)
         return _activity_payload(player_id, name or str(player_id), note=note)
 
@@ -1610,15 +2440,13 @@ def register_player_dossier_routes(app: FastAPI) -> None:
         body: PlayerNoteUpdate,
     ) -> dict[str, Any]:
         note = update_player_note(player_id, note_id, body)
-        player = _resolve_catalog_player(player_id)
-        name = str((player or {}).get("name") or "")
+        name = _cached_player_name(player_id)
         return _activity_payload(player_id, name or str(player_id), note=note)
 
     @app.delete("/api/player/{player_id}/notes/{note_id}")
     def player_notes_delete_api(player_id: int, note_id: str) -> dict[str, Any]:
         delete_player_note(player_id, note_id)
-        player = _resolve_catalog_player(player_id)
-        name = str((player or {}).get("name") or "")
+        name = _cached_player_name(player_id)
         return {"ok": True, **_activity_payload(player_id, name or str(player_id))}
 
     @app.get("/player/{player_id}", response_class=HTMLResponse)

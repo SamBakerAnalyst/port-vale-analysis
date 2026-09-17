@@ -15,8 +15,20 @@
   const photoPanel = document.getElementById("photoPanel");
   const photoGrid = document.getElementById("photoGrid");
   const photoMeta = document.getElementById("photoMeta");
+  const valeBar = document.getElementById("valeBar");
+  const valeComps = document.getElementById("valeComps");
+  const valeMatchesEl = document.getElementById("valeMatches");
+  const matchPackBar = document.getElementById("matchPackBar");
+  const matchPackPills = document.getElementById("matchPackPills");
+  const playerSearchPanel = document.getElementById("playerSearchPanel");
+  const cutoutLabel = document.getElementById("cutoutLabel");
 
   const cutoutFileName = document.getElementById("cutoutFileName");
+  const MATCH_PACK_DEFAULTS = [
+    { id: "pre-match", label: "Pre-Match" },
+    { id: "post-match", label: "Post-Match" },
+    { id: "set-plays", label: "Set Plays" },
+  ];
 
   const SLIDE_W = 1920;
   const SLIDE_H = 1080;
@@ -98,13 +110,30 @@
   let pack = null;
   let selectedPlayerId = null;
   let webPhotos = [];
+  let valeMatches = [];
+  let valeCompetitions = [];
+  let valeActiveComp = "League";
+  let valeActiveMatchId = null;
+  let valePhotos = [];
+  let valeNextStart = null;
+  let valeTotal = 0;
+  let valeLoading = false;
+  let photoSource = "vale";
   /** @type {Record<string, {photoId: string|null, cutout: string|null, soft: boolean}>} */
   let slidePhotos = {};
   let activeSlideKey = "identity";
   let selectedFormation = localStorage.getItem("mfp-formation") || "4-2-3-1";
   if (!FORMATION_KEYS.includes(selectedFormation)) selectedFormation = "4-2-3-1";
   let includeDataSlide = localStorage.getItem("mfp-data-slide") !== "0";
-  let appMode = localStorage.getItem("mfp-mode") === "dossier" ? "dossier" : "meeting";
+  function normalizeMode(mode) {
+    if (mode === "dossier") return "dossier";
+    if (mode === "match") return "match";
+    return "meeting";
+  }
+  let appMode = normalizeMode(localStorage.getItem("mfp-mode"));
+  let matchPack = null;
+  let matchPackId = localStorage.getItem("mfp-match-pack") || "pre-match";
+  if (!MATCH_PACK_DEFAULTS.some((row) => row.id === matchPackId)) matchPackId = "pre-match";
   let dossier = null;
   let dossierDirty = false;
   let dossierSaveTimer = null;
@@ -198,6 +227,12 @@
     },
   ];
 
+  function friendlyNetworkError(err, fallback) {
+    const raw = (err && err.message) || "";
+    if (/failed to fetch/i.test(raw)) return fallback;
+    return raw || fallback;
+  }
+
   function setStatus(message, isError) {
     if (!message) {
       statusBanner.classList.add("hidden");
@@ -239,7 +274,18 @@
     return (pack && pack.profiles || []).filter((p) => p.selected);
   }
 
+  function hasMatchSlides() {
+    return appMode === "match" && matchPack && Array.isArray(matchPack.slides);
+  }
+
+  function hasAssignableSlides() {
+    return Boolean(pack) || hasMatchSlides();
+  }
+
   function slideKeyList() {
+    if (hasMatchSlides()) {
+      return matchPack.slides.map((slide) => slide.id);
+    }
     const keys = ["identity"];
     if (includeDataSlide && pack && pack.dataSummary) keys.push("data");
     selectedProfiles().forEach((prof) => {
@@ -254,6 +300,10 @@
   }
 
   function slideLabel(key) {
+    if (hasMatchSlides()) {
+      const slide = matchPack.slides.find((row) => row.id === key);
+      return (slide && slide.title) || key;
+    }
     if (key === "identity") return "Identity";
     if (key === "data") return "Data summary";
     const idx = Number(String(key).replace("profile-", ""));
@@ -268,8 +318,12 @@
     return slidePhotos[key];
   }
 
+  function catalogPhotoById(id) {
+    return valePhotos.find((p) => p.id === id) || webPhotos.find((p) => p.id === id) || null;
+  }
+
   function webPhotoById(id) {
-    return webPhotos.find((p) => p.id === id) || null;
+    return catalogPhotoById(id);
   }
 
   function photoSrc(slideKey) {
@@ -277,6 +331,7 @@
     if (slot.cutout) return slot.cutout;
     const web = webPhotoById(slot.photoId);
     if (web) return web.proxyUrl || web.url;
+    if (appMode === "match") return "";
     return (pack && pack.player && pack.player.photoUrl) || "";
   }
 
@@ -405,7 +460,7 @@
     }
   }
 
-  async function loadWebPhotos() {
+  async function loadWebPhotos(options = {}) {
     if (!pack || !pack.player) return;
     const name = pack.player.name;
     let club = pack.player.club && pack.player.club !== "—" ? pack.player.club : "";
@@ -419,15 +474,25 @@
       if (!res.ok) throw new Error("Photo search failed");
       const data = await res.json();
       webPhotos = Array.isArray(data.photos) ? data.photos : [];
-      autoAssignDistinctPhotos();
+      if (options.switchTab || !valePhotos.length) {
+        autoAssignDistinctPhotos();
+      }
+      if (options.switchTab) {
+        photoSource = "web";
+        document.querySelectorAll(".mfp-source").forEach((btn) => {
+          btn.classList.toggle("is-active", btn.getAttribute("data-photo-source") === "web");
+        });
+      }
       renderPhotoGrid();
       renderPreview();
-      const assigned = photoSlideKeys().filter((k) => photoSrc(k)).length;
-      setStatus(
-        webPhotos.length
-          ? `Found ${webPhotos.length} photos — assigned across ${assigned} slides. Click a slide target, then a photo.`
-          : "No web photos found — upload a cutout or try Find web photos again."
-      );
+      if (options.switchTab || photoSource === "web") {
+        const assigned = photoSlideKeys().filter((k) => photoSrc(k)).length;
+        setStatus(
+          webPhotos.length
+            ? `Found ${webPhotos.length} photos — assigned across ${assigned} slides. Click a slide target, then a photo.`
+            : "No web photos found — upload a cutout or try Find web photos again."
+        );
+      }
     } catch (err) {
       setStatus(err.message || "Photo search failed", true);
     } finally {
@@ -435,32 +500,166 @@
     }
   }
 
+  function visiblePhotoList() {
+    return photoSource === "vale" ? valePhotos : webPhotos;
+  }
+
+  function valeMatchesForComp() {
+    return valeMatches.filter((row) => row.competition === valeActiveComp);
+  }
+
+  function activeValeMatch() {
+    return valeMatches.find((row) => row.id === valeActiveMatchId) || null;
+  }
+
+  function renderValeBar() {
+    if (!valeBar || !valeComps || !valeMatchesEl) return;
+    if (photoSource !== "vale" || !valeMatches.length) {
+      valeBar.hidden = true;
+      return;
+    }
+    valeBar.hidden = false;
+    const comps = valeCompetitions.length
+      ? valeCompetitions.map((row) => row.name)
+      : [...new Set(valeMatches.map((row) => row.competition))];
+    valeComps.innerHTML = comps.map((name) => `
+      <button type="button" class="mfp-vale-comp ${name === valeActiveComp ? "is-active" : ""}" data-vale-comp="${escapeAttr(name)}">${escapeHtml(name)}</button>
+    `).join("");
+    const rows = valeMatchesForComp();
+    valeMatchesEl.innerHTML = rows.map((row) => {
+      const thumb = row.thumbUrl
+        ? `<img src="${escapeAttr("/api/meeting-front-pages/image-proxy?url=" + encodeURIComponent(row.thumbUrl))}" alt="" />`
+        : `<div class="mfp-vale-match__ph">PVFC</div>`;
+      return `<button type="button" class="mfp-vale-match ${row.id === valeActiveMatchId ? "is-active" : ""}" data-vale-match="${escapeAttr(row.id)}" title="${escapeAttr(row.name)}">
+        ${thumb}
+        <span>${escapeHtml(row.name)}</span>
+      </button>`;
+    }).join("");
+  }
+
+  async function loadValeGalleries() {
+    try {
+      const res = await fetch("/api/meeting-front-pages/vale-photos/matches");
+      if (!res.ok) throw new Error("Through a Lens unavailable");
+      const data = await res.json();
+      valeMatches = Array.isArray(data.matches) ? data.matches : [];
+      valeCompetitions = Array.isArray(data.competitions) ? data.competitions : [];
+      if (valeCompetitions.some((row) => row.name === "League")) valeActiveComp = "League";
+      else if (valeCompetitions[0]) valeActiveComp = valeCompetitions[0].name;
+      if ((appMode === "meeting" || appMode === "match") && valeMatches.length) {
+        photoPanel.hidden = false;
+        renderValeBar();
+        if (photoSource === "vale") renderPhotoGrid();
+        if (appMode === "match" && !matchPack) {
+          setStatus("Pick a 26/27 game — Pre-match, Post-match and Set plays templates load with both badges.");
+        }
+      }
+    } catch (_err) {
+      valeMatches = [];
+    }
+  }
+
+  async function loadValePhotos(matchId, options = {}) {
+    const match = valeMatches.find((row) => row.id === matchId);
+    if (!match) return;
+    const append = Boolean(options.append);
+    const start = append && valeNextStart ? valeNextStart : 1;
+    valeLoading = true;
+    valeActiveMatchId = matchId;
+    renderValeBar();
+    if (!append) {
+      valePhotos = [];
+      valeNextStart = null;
+      valeTotal = 0;
+      setStatus(`Loading ${match.name} photos from Through a Lens…`);
+    }
+    renderPhotoGrid();
+    try {
+      const qs = new URLSearchParams({
+        nodeId: match.id,
+        match: match.name,
+        kind: match.kind || "action",
+        start: String(start),
+        count: "40",
+      });
+      if (match.albumKey) qs.set("albumKey", match.albumKey);
+      const res = await fetch(`/api/meeting-front-pages/vale-photos?${qs.toString()}`);
+      if (!res.ok) throw new Error("Could not load match photos");
+      const data = await res.json();
+      const incoming = Array.isArray(data.photos) ? data.photos : [];
+      valePhotos = append ? valePhotos.concat(incoming) : incoming;
+      valeNextStart = data.nextStart || null;
+      valeTotal = Number(data.total || valePhotos.length);
+      photoPanel.hidden = appMode === "dossier";
+      renderPhotoGrid();
+      const how = hasMatchSlides()
+        ? "Drag a picture onto a slide, or click a slide then a photo. Titles are editable."
+        : "Click a slide, then a picture — or open Match slides to build a fixture deck.";
+      setStatus(
+        valePhotos.length
+          ? `${match.name} — ${valePhotos.length}${valeTotal ? ` of ${valeTotal}` : ""} Through a Lens photos. ${how}`
+          : `No photos in ${match.name} yet.`
+      );
+    } catch (err) {
+      setStatus(friendlyNetworkError(err, "Could not load Through a Lens photos"), true);
+      renderPhotoGrid();
+    } finally {
+      valeLoading = false;
+    }
+  }
+
   function renderPhotoGrid() {
-    if (!webPhotos.length) {
-      photoPanel.hidden = true;
+    const photos = visiblePhotoList();
+    const showPanel = appMode !== "dossier" && (valeMatches.length || webPhotos.length || photos.length);
+    if (photoPanel) photoPanel.hidden = !showPanel;
+    renderValeBar();
+    if (!photoGrid) return;
+    if (!showPanel) {
       photoGrid.innerHTML = "";
       return;
     }
-    photoPanel.hidden = false;
     const activeId = (slidePhotos[activeSlideKey] || {}).photoId;
-    const targets = photoSlideKeys().map((key) => `
+    const targets = hasAssignableSlides()
+      ? photoSlideKeys().map((key) => `
       <button type="button" class="mfp-slide-target ${key === activeSlideKey ? "is-active" : ""}" data-slide-target="${escapeAttr(key)}">
         ${escapeHtml(slideLabel(key))}
-      </button>`).join("");
-    photoMeta.innerHTML = `${webPhotos.length} options · click a slide, then a photo`;
+      </button>`).join("")
+      : "";
+    if (photoSource === "vale") {
+      const match = activeValeMatch();
+      photoMeta.innerHTML = match
+        ? `<a href="${escapeAttr(match.galleryUrl)}" target="_blank" rel="noopener">${escapeHtml(match.name)}</a> on Through a Lens`
+        : "Pick a 26/27 game";
+    } else {
+      photoMeta.innerHTML = `${webPhotos.length} web options · click a slide, then a photo`;
+    }
+    const emptyVale = photoSource === "vale" && !photos.length
+      ? `<p class="mfp-hint mfp-photo-assign-hint">${valeLoading ? "Loading match photos…" : "Pick a game above — League, cups, friendlies and headshots from Through a Lens."}</p>`
+      : "";
+    const emptyWeb = photoSource === "web" && !photos.length
+      ? `<p class="mfp-hint mfp-photo-assign-hint">${pack ? "No web photos yet — try Find web photos." : "Load a player to search the web, or pick a Through a Lens game."}</p>`
+      : "";
+    const more = photoSource === "vale" && valeNextStart
+      ? `<button type="button" class="mfp-btn mfp-btn--ghost mfp-btn--small mfp-photo-more" id="valeMoreBtn">Load more photos</button>`
+      : "";
+    const assignHint = hasAssignableSlides()
+      ? `<p class="mfp-hint mfp-photo-assign-hint">${hasMatchSlides() ? "Drag onto a slide, or assigning to" : "Assigning to"} <strong>${escapeHtml(slideLabel(activeSlideKey))}</strong> — each slide can use a different picture.</p>`
+      : "";
     photoGrid.innerHTML = `
-      <div class="mfp-slide-targets">${targets}</div>
-      <p class="mfp-hint mfp-photo-assign-hint">Assigning to <strong>${escapeHtml(slideLabel(activeSlideKey))}</strong> — each slide can use a different picture.</p>
+      ${targets ? `<div class="mfp-slide-targets">${targets}</div>` : ""}
+      ${assignHint}
+      ${emptyVale}${emptyWeb}
       <div class="mfp-photo-grid__cards">
-        ${webPhotos.map((photo) => {
-          const usedOn = photoSlideKeys().filter((k) => (slidePhotos[k] || {}).photoId === photo.id);
+        ${photos.map((photo) => {
+          const usedOn = hasAssignableSlides() ? photoSlideKeys().filter((k) => (slidePhotos[k] || {}).photoId === photo.id) : [];
           const usedTag = usedOn.length ? usedOn.map(slideLabel).join(", ") : "";
-          return `<button type="button" class="mfp-photo-card ${photo.id === activeId ? "is-selected" : ""}" data-photo-id="${escapeAttr(photo.id)}" title="${escapeAttr(photo.label)}">
-            <img src="${escapeAttr(photo.proxyUrl || photo.url)}" alt="" loading="lazy" />
-            <span class="mfp-photo-card__tag">${escapeHtml(photo.source)}${usedTag ? ` · ${escapeHtml(usedTag)}` : ""}</span>
+          return `<button type="button" class="mfp-photo-card ${photo.id === activeId ? "is-selected" : ""}" data-photo-id="${escapeAttr(photo.id)}" title="${escapeAttr(photo.label)}" ${hasAssignableSlides() ? 'draggable="true"' : ""}>
+            <img src="${escapeAttr(photo.proxyThumbUrl || photo.proxyUrl || photo.url)}" alt="" loading="lazy" draggable="false" />
+            <span class="mfp-photo-card__tag">${escapeHtml(photo.source === "through-a-lens" ? "vale" : photo.source)}${usedTag ? ` · ${escapeHtml(usedTag)}` : ""}</span>
           </button>`;
         }).join("")}
-      </div>`;
+      </div>
+      ${more}`;
   }
 
   async function loadPack(playerId, positionCode, options = {}) {
@@ -506,7 +705,7 @@
       });
       renderEditor();
       renderPreview();
-      if (keepPhotos && webPhotos.length) renderPhotoGrid();
+      if (keepPhotos && (webPhotos.length || valePhotos.length || valeMatches.length)) renderPhotoGrid();
       downloadBtn.disabled = false;
       refreshBtn.disabled = false;
       refreshPhotosBtn.disabled = false;
@@ -517,9 +716,11 @@
         const seasonBit = [pack.player.league, pack.player.season].filter(Boolean).join(" ");
         const posBit = pack.player.positionLine || positionCode || "";
         setStatus(`Loaded ${[posBit, seasonBit].filter(Boolean).join(" · ")}`);
+        renderPhotoGrid();
       } else {
-        setStatus(`Loaded ${pack.player.name} — fetching web photos…`);
-        await loadWebPhotos();
+        setStatus(`Loaded ${pack.player.name} — pick a Through a Lens game or find web photos.`);
+        renderPhotoGrid();
+        loadWebPhotos({ switchTab: false });
       }
     } catch (err) {
       setStatus(err.message || "Could not load player", true);
@@ -532,10 +733,27 @@
     });
     document.body.classList.toggle("mfp-mode-dossier", appMode === "dossier");
     document.body.classList.toggle("mfp-mode-meeting", appMode === "meeting");
+    document.body.classList.toggle("mfp-mode-match", appMode === "match");
+    if (playerSearchPanel) playerSearchPanel.hidden = appMode === "match";
+    if (matchPackBar) matchPackBar.hidden = appMode !== "match";
+    if (appMode === "match") renderMatchPackPills();
     if (cutoutPanel) cutoutPanel.hidden = appMode === "dossier";
-    if (photoPanel) photoPanel.hidden = appMode === "dossier" || !webPhotos.length;
-    if (downloadBtn) downloadBtn.hidden = appMode === "dossier";
-    if (refreshPhotosBtn) refreshPhotosBtn.hidden = appMode === "dossier";
+    if (cutoutLabel) {
+      cutoutLabel.innerHTML = appMode === "match"
+        ? 'Own photo <span class="mfp-label__optional">optional</span>'
+        : 'Own cutout <span class="mfp-label__optional">optional</span>';
+    }
+    if (photoPanel) {
+      const showPhotos = appMode !== "dossier" && (valeMatches.length || webPhotos.length || valePhotos.length);
+      photoPanel.hidden = !showPhotos;
+      if (showPhotos) renderPhotoGrid();
+    }
+    if (downloadBtn) {
+      downloadBtn.hidden = appMode === "dossier";
+      downloadBtn.disabled = appMode === "match" ? !matchPack : !pack;
+    }
+    if (refreshPhotosBtn) refreshPhotosBtn.hidden = appMode === "dossier" || appMode === "match";
+    if (refreshBtn) refreshBtn.hidden = appMode === "match";
     if (saveDossierBtn) {
       saveDossierBtn.hidden = appMode !== "dossier";
       saveDossierBtn.disabled = !selectedPlayerId;
@@ -543,23 +761,111 @@
   }
 
   async function setAppMode(mode) {
-    appMode = mode === "dossier" ? "dossier" : "meeting";
+    appMode = normalizeMode(mode);
     try { localStorage.setItem("mfp-mode", appMode); } catch (_) { /* ignore */ }
     applyModeChrome();
+    if (appMode === "dossier") {
+      if (pack) await loadDossier();
+      else {
+        workspace.hidden = true;
+        renderEditor();
+        renderPreview();
+      }
+      return;
+    }
+    if (appMode === "match") {
+      const match = activeValeMatch();
+      if (!matchPack && match) {
+        await loadMatchPack(match);
+        return;
+      }
+      workspace.hidden = !matchPack;
+      if (matchPack) {
+        if (!(matchPack.slides || []).some((s) => s.id === activeSlideKey)) {
+          activeSlideKey = (matchPack.slides[0] && matchPack.slides[0].id) || "cover";
+        }
+        downloadBtn.disabled = false;
+      } else {
+        setStatus("Pick a Through a Lens game — Pre-match, Post-match and Set plays templates load with both badges.");
+      }
+      renderEditor();
+      renderPreview();
+      if (valeMatches.length || valePhotos.length) {
+        photoPanel.hidden = false;
+        renderPhotoGrid();
+      }
+      return;
+    }
     if (!pack) {
+      workspace.hidden = true;
       renderEditor();
       renderPreview();
       return;
     }
-    if (appMode === "dossier") {
-      await loadDossier();
-    } else {
+    workspace.hidden = false;
+    renderEditor();
+    renderPreview();
+    if (webPhotos.length || valePhotos.length || valeMatches.length) {
+      photoPanel.hidden = false;
+      renderPhotoGrid();
+    }
+  }
+
+  function renderMatchPackPills() {
+    if (!matchPackPills) return;
+    const packs = (matchPack && matchPack.packs) || MATCH_PACK_DEFAULTS;
+    matchPackPills.innerHTML = packs.map((row) => `
+      <button type="button" class="mfp-pill ${row.id === matchPackId ? "is-active" : ""}" data-match-pack="${escapeAttr(row.id)}">${escapeHtml(row.label)}</button>
+    `).join("");
+  }
+
+  async function loadMatchPack(match, options = {}) {
+    if (!match || !match.name) return;
+    const packId = options.packId || matchPackId || "pre-match";
+    const keepPhotos = Boolean(options.keepPhotos);
+    const previous = keepPhotos ? { ...slidePhotos } : null;
+    const extras = keepPhotos && matchPack && Array.isArray(matchPack.slides)
+      ? matchPack.slides.filter((row) => row && (row.kind === "stat" || row.kind === "stats" || String(row.id || "").startsWith("topic-custom-")))
+      : [];
+    setStatus(`Building ${packId.replace(/-/g, " ")} slides vs ${match.name}…`);
+    try {
+      const qs = new URLSearchParams({
+        name: match.name,
+        competition: match.competition || "",
+        pack: packId,
+      });
+      const res = await fetch(`/api/meeting-front-pages/match-pack?${qs.toString()}`);
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(detail.detail || `Could not build match slides (${res.status})`);
+      }
+      matchPack = await res.json();
+      matchPackId = (matchPack.pack && matchPack.pack.id) || packId;
+      try { localStorage.setItem("mfp-match-pack", matchPackId); } catch (_) { /* ignore */ }
+      if (extras.length) {
+        const seen = new Set((matchPack.slides || []).map((row) => row.id));
+        extras.forEach((row) => {
+          if (row && row.id && !seen.has(row.id)) matchPack.slides.push(row);
+        });
+      }
+      if (previous) slidePhotos = previous;
+      else {
+        slidePhotos = {};
+        activeSlideKey = "cover";
+      }
+      (matchPack.slides || []).forEach((slide) => ensureSlidePhoto(slide.id));
+      if (!(matchPack.slides || []).some((s) => s.id === activeSlideKey)) {
+        activeSlideKey = (matchPack.slides[0] && matchPack.slides[0].id) || "cover";
+      }
+      workspace.hidden = false;
+      downloadBtn.disabled = false;
+      renderMatchPackPills();
       renderEditor();
       renderPreview();
-      if (webPhotos.length) {
-        photoPanel.hidden = false;
-        renderPhotoGrid();
-      }
+      renderPhotoGrid();
+      setStatus(`${match.name} — drag photos onto slides. Click a title to edit it.`);
+    } catch (err) {
+      setStatus(friendlyNetworkError(err, "Could not build match slides"), true);
     }
   }
 
@@ -1132,9 +1438,491 @@
     requestAnimationFrame(scaleSlides);
   }
 
+  function matchSlideById(id) {
+    return (matchPack && matchPack.slides || []).find((row) => row.id === id) || null;
+  }
+
+  function matchSlideKindLabel(slide, index) {
+    if (slide.kind === "cover") return "Cover";
+    if (slide.kind === "stat") return "Stat";
+    if (slide.kind === "stats") return "Stats board";
+    return `Slide ${String(index).padStart(2, "0")}`;
+  }
+
+  function emptyStatRow(index) {
+    return {
+      id: `row-${Date.now()}-${index || 0}-${Math.random().toString(36).slice(2, 5)}`,
+      title: "Write the stat",
+      statValue: "0",
+      verdict: "positive",
+    };
+  }
+
+  function newMatchTopicSlide() {
+    return {
+      id: `topic-custom-${Date.now()}`,
+      kind: "topic",
+      title: "New slide",
+      subtitle: (matchPack.match && matchPack.match.fixture) || "",
+      kicker: (matchPack.pack && matchPack.pack.label) || "Match",
+      selected: true,
+    };
+  }
+
+  function newMatchStatSlide() {
+    return {
+      id: `stat-${Date.now()}`,
+      kind: "stat",
+      title: "Write the stat",
+      statValue: "0",
+      subtitle: (matchPack.match && matchPack.match.fixture) || "",
+      kicker: "Stat",
+      verdict: "positive",
+      selected: true,
+    };
+  }
+
+  function newMatchStatsSlide() {
+    return {
+      id: `stats-${Date.now()}`,
+      kind: "stats",
+      title: "Key numbers",
+      subtitle: (matchPack.match && matchPack.match.fixture) || "",
+      kicker: "Stats",
+      stats: [emptyStatRow(1), emptyStatRow(2), emptyStatRow(3)],
+      selected: true,
+    };
+  }
+
+  function isPositiveStat(slide) {
+    return !slide || slide.verdict !== "negative";
+  }
+
+  function statGridCols(count) {
+    if (count <= 1) return 1;
+    if (count === 2 || count === 4) return 2;
+    return 3;
+  }
+
+  function htmlWithBreaks(value) {
+    return escapeHtml(value).replace(/\n/g, "<br>");
+  }
+
+  function matchEditorSlideCard(slide, i) {
+    const rows = Array.isArray(slide.stats) ? slide.stats : [];
+    const statsRows = slide.kind === "stats"
+      ? rows.map((row, idx) => `
+          <div class="mfp-stat-edit" data-stat-row="${escapeAttr(row.id)}">
+            <div class="mfp-stat-edit__head">Stat ${idx + 1}</div>
+            <div class="mfp-field"><label>What is the stat</label><input data-row-title value="${escapeAttr(row.title || "")}" /></div>
+            <div class="mfp-field"><label>Number / result</label><input data-row-value value="${escapeAttr(row.statValue || "")}" placeholder="e.g. 12 or 3/11" /></div>
+            <div class="mfp-verdict" role="group" aria-label="Stat result">
+              <button type="button" class="mfp-verdict__btn is-good ${isPositiveStat(row) ? "is-on" : ""}" data-row-verdict="positive">Achieved</button>
+              <button type="button" class="mfp-verdict__btn is-bad ${isPositiveStat(row) ? "" : "is-on"}" data-row-verdict="negative">Not achieved</button>
+            </div>
+            ${rows.length > 1 ? `<button type="button" class="mfp-btn mfp-btn--ghost mfp-btn--small" data-remove-row="${escapeAttr(row.id)}">Remove</button>` : ""}
+          </div>
+        `).join("")
+      : "";
+    return `
+        <div class="mfp-profile-card ${slide.id === activeSlideKey ? "is-on" : ""}" data-match-slide="${escapeAttr(slide.id)}">
+          <div class="mfp-profile-card__head">
+            <div>
+              <div class="mfp-profile-card__title">${escapeHtml(matchSlideKindLabel(slide, i))}</div>
+            </div>
+          </div>
+          <div class="mfp-field"><label>${slide.kind === "stat" ? "What is the stat" : "Title"}</label><input data-slide-title value="${escapeAttr(slide.title || "")}" /></div>
+          ${slide.kind === "stat" ? `
+          <div class="mfp-field"><label>Number / result</label><input data-slide-value value="${escapeAttr(slide.statValue || "")}" placeholder="e.g. 62% or 3/11" /></div>
+          <div class="mfp-field"><label>Note</label><input data-slide-sub value="${escapeAttr(slide.subtitle || "")}" /></div>
+          <div class="mfp-verdict" role="group" aria-label="Stat result">
+            <button type="button" class="mfp-verdict__btn is-good ${isPositiveStat(slide) ? "is-on" : ""}" data-slide-verdict="positive">Achieved</button>
+            <button type="button" class="mfp-verdict__btn is-bad ${isPositiveStat(slide) ? "" : "is-on"}" data-slide-verdict="negative">Not achieved</button>
+          </div>
+          ` : ""}
+          ${slide.kind === "stats" ? `
+          <div class="mfp-field"><label>Note</label><input data-slide-sub value="${escapeAttr(slide.subtitle || "")}" /></div>
+          ${statsRows}
+          ${rows.length < 6 ? `<button type="button" class="mfp-btn mfp-btn--ghost mfp-btn--small" data-add-row>Add another stat</button>` : ""}
+          ` : ""}
+          ${slide.kind !== "stat" && slide.kind !== "stats" ? `<div class="mfp-field"><label>Subtitle</label><input data-slide-sub value="${escapeAttr(slide.subtitle || "")}" /></div>` : ""}
+          <button type="button" class="mfp-btn mfp-btn--ghost mfp-btn--small" data-select-slide="${escapeAttr(slide.id)}">${slide.kind === "stat" || slide.kind === "stats" ? "Optional photo" : "Assign photos here"}</button>
+        </div>`;
+  }
+
+  function renderMatchEditor() {
+    if (!matchPack) {
+      editor.innerHTML = `<h2>Match slides</h2><p class="mfp-hint">Pick a Through a Lens game. Pre-match, Post-match and Set plays templates load with the Vale badge, the opponent badge, and empty photo slots you can drag into.</p>`;
+      return;
+    }
+    const match = matchPack.match || {};
+    const opp = matchPack.opponent || {};
+    const slides = matchPack.slides || [];
+    editor.innerHTML = `
+      <h2>${escapeHtml((matchPack.pack && matchPack.pack.label) || "Match slides")}</h2>
+      <p class="mfp-hint">${escapeHtml(match.fixture || opp.name || "")} — drag photos onto the slides. Titles edit on the slide or here.</p>
+      <div class="mfp-field"><label>Opponent</label><input data-match-opp value="${escapeAttr(opp.name || "")}" /></div>
+      <div class="mfp-field"><label>Competition</label><input data-match-comp value="${escapeAttr(match.competition || "")}" /></div>
+      ${slides.map((slide, i) => matchEditorSlideCard(slide, i)).join("")}
+      <div class="mfp-editor-actions">
+        <button type="button" class="mfp-btn mfp-btn--ghost" id="addMatchSlideBtn">Add slide</button>
+        <button type="button" class="mfp-btn mfp-btn--ghost" id="addStatSlideBtn">Add stat slide</button>
+        <button type="button" class="mfp-btn mfp-btn--ghost" id="addStatsSlideBtn">Add multiple stats</button>
+      </div>
+    `;
+    const oppInput = editor.querySelector("[data-match-opp]");
+    if (oppInput) {
+      oppInput.addEventListener("input", () => {
+        if (!matchPack.opponent) matchPack.opponent = {};
+        matchPack.opponent.name = oppInput.value;
+        renderPreview();
+      });
+    }
+    const compInput = editor.querySelector("[data-match-comp]");
+    if (compInput) {
+      compInput.addEventListener("input", () => {
+        if (!matchPack.match) matchPack.match = {};
+        matchPack.match.competition = compInput.value;
+        const cover = matchSlideById("cover");
+        if (cover) cover.kicker = compInput.value;
+        renderPreview();
+      });
+    }
+    editor.querySelectorAll("[data-match-slide]").forEach((card) => {
+      const id = card.getAttribute("data-match-slide");
+      const slide = matchSlideById(id);
+      if (!slide) return;
+      const titleEl = card.querySelector("[data-slide-title]");
+      const subEl = card.querySelector("[data-slide-sub]");
+      const valueEl = card.querySelector("[data-slide-value]");
+      if (titleEl) {
+        titleEl.addEventListener("input", () => {
+          slide.title = titleEl.value;
+          renderPreview();
+          renderPhotoGrid();
+        });
+      }
+      if (subEl) {
+        subEl.addEventListener("input", () => {
+          slide.subtitle = subEl.value;
+          renderPreview();
+        });
+      }
+      if (valueEl) {
+        valueEl.addEventListener("input", () => {
+          slide.statValue = valueEl.value;
+          renderPreview();
+        });
+      }
+      card.querySelectorAll("[data-slide-verdict]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          slide.verdict = btn.getAttribute("data-slide-verdict") === "negative" ? "negative" : "positive";
+          renderEditor();
+          renderPreview();
+        });
+      });
+      card.querySelectorAll("[data-stat-row]").forEach((rowEl) => {
+        const rowId = rowEl.getAttribute("data-stat-row");
+        const row = (slide.stats || []).find((item) => item.id === rowId);
+        if (!row) return;
+        const rowTitle = rowEl.querySelector("[data-row-title]");
+        const rowValue = rowEl.querySelector("[data-row-value]");
+        if (rowTitle) {
+          rowTitle.addEventListener("input", () => {
+            row.title = rowTitle.value;
+            renderPreview();
+          });
+        }
+        if (rowValue) {
+          rowValue.addEventListener("input", () => {
+            row.statValue = rowValue.value;
+            renderPreview();
+          });
+        }
+        rowEl.querySelectorAll("[data-row-verdict]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            row.verdict = btn.getAttribute("data-row-verdict") === "negative" ? "negative" : "positive";
+            renderEditor();
+            renderPreview();
+          });
+        });
+      });
+      const addRowBtn = card.querySelector("[data-add-row]");
+      if (addRowBtn) {
+        addRowBtn.addEventListener("click", () => {
+          if (!Array.isArray(slide.stats)) slide.stats = [];
+          if (slide.stats.length >= 6) return;
+          slide.stats.push(emptyStatRow(slide.stats.length + 1));
+          renderEditor();
+          renderPreview();
+        });
+      }
+      card.querySelectorAll("[data-remove-row]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const rowId = btn.getAttribute("data-remove-row");
+          slide.stats = (slide.stats || []).filter((item) => item.id !== rowId);
+          renderEditor();
+          renderPreview();
+        });
+      });
+    });
+    editor.querySelectorAll("[data-select-slide]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        activeSlideKey = btn.getAttribute("data-select-slide") || activeSlideKey;
+        renderEditor();
+        renderPreview();
+        renderPhotoGrid();
+        setStatus(`Assigning photos to ${slideLabel(activeSlideKey)}.`);
+      });
+    });
+    const addBtn = editor.querySelector("#addMatchSlideBtn");
+    if (addBtn) {
+      addBtn.addEventListener("click", () => {
+        const slide = newMatchTopicSlide();
+        matchPack.slides.push(slide);
+        ensureSlidePhoto(slide.id);
+        activeSlideKey = slide.id;
+        renderEditor();
+        renderPreview();
+        renderPhotoGrid();
+        setStatus("Added a slide — rename it, then drop a photo on.");
+      });
+    }
+    const addStatBtn = editor.querySelector("#addStatSlideBtn");
+    if (addStatBtn) {
+      addStatBtn.addEventListener("click", () => {
+        const slide = newMatchStatSlide();
+        matchPack.slides.push(slide);
+        ensureSlidePhoto(slide.id);
+        activeSlideKey = slide.id;
+        renderEditor();
+        renderPreview();
+        renderPhotoGrid();
+        setStatus("Stat slide added — write the number, then mark Achieved or Not achieved.");
+      });
+    }
+    const addStatsBtn = editor.querySelector("#addStatsSlideBtn");
+    if (addStatsBtn) {
+      addStatsBtn.addEventListener("click", () => {
+        const slide = newMatchStatsSlide();
+        matchPack.slides.push(slide);
+        ensureSlidePhoto(slide.id);
+        activeSlideKey = slide.id;
+        renderEditor();
+        renderPreview();
+        renderPhotoGrid();
+        setStatus("Stats board added — fill each number, then mark Achieved or Not achieved.");
+      });
+    }
+  }
+
+  function matchSlideHtml(slide) {
+    const src = photoSrc(slide.id);
+    const vale = matchPack.portVale || {};
+    const opp = matchPack.opponent || {};
+    const valeBadge = vale.badgeProxyUrl || vale.badgeUrl || BADGE_URL;
+    const oppBadge = opp.badgeProxyUrl || opp.badgeUrl || "";
+    const oppName = opp.name || "Opponent";
+    const ghost = String(oppName).split(/\s+/)[0] || "VALE";
+    if (slide.kind === "stat") {
+      return matchStatSlideHtml(slide, {
+        src, valeBadge, oppBadge, oppName,
+      });
+    }
+    if (slide.kind === "stats") {
+      return matchStatsSlideHtml(slide, {
+        src, valeBadge, oppBadge, oppName,
+      });
+    }
+    const photoInner = src
+      ? `<img src="${escapeAttr(src)}" alt="" crossorigin="anonymous" />`
+      : `<div class="mfp-match-drop"><span>Drop a photo</span><small>Drag from Through a Lens</small></div>`;
+    return `<div class="mfp-slide mfp-slide--match ${slide.kind === "cover" ? "is-cover" : "is-topic"} ${slide.id === activeSlideKey ? "is-active-target" : ""}" data-slide="${escapeAttr(slide.id)}" data-drop-slide="${escapeAttr(slide.id)}">
+      <div class="mfp-match__atmosphere" aria-hidden="true"></div>
+      <p class="mfp-match__ghost" aria-hidden="true">${escapeHtml(ghost)}</p>
+      <div class="mfp-match__photo">${photoInner}</div>
+      <div class="mfp-match__photo-edge" aria-hidden="true"></div>
+      <div class="mfp-match__goldbar" aria-hidden="true"></div>
+      <div class="mfp-match__stage">
+        <p class="mfp-match__kicker">${escapeHtml(slide.kicker || "")}</p>
+        <h2 class="mfp-match__title" contenteditable="true" spellcheck="false" data-edit-field="title">${htmlWithBreaks(slide.title || "")}</h2>
+        <p class="mfp-match__sub" contenteditable="true" spellcheck="false" data-edit-field="subtitle">${escapeHtml(slide.subtitle || "")}</p>
+        <div class="mfp-match__badges">
+          <div class="mfp-match__club">
+            <span class="mfp-match__crest"><img src="${escapeAttr(valeBadge)}" alt="Port Vale" /></span>
+            <span>Port Vale</span>
+          </div>
+          <span class="mfp-match__vs">VS</span>
+          <div class="mfp-match__club">
+            <span class="mfp-match__crest">${oppBadge ? `<img src="${escapeAttr(oppBadge)}" alt="${escapeAttr(oppName)}" />` : `<span class="mfp-match__crest-ph"></span>`}</span>
+            <span>${escapeHtml(oppName)}</span>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function matchClubStrip(art) {
+    return `<div class="mfp-match__badges">
+          <div class="mfp-match__club">
+            <span class="mfp-match__crest"><img src="${escapeAttr(art.valeBadge)}" alt="Port Vale" /></span>
+            <span>Port Vale</span>
+          </div>
+          <span class="mfp-match__vs">VS</span>
+          <div class="mfp-match__club">
+            <span class="mfp-match__crest">${art.oppBadge ? `<img src="${escapeAttr(art.oppBadge)}" alt="${escapeAttr(art.oppName)}" />` : `<span class="mfp-match__crest-ph"></span>`}</span>
+            <span>${escapeHtml(art.oppName)}</span>
+          </div>
+        </div>`;
+  }
+
+  function matchStatSlideHtml(slide, art) {
+    const positive = isPositiveStat(slide);
+    const value = slide.statValue || "0";
+    const hasPhoto = Boolean(art.src);
+    const photoInner = hasPhoto
+      ? `<img src="${escapeAttr(art.src)}" alt="" crossorigin="anonymous" />`
+      : `<div class="mfp-match-drop is-optional"><span>Photo optional</span></div>`;
+    return `<div class="mfp-slide mfp-slide--match is-stat ${positive ? "is-positive" : "is-negative"} ${hasPhoto ? "has-photo" : "no-photo"} ${slide.id === activeSlideKey ? "is-active-target" : ""}" data-slide="${escapeAttr(slide.id)}" data-drop-slide="${escapeAttr(slide.id)}">
+      <div class="mfp-match__atmosphere" aria-hidden="true"></div>
+      ${hasPhoto ? `<div class="mfp-match__photo">${photoInner}</div><div class="mfp-match__photo-edge" aria-hidden="true"></div>` : ""}
+      <div class="mfp-match__goldbar" aria-hidden="true"></div>
+      <div class="mfp-match__stage">
+        <div class="mfp-match__verdict" role="group" aria-label="Stat result">
+          <button type="button" class="mfp-match__stamp ${positive ? "is-on" : ""}" data-verdict="positive">Achieved</button>
+          <button type="button" class="mfp-match__stamp ${positive ? "" : "is-on"}" data-verdict="negative">Not achieved</button>
+        </div>
+        <p class="mfp-match__value" contenteditable="true" spellcheck="false" data-edit-field="statValue">${escapeHtml(value)}</p>
+        <h2 class="mfp-match__title" contenteditable="true" spellcheck="false" data-edit-field="title">${htmlWithBreaks(slide.title || "")}</h2>
+        <p class="mfp-match__sub" contenteditable="true" spellcheck="false" data-edit-field="subtitle">${escapeHtml(slide.subtitle || "")}</p>
+        ${matchClubStrip(art)}
+      </div>
+    </div>`;
+  }
+
+  function matchStatsSlideHtml(slide, art) {
+    const rows = Array.isArray(slide.stats) && slide.stats.length ? slide.stats : [emptyStatRow(1)];
+    const hasPhoto = Boolean(art.src);
+    const photoInner = hasPhoto
+      ? `<img src="${escapeAttr(art.src)}" alt="" crossorigin="anonymous" />`
+      : "";
+    const cards = rows.map((row) => {
+      const positive = isPositiveStat(row);
+      return `<article class="mfp-stat-card ${positive ? "is-positive" : "is-negative"}">
+          <div class="mfp-match__verdict" role="group" aria-label="Stat result">
+            <button type="button" class="mfp-match__stamp ${positive ? "is-on" : ""}" data-stat-id="${escapeAttr(row.id)}" data-verdict="positive">Achieved</button>
+            <button type="button" class="mfp-match__stamp ${positive ? "" : "is-on"}" data-stat-id="${escapeAttr(row.id)}" data-verdict="negative">Not achieved</button>
+          </div>
+          <p class="mfp-stat-card__value" contenteditable="true" spellcheck="false" data-stat-id="${escapeAttr(row.id)}" data-edit-field="statValue">${escapeHtml(row.statValue || "0")}</p>
+          <h3 class="mfp-stat-card__title" contenteditable="true" spellcheck="false" data-stat-id="${escapeAttr(row.id)}" data-edit-field="title">${htmlWithBreaks(row.title || "")}</h3>
+        </article>`;
+    }).join("");
+    const good = rows.filter(isPositiveStat).length;
+    const mood = good === rows.length ? "is-positive" : good === 0 ? "is-negative" : "is-mixed";
+    return `<div class="mfp-slide mfp-slide--match is-stats ${mood} ${hasPhoto ? "has-photo" : "no-photo"} ${slide.id === activeSlideKey ? "is-active-target" : ""}" data-slide="${escapeAttr(slide.id)}" data-drop-slide="${escapeAttr(slide.id)}">
+      <div class="mfp-match__atmosphere" aria-hidden="true"></div>
+      ${hasPhoto ? `<div class="mfp-match__photo">${photoInner}</div><div class="mfp-match__photo-edge" aria-hidden="true"></div>` : ""}
+      <div class="mfp-match__goldbar" aria-hidden="true"></div>
+      <div class="mfp-match__stage">
+        <p class="mfp-match__kicker">${escapeHtml(slide.kicker || "Stats")}</p>
+        <h2 class="mfp-match__title" contenteditable="true" spellcheck="false" data-edit-field="title">${htmlWithBreaks(slide.title || "")}</h2>
+        <p class="mfp-match__sub" contenteditable="true" spellcheck="false" data-edit-field="subtitle">${escapeHtml(slide.subtitle || "")}</p>
+        <div class="mfp-stat-grid mfp-stat-grid--${statGridCols(rows.length)}">${cards}</div>
+        ${matchClubStrip(art)}
+      </div>
+    </div>`;
+  }
+
+  function bindMatchPreviewEvents() {
+    preview.querySelectorAll("[data-drop-slide]").forEach((slideEl) => {
+      const id = slideEl.getAttribute("data-drop-slide");
+      slideEl.addEventListener("click", (event) => {
+        if (event.target.closest("[contenteditable], [data-verdict]")) return;
+        if (id && id !== activeSlideKey) {
+          activeSlideKey = id;
+          renderEditor();
+          renderPreview();
+          renderPhotoGrid();
+        }
+      });
+      slideEl.querySelectorAll("[data-verdict]").forEach((btn) => {
+        btn.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const slide = matchSlideById(id);
+          if (!slide) return;
+          const verdict = btn.getAttribute("data-verdict") === "negative" ? "negative" : "positive";
+          const rowId = btn.getAttribute("data-stat-id");
+          if (rowId && Array.isArray(slide.stats)) {
+            const row = slide.stats.find((item) => item.id === rowId);
+            if (row) row.verdict = verdict;
+          } else {
+            slide.verdict = verdict;
+          }
+          renderEditor();
+          renderPreview();
+          renderPhotoGrid();
+        });
+      });
+      slideEl.querySelectorAll("[data-edit-field]").forEach((el) => {
+        el.addEventListener("keydown", (event) => {
+          const field = el.getAttribute("data-edit-field");
+          if (event.key === "Enter" && field !== "title") {
+            event.preventDefault();
+            el.blur();
+          }
+        });
+        el.addEventListener("input", () => {
+          const slide = matchSlideById(id);
+          if (!slide) return;
+          const field = el.getAttribute("data-edit-field");
+          const rowId = el.getAttribute("data-stat-id");
+          const multiline = field === "title";
+          const text = multiline
+            ? String(el.innerText || "").replace(/\n{3,}/g, "\n\n").replace(/^\n+|\n+$/g, "")
+            : String(el.textContent || "").replace(/\s+/g, " ").trim();
+          const target = rowId && Array.isArray(slide.stats)
+            ? slide.stats.find((item) => item.id === rowId)
+            : slide;
+          if (!target) return;
+          if (field === "statValue") target.statValue = text;
+          else target[field] = text;
+        });
+        el.addEventListener("blur", () => {
+          renderEditor();
+          renderPhotoGrid();
+        });
+      });
+    });
+  }
+
+  function renderMatchPreview() {
+    if (!matchPack) {
+      preview.innerHTML = "";
+      return;
+    }
+    preview.innerHTML = (matchPack.slides || []).map((slide, i) =>
+      `<div class="mfp-slide-wrap"><p class="mfp-slide-caption">${String(i + 1).padStart(2, "0")} · ${escapeHtml(slide.title || "Slide")}</p>${matchSlideHtml(slide)}</div>`
+    ).join("");
+    bindMatchPreviewEvents();
+    requestAnimationFrame(scaleSlides);
+  }
+
   function renderEditor() {
     if (appMode === "dossier") {
+      if (!dossier) {
+        editor.innerHTML = `<h2>Dossier</h2><p class="mfp-hint">Load a player first.</p>`;
+        return;
+      }
       renderDossierEditor();
+      return;
+    }
+    if (appMode === "match") {
+      renderMatchEditor();
+      return;
+    }
+    if (!pack) {
+      editor.innerHTML = "";
       return;
     }
     const p = pack.player;
@@ -1781,7 +2569,14 @@
       renderDossierPreview();
       return;
     }
-    if (!pack) return;
+    if (appMode === "match") {
+      renderMatchPreview();
+      return;
+    }
+    if (!pack) {
+      preview.innerHTML = "";
+      return;
+    }
     const parts = [];
     let n = 1;
     parts.push(`<div class="mfp-slide-wrap"><p class="mfp-slide-caption">${String(n).padStart(2, "0")} · Identity</p>${identitySlideHtml()}</div>`);
@@ -1818,6 +2613,7 @@
     clearCutoutBtn.disabled = false;
     renderPhotoGrid();
     renderPreview();
+    if (appMode === "match") renderEditor();
     setStatus(`Uploaded cutout applied to ${slideLabel(activeSlideKey)}.`);
   }
 
@@ -1871,51 +2667,67 @@
   }
 
   async function downloadPack() {
-    if (!pack) return;
+    const ready = appMode === "match" ? matchPack : pack;
+    if (!ready) return;
     downloadBtn.disabled = true;
     setStatus("Rendering PNG pack in Chrome…");
     try {
       const slides = Array.from(preview.querySelectorAll(".mfp-slide"));
       if (!slides.length) throw new Error("No slides to export");
 
-      const folder = slugify(pack.player.name || "player");
+      const folder = appMode === "match"
+        ? slugify(`${(matchPack.pack && matchPack.pack.id) || "match"}-${(matchPack.opponent && matchPack.opponent.name) || "vale"}`)
+        : slugify(pack.player.name || "player");
       const filenames = slides.map((slide, i) => {
         const key = slide.getAttribute("data-slide") || `slide-${i + 1}`;
         if (key === "identity") return "01-identity";
         if (key === "data") return `${String(i + 1).padStart(2, "0")}-data-summary`;
         return `${String(i + 1).padStart(2, "0")}-${slugify(slideLabel(key))}`;
       });
+      const zipName = appMode === "match"
+        ? `${folder}-match-slides.zip`
+        : `${folder}-meeting-front-pages.zip`;
+      const opponentName = appMode === "match"
+        ? ((matchPack.opponent && matchPack.opponent.name) || "match")
+        : (pack.player.name || "player");
 
+      const canFallback = typeof html2canvas === "function" && typeof JSZip === "function";
       if (window.PortValeWysiwygExport && typeof window.PortValeWysiwygExport.captureSlideHtmlPages === "function") {
-        const packHtml = await window.PortValeWysiwygExport.captureSlideHtmlPages({
-          slides,
-          forceNativeSize: true,
-          nativeWidth: SLIDE_W,
-          nativeHeight: SLIDE_H,
-          background: "#12100e",
-          stripClasses: [],
-          onProgress: (msg) => setStatus(msg),
-        });
-        // Override filenames to our meeting-pack naming.
-        packHtml.htmlFilenames = filenames;
-        setStatus("Screenshotting slides in Chrome…");
-        const result = await window.PortValeWysiwygExport.downloadPngZip({
-          ...packHtml,
-          filename: `${folder}-meeting-front-pages.zip`,
-          documentTitle: folder,
-          opponentName: pack.player.name || "player",
-          endpoint: "/api/wysiwyg-export-png-zip",
-        });
-        setStatus(
-          result.savedPath
-            ? `Downloaded ${result.pageCount} sharp PNGs · ${result.sizeMb} MB · also on Desktop`
-            : `Downloaded ${result.pageCount} sharp PNGs · ${result.sizeMb} MB`
-        );
-        return;
+        try {
+          const packHtml = await window.PortValeWysiwygExport.captureSlideHtmlPages({
+            slides,
+            forceNativeSize: true,
+            nativeWidth: SLIDE_W,
+            nativeHeight: SLIDE_H,
+            background: "#12100e",
+            stripClasses: ["is-active-target", "is-drop"],
+            onProgress: (msg) => setStatus(msg),
+          });
+          // Override filenames to our meeting-pack naming.
+          packHtml.htmlFilenames = filenames;
+          setStatus("Screenshotting slides in Chrome…");
+          const result = await window.PortValeWysiwygExport.downloadPngZip({
+            ...packHtml,
+            filename: zipName,
+            documentTitle: folder,
+            opponentName,
+            endpoint: "/api/wysiwyg-export-png-zip",
+            pagesPerRequest: 1,
+            onProgress: (msg) => setStatus(msg),
+          });
+          setStatus(
+            result.savedPath
+              ? `Downloaded ${result.pageCount} sharp PNGs · ${result.sizeMb} MB · also on Desktop`
+              : `Downloaded ${result.pageCount} sharp PNGs · ${result.sizeMb} MB`
+          );
+          return;
+        } catch (wysiwygErr) {
+          if (!canFallback) throw wysiwygErr;
+          setStatus("Chrome pack failed — capturing slides in the browser instead…");
+        }
       }
 
-      // Fallback if WYSIWYG helper failed to load.
-      if (typeof html2canvas !== "function" || typeof JSZip !== "function") {
+      if (!canFallback) {
         throw new Error("Export libraries failed to load — hard refresh and try again.");
       }
       setStatus("Chrome export unavailable — using browser fallback…");
@@ -1927,10 +2739,13 @@
         setStatus(`Rendering PNG pack… ${i + 1}/${slides.length}`);
       }
       const out = await zip.generateAsync({ type: "blob" });
-      downloadBlob(out, `${folder}-meeting-front-pages.zip`);
+      downloadBlob(out, zipName);
       setStatus(`Downloaded ${slides.length} PNGs (fallback).`);
     } catch (err) {
-      setStatus(err.message || "Export failed", true);
+      setStatus(
+        friendlyNetworkError(err, "Could not download the PNG pack. Refresh and try again."),
+        true,
+      );
     } finally {
       downloadBtn.disabled = false;
     }
@@ -1957,6 +2772,13 @@
   });
 
   photoGrid.addEventListener("click", (event) => {
+    const moreBtn = event.target.closest("#valeMoreBtn");
+    if (moreBtn) {
+      if (valeActiveMatchId && valeNextStart && !valeLoading) {
+        loadValePhotos(valeActiveMatchId, { append: true });
+      }
+      return;
+    }
     const targetBtn = event.target.closest("button[data-slide-target]");
     if (targetBtn) {
       activeSlideKey = targetBtn.getAttribute("data-slide-target") || "identity";
@@ -1966,13 +2788,118 @@
     }
     const btn = event.target.closest("button[data-photo-id]");
     if (!btn) return;
+    if (!hasAssignableSlides()) {
+      setStatus(
+        appMode === "match"
+          ? "Pick a Through a Lens game first so the slides appear."
+          : "Load a player, or open Match slides and pick a game, then drop a picture on.",
+        true
+      );
+      return;
+    }
     const photoId = btn.getAttribute("data-photo-id");
     assignPhotoToActive(photoId);
     cutoutInput.value = "";
-    const web = webPhotoById(photoId);
+    const web = catalogPhotoById(photoId);
     renderPhotoGrid();
     renderPreview();
+    if (appMode === "match") renderEditor();
     setStatus(`Set ${slideLabel(activeSlideKey)} photo → ${web ? web.label : "selected"}.`);
+  });
+
+  if (valeComps) {
+    valeComps.addEventListener("click", (event) => {
+      const btn = event.target.closest("button[data-vale-comp]");
+      if (!btn) return;
+      valeActiveComp = btn.getAttribute("data-vale-comp") || valeActiveComp;
+      valeActiveMatchId = null;
+      valePhotos = [];
+      valeNextStart = null;
+      renderPhotoGrid();
+    });
+  }
+  if (valeMatchesEl) {
+    valeMatchesEl.addEventListener("click", (event) => {
+      const btn = event.target.closest("button[data-vale-match]");
+      if (!btn) return;
+      const id = btn.getAttribute("data-vale-match");
+      if (!id) return;
+      const match = valeMatches.find((row) => row.id === id);
+      const openMatch = appMode === "match" || (appMode === "meeting" && !pack);
+      if (openMatch && match) {
+        appMode = "match";
+        try { localStorage.setItem("mfp-mode", "match"); } catch (_) { /* ignore */ }
+        applyModeChrome();
+        loadMatchPack(match).then(() => loadValePhotos(id));
+        return;
+      }
+      loadValePhotos(id);
+    });
+  }
+  if (matchPackPills) {
+    matchPackPills.addEventListener("click", (event) => {
+      const btn = event.target.closest("button[data-match-pack]");
+      if (!btn) return;
+      const packId = btn.getAttribute("data-match-pack") || "pre-match";
+      matchPackId = packId;
+      try { localStorage.setItem("mfp-match-pack", matchPackId); } catch (_) { /* ignore */ }
+      renderMatchPackPills();
+      const match = activeValeMatch();
+      if (match) loadMatchPack(match, { keepPhotos: true, packId });
+    });
+  }
+  if (photoGrid) {
+    photoGrid.addEventListener("dragstart", (event) => {
+      const card = event.target.closest("[data-photo-id]");
+      if (!card || !hasAssignableSlides()) return;
+      event.dataTransfer.setData("text/plain", card.getAttribute("data-photo-id") || "");
+      event.dataTransfer.setData("text/mfp-photo", card.getAttribute("data-photo-id") || "");
+      event.dataTransfer.effectAllowed = "copy";
+    });
+  }
+  if (preview) {
+    preview.addEventListener("dragover", (event) => {
+      const slide = event.target.closest("[data-drop-slide]");
+      if (!slide) return;
+      event.preventDefault();
+      slide.classList.add("is-drop");
+    });
+    preview.addEventListener("dragleave", (event) => {
+      const slide = event.target.closest("[data-drop-slide]");
+      if (!slide) return;
+      if (slide.contains(event.relatedTarget)) return;
+      slide.classList.remove("is-drop");
+    });
+    preview.addEventListener("drop", (event) => {
+      const slide = event.target.closest("[data-drop-slide]");
+      if (!slide) return;
+      event.preventDefault();
+      slide.classList.remove("is-drop");
+      const key = slide.getAttribute("data-drop-slide");
+      if (key) activeSlideKey = key;
+      const photoId = event.dataTransfer.getData("text/mfp-photo") || event.dataTransfer.getData("text/plain");
+      if (photoId) {
+        assignPhotoToActive(photoId);
+        renderPhotoGrid();
+        renderPreview();
+        renderEditor();
+        setStatus(`Set ${slideLabel(activeSlideKey)} photo.`);
+        return;
+      }
+      const file = event.dataTransfer.files && event.dataTransfer.files[0];
+      if (file && file.type.startsWith("image/")) {
+        applyCutoutFile(file).catch((err) => setStatus(err.message, true));
+      }
+    });
+  }
+  document.querySelectorAll(".mfp-source").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      photoSource = btn.getAttribute("data-photo-source") === "web" ? "web" : "vale";
+      document.querySelectorAll(".mfp-source").forEach((other) => {
+        other.classList.toggle("is-active", other === btn);
+      });
+      renderPhotoGrid();
+    });
   });
 
   document.querySelectorAll(".mfp-mode").forEach((btn) => {
@@ -1987,18 +2914,19 @@
     });
   }
   applyModeChrome();
+  loadValeGalleries();
 
   refreshBtn.addEventListener("click", () => {
     if (!selectedPlayerId) return;
     const code = pack && pack.player && pack.player.primaryPosition;
     const iter = pack && pack.player && pack.player.iterationId;
     loadPack(selectedPlayerId, code || undefined, {
-      keepPhotos: Boolean(webPhotos.length),
+      keepPhotos: Boolean(webPhotos.length || valePhotos.length),
       iterationId: iter,
     });
   });
 
-  refreshPhotosBtn.addEventListener("click", () => loadWebPhotos());
+  refreshPhotosBtn.addEventListener("click", () => loadWebPhotos({ switchTab: true }));
 
   downloadBtn.addEventListener("click", downloadPack);
 
@@ -2018,7 +2946,7 @@
     cutoutInput.value = "";
     if (cutoutFileName) cutoutFileName.textContent = "PNG / JPG — applies to selected slide";
     clearCutoutBtn.disabled = !Object.values(slidePhotos).some((s) => s.cutout);
-    if (pack) {
+    if (pack || matchPack) {
       renderPhotoGrid();
       renderPreview();
     }
@@ -2039,6 +2967,6 @@
   });
 
   window.addEventListener("resize", () => {
-    if (pack) scaleSlides();
+    if (pack || matchPack) scaleSlides();
   });
 })();

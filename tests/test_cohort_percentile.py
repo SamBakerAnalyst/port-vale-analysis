@@ -25,6 +25,16 @@ class TestCohortPercentile(unittest.TestCase):
         cohort = [0.2, 0.2, 0.2, 0.8]
         self.assertEqual(_cohort_percentile(0.2, cohort), 37.5)
 
+    def test_single_player_cohort_is_unknown_not_fifty(self) -> None:
+        self.assertIsNone(_cohort_percentile(0.5, [0.5]))
+        self.assertIsNone(_factor_standing(0.05, [0.05]))
+
+    def test_previous_season_label(self) -> None:
+        from app.main import _previous_season_label
+
+        self.assertEqual(_previous_season_label("26/27"), "25/26")
+        self.assertEqual(_previous_season_label(""), "")
+
 
 class TestImpectScore(unittest.TestCase):
     def test_none_and_junk_are_blank(self) -> None:
@@ -61,6 +71,26 @@ class TestFactorStanding(unittest.TestCase):
 
     def test_empty_cohort_is_blank(self) -> None:
         self.assertIsNone(_factor_standing(0.05, []))
+
+
+class TestMetricsCohortRows(unittest.TestCase):
+    def test_no_six_hundred_minute_floor(self) -> None:
+        from app.main import BENCHMARK_MIN_MINUTES
+
+        self.assertEqual(BENCHMARK_MIN_MINUTES, 0)
+
+    def test_uses_every_player_at_the_position(self) -> None:
+        from unittest.mock import patch
+
+        from app.main import _metrics_cohort_rows
+
+        all_rows = [{"id": index} for index in range(4)]
+        with patch("app.main._fetch_iteration_player_scores", return_value=all_rows), patch(
+            "app.main._fetch_benchmark_cohort"
+        ) as benchmark:
+            rows = _metrics_cohort_rows(99, ["CENTRAL_DEFENDER"])
+        self.assertEqual(rows, all_rows)
+        benchmark.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -1,0 +1,839 @@
+/* Valiant desk — Port Vale hub identity. Loaded last on hub.html. */
+
+:root {
+  --bg: #10100f;
+  --surface: #181816;
+  --surface-2: #22221e;
+  --border: #33332c;
+  --text: #f2f1ec;
+  --text-muted: #9b9a91;
+  --muted: #9b9a91;
+  --accent: #e0a800;
+  --accent-hover: #f0bc2a;
+  --green: #c5d4a8;
+  --amber: #e0a800;
+  --danger: #c45c4a;
+  --gold: #e0a800;
+  --radius: 2px;
+  --font: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --display: "Oswald", "Arial Narrow", sans-serif;
+  --mono: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --rail: 248px;
+  --shadow: none;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+
+body::before {
+  display: none;
+}
+
+/* ——— Rail ——— */
+.rail {
+  background: #0c0c0b;
+  border-right: 1px solid var(--border);
+  backdrop-filter: none;
+  box-shadow: inset 3px 0 0 var(--gold);
+}
+
+.rail__badge {
+  filter: none;
+}
+
+.rail__club {
+  font-family: var(--display);
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  color: var(--gold);
+}
+
+.rail__title {
+  font-family: var(--display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rail__home {
+  border-radius: var(--radius);
+  border: 1px solid var(--gold);
+  background: transparent;
+  color: var(--gold);
+  font-family: var(--display);
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.rail__home:hover,
+.rail__home.is-active {
+  background: var(--gold);
+  color: #10100f;
+  border-color: var(--gold);
+}
+
+.rail__group-label,
+.rail__group--analysis,
+.rail__group--recruitment,
+.rail__group--scouts,
+.rail__group--strategy,
+.rail__group--presentations {
+  --group-accent: var(--text-muted);
+}
+
+.rail__group-label {
+  font-family: var(--display);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--gold);
+}
+
+.rail__link {
+  border-radius: 0;
+  border: 0;
+  border-left: 2px solid transparent;
+  padding: 0.42rem 0.55rem 0.42rem 0.55rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.rail__link:hover {
+  color: var(--text);
+  background: transparent;
+  border-color: transparent;
+  border-left-color: var(--gold);
+}
+
+.rail__icon {
+  display: inline-block;
+  width: 1.35rem;
+  font-size: 0.95rem;
+  line-height: 1;
+  text-align: center;
+  opacity: 0.95;
+}
+
+.rail__link-title {
+  font-weight: 600;
+}
+
+.rail__soon-badge {
+  border-radius: var(--radius);
+  color: #10100f;
+  background: var(--gold);
+}
+
+.rail__soon-divider {
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+}
+
+.rail__link.is-soon {
+  color: rgba(242, 241, 236, 0.38);
+}
+
+.rail__link.is-soon:hover {
+  color: rgba(242, 241, 236, 0.38);
+}
+
+/* ——— Masthead ——— */
+.main {
+  padding: 1.5rem 1.85rem 2.75rem;
+}
+
+.main__top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(14rem, 22rem) auto;
+  align-items: end;
+  gap: 1.1rem 1.5rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 1.05rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.main__identity {
+  min-width: 0;
+}
+
+.hub-search-bar {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+.hub__clock {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  min-width: 8.5rem;
+  text-align: right;
+}
+
+.hub__clock-time {
+  font-family: var(--display);
+  font-size: 2.15rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+  line-height: 0.95;
+}
+
+.hub__clock-date {
+  margin-top: 0.2rem;
+  font-family: var(--display);
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.main__statusline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+  margin-bottom: 1.15rem;
+}
+
+.main__ops {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+
+.hub__status,
+.hub__restart-btn,
+.hub__broke-joke {
+  border-radius: var(--radius);
+  font-size: 0.68rem;
+}
+
+.hub__restart-btn {
+  padding: 0.28rem 0.55rem;
+  background: transparent;
+}
+
+.hub__feedback-link {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+@media (max-width: 1100px) {
+  .main__top {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .hub-search-bar {
+    grid-column: 1 / -1;
+    max-width: 28rem;
+  }
+}
+
+.main__eyebrow {
+  margin: 0 0 0.2rem;
+  font-family: var(--display);
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.main__greeting {
+  font-family: var(--display);
+  font-size: 2.15rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 1.05;
+}
+
+.main__subtitle {
+  font-size: 0.92rem;
+  max-width: 36rem;
+}
+
+.hub-search__input {
+  border-radius: var(--radius);
+  border-color: var(--border);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.hub-search__input::placeholder {
+  color: #7a7972;
+}
+
+.hub-search__input:focus {
+  border-color: var(--gold);
+  box-shadow: none;
+  outline: 1px solid var(--gold);
+  outline-offset: 0;
+}
+
+.hub-search__results {
+  border-radius: var(--radius);
+  background: #141412;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.hub-search__result:hover,
+.hub-search__result.is-active {
+  background: rgba(224, 168, 0, 0.1);
+}
+
+.hub-search__pipeline {
+  border-radius: var(--radius);
+}
+
+.hub-search__pipeline:hover {
+  background: rgba(224, 168, 0, 0.16);
+  color: var(--text);
+}
+
+.hub__status,
+.hub__restart-btn,
+.hub__broke-joke {
+  border-radius: var(--radius);
+}
+
+.hub__status--online {
+  border-color: color-mix(in srgb, var(--green) 45%, var(--border));
+  color: var(--green);
+}
+
+.hub__status--online .hub__status-dot {
+  background: var(--green);
+  box-shadow: none;
+}
+
+.hub__restart-btn:hover:not(:disabled) {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.hub__build {
+  font-family: var(--display);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  border-radius: var(--radius);
+  color: #10100f;
+  background: var(--gold);
+}
+
+.hub__build.is-staging {
+  color: var(--gold);
+  background: transparent;
+  border: 1px solid var(--gold);
+}
+
+.hub__broke-joke {
+  font-family: var(--font);
+  letter-spacing: 0.02em;
+}
+
+.hub__feedback-link:hover {
+  color: var(--gold);
+}
+
+.hub__health-panel {
+  border-radius: var(--radius);
+  box-shadow: none;
+}
+
+.hub-demo-banner {
+  border-radius: var(--radius);
+}
+
+/* ——— Home tabs ——— */
+.home-tabs {
+  gap: 0;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.home-tab {
+  padding: 0.7rem 1.05rem 0.6rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--display);
+  font-size: 0.86rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.home-tab:hover {
+  color: var(--text);
+  border-color: transparent;
+  background: transparent;
+}
+
+.home-tab.is-active {
+  color: var(--gold);
+  background: transparent;
+  border-color: transparent;
+  border-bottom-color: var(--gold);
+}
+
+.home-subtabs {
+  gap: 0.2rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.35rem;
+}
+
+.home-subtab {
+  border-radius: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--display);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.4rem 0.7rem;
+}
+
+.home-subtab.is-active {
+  background: transparent;
+  border-color: transparent;
+  color: var(--gold);
+  box-shadow: inset 0 -2px 0 var(--gold);
+}
+
+a.home-subtab:hover {
+  border-color: transparent;
+  color: var(--gold);
+}
+
+.home-season {
+  font-family: var(--display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+/* ——— KPIs + cards ——— */
+.home-kpis {
+  gap: 0;
+  margin-bottom: 1.15rem;
+}
+
+.home-kpi {
+  padding: 0.95rem 1.05rem 1.05rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  margin-right: -1px;
+}
+
+.home-kpi:last-child {
+  margin-right: 0;
+}
+
+.home-kpi__label {
+  font-family: var(--display);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--gold);
+}
+
+.home-kpi__value {
+  font-family: var(--display);
+  font-size: 2.35rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.02;
+  font-variant-numeric: tabular-nums;
+}
+
+.home-kpi__sub {
+  font-size: 0.78rem;
+}
+
+.home-card {
+  border-radius: 0;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.home-card__head {
+  align-items: flex-end;
+  margin-bottom: 0.95rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.home-card__title {
+  font-family: var(--display);
+  font-size: 1.42rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #fff;
+  line-height: 1.05;
+}
+
+.home-card__link {
+  color: var(--gold);
+  font-family: var(--display);
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.home-change__item {
+  border-bottom-color: var(--border);
+  padding: 0.85rem 0;
+}
+
+.home-change__tag {
+  font-family: var(--display);
+  letter-spacing: 0.12em;
+}
+
+.home-change__item strong {
+  font-family: var(--display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.home-table th {
+  font-family: var(--display);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+}
+
+.home-table td {
+  border-bottom-color: var(--border);
+}
+
+.home-table .col-pos,
+.home-table .col-pts,
+.home-table .col-num,
+.home-table .col-val,
+.home-table td.col-delta,
+.home-table td.col-rank,
+.home-compare-table .col-val,
+.home-compare-table .col-delta,
+.home-compare-table .col-rank,
+.home-vs__us,
+.home-vs__league,
+.home-avail strong,
+.home-form__pill {
+  font-variant-numeric: tabular-nums;
+}
+
+.home-table tr.is-focus td {
+  background: rgba(224, 168, 0, 0.1);
+  color: var(--gold);
+}
+
+.home-form__pill {
+  border-radius: var(--radius);
+}
+
+.home-form__pill.is-win {
+  background: rgba(197, 212, 168, 0.14);
+  border-color: rgba(197, 212, 168, 0.4);
+  color: var(--green);
+}
+
+.home-form__pill.is-loss {
+  background: rgba(196, 92, 74, 0.12);
+  border-color: rgba(196, 92, 74, 0.4);
+  color: var(--danger);
+}
+
+.home-quick a {
+  border-radius: var(--radius);
+  background: transparent;
+}
+
+.home-quick a:hover {
+  color: var(--gold);
+  border-color: var(--gold);
+}
+
+.home-filter-bar,
+.home-watch-stage,
+.home-schedule-item {
+  border-radius: var(--radius);
+}
+
+.home-filter__btn,
+.home-cal-nav__btn,
+.home-cal-people__btn,
+.home-promote-btn {
+  border-radius: var(--radius);
+}
+
+.home-filter__btn.is-active {
+  background: transparent;
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.home-filter--month select,
+.home-filter select {
+  border-radius: var(--radius);
+  border-color: var(--border);
+}
+
+.home-standouts-table tbody tr:hover td {
+  background: rgba(224, 168, 0, 0.08);
+}
+
+.home-standouts-table .col-player a {
+  color: var(--text);
+}
+
+.home-standouts-table .col-player a:hover {
+  color: var(--gold);
+}
+
+.home-standouts-table .col-age.is-age-u23 {
+  color: var(--green);
+}
+
+.home-standouts-table .col-age.is-age-o30 {
+  color: var(--danger);
+}
+
+.home-watch-chip {
+  border-radius: var(--radius);
+}
+
+.home-watch-chip--idle {
+  color: var(--text-muted);
+  border-color: var(--border);
+  background: transparent;
+}
+
+.home-watch-chip--idle .home-watch-chip__mark {
+  color: var(--gold);
+}
+
+.home-watch-chip--watch {
+  color: var(--text);
+  border-color: var(--gold);
+  background: rgba(224, 168, 0, 0.14);
+}
+
+.home-watch-chip--watch .home-watch-chip__mark {
+  background: var(--gold);
+  box-shadow: none;
+}
+
+.home-watch-chip--pipe {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--green) 55%, var(--border));
+  background: rgba(197, 212, 168, 0.12);
+}
+
+.home-watch-chip--pipe .home-watch-chip__mark {
+  background: var(--green);
+  box-shadow: none;
+}
+
+.home-watch-chip--closed {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--danger) 50%, var(--border));
+  background: rgba(196, 92, 74, 0.12);
+}
+
+.home-watch-chip--closed .home-watch-chip__mark {
+  background: var(--danger);
+}
+
+.home-promote-btn {
+  border-color: var(--gold);
+  background: transparent;
+  color: var(--gold);
+}
+
+.home-promote-btn:hover {
+  border-color: var(--gold);
+  background: var(--gold);
+  color: #10100f;
+}
+
+.home-scout-pill {
+  border-radius: var(--radius);
+}
+
+.home-scout-pill--live {
+  background: rgba(196, 92, 74, 0.14);
+  color: #e8b4ab;
+  border-color: rgba(196, 92, 74, 0.4);
+}
+
+.home-scout-pill--video {
+  background: rgba(224, 168, 0, 0.12);
+  color: var(--gold);
+  border-color: rgba(224, 168, 0, 0.4);
+}
+
+.home-pace {
+  border-radius: 0;
+  border: 1px solid var(--border);
+  background: transparent;
+}
+
+.home-pace__badge {
+  border-radius: var(--radius);
+  font-family: var(--display);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.home-schedule-item {
+  background: transparent;
+  border-color: var(--border);
+}
+
+.home-schedule-item__tag {
+  border-radius: var(--radius);
+}
+
+.home-schedule-item__tag--live,
+.home-schedule-item__tag--video {
+  background: rgba(224, 168, 0, 0.12);
+  color: var(--gold);
+  border: 1px solid rgba(224, 168, 0, 0.35);
+}
+
+.home-cal-people__btn {
+  border-radius: var(--radius);
+}
+
+.home-cal-nav__label {
+  font-family: var(--display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.home-feed__icon {
+  display: none;
+}
+
+.home-age-bands__table {
+  border-top-color: var(--border);
+}
+
+.home-vs__row {
+  border-bottom-color: var(--border);
+}
+
+.home-next__opp {
+  font-family: var(--display);
+  font-size: 1.35rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.home-bar__fill {
+  border-radius: 0;
+}
+
+.home-bar__fill.is-age-u21 { background: #e0a800; }
+.home-bar__fill.is-age-2125 { background: #b08a20; }
+.home-bar__fill.is-age-2629 { background: #7a7a70; }
+.home-bar__fill.is-age-30 { background: #c45c4a; }
+.home-bar__fill.is-poss { background: #e0a800; }
+.home-bar__fill.is-trans { background: #8a8a80; }
+.home-bar__fill.is-set { background: #c5d4a8; }
+
+.home-stat {
+  border-radius: var(--radius);
+}
+
+.home-cal__day--training {
+  background: #2a3324;
+  border-color: #c5d4a8;
+  box-shadow: none;
+}
+
+.home-cal__day--regen {
+  background: #3a201c;
+  border-color: #c45c4a;
+  box-shadow: none;
+}
+
+.home-cal__day--preseason {
+  background: #2a2a26;
+  border-color: #9b9a91;
+  box-shadow: none;
+}
+
+.home-cal__day--match.home-cal__day--home {
+  background: #e0a800;
+  border-color: #f0bc2a;
+  box-shadow: none;
+}
+
+.home-cal__day--match.home-cal__day--away {
+  background: #1c1c1a;
+  border-color: #e0a800;
+  box-shadow: none;
+}
+
+.home-cal__day--match.home-cal__day--away .home-cal__num,
+.home-cal__day--match.home-cal__day--away .home-cal__session,
+.home-cal__day--match.home-cal__day--away .home-cal__fixture {
+  color: #f2f1ec;
+}
+
+.home-cal {
+  gap: 0;
+}
+
+.home-cal__weekday {
+  font-family: var(--display);
+  letter-spacing: 0.12em;
+}
+
+.home-cal__legend i {
+  border-radius: 0;
+}
+
+.home-cal__day {
+  border-radius: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+}
+
+.home-cal__num {
+  font-family: var(--display);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}

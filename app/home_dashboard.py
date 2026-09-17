@@ -214,6 +214,8 @@ def build_activity_feed(*, limit: int = 40) -> dict[str, Any]:
                 if not line.strip():
                     continue
                 row = json.loads(line)
+                if str(row.get("status") or "open").strip().lower() == "closed":
+                    continue
                 when = _parse_when(row.get("created_at") or row.get("ts") or row.get("at"))
                 message = str(row.get("message") or "").strip()
                 if len(message) > 90:

@@ -149,7 +149,15 @@ def test_admin_bypasses_the_allowlist_entirely():
 
 def test_shared_paths_and_hub_shell_open_for_every_role():
     for role in ROLE_GROUPS:
-        for path in ("/", "/hub", "/api/apps", "/api/auth/me", "/static/styles.css"):
+        for path in (
+            "/",
+            "/hub",
+            "/api/apps",
+            "/api/auth/me",
+            "/api/feedback",
+            "/api/feedback/notifications",
+            "/static/styles.css",
+        ):
             assert _path_allowed_for_role(path, role), f"{role} blocked from {path}"
 
 

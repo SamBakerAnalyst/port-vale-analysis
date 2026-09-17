@@ -1875,6 +1875,14 @@ def _fixture_is_still_next(row: dict[str, Any], *, now: datetime | None = None) 
 def _pick_next_fixture(fixtures: list[dict[str, Any]]) -> dict[str, Any] | None:
     if not fixtures:
         return None
+    try:
+        from app.pre_match_fotmob import pick_fotmob_next_fixture
+
+        fotmob_next = pick_fotmob_next_fixture(fixtures)
+        if fotmob_next is not None and _fixture_is_still_next(fotmob_next):
+            return fotmob_next
+    except Exception:
+        pass
     with_match_id = [fixture for fixture in fixtures if fixture.get("match_id")]
     pool = with_match_id or fixtures
     for fixture in pool:
@@ -4504,6 +4512,8 @@ def _slot_pitch_to_formation(
     rows = [dict(player) for player in players or []]
     if not rows:
         return []
+    if all(str(player.get("source") or "") == "fotmob" for player in rows):
+        return rows
     return _beautify_pitch_layout(assign_lineup_formation_slots(rows, formation))
 
 
@@ -4640,6 +4650,27 @@ def _hydrate_cached_pre_match_report(report: dict[str, Any]) -> dict[str, Any]:
         hydrated["previous_xis"] = previous
 
     return hydrated
+
+
+def _apply_fotmob_live_overlay(report: dict[str, Any]) -> dict[str, Any]:
+    try:
+        from app.pre_match_fotmob import apply_fotmob_live_overlay
+
+        return apply_fotmob_live_overlay(report)
+    except Exception:
+        return report
+
+
+def _overlay_fotmob_vale_fixtures(
+    fixtures: list[dict[str, Any]],
+    iteration_id: int,
+) -> list[dict[str, Any]]:
+    try:
+        from app.pre_match_fotmob import overlay_fotmob_vale_fixtures
+
+        return overlay_fotmob_vale_fixtures(fixtures, iteration_id)
+    except Exception:
+        return fixtures
 
 
 def _merge_fixture_rows(*groups: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
@@ -4892,11 +4923,11 @@ def build_pre_match_fixtures(
                         )
                     except Exception:
                         pass
-                return hydrated
+                return _overlay_fotmob_vale_fixtures(hydrated, iteration_id)
 
     fixtures = _build_pre_match_fixtures_uncached(int(iteration_id))
     write_json("pre-match-fixtures", cache_key, {"fixtures": fixtures})
-    return fixtures
+    return _overlay_fotmob_vale_fixtures(fixtures, iteration_id)
 
 
 def _build_pre_match_fixtures_uncached(iteration_id: int) -> list[dict[str, Any]]:
@@ -5737,6 +5768,7 @@ def build_pre_match_report(body: PreMatchReportRequest) -> dict[str, Any]:
             )
         if cached:
             cached = _hydrate_cached_pre_match_report(dict(cached))
+            cached = _apply_fotmob_live_overlay(cached)
             cached["cache"] = {"hit": True, "refreshed": False}
             return cached
         return {
@@ -5762,6 +5794,7 @@ def build_pre_match_report(body: PreMatchReportRequest) -> dict[str, Any]:
     except Exception:
         pass
     report = dict(report)
+    report = _apply_fotmob_live_overlay(report)
     report["cache"] = {"hit": False, "refreshed": refresh}
     return report
 

@@ -704,11 +704,14 @@ function isNextFixture(fixture) {
 }
 
 function pickDefaultFixture() {
-  const withMatchId = state.fixtures.filter((row) => row.match_id);
-  const pool = withMatchId.length ? withMatchId : state.fixtures;
-  const nextUp = pool.find(isNextFixture);
+  const upcoming = state.fixtures.filter((row) => !row.played && isNextFixture(row));
+  const fotmobNext = upcoming.find((row) => row.source === "fotmob");
+  if (fotmobNext) return fotmobNext;
+  const withMatchId = upcoming.filter((row) => row.match_id);
+  const pool = withMatchId.length ? withMatchId : upcoming.length ? upcoming : state.fixtures;
+  const nextUp = pool.find(isNextFixture) || pool[0];
   if (nextUp) return nextUp;
-  return pool[pool.length - 1] || pool[0];
+  return pool[pool.length - 1] || state.fixtures[0];
 }
 
 function renderMatchBar() {
@@ -4143,13 +4146,13 @@ function separateOverlappingPitchMarkers(players, { minX = 10, minY = 8 } = {}) 
 
 function scoreCardExtraMeta(match) {
   const bits = [];
-  const xgFor = Number(match?.xg_for);
-  const xgAgainst = Number(match?.xg_against);
-  if (Number.isFinite(xgFor) && Number.isFinite(xgAgainst)) {
-    bits.push(`xG ${xgFor.toFixed(1)}–${xgAgainst.toFixed(1)}`);
+  const xgFor = match?.xg_for;
+  const xgAgainst = match?.xg_against;
+  if (xgFor != null && xgAgainst != null && Number.isFinite(Number(xgFor)) && Number.isFinite(Number(xgAgainst))) {
+    bits.push(`xG ${Number(xgFor).toFixed(1)}–${Number(xgAgainst).toFixed(1)}`);
   }
-  const poss = Number(match?.possession_pct);
-  if (Number.isFinite(poss)) bits.push(`${Math.round(poss)}% poss`);
+  const poss = match?.possession_pct;
+  if (poss != null && Number.isFinite(Number(poss))) bits.push(`${Math.round(Number(poss))}% poss`);
   return bits.length ? ` · ${bits.join(" · ")}` : "";
 }
 
@@ -4214,11 +4217,11 @@ function twoPagerMastheadStatsHtml(report) {
     </article>`);
   }
 
-  const xgFor = Number(lastMatch?.xg_for);
-  const xgAgainst = Number(lastMatch?.xg_against);
-  if (Number.isFinite(xgFor) || Number.isFinite(xgAgainst)) {
-    const forTxt = Number.isFinite(xgFor) ? xgFor.toFixed(1) : "—";
-    const agTxt = Number.isFinite(xgAgainst) ? xgAgainst.toFixed(1) : "—";
+  const xgFor = lastMatch?.xg_for;
+  const xgAgainst = lastMatch?.xg_against;
+  if (xgFor != null && xgAgainst != null && (Number.isFinite(Number(xgFor)) || Number.isFinite(Number(xgAgainst)))) {
+    const forTxt = Number.isFinite(Number(xgFor)) ? Number(xgFor).toFixed(1) : "—";
+    const agTxt = Number.isFinite(Number(xgAgainst)) ? Number(xgAgainst).toFixed(1) : "—";
     cells.push(`<article class="tp-snap__cell tp-snap__cell--xg">
       <span class="tp-snap__label">Open-play xG</span>
       <div class="tp-snap__xg">
@@ -4236,12 +4239,12 @@ function twoPagerMastheadStatsHtml(report) {
     </article>`);
   }
 
-  const poss = Number(lastMatch?.possession_pct);
-  if (Number.isFinite(poss)) {
-    const bar = Math.max(4, Math.min(100, Math.round(poss)));
+  const poss = lastMatch?.possession_pct;
+  if (poss != null && Number.isFinite(Number(poss))) {
+    const bar = Math.max(4, Math.min(100, Math.round(Number(poss))));
     cells.push(`<article class="tp-snap__cell tp-snap__cell--poss">
       <span class="tp-snap__label">Possession</span>
-      <strong class="tp-snap__value">${Math.round(poss)}%</strong>
+      <strong class="tp-snap__value">${Math.round(Number(poss))}%</strong>
       <div class="tp-snap__meter" aria-hidden="true"><i style="width:${bar}%"></i></div>
       <em class="tp-snap__hint">${escapeHtml(oppLine)}</em>
     </article>`);

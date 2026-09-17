@@ -9,6 +9,9 @@ from app.paths import STANDALONE_DIR
 from app import player_dossier as dossier
 from app import scoutable_teams as st
 from app import video_watch as vw
+from app import player_reports as reports
+from app import who_to_scout as wts
+from app.player_dossier import PlayerNoteCreate
 
 
 def test_sheet_player_gets_a_position_short_code():
@@ -23,8 +26,6 @@ def test_sheet_player_gets_a_position_short_code():
         club="Bohemian FC",
     )
     assert row["position_short"] == "CF"
-from app import who_to_scout as wts
-from app.player_dossier import PlayerNoteCreate
 
 
 def test_video_watch_is_a_recruitment_rail_tool():
@@ -59,13 +60,34 @@ def test_page_has_both_sheets_and_a_central_profile():
     assert "/api/video-watch/fixture" in js
     assert "/api/video-watch/player" in js
     assert "/api/video-watch/notes" in js
+    assert "/api/video-watch/general-report" in js
+    assert "/api/video-watch/detailed-report" in js
+    assert "/api/video-watch/cms" in js
     assert "Must watch" in js
     assert "Worth a look" in js
     assert "watchPct" in js
     assert "/api/pre-match/player-photo" in js
-    assert 'data-kind="comment"' in js
-    assert 'data-kind="report"' in js
-    assert 'data-tab="notes"' in js
+    assert 'data-tab="${id}"' in js
+    assert '["general", "General report"]' in js
+    assert '["detailed", "Detailed report"]' in js
+    assert '["cms", "Player CMS"]' in js
+    assert "Player notes" in js
+    assert "General report" in js
+    assert "Detailed report" in js
+    assert "Player CMS" in js
+    assert "Match conditions" in js or "Weather conditions" in js
+    assert "Home / Away" in js
+    assert "auto from match title" in js
+    assert "Position in game" in js
+    assert "Physical" in js
+    assert "Weak foot" in js
+    assert "Data profiles" in js
+    assert "Psychology" in js
+    assert "PVFC player level" in js
+    assert "Next action" in js
+    assert "Add to pipeline" in js
+    assert "How do they progress the ball" in js
+    assert "What sort of headers do they win" in js
     assert "Scoutable Teams" in js
     assert "Who to Scout" in js
     assert "player page" in js
@@ -318,3 +340,194 @@ def test_create_player_note_shape_still_feeds_the_watch_desk():
     note = PlayerNoteCreate(kind="note", summary="hello", title="Video look")
     assert note.kind == "note"
     assert note.summary == "hello"
+
+
+def test_home_away_comes_from_the_match_title():
+    parsed = reports.parse_fixture_sides("Barnet vs Accrington Stanley")
+    assert parsed == ("Barnet", "Accrington Stanley")
+    away = reports.infer_home_away(
+        club="Accrington Stanley",
+        fixture_label="Barnet vs Accrington Stanley",
+    )
+    assert away["side"] == "away"
+    assert away["label"] == "Away"
+    assert away["source"] == "match title"
+    home = reports.infer_home_away(
+        club="Barnet",
+        fixture_label="Barnet vs Accrington Stanley",
+    )
+    assert home["side"] == "home"
+    assert home["source"] == "match title"
+
+
+def test_team_sheet_side_wins_over_the_title():
+    row = reports.infer_home_away(
+        club="Accrington Stanley",
+        fixture_label="Barnet vs Accrington Stanley",
+        sheet_side="home",
+    )
+    assert row["side"] == "home"
+    assert row["source"] == "team sheet"
+
+
+def test_match_conditions_are_shared_across_players_on_the_same_game(tmp_path, monkeypatch):
+    monkeypatch.setattr(reports, "PLAYER_REPORTS_PATH", tmp_path / "player-reports.json")
+    first = reports.save_match_conditions(
+        fixture_id="barnet-accrington-1",
+        fixture_label="Barnet vs Accrington Stanley",
+        weather="light-rain",
+        pitch="soft",
+        weather_note="Wind at the away end",
+        staff="Dan",
+    )
+    assert first["filled"] is True
+    assert first["weather_label"] == "Light rain"
+    loaded = reports.match_conditions_for_fixture(
+        "barnet-accrington-1",
+        fixture_label="Barnet vs Accrington Stanley",
+    )
+    assert loaded["weather"] == "light-rain"
+    assert loaded["pitch"] == "soft"
+    assert loaded["weather_note"] == "Wind at the away end"
+    other = reports.report_file_for_player(
+        player_id=922,
+        club="Accrington Stanley",
+        fixture_id="barnet-accrington-1",
+        fixture_label="Barnet vs Accrington Stanley",
+    )
+    assert other["match_conditions"]["weather"] == "light-rain"
+    assert other["home_away"]["side"] == "away"
+
+
+def test_player_cms_persists_agent_and_contract(tmp_path, monkeypatch):
+    monkeypatch.setattr(reports, "PLAYER_REPORTS_PATH", tmp_path / "player-reports.json")
+    monkeypatch.setattr(reports, "_cached_contract_expires", lambda name, club: "Jun 30, 2027")
+    saved = reports.save_cms(
+        player_id=922,
+        agent_name="Unique Sports",
+        agent_notes="Spoke Tuesday.",
+        contract_expires="Jun 2027",
+        staff="Dan",
+        name="Connor O'Brien",
+        club="Accrington Stanley",
+    )
+    assert saved["filled"] is True
+    loaded = reports.cms_for_player(922, name="Connor O'Brien", club="Accrington Stanley")
+    assert loaded["agent_name"] == "Unique Sports"
+    assert loaded["contract_expires"] == "Jun 2027"
+    assert loaded["contract_expires_source"] == "Jun 30, 2027"
+
+
+def test_general_report_saves_player_notes_on_the_fixture(tmp_path, monkeypatch):
+    monkeypatch.setattr(reports, "PLAYER_REPORTS_PATH", tmp_path / "player-reports.json")
+    reports.save_general_report(
+        player_id=922,
+        fixture_id="barnet-accrington-1",
+        notes="Comfortable at RWB.",
+        staff="Dan",
+    )
+    row = reports.general_report_for_player(922, "barnet-accrington-1")
+    assert row["notes"] == "Comfortable at RWB."
+    empty = reports.general_report_for_player(7, "barnet-accrington-1")
+    assert empty["filled"] is False
+
+
+def test_general_report_keeps_physical_and_profile_notes(tmp_path, monkeypatch):
+    monkeypatch.setattr(reports, "PLAYER_REPORTS_PATH", tmp_path / "player-reports.json")
+    saved = reports.save_general_report(
+        player_id=922,
+        fixture_id="barnet-accrington-1",
+        position_in_game="RIGHT_WINGBACK_DEFENDER",
+        physical={"size": "Lean, not a target.", "mobility": "Recovers well."},
+        profiles={"deep-creator": "Switches when the full-back jumps."},
+        staff="Dan",
+    )
+    assert saved["filled"] is True
+    assert saved["physical"]["size"].startswith("Lean")
+    loaded = reports.general_report_for_player(922, "barnet-accrington-1")
+    assert loaded["position_in_game"] == "RIGHT_WINGBACK_DEFENDER"
+    assert loaded["profiles"]["deep-creator"].startswith("Switches")
+
+
+def test_report_profile_titles_follow_the_player_data(tmp_path, monkeypatch):
+    from app.player_report_schema import profile_entries_for_position, profile_id
+
+    assert profile_id("PV DEEP CREATOR") == "deep-creator"
+    rows = profile_entries_for_position(
+        "RIGHT_WINGBACK_DEFENDER",
+        player_profiles=[
+            {"key": "PV DEFENDER", "label": "Defender", "score": 44},
+            {"key": "PV DEEP CREATOR", "label": "Deep Creator", "score": 40},
+        ],
+        player_position="RIGHT_WINGBACK_DEFENDER",
+    )
+    labels = [row["label"] for row in rows]
+    assert "Defender" in labels
+    assert "Deep Creator" in labels
+    assert rows[1]["detailed_prompt"].startswith("How do they progress the ball")
+
+
+def test_detailed_report_stores_level_rating_and_next_action(tmp_path, monkeypatch):
+    monkeypatch.setattr(reports, "PLAYER_REPORTS_PATH", tmp_path / "player-reports.json")
+    saved = reports.save_detailed_report(
+        player_id=922,
+        fixture_id="barnet-accrington-1",
+        position_in_game="RIGHT_WINGBACK_DEFENDER",
+        psychology={"work_hard": "yes", "booked": "no", "notes": "Spoke to the bench at HT."},
+        write_up="Progresses with the switch, not the carry.",
+        next_steps="Watch again vs a better wide 10.",
+        match_rating=7,
+        pvfc_level="B",
+        next_action="high_priority",
+        add_to_pipeline=True,
+        pipeline_stage="video_scouted",
+        staff="Dan",
+    )
+    assert saved["match_rating"] == 7
+    assert saved["pvfc_level"] == "B"
+    assert saved["next_action"] == "high_priority"
+    assert saved["psychology"]["work_hard"] == "yes"
+    loaded = reports.detailed_report_for_player(922, "barnet-accrington-1")
+    assert loaded["write_up"].startswith("Progresses")
+
+
+def test_sign_next_action_adds_the_player_to_pipeline(tmp_path, monkeypatch):
+    monkeypatch.setattr(reports, "PLAYER_REPORTS_PATH", tmp_path / "player-reports.json")
+    saved = reports.save_detailed_report(
+        player_id=922,
+        fixture_id="barnet-accrington-1",
+        next_action="sign",
+        staff="Dan",
+    )
+    assert saved["next_action"] == "sign"
+    assert saved["add_to_pipeline"] is True
+    assert saved["pipeline_stage"] == "scout_identified"
+
+
+def test_not_to_standard_marks_level_d(tmp_path, monkeypatch):
+    monkeypatch.setattr(reports, "PLAYER_REPORTS_PATH", tmp_path / "player-reports.json")
+    saved = reports.save_detailed_report(
+        player_id=922,
+        fixture_id="barnet-accrington-1",
+        next_action="not_to_standard",
+        staff="Dan",
+    )
+    assert saved["pvfc_level"] == "D"
+    assert saved["pipeline_stage"] == "not_the_right_fit"
+
+
+def test_empty_detailed_report_copies_general_physical(tmp_path, monkeypatch):
+    monkeypatch.setattr(reports, "PLAYER_REPORTS_PATH", tmp_path / "player-reports.json")
+    reports.save_general_report(
+        player_id=922,
+        fixture_id="barnet-accrington-1",
+        position_in_game="RIGHT_WINGBACK_DEFENDER",
+        physical={"size": "Lean frame."},
+        profiles={"deep-creator": "Switches when the full-back jumps."},
+        staff="Dan",
+    )
+    detailed = reports.detailed_report_for_player(922, "barnet-accrington-1")
+    assert detailed["filled"] is False
+    assert detailed["position_in_game"] == "RIGHT_WINGBACK_DEFENDER"
+    assert detailed["physical"]["size"] == "Lean frame."
+    assert detailed["profiles"]["deep-creator"].startswith("Switches")

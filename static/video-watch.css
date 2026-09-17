@@ -977,8 +977,9 @@ a:hover { text-decoration: underline; }
 
 .vw-tabs {
   display: flex;
-  gap: 0.15rem;
-  padding: 0 0.55rem;
+  flex-wrap: wrap;
+  gap: 0.05rem;
+  padding: 0 0.45rem;
   border-bottom: 1px solid var(--line);
 }
 
@@ -988,11 +989,12 @@ a:hover { text-decoration: underline; }
   border-radius: 0;
   background: transparent;
   color: var(--muted);
-  padding: 0.72rem 0.9rem 0.68rem;
+  padding: 0.68rem 0.72rem 0.62rem;
   font: inherit;
-  font-size: 1rem;
+  font-size: 0.92rem;
   font-weight: 750;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .vw-tabs button.is-on {
@@ -1024,6 +1026,199 @@ a:hover { text-decoration: underline; }
 }
 
 .vw-form textarea { min-height: 7.2rem; resize: vertical; }
+
+.vw-form select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  padding: 0.7rem 0.75rem;
+  font: inherit;
+  font-size: 1.02rem;
+}
+
+.vw-report label,
+.vw-cms-grid label,
+.vw-report-block label {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.9rem;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.vw-report textarea,
+.vw-report input,
+.vw-report select,
+.vw-cms-grid textarea,
+.vw-cms-grid input,
+.vw-report-block textarea,
+.vw-report-block input,
+.vw-report-block select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  padding: 0.7rem 0.75rem;
+  font: inherit;
+  font-size: 1.02rem;
+}
+
+.vw-report {
+  display: grid;
+  gap: 0.85rem;
+  align-content: start;
+}
+
+.vw-report-block {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.85rem 0.9rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.vw-report-block h3 {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.vw-report-block p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+.vw-report-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+}
+
+.vw-homeaway {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2.7rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.vw-homeaway strong {
+  font-size: 1.02rem;
+  color: var(--text);
+}
+
+.vw-homeaway span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.vw-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.vw-meta-chip {
+  padding: 0.18rem 0.5rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.vw-placeholder {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.9rem;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.vw-placeholder h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.vw-placeholder p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.vw-form__row--save {
+  grid-template-columns: 1fr auto;
+}
+
+.vw-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.vw-chips button {
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 0.38rem 0.7rem;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+.vw-chips button.is-on {
+  background: var(--text);
+  color: #0a0c10;
+  border-color: var(--text);
+}
+.vw-rating button { min-width: 2.1rem; justify-content: center; }
+.vw-profile-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  color: var(--text);
+}
+.vw-profile-head em {
+  font-style: normal;
+  font-family: var(--mono);
+  color: var(--muted);
+}
+.vw-psych {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.45rem 0;
+  border-top: 1px solid var(--line);
+}
+.vw-psych p { margin: 0; }
+.vw-psych strong { color: var(--text); margin-right: 0.35rem; }
+.vw-check {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text);
+}
+.vw-check input { width: auto; }
+.vw-notes-box--long { min-height: 8.2rem !important; }
+
+.vw-cms-grid {
+  display: grid;
+  gap: 0.7rem;
+}
+
+@media (max-width: 720px) {
+  .vw-report-grid { grid-template-columns: 1fr; }
+}
 
 .vw-form__row {
   display: grid;

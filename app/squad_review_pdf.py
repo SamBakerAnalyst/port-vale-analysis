@@ -6,6 +6,7 @@ from typing import Any
 from fpdf import FPDF
 
 from app.label_utils import humanize_profile_name
+from app.metric_bars import format_metric_value
 from app.pdf_report import SLIDE_HEIGHT_MM, SLIDE_WIDTH_MM, pdf_safe
 from app.squad_photos import fetch_photo_bytes, resolve_squad_photo_url
 
@@ -245,6 +246,160 @@ def _add_comparison_page(pdf: SquadComparisonPDF, data: dict[str, Any]) -> None:
         pdf.multi_cell(inner_w, 3.5, note, align="C")
 
 
+def _add_profile_breakdown_page(pdf: SquadComparisonPDF, data: dict[str, Any], breakdown: dict[str, Any]) -> None:
+    players: list[dict[str, Any]] = data.get("players") or []
+    factors: list[dict[str, Any]] = breakdown.get("factors") or []
+    if len(players) < 2 or not factors:
+        return
+
+    pdf.add_page()
+    frame_x, frame_y, frame_w, frame_h = pdf._frame_rect()
+    inner_x = frame_x + INNER_PAD_MM
+    inner_y = frame_y + INNER_PAD_MM
+    inner_w = frame_w - (INNER_PAD_MM * 2)
+    cursor_y = inner_y
+
+    position_label = pdf_safe(str(data.get("positionLabel", "Player")))
+    profile_label, profile_sub = _profile_label_parts(
+        str(breakdown.get("label") or breakdown.get("profile") or "Profile")
+    )
+
+    pdf.set_xy(inner_x, cursor_y)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf._text_rgb((245, 197, 24))
+    pdf.cell(inner_w, 5, pdf_safe("PORT VALE F.C."))
+
+    cursor_y += 7
+    pdf.set_xy(inner_x, cursor_y)
+    pdf.set_font("Helvetica", "B", 18)
+    pdf._text_rgb((245, 245, 245))
+    pdf.cell(inner_w, 9, pdf_safe(profile_label))
+
+    cursor_y += 10
+    pdf.set_xy(inner_x, cursor_y)
+    pdf.set_font("Helvetica", "", 10)
+    pdf._text_rgb((156, 163, 175))
+    subtitle = pdf_safe(
+        f"{position_label} · {data.get('competition', 'League Two')} · {data.get('season', '')}"
+        + (f" · {profile_sub}" if profile_sub else "")
+    )
+    pdf.cell(inner_w, 5, subtitle)
+
+    cursor_y += 9
+    player_count = len(players)
+    photo_h = {3: 34.0, 4: 28.0, 5: 24.0}.get(player_count, 30.0)
+    photo_w = min(24.0, photo_h * 0.72)
+    label_col_w = min(92.0 if player_count >= 5 else 100.0, inner_w * 0.28)
+    player_col_w = (inner_w - label_col_w) / player_count
+
+    for index, player in enumerate(players):
+        color = PLAYER_COLORS[index % len(PLAYER_COLORS)]
+        col_x = inner_x + label_col_w + (index * player_col_w)
+        photo_x = col_x + ((player_col_w - photo_w) / 2)
+
+        pdf._fill_rgb((31, 41, 55))
+        pdf._draw_rgb((245, 197, 24))
+        pdf.set_line_width(0.4)
+        pdf.rect(photo_x, cursor_y, photo_w, photo_h, style="DF")
+
+        photo = _try_player_photo(str(player.get("name", "")))
+        if photo is not None:
+            try:
+                pdf.image(photo, x=photo_x, y=cursor_y, w=photo_w, h=photo_h)
+            except Exception:
+                photo = None
+        if photo is None:
+            pdf.set_xy(photo_x, cursor_y + (photo_h / 2) - 4)
+            pdf.set_font("Helvetica", "B", 11)
+            pdf._text_rgb((107, 114, 128))
+            pdf.cell(photo_w, 8, _player_initials(str(player.get("name", ""))), align="C")
+
+        pdf.set_xy(col_x, cursor_y + photo_h + 2)
+        pdf.set_font("Helvetica", "B", 8.5)
+        pdf._text_rgb(color)
+        pdf.multi_cell(player_col_w, 3.8, pdf_safe(str(player.get("name", ""))), align="C")
+
+    cursor_y += photo_h + 12
+    note_h = 8.0
+    grid_bottom = frame_y + frame_h - INNER_PAD_MM - note_h - 2
+    available_grid_h = max(24.0, grid_bottom - cursor_y)
+    row_h = min(17.0, max(12.0, available_grid_h / max(len(factors), 1)))
+
+    for factor in factors:
+        scores = list(factor.get("scores") or [])
+        standings = list(factor.get("standings") or [])
+        while len(scores) < player_count:
+            scores.append(None)
+        while len(standings) < player_count:
+            standings.append(None)
+
+        numeric_scores = [float(value) for value in scores if value is not None]
+        leader_value = max(numeric_scores) if numeric_scores else None
+
+        pdf.set_xy(inner_x, cursor_y + 1)
+        pdf.set_font("Helvetica", "B", 8)
+        pdf._text_rgb((209, 213, 219))
+        pdf.multi_cell(label_col_w - 2, 3.6, pdf_safe(str(factor.get("label") or "")))
+
+        for index in range(player_count):
+            color = PLAYER_COLORS[index % len(PLAYER_COLORS)]
+            col_x = inner_x + label_col_w + (index * player_col_w)
+            score = scores[index]
+            standing = standings[index]
+            is_leader = (
+                score is not None
+                and leader_value is not None
+                and float(score) == leader_value
+            )
+            cell_x = col_x + 1.5
+            cell_w = player_col_w - 3
+            if is_leader:
+                fill = tuple(int(channel * 0.18 + 255 * 0.06) for channel in color)
+                pdf._fill_rgb(fill)
+                pdf.rect(cell_x, cursor_y + 0.6, cell_w, row_h - 1.2, style="F")
+
+            display = "—" if score is None else format_metric_value(float(score))
+            pdf.set_xy(cell_x, cursor_y + 0.8)
+            pdf.set_font("Helvetica", "B", 9)
+            pdf._text_rgb(color)
+            pdf.cell(cell_w, 4.2, display, align="C")
+
+            track_h = 3.4
+            track_y = cursor_y + row_h - track_h - 1.4
+            track_x = cell_x + 2
+            track_w = max(cell_w - 4, 8.0)
+            pdf._fill_rgb((28, 28, 28))
+            pdf._draw_rgb((42, 42, 42))
+            pdf.set_line_width(0.2)
+            pdf.rect(track_x, track_y, track_w, track_h, style="DF")
+
+            fraction = None
+            if standing is not None:
+                fraction = max(0.0, min(1.0, float(standing) / 100.0))
+            elif score is not None and leader_value and leader_value > 0:
+                fraction = max(0.0, min(1.0, float(score) / leader_value))
+            if fraction:
+                pdf._fill_rgb(color)
+                pdf.rect(track_x, track_y, max(track_w * fraction, 2.0), track_h, style="F")
+
+        cursor_y += row_h
+
+    note = pdf_safe(
+        "Impect factor scores for this profile. Number = Impect value; bar = standing vs the position cohort."
+    )
+    pdf.set_xy(inner_x, frame_y + frame_h - INNER_PAD_MM - note_h + 1)
+    pdf.set_font("Helvetica", "", 7)
+    pdf._text_rgb((107, 114, 128))
+    pdf.multi_cell(inner_w, 3.5, note, align="C")
+
+
+def _pdf_bytes(pdf: SquadComparisonPDF) -> bytes:
+    output = pdf.output()
+    if isinstance(output, str):
+        return output.encode("latin-1")
+    return bytes(output)
+
+
 def build_squad_review_pdf(pages: list[dict[str, Any]]) -> bytes:
     pdf = SquadComparisonPDF()
     rendered = False
@@ -257,7 +412,21 @@ def build_squad_review_pdf(pages: list[dict[str, Any]]) -> bytes:
     if not rendered:
         raise ValueError("No comparisons with at least two players were available for export.")
 
-    output = pdf.output(dest="S")
-    if isinstance(output, str):
-        return output.encode("latin-1")
-    return bytes(output)
+    return _pdf_bytes(pdf)
+
+
+def build_squad_review_full_pdf(pages: list[dict[str, Any]]) -> bytes:
+    pdf = SquadComparisonPDF()
+    rendered = False
+    for page_data in pages:
+        if len(page_data.get("players") or []) < 2:
+            continue
+        _add_comparison_page(pdf, page_data)
+        rendered = True
+        for breakdown in page_data.get("profileBreakdowns") or []:
+            _add_profile_breakdown_page(pdf, page_data, breakdown)
+
+    if not rendered:
+        raise ValueError("No comparisons with at least two players were available for export.")
+
+    return _pdf_bytes(pdf)

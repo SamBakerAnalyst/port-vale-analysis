@@ -1123,12 +1123,13 @@ function showWarning(message) {
 // scale rather than a cohort we no longer rank against.
 function formatBenchmarkSubtitle(benchmark) {
   if (!benchmark) {
-    return "Impect score (0–100) · Nat Lge, Lg Two, Scot Prem · 600+ min";
+    return "Impect profile scores (0–100)";
   }
 
   const leagues = (benchmark.competitions || []).join(", ");
-  const minMinutes = benchmark.min_minutes ?? 600;
-  return `Impect score (0–100) · ${leagues} · ${minMinutes}+ min`;
+  return leagues
+    ? `Impect profile scores (0–100) · ${leagues}`
+    : "Impect profile scores (0–100)";
 }
 
 function hideAlert() {
@@ -3220,12 +3221,11 @@ function buildKeynoteFootnote(data, extra = "") {
   const benchmark = data?.benchmark;
   const parts = [];
   if (benchmark?.cohort_size) {
-    parts.push("Impect score (0–100) for this position");
+    parts.push("Impect profile scores (0–100) for this position");
     const competitions = (benchmark.competitions || []).join(", ");
     if (competitions) {
       parts.push(competitions);
     }
-    parts.push(`${benchmark.min_minutes || 600}+ minutes`);
   } else {
     parts.push("Position-specific profiles · one selected season per player");
   }

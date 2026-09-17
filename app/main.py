@@ -82,7 +82,7 @@ BENCHMARK_COMPETITIONS = (
     "League Two",
     "Scottish Premiership",
 )
-BENCHMARK_MIN_MINUTES = 600
+BENCHMARK_MIN_MINUTES = 0
 MAX_CHART_FACTORS = 7
 MAX_BAR_FACTORS = 4  # drilldown bar grid is 2×2
 
@@ -1243,6 +1243,20 @@ def _player_name_map(players: list[dict[str, Any]]) -> dict[int, str]:
     return mapping
 
 
+def _previous_season_label(season: str) -> str:
+    text = str(season or "").strip()
+    parts = text.split("/")
+    if len(parts) != 2:
+        return ""
+    try:
+        start = int(parts[0])
+        end = int(parts[1])
+    except ValueError:
+        return ""
+    width = max(len(parts[0]), 2)
+    return f"{start - 1:0{width}d}/{end - 1:02d}"
+
+
 def _season_for_iteration(iteration_id: int) -> str:
     for row in _fetch_iterations():
         if row["id"] == iteration_id:
@@ -1281,11 +1295,15 @@ def _play_duration_minutes(row: dict[str, Any]) -> float | None:
 
 
 def _meets_benchmark_minutes(row: dict[str, Any], min_minutes: float) -> bool:
+    if min_minutes <= 0:
+        return True
     minutes = _play_duration_minutes(row)
     return minutes is not None and minutes >= min_minutes
 
 
 def _low_minutes_warning(row: dict[str, Any], min_minutes: float) -> str | None:
+    if min_minutes <= 0:
+        return None
     minutes = _play_duration_minutes(row)
     if minutes is None:
         return f"No minutes data available (benchmark uses {min_minutes:.0f}+ minutes)."
@@ -1858,8 +1876,8 @@ def _cohort_percentile(value: float, cohort_values: list[float]) -> float | None
         return None
 
     n = len(cohort_values)
-    if n == 1:
-        return 50.0
+    if n < 2:
+        return None
 
     if len(set(cohort_values)) == 1:
         return 50.0
@@ -1911,17 +1929,8 @@ def _metrics_cohort_rows(
     iteration_id: int,
     positions: list[str],
 ) -> list[dict[str, Any]]:
-    """Same-league, same-position sample for factor standing; wider fallback."""
-    rows = _eligible_cohort_rows(
-        _fetch_iteration_player_scores(iteration_id, positions or [], 0)
-    )
-    if len(rows) >= 8:
-        return rows
-    season = _season_for_iteration(iteration_id)
-    if not season:
-        return rows
-    cohort_rows, _ = _fetch_benchmark_cohort(season, positions or [], "metrics")
-    return cohort_rows or rows
+    """Everyone at this position in this league — no minutes floor."""
+    return _fetch_iteration_player_scores(iteration_id, positions or [], 0)
 
 
 def _selected_profiles(body: ChartRequest) -> list[str]:
@@ -2234,6 +2243,7 @@ def _build_single_profile_drilldown(
                 ),
                 "radar_value": float(radar_value),
                 "raw_value": float(score),
+                "metric_value": float(value),
                 "inverted": inverted,
             }
         )
@@ -2276,9 +2286,11 @@ def _build_single_profile_drilldown(
         "labels": labels,
         "radar_values": radar_values,
         "raw_values": raw_values,
+        "metric_values": [item["metric_value"] for item in chart_factors],
         "bar_labels": [item["label"] for item in bar_factors],
         "bar_radar_values": [item["radar_value"] for item in bar_factors],
         "bar_raw_values": [item["raw_value"] for item in bar_factors],
+        "bar_metric_values": [item["metric_value"] for item in bar_factors],
         "bar_weights": [
             round((float(item["weight"]) / profile_weight_total) * 100.0, 1)
             if profile_weight_total
@@ -2405,6 +2417,29 @@ def _values_for_labels(
     return [float(by_label[_normalize_profile_name(label)]) for label in labels]
 
 
+def _optional_values_for_labels(
+    labels: list[str],
+    source_labels: list[str],
+    values: list[Any],
+) -> list[float | None]:
+    by_label: dict[str, Any] = {}
+    for label, value in zip(source_labels, values):
+        key = _normalize_profile_name(label)
+        if key:
+            by_label[key] = value
+    aligned: list[float | None] = []
+    for label in labels:
+        value = by_label.get(_normalize_profile_name(label))
+        if value is None:
+            aligned.append(None)
+            continue
+        try:
+            aligned.append(float(value))
+        except (TypeError, ValueError):
+            aligned.append(None)
+    return aligned
+
+
 def _merge_profile_drilldowns(
     active_results: list[dict[str, Any]],
     profile_names: list[str],
@@ -2429,24 +2464,33 @@ def _merge_profile_drilldowns(
         if not profile_entries:
             continue
 
+        reference = max(
+            profile_entries,
+            key=lambda entry: (
+                len(entry[1].get("bar_labels") or []),
+                len(entry[1].get("labels") or []),
+            ),
+        )[1]
         canonical_labels = _shared_drilldown_labels(
             profile_entries,
             labels_key="labels",
             values_key="radar_values",
         )[:MAX_CHART_FACTORS]
-        canonical_bar_labels = _shared_drilldown_labels(
-            profile_entries,
-            labels_key="bar_labels",
-            values_key="bar_radar_values",
-        )[:MAX_BAR_FACTORS]
+        # Keep the reference player's weight-ranked bars even if a low-minute
+        # teammate is missing a factor. Shared-only merge dropped Aerial duel
+        # win % and fell back to the first radar axes.
+        canonical_bar_labels = list(reference.get("bar_labels") or [])[:MAX_BAR_FACTORS]
+        if not canonical_bar_labels:
+            canonical_bar_labels = _shared_drilldown_labels(
+                profile_entries,
+                labels_key="bar_labels",
+                values_key="bar_radar_values",
+            )[:MAX_BAR_FACTORS]
 
-        if not canonical_labels:
+        if not canonical_labels and not canonical_bar_labels:
             continue
-
-        reference = max(
-            profile_entries,
-            key=lambda entry: len(entry[1].get("labels", [])),
-        )[1]
+        if not canonical_labels:
+            canonical_labels = list(canonical_bar_labels)
         ref_bar_labels = list(reference.get("bar_labels", reference.get("labels", [])))
         ref_bar_weights = list(reference.get("bar_weights", []))
         ref_bar_inverted = list(reference.get("bar_inverted", []))
@@ -2485,26 +2529,33 @@ def _merge_profile_drilldowns(
                     "play_duration_minutes": result.get("play_duration_minutes"),
                     "photo_url": result.get("photo_url"),
                     "labels": canonical_labels,
-                    "radar_values": _values_for_labels(
+                    "radar_values": _optional_values_for_labels(
                         canonical_labels,
                         source_labels,
                         player_drilldown.get("radar_values", []),
                     ),
-                    "raw_values": _values_for_labels(
+                    "raw_values": _optional_values_for_labels(
                         canonical_labels,
                         source_labels,
                         player_drilldown.get("raw_values", []),
                     ),
                     "bar_labels": canonical_bar_labels,
-                    "bar_radar_values": _values_for_labels(
+                    "bar_radar_values": _optional_values_for_labels(
                         canonical_bar_labels,
                         source_bar_labels,
                         player_drilldown.get("bar_radar_values", []),
                     ),
-                    "bar_raw_values": _values_for_labels(
+                    "bar_raw_values": _optional_values_for_labels(
                         canonical_bar_labels,
                         source_bar_labels,
                         player_drilldown.get("bar_raw_values", []),
+                    ),
+                    "bar_metric_values": _optional_values_for_labels(
+                        canonical_bar_labels,
+                        source_bar_labels,
+                        player_drilldown.get("bar_metric_values")
+                        or player_drilldown.get("metric_values")
+                        or player_drilldown.get("bar_raw_values", []),
                     ),
                 }
             )

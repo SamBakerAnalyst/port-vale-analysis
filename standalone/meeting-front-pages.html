@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/meeting-front-pages.css?v=38" />
+  <link rel="stylesheet" href="/static/meeting-front-pages.css?v=45" />
 </head>
 <body>
   <div class="mfp-app">
@@ -15,7 +15,7 @@
       <div class="mfp-chrome__brand">
         <a class="mfp-chrome__back" href="/">← Hub</a>
         <div>
-          <p class="mfp-chrome__eyebrow">Scouts · Meeting pages &amp; dossiers</p>
+          <p class="mfp-chrome__eyebrow">Scouts · Meeting pages, match slides &amp; dossiers</p>
           <h1 class="mfp-chrome__title">Meeting Front Pages</h1>
         </div>
       </div>
@@ -29,17 +29,23 @@
 
     <section class="mfp-modebar" aria-label="Tool mode">
       <button type="button" class="mfp-mode is-active" data-mode="meeting">Meeting pages</button>
+      <button type="button" class="mfp-mode" data-mode="match">Match slides</button>
       <button type="button" class="mfp-mode" data-mode="dossier">Dossier</button>
     </section>
 
+    <section class="mfp-packs" id="matchPackBar" hidden>
+      <p class="mfp-label">Slide template</p>
+      <div class="mfp-pills" id="matchPackPills"></div>
+    </section>
+
     <section class="mfp-controls">
-      <div class="mfp-search">
+      <div class="mfp-search" id="playerSearchPanel">
         <label class="mfp-label" for="playerSearch">Player</label>
         <input id="playerSearch" class="mfp-input" type="search" placeholder="Type a name — e.g. Trevan Sanusi" autocomplete="off" />
         <ul id="searchResults" class="mfp-results" hidden></ul>
       </div>
       <div class="mfp-cutout" id="cutoutPanel">
-        <label class="mfp-label" for="cutoutInput">Own cutout <span class="mfp-label__optional">optional</span></label>
+        <label class="mfp-label" for="cutoutInput" id="cutoutLabel">Own cutout <span class="mfp-label__optional">optional</span></label>
         <div class="mfp-cutout__row">
           <label class="mfp-file" for="cutoutInput">
             <span class="mfp-file__btn">Choose image</span>
@@ -55,8 +61,16 @@
 
     <section class="mfp-photos" id="photoPanel" hidden>
       <div class="mfp-photos__head">
-        <h2>Photos from the internet</h2>
+        <h2>Photos</h2>
+        <div class="mfp-photo-sources" role="tablist" aria-label="Photo source">
+          <button type="button" class="mfp-source is-active" data-photo-source="vale">Through a Lens</button>
+          <button type="button" class="mfp-source" data-photo-source="web">Web</button>
+        </div>
         <span class="mfp-hint" id="photoMeta"></span>
+      </div>
+      <div class="mfp-vale-bar" id="valeBar" hidden>
+        <div class="mfp-vale-comps" id="valeComps"></div>
+        <div class="mfp-vale-matches" id="valeMatches"></div>
       </div>
       <div class="mfp-photo-grid" id="photoGrid"></div>
     </section>
@@ -67,10 +81,10 @@
     </div>
   </div>
 
-  <script defer src="/static/wysiwyg-export.js?v=2"></script>
+  <script defer src="/static/wysiwyg-export.js?v=3"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script defer src="/static/meeting-front-pages.js?v=38"></script>
+  <script defer src="/static/meeting-front-pages.js?v=46"></script>
   <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>

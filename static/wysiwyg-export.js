@@ -36,19 +36,54 @@
     );
   }
 
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function compressImageBlob(blob, { maxW = 1920, maxH = 1080, quality = 0.82 } = {}) {
+    const type = String(blob.type || "").toLowerCase();
+    if (type.includes("svg")) return blobToDataUrl(blob);
+    let bitmap;
+    try {
+      bitmap = await createImageBitmap(blob);
+    } catch {
+      return blobToDataUrl(blob);
+    }
+    const srcW = bitmap.width;
+    const srcH = bitmap.height;
+    // Crests / small UI images — keep original (often PNG with alpha).
+    if (srcW <= 400 && srcH <= 400) {
+      bitmap.close();
+      return blobToDataUrl(blob);
+    }
+    const scale = Math.min(1, maxW / srcW, maxH / srcH);
+    const w = Math.max(1, Math.round(srcW * scale));
+    const h = Math.max(1, Math.round(srcH * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#12100e";
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    bitmap.close();
+    return canvas.toDataURL("image/jpeg", quality);
+  }
+
   async function imageToDataUrl(img) {
     const src = img.currentSrc || img.src;
-    if (!src || src.startsWith("data:")) return src || "";
+    if (!src) return "";
+    if (src.startsWith("data:") && src.length < 400000) return src;
     try {
       const response = await fetch(src, { credentials: "same-origin" });
       if (!response.ok) return src;
       const blob = await response.blob();
-      return await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || src));
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
+      return await compressImageBlob(blob);
     } catch {
       return src;
     }
@@ -101,6 +136,12 @@
       if (field.matches("li, .tp-note__item")) {
         field.textContent = text.trim() ? text.replace(/\n+/g, " ").trim() : "";
       }
+    });
+    clone.querySelectorAll("button").forEach((btn) => {
+      const span = document.createElement("span");
+      span.className = btn.className;
+      span.innerHTML = btn.innerHTML;
+      btn.replaceWith(span);
     });
     clone.style.setProperty("width", `${width}px`, "important");
     clone.style.setProperty("max-width", `${width}px`, "important");
@@ -357,31 +398,58 @@ ${wrapped}
     };
   }
 
-  async function downloadPngZip({
+  function triggerBlobDownload(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function pngZipFetchError(err) {
+    const msg = err && err.message ? String(err.message) : "";
+    if (/failed to fetch/i.test(msg) || (err && err.name === "TypeError")) {
+      return new Error(
+        "Could not reach the PNG exporter — the pack was too large or Chrome dropped the connection.",
+      );
+    }
+    return err instanceof Error ? err : new Error(msg || "PNG zip export failed");
+  }
+
+  async function postPngZipChunk({
     htmlPages,
     htmlFilenames,
-    width = FRAME_W,
-    height = FRAME_H,
-    scale = DEVICE_SCALE,
-    filename = "port-vale-export.zip",
-    documentTitle = "Port Vale export",
-    endpoint = "/api/wysiwyg-export-png-zip",
-    opponentName = null,
+    width,
+    height,
+    scale,
+    filename,
+    documentTitle,
+    endpoint,
+    opponentName,
   }) {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        html_pages: htmlPages,
-        html_filenames: htmlFilenames,
-        width,
-        height,
-        scale,
-        filename,
-        document_title: documentTitle,
-        opponent_name: opponentName,
-      }),
-    });
+    let response;
+    try {
+      response = await fetch(endpoint, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          html_pages: htmlPages,
+          html_filenames: htmlFilenames,
+          width,
+          height,
+          scale,
+          filename,
+          document_title: documentTitle,
+          opponent_name: opponentName,
+        }),
+      });
+    } catch (err) {
+      throw pngZipFetchError(err);
+    }
     if (!response.ok) {
       let detail = "";
       try {
@@ -392,20 +460,95 @@ ${wrapped}
       }
       throw new Error(detail || "PNG zip export failed");
     }
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    return {
+      blob: await response.blob(),
+      savedPath: response.headers.get("X-Saved-Desktop-Path"),
+    };
+  }
+
+  async function downloadPngZip({
+    htmlPages,
+    htmlFilenames,
+    width = FRAME_W,
+    height = FRAME_H,
+    scale = DEVICE_SCALE,
+    filename = "port-vale-export.zip",
+    documentTitle = "Port Vale export",
+    endpoint = "/api/wysiwyg-export-png-zip",
+    opponentName = null,
+    pagesPerRequest = 0,
+    onProgress = null,
+  }) {
+    const pages = htmlPages || [];
+    const names = htmlFilenames || [];
+    const estimated = pages.reduce((n, page) => n + (page ? page.length : 0), 0);
+    let chunkSize = Number(pagesPerRequest) || 0;
+    if (!chunkSize) {
+      chunkSize = estimated > 2500000 || pages.length > 3 ? 1 : pages.length;
+    }
+    chunkSize = Math.max(1, chunkSize);
+    const canMerge = typeof JSZip === "function";
+    if (!canMerge) chunkSize = pages.length;
+
+    const mergeIntoMaster = async (master, zipBlob) => {
+      const part = await JSZip.loadAsync(zipBlob);
+      await Promise.all(
+        Object.keys(part.files).map(async (name) => {
+          const file = part.files[name];
+          if (!file || file.dir) return;
+          master.file(name, await file.async("uint8array"));
+        }),
+      );
+    };
+
+    if (chunkSize >= pages.length) {
+      onProgress?.("Screenshotting slides in Chrome…");
+      const result = await postPngZipChunk({
+        htmlPages: pages,
+        htmlFilenames: names,
+        width,
+        height,
+        scale,
+        filename,
+        documentTitle,
+        endpoint,
+        opponentName,
+      });
+      triggerBlobDownload(result.blob, filename);
+      return {
+        blob: result.blob,
+        savedPath: result.savedPath,
+        sizeMb: (result.blob.size / (1024 * 1024)).toFixed(1),
+        pageCount: pages.length,
+      };
+    }
+
+    const master = new JSZip();
+    let lastSaved = null;
+    for (let i = 0; i < pages.length; i += chunkSize) {
+      const end = Math.min(i + chunkSize, pages.length);
+      onProgress?.(`Screenshotting slides in Chrome… ${end}/${pages.length}`);
+      const result = await postPngZipChunk({
+        htmlPages: pages.slice(i, end),
+        htmlFilenames: names.slice(i, end),
+        width,
+        height,
+        scale,
+        filename: filename.replace(/\.zip$/i, `-part${Math.floor(i / chunkSize) + 1}.zip`),
+        documentTitle,
+        endpoint,
+        opponentName,
+      });
+      lastSaved = result.savedPath || lastSaved;
+      await mergeIntoMaster(master, result.blob);
+    }
+    const blob = await master.generateAsync({ type: "blob" });
+    triggerBlobDownload(blob, filename);
     return {
       blob,
-      savedPath: response.headers.get("X-Saved-Desktop-Path"),
+      savedPath: lastSaved,
       sizeMb: (blob.size / (1024 * 1024)).toFixed(1),
-      pageCount: htmlPages.length,
+      pageCount: pages.length,
     };
   }
 

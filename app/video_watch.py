@@ -31,7 +31,19 @@ from app.player_dossier import (
     _normalize_entry_kind,
     create_player_note,
 )
-from app.player_pipelines import STAGES, pipeline_index_by_player_id
+from app.player_pipelines import STAGES, pipeline_index_by_player_id, upsert_pipeline_from_scout
+from app.player_reports import (
+    DetailedReportBody,
+    GeneralReportBody,
+    MatchConditionsBody,
+    PlayerCmsBody,
+    match_conditions_for_fixture,
+    report_file_for_player,
+    save_cms,
+    save_detailed_report,
+    save_general_report,
+    save_match_conditions,
+)
 from app.scoutable_teams import (
     attach_scout_notes_to_players,
     save_scout_notes,
@@ -239,11 +251,23 @@ def _decorate_fixture_sheet(sheet: dict[str, Any]) -> dict[str, Any]:
         players = list(team.get("players") or [])
         attach_scout_notes_to_players(players)
         _attach_squad_shirts(players, club)
+        decorated_players = []
+        for row in players:
+            player = _decorate_sheet_player(row, club=club)
+            player["sheet_side"] = side
+            decorated_players.append(player)
         decorated = {
             **team,
-            "players": [_decorate_sheet_player(row, club=club) for row in players],
+            "players": decorated_players,
         }
         sheet[side] = attach_watch_formation(decorated)
+    fixture_id = str(sheet.get("fixture_id") or "")
+    home_name = str((sheet.get("home") or {}).get("name") or "")
+    away_name = str((sheet.get("away") or {}).get("name") or "")
+    label = f"{home_name} vs {away_name}" if home_name or away_name else ""
+    sheet["match_conditions"] = match_conditions_for_fixture(
+        fixture_id, fixture_label=label
+    )
     return sheet
 
 
@@ -276,6 +300,11 @@ def build_watch_player(
     *,
     player_id: int,
     sheet_player: dict[str, Any] | None = None,
+    fixture_id: str = "",
+    fixture_label: str = "",
+    home_name: str = "",
+    away_name: str = "",
+    sheet_side: str = "",
 ) -> dict[str, Any]:
     base = dict(sheet_player or {})
     name = str(base.get("name") or f"Player {player_id}")
@@ -284,6 +313,18 @@ def build_watch_player(
     shared = scout_notes_for_player(player_id)
     activity = _real_activity(player_id, name)
     pipeline = _pipeline_for_player(player_id)
+    report_file = report_file_for_player(
+        player_id=int(player_id),
+        club=club,
+        name=name,
+        fixture_id=fixture_id,
+        fixture_label=fixture_label,
+        home_name=home_name,
+        away_name=away_name,
+        sheet_side=sheet_side or str(base.get("sheet_side") or ""),
+        position=str(base.get("position") or ""),
+        player_profiles=list(base.get("profiles") or []),
+    )
     return {
         **base,
         "player_id": int(player_id),
@@ -300,6 +341,7 @@ def build_watch_player(
         "dossier_href": f"/player/{int(player_id)}",
         "scoutable_href": f"/scoutable-teams?club={club}" if club else "/scoutable-teams",
         "who_to_scout_href": "/who-to-scout",
+        **report_file,
     }
 
 
@@ -335,6 +377,10 @@ def save_video_watch_entry(
     current_ability: float | None = None,
     potential_ability: float | None = None,
     scout_scores: dict[str, int | None] | None = None,
+    fixture_id: str = "",
+    home_name: str = "",
+    away_name: str = "",
+    sheet_side: str = "",
 ) -> dict[str, Any]:
     if not player_id:
         raise HTTPException(status_code=400, detail="player_id is required")
@@ -380,7 +426,13 @@ def save_video_watch_entry(
             "position": position,
             "position_label": position_label,
             "age": age,
+            "sheet_side": sheet_side,
         },
+        fixture_id=fixture_id,
+        fixture_label=fixture_label,
+        home_name=home_name,
+        away_name=away_name,
+        sheet_side=sheet_side,
     )
     return {
         "ok": True,
@@ -430,6 +482,11 @@ def register_video_watch_routes(app: FastAPI) -> None:
         position: str | None = Query(None),
         position_label: str | None = Query(None),
         age: int | None = Query(None),
+        fixture_id: str | None = Query(None),
+        fixture_label: str | None = Query(None),
+        home_name: str | None = Query(None),
+        away_name: str | None = Query(None),
+        sheet_side: str | None = Query(None),
     ) -> dict[str, Any]:
         if not player_id:
             raise HTTPException(status_code=400, detail="player_id is required")
@@ -440,11 +497,17 @@ def register_video_watch_routes(app: FastAPI) -> None:
             "position": position or "",
             "position_label": position_label or "",
             "age": age,
+            "sheet_side": sheet_side or "",
         }
         return {
             "player": build_watch_player(
                 player_id=player_id,
                 sheet_player=sheet_player,
+                fixture_id=fixture_id or "",
+                fixture_label=fixture_label or "",
+                home_name=home_name or "",
+                away_name=away_name or "",
+                sheet_side=sheet_side or "",
             )
         }
 
@@ -467,4 +530,170 @@ def register_video_watch_routes(app: FastAPI) -> None:
             current_ability=body.current_ability,
             potential_ability=body.potential_ability,
             scout_scores=body.scout_scores,
+            fixture_id=body.fixture_id,
         )
+
+    def _player_after_report_save(
+        *,
+        player_id: int,
+        name: str = "",
+        club: str = "",
+        fixture_id: str = "",
+        fixture_label: str = "",
+        home_name: str = "",
+        away_name: str = "",
+        sheet_side: str = "",
+        position: str = "",
+        position_label: str = "",
+    ) -> dict[str, Any]:
+        return build_watch_player(
+            player_id=player_id,
+            sheet_player={
+                "name": name,
+                "club": club,
+                "sheet_side": sheet_side,
+                "position": position,
+                "position_label": position_label,
+            },
+            fixture_id=fixture_id,
+            fixture_label=fixture_label,
+            home_name=home_name,
+            away_name=away_name,
+            sheet_side=sheet_side,
+        )
+
+    @app.post("/api/video-watch/match-conditions")
+    def video_watch_save_match_conditions(
+        request: Request, body: MatchConditionsBody
+    ) -> dict[str, Any]:
+        conditions = save_match_conditions(
+            fixture_id=body.fixture_id,
+            fixture_label=body.fixture_label,
+            weather=body.weather,
+            weather_note=body.weather_note,
+            pitch=body.pitch,
+            pitch_note=body.pitch_note,
+            staff=_staff_name(request),
+        )
+        return {"ok": True, "match_conditions": conditions}
+
+    @app.post("/api/video-watch/general-report")
+    def video_watch_save_general_report(
+        request: Request, body: GeneralReportBody
+    ) -> dict[str, Any]:
+        staff = _staff_name(request)
+        conditions = save_match_conditions(
+            fixture_id=body.fixture_id,
+            fixture_label=body.fixture_label,
+            weather=body.weather,
+            weather_note=body.weather_note,
+            pitch=body.pitch,
+            pitch_note=body.pitch_note,
+            staff=staff,
+        )
+        general = save_general_report(
+            player_id=body.player_id,
+            fixture_id=body.fixture_id,
+            notes=body.notes,
+            position_in_game=body.position_in_game,
+            physical=body.physical,
+            profiles=body.profiles,
+            staff=staff,
+        )
+        player = _player_after_report_save(
+            player_id=body.player_id,
+            name=body.name,
+            club=body.club,
+            fixture_id=body.fixture_id,
+            fixture_label=body.fixture_label,
+            home_name=body.home_name,
+            away_name=body.away_name,
+            sheet_side=body.sheet_side,
+        )
+        return {
+            "ok": True,
+            "match_conditions": conditions,
+            "general_report": general,
+            "player": player,
+        }
+
+    @app.post("/api/video-watch/detailed-report")
+    def video_watch_save_detailed_report(
+        request: Request, body: DetailedReportBody
+    ) -> dict[str, Any]:
+        staff = _staff_name(request)
+        detailed = save_detailed_report(
+            player_id=body.player_id,
+            fixture_id=body.fixture_id,
+            position_in_game=body.position_in_game,
+            physical=body.physical,
+            profiles=body.profiles,
+            psychology=body.psychology,
+            write_up=body.write_up,
+            next_steps=body.next_steps,
+            match_rating=body.match_rating,
+            pvfc_level=body.pvfc_level,
+            add_to_pipeline=body.add_to_pipeline,
+            pipeline_stage=body.pipeline_stage,
+            next_action=body.next_action,
+            staff=staff,
+        )
+        pipeline = None
+        pipeline_error = ""
+        if body.add_to_pipeline:
+            stage = detailed.get("pipeline_stage") or "video_scouted"
+            reason = (
+                detailed.get("write_up")
+                or detailed.get("next_steps")
+                or "Not to standard off this look."
+            )
+            try:
+                pipeline = upsert_pipeline_from_scout(
+                    request,
+                    player_id=body.player_id,
+                    name=body.name,
+                    club=body.club,
+                    league=body.league,
+                    position=body.position_in_game or body.position,
+                    position_label=body.position_label,
+                    age=body.age,
+                    stage=stage,
+                    reason=reason,
+                )
+            except HTTPException as exc:
+                pipeline_error = str(exc.detail or "Could not add to pipeline.")
+        player = _player_after_report_save(
+            player_id=body.player_id,
+            name=body.name,
+            club=body.club,
+            fixture_id=body.fixture_id,
+            fixture_label=body.fixture_label,
+            home_name=body.home_name,
+            away_name=body.away_name,
+            sheet_side=body.sheet_side,
+            position=body.position_in_game or body.position,
+            position_label=body.position_label,
+        )
+        return {
+            "ok": True,
+            "detailed_report": detailed,
+            "pipeline": pipeline,
+            "pipeline_error": pipeline_error,
+            "player": player,
+        }
+
+    @app.post("/api/video-watch/cms")
+    def video_watch_save_cms(request: Request, body: PlayerCmsBody) -> dict[str, Any]:
+        cms = save_cms(
+            player_id=body.player_id,
+            agent_name=body.agent_name,
+            agent_notes=body.agent_notes,
+            contract_expires=body.contract_expires,
+            contract_notes=body.contract_notes,
+            wages_notes=body.wages_notes,
+            other_notes=body.other_notes,
+            staff=_staff_name(request),
+            name=body.name,
+            club=body.club,
+        )
+        return {"ok": True, "cms": cms}

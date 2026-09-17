@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import html as html_lib
 import re
 import time
@@ -15,6 +16,7 @@ from app.set_piece_pre_match import _height_label_from_cm, _parse_tm_height_cm
 
 _TM_PROFILE_CACHE: dict[str, tuple[float, dict[str, Any] | None]] = {}
 _FBREF_CACHE: dict[str, tuple[float, dict[str, Any] | None]] = {}
+_FOTMOB_CACHE: dict[str, tuple[float, dict[str, Any] | None]] = {}
 _CACHE_TTL = 6 * 60 * 60
 
 FBREF_HEADERS = {
@@ -195,12 +197,15 @@ def fetch_transfermarkt_player_profile(
     player_name: str,
     *,
     club_name: str | None = None,
+    cached_only: bool = False,
 ) -> dict[str, Any] | None:
     cache_key = f"{_normalize_name_key(player_name)}|{_normalize_name_key(club_name or '')}"
     cached = _TM_PROFILE_CACHE.get(cache_key)
     now = time.time()
     if cached and now - cached[0] < _CACHE_TTL:
         return cached[1]
+    if cached_only:
+        return None
 
     profile_url = _search_transfermarkt_player_url(player_name, club_name)
     if not profile_url:
@@ -667,12 +672,18 @@ def _parse_fbref_summary(html: str, page_url: str) -> dict[str, Any]:
     return stats
 
 
-def fetch_fbref_player_summary(player_name: str) -> dict[str, Any] | None:
+def fetch_fbref_player_summary(
+    player_name: str,
+    *,
+    cached_only: bool = False,
+) -> dict[str, Any] | None:
     cache_key = _normalize_name_key(player_name)
     cached = _FBREF_CACHE.get(cache_key)
     now = time.time()
     if cached and now - cached[0] < _CACHE_TTL:
         return cached[1]
+    if cached_only:
+        return None
 
     page_url = _search_fbref_player_url(player_name)
     if not page_url:
@@ -702,14 +713,190 @@ def fetch_fbref_player_summary(player_name: str) -> dict[str, Any] | None:
     return payload
 
 
+def _current_season_tokens() -> tuple[str, str]:
+    now = datetime.now(UTC)
+    start = now.year if now.month >= 8 else now.year - 1
+    return str(start)[-2:], str(start + 1)[-2:]
+
+
+def _is_current_football_season(season: str | None) -> bool:
+    found = {token[-2:] for token in re.findall(r"\d{2,4}", str(season or ""))}
+    start, end = _current_season_tokens()
+    return start in found and (end in found or start in found and len(found) == 1)
+
+
+def _fotmob_stat_value(stats: list[dict[str, Any]] | None, *keys: str) -> float | int | None:
+    wanted = {str(key).casefold() for key in keys}
+    for row in stats or []:
+        if not isinstance(row, dict):
+            continue
+        token = str(row.get("localizedTitleId") or row.get("title") or "").casefold()
+        token = token.replace("_uppercase", "").replace("_", " ").strip()
+        title = str(row.get("title") or "").casefold()
+        if token not in wanted and title not in wanted:
+            continue
+        raw = row.get("value")
+        if raw is None or raw == "":
+            return None
+        try:
+            number = float(raw)
+        except (TypeError, ValueError):
+            return None
+        if abs(number - round(number)) < 0.05:
+            return int(round(number))
+        return round(number, 2)
+    return None
+
+
+def _match_fotmob_squad_id(player_name: str, members: list[dict[str, Any]]) -> int | None:
+    target = _normalize_name_key(player_name)
+    if not target:
+        return None
+    ranked: list[tuple[int, int]] = []
+    first, surname = _name_tokens(player_name)
+    for member in members:
+        if not isinstance(member, dict):
+            continue
+        try:
+            pid = int(member.get("id") or 0)
+        except (TypeError, ValueError):
+            pid = 0
+        name = str(member.get("name") or "").strip()
+        if pid <= 0 or not name:
+            continue
+        key = _normalize_name_key(name)
+        score = 0
+        if key == target:
+            score = 10
+        elif surname and surname in key and (not first or first[:3] in key):
+            score = 6
+        elif surname and surname in key:
+            score = 3
+        if score:
+            ranked.append((score, pid))
+    ranked.sort(reverse=True)
+    return ranked[0][1] if ranked else None
+
+
+def _parse_fotmob_season_snapshot(payload: dict[str, Any]) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return None
+    main = payload.get("mainLeague") if isinstance(payload.get("mainLeague"), dict) else {}
+    season = str(main.get("season") or "").strip()
+    if not _is_current_football_season(season):
+        return None
+    stats = main.get("stats") if isinstance(main.get("stats"), list) else []
+    games = _fotmob_stat_value(stats, "matches", "games")
+    minutes = _fotmob_stat_value(stats, "minutes played", "minutes_played", "minutes")
+    goals = _fotmob_stat_value(stats, "goals")
+    assists = _fotmob_stat_value(stats, "assists")
+    if games is None and minutes is None and goals is None and assists is None:
+        return None
+    team = payload.get("primaryTeam") if isinstance(payload.get("primaryTeam"), dict) else {}
+    page = str(((payload.get("meta") or {}).get("pageurl") or "")).strip()
+    profile_url = f"https://www.fotmob.com{page}" if page.startswith("/") else (page or None)
+    height_cm = None
+    for row in payload.get("playerInformation") or []:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("translationKey") or "") != "height" and "height" not in str(row.get("title") or "").casefold():
+            continue
+        value = row.get("value")
+        raw = value.get("numberValue") if isinstance(value, dict) else value
+        try:
+            height_cm = int(float(raw))
+        except (TypeError, ValueError):
+            height_cm = None
+        break
+    return {
+        "source": "fotmob",
+        "player_id": payload.get("id"),
+        "season": season,
+        "league": str(main.get("leagueName") or "").strip() or None,
+        "squad": str(team.get("teamName") or "").strip() or None,
+        "games": games,
+        "minutes": minutes,
+        "goals": goals,
+        "assists": assists,
+        "profile_url": profile_url,
+        "height_cm": height_cm,
+        "on_loan": bool(team.get("onLoan")),
+    }
+
+
+def fetch_fotmob_player_season(
+    player_name: str,
+    *,
+    club_name: str | None = None,
+    cached_only: bool = False,
+) -> dict[str, Any] | None:
+    cache_key = f"{_normalize_name_key(player_name)}|{_normalize_name_key(club_name or '')}"
+    cached = _FOTMOB_CACHE.get(cache_key)
+    now = time.time()
+    if cached and now - cached[0] < _CACHE_TTL:
+        return cached[1]
+    if cached_only:
+        return None
+    from app.handout_badges import fotmob_team_id_for_club
+    from app.pre_match_fotmob import fetch_fotmob_team_payload
+
+    team_id = fotmob_team_id_for_club(club_name)
+    payload = fetch_fotmob_team_payload(team_id) if team_id else None
+    members: list[dict[str, Any]] = []
+    for group in ((payload or {}).get("squad") or {}).get("squad") or []:
+        if not isinstance(group, dict):
+            continue
+        title = str(group.get("title") or "").strip().casefold()
+        if title in {"coach", "staff"}:
+            continue
+        for member in group.get("members") or []:
+            if isinstance(member, dict):
+                members.append(member)
+    fotmob_id = _match_fotmob_squad_id(player_name, members)
+    if not fotmob_id:
+        _FOTMOB_CACHE[cache_key] = (now, None)
+        return None
+    try:
+        from app.fixture_planner import _http
+
+        response = _http.get(
+            "https://www.fotmob.com/api/data/playerData",
+            params={"id": int(fotmob_id)},
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=20,
+        )
+        if not response.ok:
+            _FOTMOB_CACHE[cache_key] = (now, None)
+            return None
+        data = response.json()
+    except Exception:
+        _FOTMOB_CACHE[cache_key] = (now, None)
+        return None
+    snapshot = _parse_fotmob_season_snapshot(data if isinstance(data, dict) else {})
+    _FOTMOB_CACHE[cache_key] = (now, snapshot)
+    return snapshot
+
+
 def enrich_player_web(
     player_name: str,
     *,
     club_name: str | None = None,
+    cached_only: bool = False,
+    include_fbref: bool = True,
 ) -> dict[str, Any]:
-    tm = fetch_transfermarkt_player_profile(player_name, club_name=club_name)
-    fbref = fetch_fbref_player_summary(player_name)
+    tm = fetch_transfermarkt_player_profile(
+        player_name, club_name=club_name, cached_only=cached_only
+    )
+    fotmob = fetch_fotmob_player_season(
+        player_name, club_name=club_name, cached_only=cached_only
+    )
+    fbref = (
+        fetch_fbref_player_summary(player_name, cached_only=cached_only)
+        if include_fbref
+        else None
+    )
     return {
         "transfermarkt": tm,
+        "fotmob": fotmob,
         "fbref": fbref,
     }

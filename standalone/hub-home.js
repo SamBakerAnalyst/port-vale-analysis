@@ -536,16 +536,16 @@
       "homeMonthCal",
       `<div class="home-cal">${weekdays}${cells.join("")}</div>
       <div class="home-cal__legend">
-        <span><i style="background:#2fd46a"></i> IN</span>
-        <span><i style="background:#ff4d6d"></i> Regen</span>
-        <span><i style="background:#38bdf8"></i> Pre-season</span>
+        <span><i style="background:#c5d4a8"></i> IN</span>
+        <span><i style="background:#c45c4a"></i> Regen</span>
+        <span><i style="background:#9b9a91"></i> Pre-season</span>
         <span><i class="home-cal__legend-r">R</i> Recruitment in</span>
-        <span><i style="background:#c9a227"></i> Home</span>
-        <span><i style="background:#1a4fd6"></i> Away</span>
-        ${showScoutDots ? `<span><i style="background:var(--green)"></i> Scout LIVE</span>
-        <span><i style="background:var(--accent)"></i> Scout VIDEO</span>` : ""}
+        <span><i style="background:#e0a800"></i> Home</span>
+        <span><i style="background:#f2f1ec"></i> Away</span>
+        ${showScoutDots ? `<span><i style="background:#c5d4a8"></i> Scout LIVE</span>
+        <span><i style="background:#e0a800"></i> Scout VIDEO</span>` : ""}
       </div>
-      <p class="home-cal__hint">${ownerLabel} — click: <strong>IN</strong> → <strong>Regen</strong> → <strong>Pre-season</strong> (blue) → blank. Shift-click for <strong>R</strong>. Open <a href="/schedule">Full schedule</a> for the big board.</p>`
+      <p class="home-cal__hint">${ownerLabel} — click: <strong>IN</strong> → <strong>Regen</strong> → <strong>Pre-season</strong> → blank. Shift-click for <strong>R</strong>. Open <a href="/schedule">Full schedule</a> for the big board.</p>`
     );
 
     const root = document.getElementById("homeMonthCal");
@@ -1173,7 +1173,7 @@
     if (document.querySelector('link[data-hub-notice-css]')) return;
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = "/static/hub-feedback.css?v=1";
+    link.href = "/static/hub-feedback.css?v=2";
     link.setAttribute("data-hub-notice-css", "1");
     document.head.appendChild(link);
   }

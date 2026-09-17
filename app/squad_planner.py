@@ -493,8 +493,6 @@ def squad_planner_meta() -> dict[str, Any]:
             }
         )
 
-    impect = _impect()
-    benchmark_minutes = float(impect.BENCHMARK_MIN_MINUTES)
     return {
         "formation": "4-3-3",
         "defaultFormation": "4-3-3",
@@ -503,13 +501,13 @@ def squad_planner_meta() -> dict[str, Any]:
         "maxPlayersPerPosition": 15,
         "positions": positions,
         "scoring": {
-            "method": "league_relative_percentile",
-            "benchmarkMinutes": benchmark_minutes,
+            "method": "impect_profile",
+            "benchmarkMinutes": 0,
             "seasonWindow": COMBINED_SEASON_COUNT,
             "note": (
                 f"Position-specific minutes and minutes-weighted profiles from the last "
                 f"{COMBINED_SEASON_COUNT} seasons with data at the selected role. "
-                f"Percentiles vs the same-league cohort ({benchmark_minutes:.0f}+ combined min)."
+                "Exact Impect profile scores (0–100), not a minutes-filtered percentile."
             ),
         },
     }

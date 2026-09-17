@@ -8,10 +8,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="/static/player-dossier.css?v=15" />
+  <link rel="stylesheet" href="/static/player-dossier.css?v=26" />
 </head>
 <body>
   <div class="pd">
@@ -20,104 +20,119 @@
       <div class="pd-top__actions" id="pdActions" hidden>
         <button type="button" class="pd-btn" id="pdPipelineBtn">Add to pipeline</button>
         <a class="pd-btn pd-btn--ghost" id="pdPipelineLink" href="/player-pipelines" hidden>Open pipeline</a>
-        <a class="pd-btn" id="pdChartsLink" href="#">Full charts</a>
+        <a class="pd-btn" id="pdChartsLink" href="#" hidden>Full charts</a>
         <a class="pd-btn pd-btn--ghost" id="pdCompareLink" href="/studio">Compare</a>
       </div>
     </header>
 
-    <div id="pdStatus" class="pd-status">Loading player…</div>
+    <div id="pdStatus" class="pd-status" hidden></div>
     <div id="pdError" class="pd-error" hidden></div>
 
-    <section class="pd-hero" id="pdHero" hidden>
-      <div class="pd-hero__photo-wrap">
-        <img class="pd-hero__photo" id="pdPhoto" alt="" />
-        <div class="pd-hero__photo-fallback" id="pdPhotoFallback" hidden></div>
-      </div>
-      <div class="pd-hero__body">
+    <div class="pd-shell" id="pdShell" hidden>
+      <aside class="pd-identity" id="pdHero">
+        <div class="pd-hero__photo-wrap">
+          <img class="pd-hero__photo" id="pdPhoto" alt="" />
+          <div class="pd-hero__photo-fallback" id="pdPhotoFallback" hidden></div>
+          <div class="pd-score" id="pdScore" hidden>
+            <span class="pd-score__num" id="pdScoreNum"></span>
+            <span class="pd-score__label">Overall</span>
+          </div>
+        </div>
         <p class="pd-hero__eyebrow" id="pdClubSeason"></p>
         <h1 class="pd-hero__name" id="pdName"></h1>
         <p class="pd-hero__meta" id="pdMeta"></p>
         <div class="pd-hero__tags" id="pdTags"></div>
-        <div class="pd-ability" id="pdAbility" hidden></div>
-        <div class="pd-stats" id="pdBioStats"></div>
-        <div class="pd-hero-metrics" id="pdHeroMetrics"></div>
+        <div class="pd-facts" id="pdBioStats"></div>
         <div class="pd-positions" id="pdPositions"></div>
-      </div>
-    </section>
-
-    <section class="pd-keystats" id="pdKeyStatsCard" hidden>
-      <div class="pd-card__head">
-        <h2>Key stats</h2>
-        <span class="pd-card__sub">Impect · Transfermarkt · FBRef when available</span>
-      </div>
-      <div class="pd-keystats__grid" id="pdKeyStats"></div>
-    </section>
-
-    <section class="pd-fbref" id="pdFbrefCard" hidden>
-      <div class="pd-card__head">
-        <h2>FBRef snapshot</h2>
-        <a class="pd-card__sub" id="pdFbrefLink" href="#" target="_blank" rel="noopener">Open on FBRef →</a>
-      </div>
-      <div class="pd-keystats__grid" id="pdFbrefStats"></div>
-      <div class="pd-profile-legend" id="pdFbrefPips"></div>
-    </section>
-
-    <div class="pd-grid" id="pdGrid" hidden>
-      <article class="pd-card pd-card--radar">
-        <div class="pd-card__head">
-          <h2>PV profiles</h2>
-          <span class="pd-card__sub">Port Vale Impect profiles</span>
-        </div>
-        <div id="pdRadar" class="pd-radar"></div>
-        <div id="pdProfiles" class="pd-profile-legend"></div>
-      </article>
-
-      <article class="pd-card pd-card--file">
-        <div class="pd-file-block">
+        <div class="pd-ability" id="pdAbility" hidden></div>
+        <div class="pd-file-block pd-file-block--identity">
           <div class="pd-card__head pd-card__head--actions">
             <div>
               <h2>Notes</h2>
-              <span class="pd-card__sub">Work updates · agent · chasing</span>
+              <span class="pd-card__sub">Chasing · agent · work</span>
             </div>
             <button type="button" class="pd-btn pd-btn--small pd-btn--ghost" id="pdAddNoteBtn">Add notes</button>
           </div>
           <div id="pdNotes"><p class="pd-empty">No notes yet.</p></div>
         </div>
-        <div class="pd-file-block">
+      </aside>
+
+      <main class="pd-analytics" id="pdGrid">
+        <section class="pd-keystats" id="pdKeyStatsCard" hidden>
+          <div class="pd-card__head">
+            <h2>Season snapshot</h2>
+            <span class="pd-card__sub">Local database</span>
+          </div>
+          <div class="pd-keystats__grid" id="pdKeyStats"></div>
+        </section>
+
+        <section class="pd-charts">
+          <article class="pd-card pd-card--radar">
+            <div class="pd-card__head">
+              <h2>PV profiles</h2>
+              <span class="pd-card__sub">Port Vale profile scores</span>
+            </div>
+            <div id="pdRadar" class="pd-radar"></div>
+          </article>
+          <article class="pd-card pd-card--bars">
+            <div class="pd-card__head">
+              <h2>Profiles</h2>
+              <span class="pd-card__sub">Click a profile to see its Impect stats</span>
+            </div>
+            <div id="pdProfileBars" class="pd-bars"></div>
+            <div class="pd-factors-head">
+              <h3 id="pdFactorHeading">Impect stats</h3>
+              <span class="pd-card__sub" id="pdFactorSub">Top factors in this profile</span>
+            </div>
+            <div id="pdFactorStats" class="pd-factors"><p class="pd-empty">Select a profile.</p></div>
+            <div id="pdProfiles" class="pd-profile-legend" hidden></div>
+          </article>
+        </section>
+
+        <section class="pd-fbref" id="pdFotmobCard" hidden>
+          <div class="pd-card__head">
+            <h2>FotMob snapshot</h2>
+            <a class="pd-card__sub" id="pdFotmobLink" href="#" target="_blank" rel="noopener">Open on FotMob →</a>
+          </div>
+          <p class="pd-card__sub" id="pdFotmobSub"></p>
+          <div class="pd-keystats__grid" id="pdFotmobStats"></div>
+        </section>
+
+        <article class="pd-card" id="pdUpcomingCard" hidden>
+          <div class="pd-card__head">
+            <h2>Upcoming games</h2>
+            <span class="pd-card__sub" id="pdUpcomingSub">Next for this club</span>
+          </div>
+          <div id="pdUpcoming" class="pd-games-wrap"></div>
+        </article>
+
+        <article class="pd-card" id="pdGamesCard" hidden>
+          <div class="pd-card__head">
+            <h2>Recent games</h2>
+            <span class="pd-card__sub">When match data is stored</span>
+          </div>
+          <div id="pdGames" class="pd-games-wrap"></div>
+        </article>
+
+        <article class="pd-card pd-card--file">
           <div class="pd-card__head pd-card__head--actions">
             <div>
               <h2>Scout reports</h2>
-              <span class="pd-card__sub">Full looks · CA / PA stars</span>
+              <span class="pd-card__sub">Full looks · CA / PA</span>
             </div>
             <button type="button" class="pd-btn pd-btn--small" id="pdAddReportBtn">Add report</button>
           </div>
           <div id="pdReports"><p class="pd-empty">No scout reports yet.</p></div>
-        </div>
-      </article>
+        </article>
 
-      <article class="pd-card">
-        <div class="pd-card__head">
-          <h2>Recent games</h2>
-          <span class="pd-card__sub">Form · minutes · Impect</span>
-        </div>
-        <div id="pdGames" class="pd-games-wrap"><p class="pd-empty">Loading recent games…</p></div>
-      </article>
-
-      <article class="pd-card">
-        <div class="pd-card__head">
-          <h2>Upcoming games</h2>
-          <span class="pd-card__sub" id="pdUpcomingSub">FotMob · next for this club</span>
-        </div>
-        <div id="pdUpcoming" class="pd-games-wrap"><p class="pd-empty">Loading fixtures…</p></div>
-      </article>
-
-      <article class="pd-card pd-card--wide">
-        <div class="pd-card__head">
-          <h2>Season history</h2>
-          <span class="pd-card__sub">Leagues &amp; clubs in our catalog</span>
-        </div>
-        <div id="pdSeasons"><p class="pd-empty">No seasons listed.</p></div>
-      </article>
+        <article class="pd-card">
+          <div class="pd-card__head">
+            <h2>Season history</h2>
+            <span class="pd-card__sub">Leagues &amp; clubs in the database</span>
+          </div>
+          <div id="pdSeasons"><p class="pd-empty">No seasons listed.</p></div>
+        </article>
+      </main>
     </div>
   </div>
 
@@ -167,8 +182,7 @@
     </div>
   </div>
 
-  <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-  <script defer src="/static/player-dossier.js?v=17"></script>
+  <script defer src="/static/player-dossier.js?v=26"></script>
   <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>

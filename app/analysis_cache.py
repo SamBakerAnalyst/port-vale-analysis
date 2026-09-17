@@ -259,6 +259,18 @@ def clear_tool_memory_caches() -> None:
     except Exception:
         logger.exception("Could not clear blocks_analysis payload cache")
 
+    try:
+        from app import squad_review
+
+        cache = getattr(squad_review, "_comparison_all_memory", None)
+        if isinstance(cache, dict):
+            cache.clear()
+        charts = getattr(squad_review, "_charts_memory", None)
+        if isinstance(charts, dict):
+            charts.clear()
+    except Exception:
+        logger.exception("Could not clear squad_review comparison cache")
+
 
 def parse_kickoff_utc(value: Any) -> datetime | None:
     if value is None:

@@ -49,12 +49,12 @@
 
   function formatBenchmarkSubtitle(benchmark) {
     if (!benchmark) {
-      return "Cross-league percentile · Nat Lge, Lg Two, Scot Prem · 600+ min";
+      return "Impect profile scores (0–100)";
     }
     const leagues = (benchmark.competitions || []).join(", ");
-    const cohort = benchmark.cohort_size ?? "?";
-    const minMinutes = benchmark.min_minutes ?? 600;
-    return `Percentile vs ${cohort} players · ${leagues} · ${minMinutes}+ min`;
+    return leagues
+      ? `Impect profile scores (0–100) · ${leagues}`
+      : "Impect profile scores (0–100)";
   }
 
   function angularRotation(labelCount) {

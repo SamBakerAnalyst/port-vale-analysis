@@ -75,11 +75,18 @@ def capture_html_documents(
             for index, html in enumerate(documents, start=1):
                 if not str(html or "").strip():
                     raise WysiwygCaptureError(f"Page {index} has empty HTML.")
-                page.set_content(str(html), wait_until="networkidle", timeout=120_000)
+                # load, not networkidle: Google Fonts / authenticated image-proxy
+                # URLs never go idle in Docker, which used to hang 120s then drop
+                # the browser fetch ("Failed to fetch").
+                page.set_content(str(html), wait_until="load", timeout=60_000)
                 try:
-                    page.evaluate("() => document.fonts && document.fonts.ready")
+                    page.wait_for_function(
+                        "() => [...document.images].every((img) => img.complete)",
+                        timeout=12_000,
+                    )
                 except Exception:
                     pass
+                # Do not await document.fonts.ready — Google Fonts can hang headless Chrome.
                 page.wait_for_timeout(max(settle_ms, 450))
                 loc = page.locator(".pv-export-frame, .pm-export-frame").first
                 if loc.count() == 0:

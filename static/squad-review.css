@@ -349,9 +349,17 @@ select,
 .comparison-picker__head {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem .85rem;
+  margin-bottom: .55rem;
+}
+
+.comparison-picker__titles {
+  display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: .35rem .65rem;
-  margin-bottom: .55rem;
 }
 
 .comparison-picker__label {
@@ -365,6 +373,12 @@ select,
 .comparison-picker__hint {
   font-size: .72rem;
   color: #6b7280;
+}
+
+.comparison-picker__export {
+  margin-left: auto;
+  padding: .4rem .8rem;
+  font-size: .75rem;
 }
 
 .comparison-export-target {
@@ -742,3 +756,359 @@ select,
   color: var(--text-muted);
   font-size: .875rem;
 }
+
+.keynote-radar-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.keynote-radar-svg .radar-ring,
+.keynote-radar-svg .radar-spoke {
+  fill: none;
+  stroke: rgba(226, 232, 240, 0.16);
+  stroke-width: 1;
+}
+
+.keynote-radar-svg .radar-label {
+  fill: #e2e8f0;
+  font-size: 10px;
+  font-family: var(--font);
+  text-anchor: middle;
+  dominant-baseline: middle;
+  overflow: visible;
+}
+
+.keynote-radar-svg .radar-shape {
+  fill-opacity: 0.2;
+  stroke-width: 2.6;
+  stroke-linejoin: round;
+}
+
+.keynote-drilldown .keynote-factors[data-players="5"] {
+  gap: 10px;
+}
+
+.keynote-drilldown .keynote-factors[data-players="5"] .keynote-factor {
+  gap: 4px;
+}
+
+.keynote-drilldown .keynote-factors[data-players="5"] .keynote-factor__rows {
+  gap: 3px;
+}
+
+.keynote-drilldown .keynote-factors[data-players="5"] .keynote-factor__name {
+  font-size: 18px;
+}
+
+.keynote-drilldown .keynote-factors[data-players="5"] .keynote-factor__track {
+  height: 22px;
+  border-radius: 7px;
+}
+
+.keynote-drilldown .keynote-factors[data-players="5"] .keynote-factor__initial {
+  width: 24px;
+  height: 24px;
+  font-size: 10px;
+}
+
+.keynote-drilldown .keynote-factors[data-players="5"] .keynote-factor__row:has(.keynote-factor__initial) {
+  grid-template-columns: 28px minmax(0, 1fr) 54px;
+  gap: 10px;
+}
+
+.keynote-drilldown .keynote-factors[data-players="5"] .keynote-factor__value {
+  font-size: 20px;
+}
+
+.comparison-charts {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1.1rem;
+}
+
+.comparison-charts__label {
+  margin: 0.15rem 0 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold, #f5c518);
+}
+
+.comparison-charts__status {
+  margin: 0;
+  padding: 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.comparison-charts__status--error {
+  color: #fca5a5;
+}
+
+.profile-chart-card {
+  background: #0d0d0d;
+  border: 1px solid rgba(245, 197, 24, 0.28);
+  border-radius: 10px;
+  padding: 1rem 1.15rem 1.1rem;
+}
+
+.profile-chart-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.profile-chart-card__eyebrow {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gold, #f5c518);
+}
+
+.profile-chart-card__title {
+  margin: 0.2rem 0 0;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #f8fafc;
+}
+
+.profile-chart-card__scores {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+.profile-chart-card__score {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 4.8rem;
+  width: 4.8rem;
+  min-width: 4.8rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-left: 6px solid var(--band, #94a3b8);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.profile-chart-card__score span {
+  font-size: 0.68rem;
+  line-height: 1.15;
+  color: #c3cad4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profile-chart-card__score strong {
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--band-text, #e2e8f0);
+}
+
+.profile-chart-card__body {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.85fr) minmax(0, 1.15fr);
+  gap: 1.15rem;
+  align-items: stretch;
+}
+
+.profile-chart-card__radar {
+  min-width: 0;
+  min-height: 320px;
+}
+
+.profile-chart-card__radar .keynote-radar-svg {
+  height: 320px;
+  overflow: visible;
+}
+
+.profile-chart-card__players {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+}
+
+.profile-chart-card__player {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.profile-chart-card__photo {
+  width: 52px;
+  height: 64px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid var(--player-color, #f5c518);
+  background: #161616;
+}
+
+.profile-chart-card__photo img,
+.profile-chart-card__photo-fallback {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 16%;
+}
+
+.profile-chart-card__photo-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #9ca3af;
+}
+
+.profile-chart-card__player-name {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.05rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--player-color, #f8fafc);
+  text-align: center;
+  max-width: 100%;
+}
+
+.profile-chart-card__player-name span {
+  display: block;
+  max-width: 100%;
+}
+
+.profile-chart-card__bars {
+  min-width: 0;
+  border-left: 1px solid rgba(148, 163, 184, 0.16);
+  padding-left: 1rem;
+}
+
+.profile-chart-card .keynote-factors,
+.profile-chart-card .keynote-factors[data-players],
+.profile-chart-card .keynote-factors[data-players="2"],
+.profile-chart-card .keynote-factors[data-players="3"],
+.profile-chart-card .keynote-factors[data-players="4"],
+.profile-chart-card .keynote-factors[data-players="5"] {
+  gap: 14px;
+  justify-content: flex-start;
+}
+
+.profile-chart-card .keynote-factors[data-players] .keynote-factor,
+.profile-chart-card .keynote-factor {
+  gap: 6px;
+}
+
+.profile-chart-card .keynote-factors[data-players] .keynote-factor__head,
+.profile-chart-card .keynote-factor__head {
+  align-items: baseline;
+  gap: 8px;
+  min-height: 1.2rem;
+}
+
+.profile-chart-card .keynote-factors[data-players] .keynote-factor__name,
+.profile-chart-card .keynote-factor__name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.keynote-drilldown .keynote-factor__name {
+  font-size: 22px;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  word-break: break-word;
+  line-height: 1.25;
+}
+
+.profile-chart-card .keynote-factors[data-players] .keynote-factor__weight,
+.profile-chart-card .keynote-factor__weight {
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.profile-chart-card .keynote-factors[data-players] .keynote-factor__rows,
+.profile-chart-card .keynote-factor__rows {
+  gap: 6px;
+}
+
+.profile-chart-card .keynote-factors[data-players] .keynote-factor__row,
+.profile-chart-card .keynote-factor__row,
+.profile-chart-card .keynote-factors[data-players] .keynote-factor__row:has(.keynote-factor__initial),
+.profile-chart-card .keynote-factor__row:has(.keynote-factor__initial) {
+  grid-template-columns: 28px minmax(0, 1fr) 3.6rem;
+  gap: 10px;
+  min-height: 22px;
+}
+
+.profile-chart-card .keynote-factors[data-players] .keynote-factor__initial,
+.profile-chart-card .keynote-factor__initial {
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #0b1220;
+  justify-content: center;
+  gap: 0;
+  overflow: hidden;
+}
+
+.profile-chart-card .keynote-factors[data-players] .keynote-factor__track,
+.profile-chart-card .keynote-factor__track {
+  height: 14px;
+  border-radius: 7px;
+  border-width: 1px;
+}
+
+.profile-chart-card .keynote-factors[data-players] .keynote-factor__fill,
+.profile-chart-card .keynote-factor__fill {
+  border-radius: 6px 3px 3px 6px;
+}
+
+.profile-chart-card .keynote-factors[data-players] .keynote-factor__value,
+.profile-chart-card .keynote-factor__value {
+  font-size: 0.92rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  text-align: right;
+  min-width: 0;
+  width: 100%;
+}
+
+@media (max-width: 980px) {
+  .profile-chart-card__body {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-chart-card__bars {
+    border-left: 0;
+    padding-left: 0;
+    border-top: 1px solid rgba(148, 163, 184, 0.16);
+    padding-top: 0.9rem;
+  }
+}
+

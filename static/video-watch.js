@@ -64,11 +64,42 @@
     sheet: null,
     playerId: null,
     player: null,
+    tab: "general",
     kind: "comment",
-    tab: "write",
     ca: 0,
     pa: 0,
     draft: { text: "", minute: "", title: "" },
+    generalDraft: {
+      weather: "",
+      weather_note: "",
+      pitch: "",
+      pitch_note: "",
+      notes: "",
+      position_in_game: "",
+      physical: {},
+      profiles: {},
+    },
+    detailedDraft: {
+      position_in_game: "",
+      physical: {},
+      profiles: {},
+      psychology: {},
+      write_up: "",
+      next_steps: "",
+      match_rating: "",
+      pvfc_level: "",
+      add_to_pipeline: false,
+      pipeline_stage: "video_scouted",
+      next_action: "",
+    },
+    cmsDraft: {
+      agent_name: "",
+      agent_notes: "",
+      contract_expires: "",
+      contract_notes: "",
+      wages_notes: "",
+      other_notes: "",
+    },
     loadingSheet: false,
     loadError: "",
     sortKey: "date",
@@ -253,17 +284,203 @@
     const text = document.getElementById("vwText");
     const minute = document.getElementById("vwMinute");
     const title = document.getElementById("vwNoteTitle");
-    if (!text && !minute && !title) return;
-    state.draft = {
-      text: text?.value ?? state.draft.text,
-      minute: minute?.value ?? state.draft.minute,
-      title: title?.value ?? state.draft.title,
-    };
+    if (text || minute || title) {
+      state.draft = {
+        text: text?.value ?? state.draft.text,
+        minute: minute?.value ?? state.draft.minute,
+        title: title?.value ?? state.draft.title,
+      };
+    }
+    const weather = document.getElementById("vwWeather");
+    const generalForm = document.getElementById("vwGeneralForm");
+    if (weather || generalForm) {
+      state.generalDraft = {
+        ...state.generalDraft,
+        weather: document.getElementById("vwWeather")?.value ?? state.generalDraft.weather,
+        weather_note: document.getElementById("vwWeatherNote")?.value ?? state.generalDraft.weather_note,
+        pitch: document.getElementById("vwPitch")?.value ?? state.generalDraft.pitch,
+        pitch_note: document.getElementById("vwPitchNote")?.value ?? state.generalDraft.pitch_note,
+        notes: document.getElementById("vwGeneralNotes")?.value ?? state.generalDraft.notes,
+        position_in_game: document.getElementById("vwGamePosition")?.value ?? state.generalDraft.position_in_game,
+        physical: collectKeyedFields("data-physical"),
+        profiles: { ...state.generalDraft.profiles, ...collectKeyedFields("data-profile") },
+      };
+    }
+    const detailedForm = document.getElementById("vwDetailedForm");
+    if (detailedForm) {
+      state.detailedDraft = {
+        ...state.detailedDraft,
+        position_in_game: document.getElementById("vwDetailedPosition")?.value ?? state.detailedDraft.position_in_game,
+        physical: collectKeyedFields("data-detailed-physical"),
+        profiles: { ...state.detailedDraft.profiles, ...collectKeyedFields("data-detailed-profile") },
+        psychology: {
+          ...state.detailedDraft.psychology,
+          notes: document.getElementById("vwPsychNotes")?.value ?? state.detailedDraft.psychology?.notes ?? "",
+        },
+        write_up: document.getElementById("vwWriteUp")?.value ?? state.detailedDraft.write_up,
+        next_steps: document.getElementById("vwNextSteps")?.value ?? state.detailedDraft.next_steps,
+        add_to_pipeline: Boolean(document.getElementById("vwAddPipeline")?.checked),
+        pipeline_stage: document.getElementById("vwPipelineStage")?.value ?? state.detailedDraft.pipeline_stage,
+      };
+    }
+    const agentName = document.getElementById("vwAgentName");
+    if (agentName) {
+      state.cmsDraft = {
+        agent_name: agentName.value,
+        agent_notes: document.getElementById("vwAgentNotes")?.value ?? "",
+        contract_expires: document.getElementById("vwContractExpires")?.value ?? "",
+        contract_notes: document.getElementById("vwContractNotes")?.value ?? "",
+        wages_notes: document.getElementById("vwWagesNotes")?.value ?? "",
+        other_notes: document.getElementById("vwOtherNotes")?.value ?? "",
+      };
+    }
+  }
+
+  function collectKeyedFields(attr) {
+    const out = {};
+    document.querySelectorAll(`[${attr}]`).forEach((node) => {
+      out[node.getAttribute(attr)] = node.value || "";
+    });
+    return out;
   }
 
   function fixtureLabel(row) {
     if (!row) return "";
     return `${sideName(row.home)} vs ${sideName(row.away)}`;
+  }
+
+  function fixtureContext() {
+    const sheet = state.sheet || {};
+    const player = state.player || {};
+    return {
+      fixture_id: state.fixtureId || sheet.fixture_id || "",
+      fixture_label: fixtureLabel(sheet),
+      home_name: sideName(sheet.home),
+      away_name: sideName(sheet.away),
+      sheet_side: player.sheet_side || "",
+    };
+  }
+
+  const DEFAULT_WEATHER = [
+    ["dry", "Dry"],
+    ["light-rain", "Light rain"],
+    ["heavy-rain", "Heavy rain"],
+    ["snow", "Snow"],
+    ["windy", "Windy"],
+    ["cold", "Cold"],
+    ["hot", "Hot"],
+    ["mixed", "Mixed"],
+  ];
+  const DEFAULT_PITCH = [
+    ["excellent", "Excellent"],
+    ["good", "Good"],
+    ["average", "Average"],
+    ["soft", "Soft / wet"],
+    ["heavy", "Heavy"],
+    ["worn", "Worn / patchy"],
+    ["uneven", "Uneven / bobbly"],
+    ["hard", "Hard / frozen"],
+  ];
+
+  function reportOptions(kind) {
+    const rows = state.player?.options?.[kind] || [];
+    if (rows.length) return rows.map((row) => [row.id, row.label]);
+    return kind === "pitch" ? DEFAULT_PITCH : DEFAULT_WEATHER;
+  }
+
+  function selectOptions(kind, selected) {
+    const value = selected || "";
+    const options = reportOptions(kind)
+      .map(([id, label]) => `<option value="${escapeHtml(id)}" ${id === value ? "selected" : ""}>${escapeHtml(label)}</option>`)
+      .join("");
+    return `<option value="">Select…</option>${options}`;
+  }
+
+  function matchConditions() {
+    return state.player?.match_conditions || state.sheet?.match_conditions || {};
+  }
+
+  function applyMatchConditions(conditions) {
+    if (!conditions) return;
+    if (state.sheet) state.sheet.match_conditions = conditions;
+    if (state.player) state.player.match_conditions = conditions;
+  }
+
+  function defaultPosition(player) {
+    return (
+      state.generalDraft.position_in_game ||
+      player?.general_report?.position_in_game ||
+      player?.position ||
+      player?.formation_slot ||
+      ""
+    );
+  }
+
+  function fillGeneralDraft(player) {
+    const conditions = player?.match_conditions || state.sheet?.match_conditions || {};
+    const general = player?.general_report || {};
+    state.generalDraft = {
+      weather: conditions.weather || "",
+      weather_note: conditions.weather_note || "",
+      pitch: conditions.pitch || "",
+      pitch_note: conditions.pitch_note || "",
+      notes: general.notes || "",
+      position_in_game: general.position_in_game || player?.position || "",
+      physical: { ...(general.physical || {}) },
+      profiles: { ...(general.profiles || {}) },
+    };
+  }
+
+  function fillCmsDraft(player) {
+    const cms = player?.cms || {};
+    state.cmsDraft = {
+      agent_name: cms.agent_name || "",
+      agent_notes: cms.agent_notes || "",
+      contract_expires: cms.contract_expires || "",
+      contract_notes: cms.contract_notes || "",
+      wages_notes: cms.wages_notes || "",
+      other_notes: cms.other_notes || "",
+    };
+  }
+
+  function fillDetailedDraft(player) {
+    const detailed = player?.detailed_report || {};
+    const general = player?.general_report || {};
+    state.detailedDraft = {
+      position_in_game: detailed.position_in_game || general.position_in_game || player?.position || "",
+      physical: { ...(detailed.physical || general.physical || {}) },
+      profiles: { ...(detailed.profiles || general.profiles || {}) },
+      psychology: { ...(detailed.psychology || {}) },
+      write_up: detailed.write_up || "",
+      next_steps: detailed.next_steps || "",
+      match_rating: detailed.match_rating == null ? "" : String(detailed.match_rating),
+      pvfc_level: detailed.pvfc_level || "",
+      add_to_pipeline: Boolean(detailed.add_to_pipeline),
+      pipeline_stage: detailed.pipeline_stage || "video_scouted",
+      next_action: detailed.next_action || "",
+    };
+  }
+
+  function homeAwayCopy(player) {
+    const row = player?.home_away || {};
+    if (row.label) {
+      const source = row.source === "match title" ? "auto from match title" : row.source || "auto";
+      return { label: row.label, source };
+    }
+    if (player?.sheet_side === "home" || player?.sheet_side === "away") {
+      return {
+        label: player.sheet_side === "home" ? "Home" : "Away",
+        source: "team sheet",
+      };
+    }
+    return { label: "—", source: "set from the match title" };
+  }
+
+  function conditionsChips(conditions) {
+    const bits = [];
+    if (conditions?.weather_label) bits.push(conditions.weather_label);
+    if (conditions?.pitch_label) bits.push(conditions.pitch_label);
+    return bits;
   }
 
   function badge(url, name) {
@@ -967,6 +1184,8 @@
     }
     const pct = watchPct(sheet);
     const watch = watchMeta(pct);
+    const conditions = matchConditions();
+    const chips = conditionsChips(conditions);
     els.match.innerHTML = `
       ${leagueMarks(sheet.league)}
       <strong>${escapeHtml(fixtureLabel(sheet))}</strong>
@@ -974,6 +1193,7 @@
       <span>${escapeHtml(formatDate(sheet.date, "long"))}${sheet.played ? " · Played" : " · Upcoming"}</span>
       ${sheet.score ? `<span>${escapeHtml(sheet.score)}</span>` : ""}
       <span style="color:${watch.color}">${escapeHtml(watch.text)}${pct != null ? ` · ${pct}%` : ""}</span>
+      ${chips.map((chip) => `<span class="vw-meta-chip">${escapeHtml(chip)}</span>`).join("")}
     `;
     els.home.innerHTML = formation ? formationColumn("home", sheet.home) : sheetColumn("home", sheet.home);
     els.away.innerHTML = formation ? formationColumn("away", sheet.away) : sheetColumn("away", sheet.away);
@@ -1043,13 +1263,6 @@
     }
   }
 
-  function starPicker(kind, value) {
-    return Array.from({ length: 5 }, (_, idx) => {
-      const score = idx + 1;
-      return `<button type="button" class="${score <= value ? "is-on" : ""}" data-star="${kind}" data-score="${score}" aria-label="${score} stars">★</button>`;
-    }).join("");
-  }
-
   function entryCard(row) {
     const kind = row.kind === "report" ? "Report" : "Note";
     return `<article class="vw-entry">
@@ -1057,6 +1270,366 @@
       <small>${[kind, row.staff, row.date].filter(Boolean).map(escapeHtml).join(" · ")}</small>
       ${row.summary ? `<p>${escapeHtml(row.summary)}</p>` : ""}
     </article>`;
+  }
+
+  function playerHistory(player) {
+    return [...(player.reports || []), ...(player.notes || [])].sort((a, b) =>
+      String(b.marked_at || b.date || "").localeCompare(String(a.marked_at || a.date || ""))
+    );
+  }
+
+  function optionList(kind) {
+    return state.player?.options?.[kind] || [];
+  }
+
+  function positionChoices() {
+    const rows = optionList("positions");
+    if (rows.length) return rows;
+    return [
+      { id: "GOALKEEPER", short: "GK", label: "Goalkeeper" },
+      { id: "LEFT_WINGBACK_DEFENDER", short: "LB", label: "Left back / wing-back" },
+      { id: "CENTRAL_DEFENDER", short: "CB", label: "Centre-back" },
+      { id: "RIGHT_WINGBACK_DEFENDER", short: "RB", label: "Right back / wing-back" },
+      { id: "DEFENSE_MIDFIELD", short: "DM", label: "Defensive midfield" },
+      { id: "CENTRAL_MIDFIELD", short: "CM", label: "Central midfield" },
+      { id: "ATTACKING_MIDFIELD", short: "AM", label: "Attacking midfield" },
+      { id: "LEFT_WINGER", short: "LW", label: "Left winger" },
+      { id: "RIGHT_WINGER", short: "RW", label: "Right winger" },
+      { id: "CENTER_FORWARD", short: "ST", label: "Centre-forward" },
+    ];
+  }
+
+  function positionSelect(id, selected) {
+    const value = selected || "";
+    const options = positionChoices()
+      .map((row) => `<option value="${escapeHtml(row.id)}" ${row.id === value ? "selected" : ""}>${escapeHtml(row.short)} · ${escapeHtml(row.label)}</option>`)
+      .join("");
+    return `<select id="${id}"><option value="">Select position in game</option>${options}</select>`;
+  }
+
+  function profilesFor(position, player) {
+    const wanted = position || player?.position || "";
+    const byPos = player?.options?.profiles_by_position || {};
+    const live = player?.report_profiles || [];
+    const playerPos = player?.position || "";
+    if (wanted && wanted === playerPos && live.length) return live;
+    if (wanted && byPos[wanted]?.length) return byPos[wanted];
+    if (live.length) return live;
+    return byPos[wanted] || [];
+  }
+
+  function chipRow(kind, value, rows) {
+    return `<div class="vw-chips" role="group">${rows
+      .map((row) => {
+        const on = String(value || "") === String(row.id);
+        const title = row.hint ? ` title="${escapeHtml(row.hint)}"` : "";
+        return `<button type="button" class="${on ? "is-on" : ""}" data-chip="${escapeHtml(kind)}" data-value="${escapeHtml(row.id)}"${title}>${escapeHtml(row.label)}</button>`;
+      })
+      .join("")}</div>`;
+  }
+
+  function physicalFields(fields, values, attr, promptKey) {
+    const rows = fields.length ? fields : [
+      { id: "size", label: "Size", prompt: "Frame, height, strength in duels and hold-up.", detailed_prompt: "How big vs the opponent? Who wins aerials and hold-up, and how?" },
+      { id: "mobility", label: "Mobility", prompt: "Pace, recovery runs, agility.", detailed_prompt: "Pace over 10 yards, recovery, agility. Did they last, or drop off late?" },
+      { id: "foot", label: "Foot", prompt: "Preferred foot — range of pass, cross, shot.", detailed_prompt: "Preferred foot in this game — what actions did they actually play with it?" },
+      { id: "weak_foot", label: "Weak foot", prompt: "Can they use it under pressure?", detailed_prompt: "Can they use the weak foot under pressure, or did they hide it?" },
+      { id: "physical_ability", label: "Physical ability", prompt: "Stamina, repeated sprints, how they lasted.", detailed_prompt: "Stamina, repeated sprints, duels. How they lasted — and what dropped off after 70?" },
+    ];
+    return rows
+      .map((row) => {
+        const prompt = row[promptKey] || row.prompt || "";
+        return `<label>${escapeHtml(row.label)}
+        <textarea ${attr}="${escapeHtml(row.id)}" class="vw-notes-box ${promptKey === "detailed_prompt" ? "vw-notes-box--long" : ""}" maxlength="2000" placeholder="${escapeHtml(prompt)}">${escapeHtml(values[row.id] || "")}</textarea>
+      </label>`;
+      })
+      .join("");
+  }
+
+  function profileFields(profiles, values, attr, promptKey) {
+    if (!profiles.length) {
+      return `<p>Pick a position in the game to load the data profiles for that role.</p>`;
+    }
+    return profiles
+      .map((row) => {
+        const prompt = row[promptKey] || row.general_prompt || (promptKey === "detailed_prompt"
+          ? "How do they progress the ball? What sort of headers do they win? Why did this look good or poor?"
+          : "What did you see in this part of his game?");
+        const score = row.score != null ? `<em>${escapeHtml(String(row.score))}</em>` : "";
+        return `<label>
+          <span class="vw-profile-head">${escapeHtml(row.label)}${score}</span>
+          <textarea ${attr}="${escapeHtml(row.id)}" class="vw-notes-box ${promptKey === "detailed_prompt" ? "vw-notes-box--long" : ""}" maxlength="4000" placeholder="${escapeHtml(prompt)}">${escapeHtml(values[row.id] || "")}</textarea>
+        </label>`;
+      })
+      .join("");
+  }
+
+  function matchConditionsBlock(player, draft) {
+    const conditions = matchConditions();
+    const homeAway = homeAwayCopy(player);
+    const matchName = fixtureLabel(state.sheet) || conditions.fixture_label || "this match";
+    const sharedHint = conditions.filled
+      ? `Loaded from ${matchName} — change it here and every other report on this game updates.`
+      : `Once saved, weather and pitch auto-load on every other report for ${matchName}.`;
+    return `<div class="vw-report-grid">
+          <label>Home / Away
+            <div class="vw-homeaway">
+              <strong>${escapeHtml(homeAway.label)}</strong>
+              <span>${escapeHtml(homeAway.source)}</span>
+            </div>
+          </label>
+          <label>Match
+            <div class="vw-homeaway">
+              <strong>${escapeHtml(matchName)}</strong>
+            </div>
+          </label>
+        </div>
+        <p>${escapeHtml(sharedHint)}</p>
+        <div class="vw-report-grid">
+          <label>Weather conditions
+            <select id="vwWeather">${selectOptions("weather", draft.weather)}</select>
+          </label>
+          <label>Pitch conditions
+            <select id="vwPitch">${selectOptions("pitch", draft.pitch)}</select>
+          </label>
+        </div>
+        <div class="vw-report-grid">
+          <label>Weather note
+            <input id="vwWeatherNote" type="text" maxlength="160" placeholder="Wind, temperature, anything else" value="${escapeHtml(draft.weather_note || "")}" />
+          </label>
+          <label>Pitch note
+            <input id="vwPitchNote" type="text" maxlength="160" placeholder="Cut, bobble, heavy areas" value="${escapeHtml(draft.pitch_note || "")}" />
+          </label>
+        </div>`;
+  }
+
+  function generalReportBody(player) {
+    const draft = state.generalDraft;
+    const position = draft.position_in_game || player?.position || "";
+    const profiles = profilesFor(position, player);
+    return `<form class="vw-report" id="vwGeneralForm">
+      <section class="vw-report-block">
+        <div>
+          <h3>General</h3>
+          <p>Asked on every position. Match conditions are shared across every player report on this game.</p>
+        </div>
+        ${matchConditionsBlock(player, draft)}
+        <label>Position in game
+          ${positionSelect("vwGamePosition", position)}
+        </label>
+      </section>
+      <section class="vw-report-block">
+        <div>
+          <h3>Physical</h3>
+          <p>Size, mobility, foot, weak foot, physical ability — same questions for every role.</p>
+        </div>
+        ${physicalFields(optionList("physical"), draft.physical || {}, "data-physical", "prompt")}
+      </section>
+      <section class="vw-report-block">
+        <div>
+          <h3>Data profiles</h3>
+          <p>Titles match the data profiles for this position. First look only — Detailed asks for more.</p>
+        </div>
+        ${profileFields(profiles, draft.profiles || {}, "data-profile", "general_prompt")}
+      </section>
+      <section class="vw-report-block">
+        <label>Anything else for this match
+          <textarea id="vwGeneralNotes" class="vw-notes-box" maxlength="2000" placeholder="First look, role, anything that is not position-specific yet.">${escapeHtml(draft.notes || "")}</textarea>
+        </label>
+        <div class="vw-form__row vw-form__row--save">
+          <span></span>
+          <button type="submit" class="vw-save" id="vwSaveGeneral">Save general report</button>
+        </div>
+      </section>
+    </form>`;
+  }
+
+  function detailedReportBody(player) {
+    const conditions = matchConditions();
+    const chips = conditionsChips(conditions);
+    const homeAway = homeAwayCopy(player);
+    const draft = state.detailedDraft;
+    const position = draft.position_in_game || state.generalDraft.position_in_game || player?.position || "";
+    const profiles = profilesFor(position, player);
+    const psych = optionList("psychology");
+    const psychValues = draft.psychology || {};
+    const yesNo = optionList("yes_mixed_no").length
+      ? optionList("yes_mixed_no")
+      : [{ id: "yes", label: "Yes" }, { id: "mixed", label: "Mixed" }, { id: "no", label: "No" }];
+    const levels = optionList("pvfc_levels").length
+      ? optionList("pvfc_levels")
+      : [
+          { id: "A", label: "A · Starter" },
+          { id: "B", label: "B · Challenger" },
+          { id: "C", label: "C · Emerging talent" },
+          { id: "D", label: "D · Not to standard" },
+        ];
+    const actions = optionList("next_actions").length
+      ? optionList("next_actions")
+      : [
+          { id: "not_to_standard", label: "Not to standard" },
+          { id: "low_priority", label: "Low priority" },
+          { id: "high_priority", label: "High priority" },
+          { id: "sign", label: "Sign" },
+        ];
+    const stages = optionList("pipeline_stages");
+    const ratingButtons = Array.from({ length: 11 }, (_, idx) => {
+      const on = String(draft.match_rating) === String(idx);
+      return `<button type="button" class="${on ? "is-on" : ""}" data-chip="match_rating" data-value="${idx}">${idx}</button>`;
+    }).join("");
+    const psychBlock = (psych.length ? psych : [
+      { id: "work_hard", label: "Worked hard", prompt: "Did he work for the team off the ball?" },
+      { id: "leader", label: "Leader", prompt: "Did he organise, demand, or take responsibility?" },
+      { id: "booked", label: "Booked", prompt: "Yellow / red, or lucky not to be?" },
+      { id: "frustrated", label: "Frustrated", prompt: "Body language when it went against him." },
+      { id: "spoke_to_coach", label: "Spoke to the coach", prompt: "Sideline chat, instructions, argument?" },
+    ])
+      .map((row) => `<div class="vw-psych">
+        <p><strong>${escapeHtml(row.label)}</strong> ${escapeHtml(row.prompt || "")}</p>
+        ${chipRow(`psych:${row.id}`, psychValues[row.id] || "", row.id === "booked" || row.id === "spoke_to_coach" ? [{ id: "yes", label: "Yes" }, { id: "no", label: "No" }] : yesNo)}
+      </div>`)
+      .join("");
+    return `<form class="vw-report" id="vwDetailedForm">
+      <section class="vw-report-block">
+        <div>
+          <h3>Detailed report</h3>
+          <p>Same headings as General, with prompts that push for actions — how they progress the ball, what headers they win, why a profile looked good or poor.</p>
+        </div>
+        <div class="vw-chip-row">
+          ${homeAway.label !== "—" ? `<span class="vw-meta-chip">${escapeHtml(homeAway.label)}</span>` : ""}
+          ${chips.map((chip) => `<span class="vw-meta-chip">${escapeHtml(chip)}</span>`).join("")}
+          ${!chips.length ? `<span class="vw-meta-chip">Set weather / pitch on General</span>` : ""}
+        </div>
+        <label>Position in game
+          ${positionSelect("vwDetailedPosition", position)}
+        </label>
+      </section>
+      <section class="vw-report-block">
+        <div>
+          <h3>Physical</h3>
+          <p>Size, mobility, foot, weak foot, physical ability — more detail than the first look.</p>
+        </div>
+        ${physicalFields(optionList("physical"), draft.physical || {}, "data-detailed-physical", "detailed_prompt")}
+      </section>
+      <section class="vw-report-block">
+        <div>
+          <h3>Break down the profiles</h3>
+          <p>Why did he progress the ball well? Weaknesses? Be specific, not just the data score.</p>
+        </div>
+        ${profileFields(profiles, draft.profiles || {}, "data-detailed-profile", "detailed_prompt")}
+      </section>
+      <section class="vw-report-block">
+        <div>
+          <h3>Psychology</h3>
+          <p>Work rate, leadership, bookings, frustration, and whether he spoke to the coach.</p>
+        </div>
+        ${psychBlock}
+        <label>Psychology notes
+          <textarea id="vwPsychNotes" class="vw-notes-box" maxlength="4000" placeholder="How did he behave? Body language, reactions, communication with teammates and staff.">${escapeHtml(psychValues.notes || "")}</textarea>
+        </label>
+      </section>
+      <section class="vw-report-block">
+        <label>General write up
+          <textarea id="vwWriteUp" class="vw-notes-box vw-notes-box--long" maxlength="4000" placeholder="The match in full — what he is, what he is not, and whether he fits us.">${escapeHtml(draft.write_up || "")}</textarea>
+        </label>
+        <label>Next step recommendations
+          <textarea id="vwNextSteps" class="vw-notes-box" maxlength="4000" placeholder="Watch again live, compare vs our 8, leave, or push to the board.">${escapeHtml(draft.next_steps || "")}</textarea>
+        </label>
+        <label>Match rating · 0–10
+          <div class="vw-chips vw-rating">${ratingButtons}</div>
+        </label>
+        <label>PVFC player level
+          ${chipRow("pvfc_level", draft.pvfc_level, levels.map((row) => ({ id: row.id, label: `${row.id} · ${row.label}`, hint: row.hint })))}
+        </label>
+        <label>Next action
+          ${chipRow("next_action", draft.next_action, actions)}
+        </label>
+        <label class="vw-check">
+          <input id="vwAddPipeline" type="checkbox" ${draft.add_to_pipeline ? "checked" : ""} />
+          Add to pipeline
+        </label>
+        <label>Pipeline stage
+          <select id="vwPipelineStage">${(stages.length ? stages : [{ id: "video_scouted", label: "Video scouted" }])
+            .map((row) => `<option value="${escapeHtml(row.id)}" ${row.id === (draft.pipeline_stage || "video_scouted") ? "selected" : ""}>${escapeHtml(row.label)}</option>`)
+            .join("")}</select>
+        </label>
+        ${player.pipeline ? `<p>Currently on ${escapeHtml(player.pipeline.stage_title)} · <a href="/player-pipelines">Open pipelines →</a></p>` : `<p><a href="/player-pipelines">Player Pipelines →</a></p>`}
+        <div class="vw-form__row vw-form__row--save">
+          <span></span>
+          <button type="submit" class="vw-save" id="vwSaveDetailed">Save detailed report</button>
+        </div>
+      </section>
+    </form>`;
+  }
+
+  function notesBody(player) {
+    const history = playerHistory(player);
+    const draftText = state.draft.text || player.scout_comment || "";
+    return `<form class="vw-form" id="vwNoteForm">
+      <label>Latest comment on Scoutable Teams and Who to Scout.
+        <textarea id="vwText" maxlength="2000" placeholder="Quick comment on this player — saved to Scoutable Teams and the player page.">${escapeHtml(draftText)}</textarea>
+      </label>
+      <div class="vw-form__row">
+        <label>Minute
+          <input id="vwMinute" type="number" min="0" max="130" inputmode="numeric" placeholder="—" value="${escapeHtml(state.draft.minute)}" />
+        </label>
+        <label>Title
+          <input id="vwNoteTitle" type="text" maxlength="80" placeholder="${escapeHtml(fixtureLabel(state.sheet) || "Video look")}" value="${escapeHtml(state.draft.title)}" />
+        </label>
+        <button type="submit" class="vw-save" id="vwSave">Save comment</button>
+      </div>
+      <div class="vw-links">
+        <a href="${escapeHtml(player.dossier_href || `/player/${player.player_id}`)}">Player page →</a>
+        <a href="${escapeHtml(player.scoutable_href || "/scoutable-teams")}">Scoutable Teams →</a>
+        <a href="${escapeHtml(player.who_to_scout_href || "/who-to-scout")}">Who to Scout →</a>
+      </div>
+      <div class="vw-history">
+        ${history.length ? history.map(entryCard).join("") : `<p class="vw-empty">No notes on Scoutable Teams or the player page yet.</p>`}
+      </div>
+    </form>`;
+  }
+
+  function cmsBody(player) {
+    const draft = state.cmsDraft;
+    const source = player.cms?.contract_expires_source || "";
+    return `<form class="vw-cms-grid" id="vwCmsForm">
+      <section class="vw-report-block">
+        <div>
+          <h3>Player CMS</h3>
+          <p>Agent notes, contract info, and internal chasing — stays on this player.</p>
+        </div>
+        <label>Agent
+          <input id="vwAgentName" type="text" maxlength="80" placeholder="Agency / agent name" value="${escapeHtml(draft.agent_name)}" />
+        </label>
+        <label>Agent notes
+          <textarea id="vwAgentNotes" class="vw-notes-box" maxlength="2000" placeholder="Conversations, mandate, who we speak to…">${escapeHtml(draft.agent_notes)}</textarea>
+        </label>
+        <label>Contract expires
+          <input id="vwContractExpires" type="text" maxlength="80" placeholder="${escapeHtml(source || "Jun 2027")}" value="${escapeHtml(draft.contract_expires)}" />
+        </label>
+        ${source ? `<p>Transfermarkt has ${escapeHtml(source)} on file.</p>` : ""}
+        <label>Contract notes
+          <textarea id="vwContractNotes" class="vw-notes-box" maxlength="2000" placeholder="Option, release clause, out of contract…">${escapeHtml(draft.contract_notes)}</textarea>
+        </label>
+        <label>Wages / deal notes
+          <textarea id="vwWagesNotes" class="vw-notes-box" maxlength="2000" placeholder="Wage band, add-ons, loan fee…">${escapeHtml(draft.wages_notes)}</textarea>
+        </label>
+        <label>Other CMS notes
+          <textarea id="vwOtherNotes" class="vw-notes-box" maxlength="4000" placeholder="Anything else recruitment need on file.">${escapeHtml(draft.other_notes)}</textarea>
+        </label>
+        <div class="vw-form__row vw-form__row--save">
+          <span></span>
+          <button type="submit" class="vw-save" id="vwSaveCms">Save CMS</button>
+        </div>
+      </section>
+    </form>`;
+  }
+
+  function profileTabBody(player) {
+    if (state.tab === "detailed") return detailedReportBody(player);
+    if (state.tab === "notes") return notesBody(player);
+    if (state.tab === "cms") return cmsBody(player);
+    return generalReportBody(player);
   }
 
   function renderProfile() {
@@ -1075,37 +1648,13 @@
       .slice(0, 8)
       .map((row) => `<span class="vw-profile-score">${escapeHtml(row.label)}<strong>${row.score}</strong></span>`)
       .join("");
-    const history = [...(player.reports || []), ...(player.notes || [])].sort((a, b) =>
-      String(b.marked_at || b.date || "").localeCompare(String(a.marked_at || a.date || ""))
-    );
-    const writing = state.tab !== "notes";
-    const draftText =
-      state.draft.text ||
-      (state.kind === "comment" ? player.scout_comment || "" : "");
-    const reportFields =
-      writing && state.kind === "report"
-        ? `<div class="vw-form__row">
-            <label>CA
-              <div class="vw-stars" id="vwCa">${starPicker("ca", state.ca)}</div>
-            </label>
-            <label>PA
-              <div class="vw-stars" id="vwPa">${starPicker("pa", state.pa)}</div>
-            </label>
-            <span></span>
-          </div>`
-        : "";
-    const placeholder =
-      state.kind === "report"
-        ? "What did you see? Strengths, weaknesses, role fit…"
-        : state.kind === "note"
-          ? "Work update, agent chat, chasing, or a longer look…"
-          : "Quick comment on this player — saved to Scoutable Teams and the player page.";
-    const formHint =
-      state.kind === "report"
-        ? "Full report — saved on the player page with CA / PA."
-        : state.kind === "note"
-          ? "Longer note — stays on the player page."
-          : "Latest comment on Scoutable Teams and Who to Scout.";
+    const history = playerHistory(player);
+    const tabs = [
+      ["general", "General report"],
+      ["detailed", "Detailed report"],
+      ["notes", `Player notes${history.length ? ` · ${history.length}` : ""}`],
+      ["cms", "Player CMS"],
+    ];
     els.profile.innerHTML = `
       <div class="vw-hero">
         <div class="vw-photo-wrap">
@@ -1120,66 +1669,91 @@
             ${player.pipeline ? `<span class="vw-tag">${escapeHtml(player.pipeline.stage_title)}</span>` : ""}
             ${player.u27 ? `<span class="vw-tag">U27</span>` : ""}
             ${player.has_scout_note ? `<span class="vw-tag">Has notes</span>` : ""}
+            ${homeAwayCopy(player).label !== "—" ? `<span class="vw-tag">${escapeHtml(homeAwayCopy(player).label)}</span>` : ""}
           </div>
         </div>
       </div>
       ${profiles ? `<div class="vw-profiles">${profiles}</div>` : ""}
       <div class="vw-tabs" role="tablist">
-        <button type="button" data-tab="write" data-kind="comment" class="${writing && state.kind === "comment" ? "is-on" : ""}">Comment</button>
-        <button type="button" data-tab="write" data-kind="note" class="${writing && state.kind === "note" ? "is-on" : ""}">Note</button>
-        <button type="button" data-tab="write" data-kind="report" class="${writing && state.kind === "report" ? "is-on" : ""}">Report</button>
-        <button type="button" data-tab="notes" class="${writing ? "" : "is-on"}">Notes${history.length ? ` · ${history.length}` : ""}</button>
+        ${tabs
+          .map(
+            ([id, label]) =>
+              `<button type="button" data-tab="${id}" class="${state.tab === id ? "is-on" : ""}">${escapeHtml(label)}</button>`
+          )
+          .join("")}
       </div>
-      <div class="vw-body">
-        ${
-          writing
-            ? `<form class="vw-form" id="vwNoteForm">
-          <label>${escapeHtml(formHint)}
-            <textarea id="vwText" maxlength="2000" placeholder="${escapeHtml(placeholder)}">${escapeHtml(draftText)}</textarea>
-          </label>
-          <div class="vw-form__row">
-            <label>Minute
-              <input id="vwMinute" type="number" min="0" max="130" inputmode="numeric" placeholder="—" value="${escapeHtml(state.draft.minute)}" />
-            </label>
-            <label>Title
-              <input id="vwNoteTitle" type="text" maxlength="80" placeholder="${escapeHtml(fixtureLabel(state.sheet) || "Video look")}" value="${escapeHtml(state.draft.title)}" />
-            </label>
-            <button type="submit" class="vw-save" id="vwSave">Save ${escapeHtml(state.kind)}</button>
-          </div>
-          ${reportFields}
-          <div class="vw-links">
-            <a href="${escapeHtml(player.dossier_href || `/player/${player.player_id}`)}">Player page →</a>
-            <a href="${escapeHtml(player.scoutable_href || "/scoutable-teams")}">Scoutable Teams →</a>
-            <a href="${escapeHtml(player.who_to_scout_href || "/who-to-scout")}">Who to Scout →</a>
-          </div>
-        </form>`
-            : `<div class="vw-history">
-          ${history.length ? history.map(entryCard).join("") : `<p class="vw-empty">No notes or reports on this player yet.</p>`}
-        </div>`
-        }
-      </div>
+      <div class="vw-body">${profileTabBody(player)}</div>
     `;
     bindPhotos(els.profile);
     els.profile.querySelectorAll("[data-tab]").forEach((btn) => {
       btn.addEventListener("click", () => {
         captureDraft();
-        state.tab = btn.dataset.tab || "write";
-        if (btn.dataset.kind) state.kind = btn.dataset.kind;
+        state.tab = btn.dataset.tab || "general";
+        if (state.tab === "detailed") {
+          const detailedEmpty = !Object.values(state.detailedDraft.physical || {}).some(Boolean)
+            && !Object.values(state.detailedDraft.profiles || {}).some(Boolean);
+          if (detailedEmpty) {
+            state.detailedDraft.physical = { ...(state.generalDraft.physical || {}) };
+            state.detailedDraft.profiles = { ...(state.generalDraft.profiles || {}) };
+            state.detailedDraft.position_in_game =
+              state.detailedDraft.position_in_game || state.generalDraft.position_in_game;
+          }
+        }
         renderProfile();
       });
     });
-    els.profile.querySelectorAll("[data-star]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        captureDraft();
-        const next = Number(btn.dataset.score) || 0;
-        if (btn.dataset.star === "ca") state.ca = state.ca === next ? 0 : next;
-        if (btn.dataset.star === "pa") state.pa = state.pa === next ? 0 : next;
-        renderProfile();
-      });
+    document.getElementById("vwGeneralForm")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      saveGeneralReport();
+    });
+    document.getElementById("vwDetailedForm")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      saveDetailedReport();
     });
     document.getElementById("vwNoteForm")?.addEventListener("submit", (event) => {
       event.preventDefault();
       saveCurrent();
+    });
+    document.getElementById("vwCmsForm")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      saveCms();
+    });
+    document.getElementById("vwGamePosition")?.addEventListener("change", (event) => {
+      captureDraft();
+      state.generalDraft.position_in_game = event.target.value;
+      renderProfile();
+    });
+    document.getElementById("vwDetailedPosition")?.addEventListener("change", (event) => {
+      captureDraft();
+      state.detailedDraft.position_in_game = event.target.value;
+      renderProfile();
+    });
+    els.profile.querySelectorAll("[data-chip]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        captureDraft();
+        const kind = btn.dataset.chip || "";
+        const value = btn.dataset.value || "";
+        if (kind === "match_rating") state.detailedDraft.match_rating = value;
+        else if (kind === "pvfc_level") state.detailedDraft.pvfc_level = value;
+        else if (kind === "next_action") {
+          state.detailedDraft.next_action = value;
+          if (value === "sign") {
+            state.detailedDraft.add_to_pipeline = true;
+            state.detailedDraft.pipeline_stage = "scout_identified";
+          }
+          if (value === "not_to_standard") {
+            state.detailedDraft.pvfc_level = state.detailedDraft.pvfc_level || "D";
+            state.detailedDraft.pipeline_stage = "not_the_right_fit";
+          }
+        } else if (kind.startsWith("psych:")) {
+          const key = kind.slice(6);
+          state.detailedDraft.psychology = {
+            ...(state.detailedDraft.psychology || {}),
+            [key]: value,
+          };
+        }
+        renderProfile();
+      });
     });
   }
 
@@ -1188,7 +1762,7 @@
     if (!sheet) return null;
     for (const side of ["home", "away"]) {
       const match = (sheet[side]?.players || []).find((row) => Number(row.player_id) === Number(playerId));
-      if (match) return match;
+      if (match) return { ...match, sheet_side: match.sheet_side || side };
     }
     return null;
   }
@@ -1205,7 +1779,7 @@
     if (!player) return;
     const text = document.getElementById("vwText")?.value.trim() || "";
     if (!text) {
-      setStatus("Write a comment, note, or report first.", "is-error");
+      setStatus("Write a comment first.", "is-error");
       return;
     }
     const btn = document.getElementById("vwSave");
@@ -1213,38 +1787,183 @@
     setStatus("Saving to Scoutable Teams and the player page…");
     try {
       const minuteRaw = document.getElementById("vwMinute")?.value;
+      const ctx = fixtureContext();
       const data = await fetchJson("/api/video-watch/notes", {
         method: "POST",
         body: JSON.stringify({
           player_id: player.player_id,
-          kind: state.kind,
+          kind: "comment",
           text,
           title: document.getElementById("vwNoteTitle")?.value.trim() || "",
           match_minute: minuteRaw === "" ? null : Number(minuteRaw),
-          fixture_id: state.fixtureId,
-          fixture_label: fixtureLabel(state.sheet),
+          fixture_id: ctx.fixture_id,
+          fixture_label: ctx.fixture_label,
           name: player.name,
           club: player.club || player.team_name || "",
           league: player.league || state.sheet?.league || "",
           position: player.position || "",
           position_label: player.position_label || "",
           age: player.age ?? null,
-          current_ability: state.kind === "report" ? state.ca || null : null,
-          potential_ability: state.kind === "report" ? state.pa || null : null,
         }),
       });
-      state.player = data.player || player;
+      state.player = { ...player, ...(data.player || {}) };
       markSheetNote(player.player_id, data.scout_comment);
-      state.kind = "comment";
       state.tab = "notes";
-      state.ca = 0;
-      state.pa = 0;
-      state.draft = { text: "", minute: "", title: "" };
+      state.draft = { text: data.scout_comment || text, minute: "", title: "" };
       setStatus("Saved on Scoutable Teams, Who to Scout, and the player page.", "is-ok");
       renderSheets();
       renderProfile();
     } catch (error) {
       setStatus(error.message || "Could not save", "is-error");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function saveGeneralReport() {
+    const player = state.player;
+    if (!player) return;
+    captureDraft();
+    const ctx = fixtureContext();
+    if (!ctx.fixture_id) {
+      setStatus("Open a match before saving match conditions.", "is-error");
+      return;
+    }
+    const btn = document.getElementById("vwSaveGeneral");
+    if (btn) btn.disabled = true;
+    setStatus("Saving match conditions…");
+    try {
+      const data = await fetchJson("/api/video-watch/general-report", {
+        method: "POST",
+        body: JSON.stringify({
+          player_id: player.player_id,
+          fixture_id: ctx.fixture_id,
+          fixture_label: ctx.fixture_label,
+          weather: state.generalDraft.weather,
+          weather_note: state.generalDraft.weather_note,
+          pitch: state.generalDraft.pitch,
+          pitch_note: state.generalDraft.pitch_note,
+          notes: state.generalDraft.notes,
+          position_in_game: state.generalDraft.position_in_game,
+          physical: state.generalDraft.physical,
+          profiles: state.generalDraft.profiles,
+          name: player.name || "",
+          club: player.club || player.team_name || "",
+          home_name: ctx.home_name,
+          away_name: ctx.away_name,
+          sheet_side: ctx.sheet_side,
+        }),
+      });
+      applyMatchConditions(data.match_conditions);
+      state.player = {
+        ...player,
+        ...(data.player || {}),
+        position: player.position || data.player?.position || "",
+        position_label: player.position_label || data.player?.position_label || "",
+        profiles: data.player?.profiles?.length ? data.player.profiles : player.profiles || [],
+        sheet_side: player.sheet_side || data.player?.sheet_side || "",
+      };
+      fillGeneralDraft(state.player);
+      setStatus("General report saved. Weather and pitch will load on every other report for this game.", "is-ok");
+      renderSheets();
+      renderProfile();
+    } catch (error) {
+      setStatus(error.message || "Could not save general report", "is-error");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function saveDetailedReport() {
+    const player = state.player;
+    if (!player) return;
+    captureDraft();
+    const ctx = fixtureContext();
+    if (!ctx.fixture_id) {
+      setStatus("Open a match before saving a detailed report.", "is-error");
+      return;
+    }
+    const btn = document.getElementById("vwSaveDetailed");
+    if (btn) btn.disabled = true;
+    setStatus("Saving detailed report…");
+    try {
+      const ratingRaw = state.detailedDraft.match_rating;
+      const data = await fetchJson("/api/video-watch/detailed-report", {
+        method: "POST",
+        body: JSON.stringify({
+          player_id: player.player_id,
+          fixture_id: ctx.fixture_id,
+          fixture_label: ctx.fixture_label,
+          name: player.name || "",
+          club: player.club || player.team_name || "",
+          league: player.league || state.sheet?.league || "",
+          home_name: ctx.home_name,
+          away_name: ctx.away_name,
+          sheet_side: ctx.sheet_side,
+          position: player.position || "",
+          position_label: player.position_label || "",
+          age: player.age ?? null,
+          position_in_game: state.detailedDraft.position_in_game,
+          physical: state.detailedDraft.physical,
+          profiles: state.detailedDraft.profiles,
+          psychology: state.detailedDraft.psychology,
+          write_up: state.detailedDraft.write_up,
+          next_steps: state.detailedDraft.next_steps,
+          match_rating: ratingRaw === "" ? null : Number(ratingRaw),
+          pvfc_level: state.detailedDraft.pvfc_level,
+          add_to_pipeline: state.detailedDraft.add_to_pipeline,
+          pipeline_stage: state.detailedDraft.pipeline_stage,
+          next_action: state.detailedDraft.next_action,
+        }),
+      });
+      state.player = {
+        ...player,
+        ...(data.player || {}),
+        position: player.position || data.player?.position || "",
+        position_label: player.position_label || data.player?.position_label || "",
+        profiles: data.player?.profiles?.length ? data.player.profiles : player.profiles || [],
+        sheet_side: player.sheet_side || data.player?.sheet_side || "",
+      };
+      fillGeneralDraft(state.player);
+      const pipeline = data.pipeline?.target;
+      const extra = data.pipeline_error
+        ? ` Report saved, but pipeline: ${data.pipeline_error}`
+        : pipeline
+          ? ` On the pipeline.`
+          : "";
+      setStatus(`Detailed report saved.${extra}`, "is-ok");
+      renderSheets();
+      renderProfile();
+    } catch (error) {
+      setStatus(error.message || "Could not save detailed report", "is-error");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function saveCms() {
+    const player = state.player;
+    if (!player) return;
+    captureDraft();
+    const btn = document.getElementById("vwSaveCms");
+    if (btn) btn.disabled = true;
+    setStatus("Saving player CMS…");
+    try {
+      const data = await fetchJson("/api/video-watch/cms", {
+        method: "POST",
+        body: JSON.stringify({
+          player_id: player.player_id,
+          name: player.name || "",
+          club: player.club || player.team_name || "",
+          ...state.cmsDraft,
+        }),
+      });
+      if (state.player) state.player.cms = data.cms || state.cmsDraft;
+      fillCmsDraft(state.player);
+      setStatus("Player CMS saved.", "is-ok");
+      renderProfile();
+    } catch (error) {
+      setStatus(error.message || "Could not save CMS", "is-error");
     } finally {
       if (btn) btn.disabled = false;
     }
@@ -1256,10 +1975,16 @@
     state.playerId = playerId;
     state.player = { ...sheetPlayer, player_id: playerId };
     state.kind = "comment";
-    state.tab = "write";
+    if (!["general", "detailed", "notes", "cms"].includes(state.tab)) state.tab = "general";
     state.ca = 0;
     state.pa = 0;
     state.draft = { text: sheetPlayer.scout_comment || "", minute: "", title: "" };
+    fillGeneralDraft({
+      match_conditions: sheetPlayer.match_conditions || state.sheet?.match_conditions,
+      general_report: {},
+    });
+    fillDetailedDraft(sheetPlayer);
+    fillCmsDraft(sheetPlayer);
     writeUrl();
     renderSheets();
     renderProfile();
@@ -1275,15 +2000,27 @@
       if (sheetPlayer.position) params.set("position", sheetPlayer.position);
       if (sheetPlayer.position_label) params.set("position_label", sheetPlayer.position_label);
       if (sheetPlayer.age != null) params.set("age", String(sheetPlayer.age));
+      const ctx = fixtureContext();
+      if (ctx.fixture_id) params.set("fixture_id", ctx.fixture_id);
+      if (ctx.fixture_label) params.set("fixture_label", ctx.fixture_label);
+      if (ctx.home_name) params.set("home_name", ctx.home_name);
+      if (ctx.away_name) params.set("away_name", ctx.away_name);
+      if (sheetPlayer.sheet_side) params.set("sheet_side", sheetPlayer.sheet_side);
       const data = await fetchJson(`/api/video-watch/player?${params}`);
       state.player = {
         ...sheetPlayer,
         ...(data.player || {}),
         profiles: data.player?.profiles?.length ? data.player.profiles : sheetPlayer.profiles || [],
+        sheet_side: sheetPlayer.sheet_side || data.player?.sheet_side || "",
       };
+      if (state.player.match_conditions) applyMatchConditions(state.player.match_conditions);
       if (!state.draft.text && state.player.scout_comment) {
         state.draft.text = state.player.scout_comment;
       }
+      fillGeneralDraft(state.player);
+      fillDetailedDraft(state.player);
+      fillCmsDraft(state.player);
+      renderSheets();
       renderProfile();
     } catch (error) {
       setStatus(error.message || "Could not load player", "is-error");

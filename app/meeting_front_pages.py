@@ -27,8 +27,10 @@ from app.opponent_photos import (
     _upgrade_portrait_url,
     _wikipedia_player_photo_url,
 )
+from app.handout_badges import PORT_VALE_BADGE_URL, fotmob_crest_url_for_club
 from app.paths import DATA_ROOT, STANDALONE_DIR, ensure_data_dirs
 from app.scouting import SCOUTING_DIR, _profiles_for_position
+from app.through_a_lens import list_vale_galleries, list_vale_photos
 
 _PHOTO_SEARCH_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 _PHOTO_SEARCH_TTL = 30 * 60
@@ -60,6 +62,8 @@ _PROXY_ALLOWED_HOST_SUFFIXES = (
     "wp.com",
     "cloudfront.net",
     "googleusercontent.com",
+    "smugmug.com",
+    "throughalensphotography.com",
 )
 
 # Presentation titles → default clip bullets (editable in the UI).
@@ -2144,6 +2148,195 @@ def _proxy_photo_url(url: str) -> str:
     return f"/api/meeting-front-pages/image-proxy?url={quote(token, safe='')}"
 
 
+MATCH_SLIDE_PACKS: dict[str, dict[str, Any]] = {
+    "pre-match": {
+        "id": "pre-match",
+        "label": "Pre-Match",
+        "kicker": "Pre-Match Meeting",
+        "topics": [
+            "Keys to the game",
+            "In possession",
+            "Out of possession",
+            "Set plays",
+            "Individuals",
+        ],
+    },
+    "post-match": {
+        "id": "post-match",
+        "label": "Post-Match",
+        "kicker": "Post-Match Meeting",
+        "topics": [
+            "What went well",
+            "What to fix",
+            "Goals for",
+            "Goals against",
+            "Set plays",
+        ],
+    },
+    "set-plays": {
+        "id": "set-plays",
+        "label": "Set Plays",
+        "kicker": "Set Plays Meeting",
+        "topics": [
+            "Attacking corners",
+            "Defensive corners",
+            "Attacking free kicks",
+            "Defensive free kicks",
+            "Throw-ins",
+        ],
+    },
+}
+
+_MATCH_LABEL_RE = re.compile(r"^(.*?)\s*\(([HA])\)\s*$", re.I)
+_OPPONENT_ALIASES = {
+    "wolves": "Wolverhampton Wanderers",
+    "wolverhampton": "Wolverhampton Wanderers",
+    "spurs": "Tottenham Hotspur",
+}
+_EXTRA_FOTMOB_IDS = {
+    "wolverhamptonwanderers": 10260,
+    "wolves": 10260,
+    "tottenhamhotspur": 8586,
+    "spurs": 8586,
+}
+
+
+def parse_vale_match_label(name: str) -> dict[str, Any]:
+    """Split Through a Lens names like 'Exeter (H)' into opponent + venue."""
+    raw = str(name or "").strip()
+    venue = None
+    opponent = raw
+    match = _MATCH_LABEL_RE.match(raw)
+    if match:
+        opponent = match.group(1).strip()
+        venue = match.group(2).upper()
+    return {
+        "label": raw,
+        "opponent": opponent,
+        "venue": venue,
+        "home": venue == "H",
+        "away": venue == "A",
+    }
+
+
+def _club_key(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(name or "").casefold())
+
+
+def _canonical_opponent_name(name: str) -> str:
+    key = _club_key(name)
+    return _OPPONENT_ALIASES.get(key, str(name or "").strip())
+
+
+def _opponent_badge_url(name: str) -> str:
+    canonical = _canonical_opponent_name(name)
+    crest = fotmob_crest_url_for_club(canonical) or fotmob_crest_url_for_club(name)
+    if crest:
+        return crest
+    extra_id = _EXTRA_FOTMOB_IDS.get(_club_key(canonical)) or _EXTRA_FOTMOB_IDS.get(
+        _club_key(name)
+    )
+    if extra_id:
+        return f"https://images.fotmob.com/image_resources/logo/teamlogo/{extra_id}.png"
+    return ""
+
+
+def _vale_club_payload() -> dict[str, Any]:
+    try:
+        from app.pa_meeting_slides import port_vale_club
+
+        return port_vale_club()
+    except Exception:
+        return {
+            "id": "port-vale",
+            "name": "Port Vale",
+            "league": "League Two",
+            "badgeUrl": PORT_VALE_BADGE_URL,
+            "badgeProxyUrl": PORT_VALE_BADGE_URL,
+            "portVale": True,
+        }
+
+
+def _opponent_payload(name: str) -> dict[str, Any]:
+    canonical = _canonical_opponent_name(name)
+    club = None
+    try:
+        from app.pa_meeting_slides import resolve_club
+
+        club = resolve_club(canonical) or resolve_club(name)
+    except Exception:
+        club = None
+    badge = ""
+    if club:
+        badge = str(club.get("badgeUrl") or "")
+        canonical = str(club.get("name") or canonical)
+    if not badge:
+        badge = _opponent_badge_url(canonical) or _opponent_badge_url(name)
+    return {
+        "id": str((club or {}).get("id") or _club_key(canonical) or "opponent"),
+        "name": canonical or "Opponent",
+        "badgeUrl": badge,
+        "badgeProxyUrl": _proxy_photo_url(badge) if badge else "",
+        "fotmobId": (club or {}).get("fotmobId"),
+    }
+
+
+def build_match_slide_pack(
+    *,
+    name: str,
+    competition: str = "",
+    pack_id: str = "pre-match",
+) -> dict[str, Any]:
+    parsed = parse_vale_match_label(name)
+    pack = MATCH_SLIDE_PACKS.get(str(pack_id or "").strip()) or MATCH_SLIDE_PACKS["pre-match"]
+    opponent = _opponent_payload(parsed["opponent"])
+    vale = _vale_club_payload()
+    venue_label = "Home" if parsed["venue"] == "H" else ("Away" if parsed["venue"] == "A" else "")
+    if parsed["venue"] == "A":
+        fixture = f"{opponent['name']} vs Port Vale"
+    else:
+        fixture = f"Port Vale vs {opponent['name']}"
+    if venue_label:
+        fixture = f"{fixture} · {venue_label}"
+    slides = [
+        {
+            "id": "cover",
+            "kind": "cover",
+            "title": str(pack["label"]),
+            "subtitle": fixture,
+            "kicker": str(competition or pack["kicker"]),
+            "selected": True,
+        }
+    ]
+    for index, title in enumerate(pack["topics"]):
+        slides.append(
+            {
+                "id": f"topic-{index + 1}",
+                "kind": "topic",
+                "title": title,
+                "subtitle": fixture,
+                "kicker": str(pack["label"]),
+                "selected": True,
+            }
+        )
+    return {
+        "pack": pack,
+        "packs": list(MATCH_SLIDE_PACKS.values()),
+        "match": {
+            "label": parsed["label"] or opponent["name"],
+            "opponent": parsed["opponent"],
+            "venue": parsed["venue"],
+            "venueLabel": venue_label,
+            "competition": competition or "",
+            "fixture": fixture,
+        },
+        "portVale": vale,
+        "opponent": opponent,
+        "slides": slides,
+        "slideSize": {"width": 1920, "height": 1080},
+    }
+
+
 def _host_allowed(host: str) -> bool:
     h = host.lower().strip(".")
     if not h:
@@ -2678,6 +2871,8 @@ def register_meeting_front_pages_routes(app: FastAPI) -> None:
         }
         if "transfermarkt" in token.casefold():
             headers["Referer"] = "https://www.transfermarkt.co.uk/"
+        elif "smugmug" in token.casefold() or "throughalensphotography" in token.casefold():
+            headers["Referer"] = "https://www.throughalensphotography.com/"
         try:
             upstream = requests.get(token, timeout=25, headers=headers, stream=True)
         except requests.RequestException as exc:
@@ -2717,15 +2912,69 @@ def register_meeting_front_pages_routes(app: FastAPI) -> None:
             headers={"Cache-Control": "public, max-age=86400"},
         )
 
+    @app.get("/api/meeting-front-pages/vale-photos/matches")
+    def meeting_front_pages_vale_matches(refresh: int = Query(0)) -> JSONResponse:
+        try:
+            payload = list_vale_galleries(refresh=bool(refresh))
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="Could not load Through a Lens match galleries.",
+            ) from exc
+        return JSONResponse(payload, headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/meeting-front-pages/vale-photos")
+    def meeting_front_pages_vale_photos(
+        node_id: str | None = Query(None, alias="nodeId"),
+        album_key: str | None = Query(None, alias="albumKey"),
+        match: str | None = Query(None),
+        kind: str = Query("action"),
+        start: int = Query(1),
+        count: int = Query(40),
+        refresh: int = Query(0),
+    ) -> JSONResponse:
+        if not str(node_id or "").strip() and not str(album_key or "").strip():
+            raise HTTPException(status_code=400, detail="Pick a match first.")
+        try:
+            payload = list_vale_photos(
+                node_id=node_id,
+                album_key=album_key,
+                match_name=str(match or ""),
+                kind="portrait" if kind == "portrait" else "action",
+                start=start,
+                count=count,
+                refresh=bool(refresh),
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="Could not load Through a Lens photos for that match.",
+            ) from exc
+        return JSONResponse(payload, headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/meeting-front-pages/match-pack")
+    def meeting_front_pages_match_pack(
+        name: str = Query(..., min_length=1),
+        competition: str = Query(""),
+        pack: str = Query("pre-match"),
+    ) -> JSONResponse:
+        payload = build_match_slide_pack(
+            name=name,
+            competition=competition,
+            pack_id=pack,
+        )
+        return JSONResponse(payload, headers={"Cache-Control": "no-store"})
+
     @app.get("/api/meeting-front-pages/meta")
     def meeting_front_pages_meta() -> dict[str, Any]:
         return {
             "title": "Meeting Front Pages",
-            "badgeUrl": "/standalone/port-vale-badge.png",
+            "badgeUrl": PORT_VALE_BADGE_URL,
             "slideSize": {"width": 1920, "height": 1080},
             "bulletDefaults": PROFILE_BULLET_DEFAULTS,
             "standaloneDir": str(STANDALONE_DIR),
-            "modes": ["meeting", "dossier"],
+            "modes": ["meeting", "match", "dossier"],
+            "matchPacks": list(MATCH_SLIDE_PACKS.values()),
         }
 
     @app.get("/api/meeting-front-pages/dossier")

@@ -471,9 +471,9 @@ APPS: list[dict[str, Any]] = [
         "group": "recruitment",
         "title": "Player Reports",
         "description": (
-            "Watch a game with both team sheets. Open a player, write comments, notes, "
-            "or a report — they stay on Scoutable Teams, Who to Scout, and the player page. "
-            "This is becoming the scouting hub."
+            "Watch a game with both team sheets. Open a player for the general report, "
+            "detailed report, Scoutable Teams notes, and player CMS. Match weather and "
+            "pitch are shared across every report on that game."
         ),
         "href": "/player-reports",
         "icon": "📝",
@@ -629,15 +629,20 @@ APPS: list[dict[str, Any]] = [
         "group": "strategy",
         "title": "Squad Comparison",
         "description": (
-            "Internal squad reviews — compare Port Vale players by PV profile "
-            "percentiles. Live-updates through the season."
+            "Internal squad reviews — compare Port Vale players by exact Impect "
+            "profile scores. Live-updates through the season."
         ),
         "href": "/squad-review",
         "icon": "👥",
         "accent": "#f5c518",
         "tags": ["Squad", "Internal"],
         "roles": ("admin",),
-        "api_prefixes": ("/squad-review", "/api/squad-review"),
+        "api_prefixes": (
+            "/squad-review",
+            "/api/squad-review",
+            "/api/charts",
+            "/api/wysiwyg-export-pdf",
+        ),
         "router": "squad_review",
     },
     {

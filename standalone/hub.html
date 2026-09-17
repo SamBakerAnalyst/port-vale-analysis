@@ -10,25 +10,26 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
   <style>
     :root {
-      --bg: #0c0f14;
-      --surface: #141a22;
-      --surface-2: #1a222d;
-      --border: #2a3544;
-      --text: #e8edf4;
-      --text-muted: #8b9bb0;
-      --accent: #3d8bfd;
-      --green: #34d399;
-      --amber: #fbbf24;
-      --danger: #f87171;
-      --gold: #f5c518;
-      --radius: 12px;
-      --font: "Manrope", system-ui, sans-serif;
-      --mono: "JetBrains Mono", monospace;
+      --bg: #10100f;
+      --surface: #181816;
+      --surface-2: #22221e;
+      --border: #33332c;
+      --text: #f2f1ec;
+      --text-muted: #9b9a91;
+      --accent: #e0a800;
+      --green: #c5d4a8;
+      --amber: #e0a800;
+      --danger: #c45c4a;
+      --gold: #e0a800;
+      --radius: 2px;
+      --font: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+      --display: "Oswald", "Arial Narrow", sans-serif;
+      --mono: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
       --rail: 248px;
     }
 
@@ -44,14 +45,7 @@
     }
 
     body::before {
-      content: "";
-      position: fixed;
-      inset: 0;
-      background:
-        radial-gradient(ellipse 70% 45% at 70% -10%, rgba(61, 139, 253, 0.14), transparent),
-        radial-gradient(ellipse 50% 35% at 100% 100%, rgba(52, 211, 153, 0.05), transparent);
-      pointer-events: none;
-      z-index: 0;
+      display: none;
     }
 
     .shell {
@@ -410,7 +404,6 @@
         max-width: none;
         margin: 0;
       }
-      .main__meta { order: 2; }
     }
 
     .hub__clock {
@@ -2261,6 +2254,7 @@
 
   </style>
   <link rel="stylesheet" href="/standalone/hub-launcher.css?v=__HUB_BUILD__" />
+  <link rel="stylesheet" href="/static/hub-valiant.css?v=__HUB_BUILD__" />
 </head>
 <body>
   <div class="shell">
@@ -2273,14 +2267,16 @@
         </div>
       </a>
       <button type="button" class="rail__home is-active" id="railHomeBtn">
-        <span aria-hidden="true">🏠</span> Home dashboard
+        <span class="rail__icon" aria-hidden="true">🏠</span>
+        Home
       </button>
       <div id="railGroups"></div>
     </aside>
 
     <main class="main">
       <div class="main__top">
-        <div>
+        <div class="main__identity">
+          <p class="main__eyebrow">Port Vale · Analysis Hub</p>
           <h1 class="main__greeting" id="greeting">Football analysis</h1>
           <p class="main__subtitle" id="hubSubtitle">Live league snapshot · pick an app from the left ribbon</p>
         </div>
@@ -2302,17 +2298,23 @@
             <div id="hubPlayerResults" class="hub-search__results hidden" role="listbox"></div>
           </div>
         </div>
-        <div class="main__meta">
-          <div class="hub__status" id="serverStatus" role="status">
-            <span class="hub__status-dot"></span>
-            <span id="serverStatusText">Checking…</span>
-          </div>
-          <span class="hub__build" id="hubBuildStamp" title="Product environment">Port Vale Live · __HUB_BUILD__</span>
-          <span
-            class="hub__broke-joke"
-            id="hubBrokeJoke"
-            title="Little joke. Reset by editing standalone/hub-uptime-joke.json when we next break."
-          >— days since we last broke</span>
+        <div class="hub__clock" aria-live="polite">
+          <div class="hub__clock-time" id="clockTime">--:--</div>
+          <div class="hub__clock-date" id="clockDate">Loading…</div>
+        </div>
+      </div>
+      <div class="main__statusline">
+        <div class="hub__status" id="serverStatus" role="status">
+          <span class="hub__status-dot"></span>
+          <span id="serverStatusText">Checking…</span>
+        </div>
+        <span class="hub__build" id="hubBuildStamp" title="Product environment">Port Vale Live · __HUB_BUILD__</span>
+        <span
+          class="hub__broke-joke"
+          id="hubBrokeJoke"
+          title="Little joke. Reset by editing standalone/hub-uptime-joke.json when we next break."
+        >— days since we last broke</span>
+        <div class="main__ops">
           <button type="button" class="hub__restart-btn" id="forceRefreshDataBtn" title="Pull fresh match data from Impect after games upload (~10am). Use a couple of times a week.">Force refresh data</button>
           <button type="button" class="hub__restart-btn" id="restartServerBtn">Restart</button>
           <a class="hub__restart-btn" id="startServerLink" href="/standalone/restart.command" hidden>Start server</a>
@@ -2321,16 +2323,9 @@
             <div class="hub__health-panel" id="cacheHealthPanel" hidden></div>
           </div>
           <button type="button" class="hub__restart-btn" id="signOutBtn" hidden>Sign out</button>
-          <div class="hub__clock" aria-live="polite">
-            <div class="hub__clock-time" id="clockTime">--:--</div>
-            <div class="hub__clock-date" id="clockDate">Loading…</div>
-          </div>
         </div>
       </div>
-
-      <div style="display:flex;justify-content:flex-end;margin-bottom:0.75rem">
-        <button type="button" class="hub__feedback-link" id="feedbackOpenBtn">Suggestion / bug</button>
-      </div>
+      <button type="button" class="hub__feedback-link" id="feedbackOpenBtn">Suggestion / bug</button>
 
         <section id="homeDashboard" aria-label="Home dashboard">
         <div class="hub-demo-banner" id="hubDemoBanner" hidden></div>
@@ -2344,22 +2339,22 @@
         <div class="home-panel" data-panel="home" role="tabpanel">
           <p class="home-season" id="homeOverviewSeason">Port Vale · League Two</p>
           <div class="home-kpis">
-            <article class="home-kpi" id="homeKpiOverviewPos" style="--kpi-accent:#f5c518">
+            <article class="home-kpi" id="homeKpiOverviewPos">
               <p class="home-kpi__label">League position</p>
               <p class="home-kpi__value">—</p>
               <p class="home-kpi__sub">Loading…</p>
             </article>
-            <article class="home-kpi" id="homeKpiOverviewPpg" style="--kpi-accent:#3d8bfd">
+            <article class="home-kpi" id="homeKpiOverviewPpg">
               <p class="home-kpi__label">Points / game</p>
               <p class="home-kpi__value">—</p>
               <p class="home-kpi__sub">vs league</p>
             </article>
-            <article class="home-kpi" id="homeKpiOverviewPace" style="--kpi-accent:#34d399">
+            <article class="home-kpi" id="homeKpiOverviewPace">
               <p class="home-kpi__label">Play-off pace</p>
               <p class="home-kpi__value">—</p>
               <p class="home-kpi__sub">target line</p>
             </article>
-            <article class="home-kpi" id="homeKpiOverviewNext" style="--kpi-accent:#f97316">
+            <article class="home-kpi" id="homeKpiOverviewNext">
               <p class="home-kpi__label">Next match</p>
               <p class="home-kpi__value">—</p>
               <p class="home-kpi__sub">upcoming</p>
@@ -2438,22 +2433,22 @@
         <div class="home-panel" data-panel="performance" role="tabpanel" hidden>
           <p class="home-season" id="homeSeasonLabel">League Two</p>
           <div class="home-kpis">
-            <article class="home-kpi" id="homeKpiPos" style="--kpi-accent:#f5c518">
+            <article class="home-kpi" id="homeKpiPos" >
               <p class="home-kpi__label">League position</p>
               <p class="home-kpi__value">—</p>
               <p class="home-kpi__sub">Loading…</p>
             </article>
-            <article class="home-kpi" id="homeKpiPpg" style="--kpi-accent:#3d8bfd">
+            <article class="home-kpi" id="homeKpiPpg" >
               <p class="home-kpi__label">Points / game</p>
               <p class="home-kpi__value">—</p>
               <p class="home-kpi__sub">vs league</p>
             </article>
-            <article class="home-kpi" id="homeKpiXgd" style="--kpi-accent:#34d399">
+            <article class="home-kpi" id="homeKpiXgd" >
               <p class="home-kpi__label">xG difference</p>
               <p class="home-kpi__value">—</p>
               <p class="home-kpi__sub">vs league</p>
             </article>
-            <article class="home-kpi" id="homeKpiCs" style="--kpi-accent:#f97316">
+            <article class="home-kpi" id="homeKpiCs" >
               <p class="home-kpi__label">Clean sheet %</p>
               <p class="home-kpi__value">—</p>
               <p class="home-kpi__sub">vs league</p>
@@ -2533,6 +2528,7 @@
             <a class="home-subtab home-subtab--link" href="/who-to-scout">Who To Scout →</a>
             <a class="home-subtab home-subtab--link" href="/player-pipelines">Pipelines →</a>
             <a class="home-subtab home-subtab--link" href="/transfer-centre">Transfer Centre →</a>
+            <a class="home-subtab home-subtab--link" href="/loans-watch">Loans Watch →</a>
             <a class="home-subtab home-subtab--link" href="/games-to-watch">Games to Watch →</a>
             <a class="home-subtab home-subtab--link" href="/player-reports">Player Reports →</a>
           </div>
@@ -2540,22 +2536,22 @@
           <div class="home-subpanel" data-recruit-panel="league">
           <p class="home-season" id="homeRecruitSeason">Squad profile</p>
           <div class="home-kpis">
-            <article class="home-kpi" id="recruitKpiAge" style="--kpi-accent:#3d8bfd">
+            <article class="home-kpi" id="recruitKpiAge" >
               <p class="home-kpi__label">Avg squad age</p>
               <p class="home-kpi__value">—</p>
               <p class="home-kpi__sub">Loading…</p>
             </article>
-            <article class="home-kpi" id="recruitKpiU25" style="--kpi-accent:#34d399">
+            <article class="home-kpi" id="recruitKpiU25" >
               <p class="home-kpi__label">Minutes from U25</p>
               <p class="home-kpi__value">—</p>
               <p class="home-kpi__sub">vs league</p>
             </article>
-            <article class="home-kpi" id="recruitKpiU21" style="--kpi-accent:#f5c518">
+            <article class="home-kpi" id="recruitKpiU21" >
               <p class="home-kpi__label">Minutes from U21</p>
               <p class="home-kpi__value">—</p>
               <p class="home-kpi__sub">youth share</p>
             </article>
-            <article class="home-kpi" id="recruitKpiWeighted" style="--kpi-accent:#f97316">
+            <article class="home-kpi" id="recruitKpiWeighted" >
               <p class="home-kpi__label">Mins-weighted age</p>
               <p class="home-kpi__value">—</p>
               <p class="home-kpi__sub">who actually plays</p>
@@ -2580,6 +2576,7 @@
                 <a href="/watch-list">Watch list</a>
                 <a href="/player-pipelines">Player Pipelines</a>
                 <a href="/transfer-centre">Transfer Centre</a>
+                <a href="/loans-watch">Loans Watch</a>
                 <a href="/games-to-watch">Games to Watch</a>
                 <a href="/player-reports">Player Reports</a>
                 <a href="/studio">Player Comparison</a>
@@ -2678,22 +2675,22 @@
             <a class="home-card__link" href="/strategy-tracker">Season Progress →</a>
           </div>
           <div class="home-kpis">
-            <article class="home-kpi" id="stratKpiPpg" style="--kpi-accent:#f5c518">
+            <article class="home-kpi" id="stratKpiPpg" >
               <p class="home-kpi__label">Points / game</p>
               <p class="home-kpi__value">—</p>
               <p class="home-kpi__sub">vs play-off line</p>
             </article>
-            <article class="home-kpi" id="stratKpiProj" style="--kpi-accent:#3d8bfd">
+            <article class="home-kpi" id="stratKpiProj" >
               <p class="home-kpi__label">Season projection</p>
               <p class="home-kpi__value">—</p>
               <p class="home-kpi__sub">PPG × 46</p>
             </article>
-            <article class="home-kpi" id="stratKpiXppg" style="--kpi-accent:#34d399">
+            <article class="home-kpi" id="stratKpiXppg" >
               <p class="home-kpi__label">Expected PPG</p>
               <p class="home-kpi__value">—</p>
               <p class="home-kpi__sub">process track</p>
             </article>
-            <article class="home-kpi" id="stratKpiLuck" style="--kpi-accent:#f97316">
+            <article class="home-kpi" id="stratKpiLuck" >
               <p class="home-kpi__label">Pts vs xPts</p>
               <p class="home-kpi__value">—</p>
               <p class="home-kpi__sub">over / under</p>
@@ -3270,6 +3267,6 @@
     bootHub();
 
   </script>
-  <script defer src="/static/hub-feedback.js?v=1"></script>
+  <script defer src="/static/hub-feedback.js?v=3"></script>
 </body>
 </html>
