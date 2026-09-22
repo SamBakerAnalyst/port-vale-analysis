@@ -668,7 +668,7 @@ a:hover { text-decoration: underline; }
 .av-matrix thead th {
   position: sticky;
   top: 0;
-  z-index: 3;
+  z-index: 5;
   background: #11161d;
 }
 
@@ -681,7 +681,7 @@ a:hover { text-decoration: underline; }
   min-width: 180px;
 }
 
-.av-matrix thead .av-sticky-col { z-index: 4; background: #11161d; }
+.av-matrix thead .av-sticky-col { z-index: 6; background: #11161d; }
 
 .av-player-cell {
   display: flex;
@@ -780,7 +780,9 @@ a:hover { text-decoration: underline; }
 .av-cell--injury { box-shadow: inset 0 0 0 1px rgba(239, 68, 68, .35); }
 
 .av-group-row td {
-  background: rgba(245, 197, 24, .08);
+  position: sticky;
+  z-index: 4;
+  background: #1c180c;
   color: var(--accent);
   font-family: var(--display);
   font-size: .85rem;
@@ -789,6 +791,12 @@ a:hover { text-decoration: underline; }
   text-transform: uppercase;
   text-align: left;
   padding: .45rem .7rem;
+}
+
+.av-matrix .av-group-row .av-group-label {
+  left: 0;
+  min-width: 180px;
+  z-index: 4;
 }
 
 .av-injury-badge {
@@ -804,6 +812,16 @@ a:hover { text-decoration: underline; }
 
 .av-injury-badge--MM {
   background: rgba(107, 114, 128, .28);
+  color: #d1d5db;
+}
+
+.av-injury-badge--INT {
+  background: rgba(59, 130, 246, .22);
+  color: #bfdbfe;
+}
+
+.av-injury-badge--LOAN {
+  background: rgba(31, 41, 55, .85);
   color: #d1d5db;
 }
 
