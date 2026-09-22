@@ -496,7 +496,9 @@ def test_central_midfield_profiles_are_the_pv_catalog():
     )
     ids = [row["id"] for row in rows]
     assert "defender" not in ids
-    assert set(fallback).issubset(set(ids)) or ids == fallback
+    assert "deep-creator" not in ids
+    assert "presser" not in ids
+    assert ids == fallback
 
 
 def test_detailed_report_stores_level_rating_and_next_action(tmp_path, monkeypatch):

@@ -1327,19 +1327,69 @@
     return `<select id="${id}"><option value="">Select position in game</option>${options}</select>`;
   }
 
+  const LOCKED_PROFILES = {
+    GOALKEEPER: ["shot-stopping", "box-goalkeeper", "sweeper", "ball-playing"],
+    CENTRAL_DEFENDER: ["defensive", "defender", "progressor", "ball-playing"],
+    LEFT_WINGBACK_DEFENDER: ["defender", "offensive", "deep-creator", "wide-presser", "wide-ball-carrier", "wide-creator"],
+    RIGHT_WINGBACK_DEFENDER: ["defender", "offensive", "deep-creator", "wide-presser", "wide-ball-carrier", "wide-creator"],
+    DEFENSE_MIDFIELD: ["ball-winner", "ball-progressor", "deep-creator", "presser", "ball-carrier"],
+    CENTRAL_MIDFIELD: ["goal-threat", "running-threat", "ball-winner", "creator", "ball-progressor"],
+    ATTACKING_MIDFIELD: ["creator", "goal-threat", "presser", "ball-carrier", "threat-in-behind"],
+    LEFT_WINGER: ["wide-creator", "wide-goal-threat", "wide-presser", "wide-ball-carrier", "threat-in-behind"],
+    RIGHT_WINGER: ["wide-creator", "wide-goal-threat", "wide-presser", "wide-ball-carrier", "threat-in-behind"],
+    CENTER_FORWARD: ["goal-threat", "hold-up", "presser", "threat-in-behind", "ball-carrier"],
+  };
+  const PROFILE_LABELS = {
+    "shot-stopping": "Shot Stopping",
+    "box-goalkeeper": "Box Goalkeeper",
+    "sweeper": "Sweeper",
+    "ball-playing": "Ball Playing",
+    defensive: "Defensive",
+    defender: "Defender",
+    progressor: "Progressor",
+    offensive: "Offensive",
+    "deep-creator": "Deep Creator",
+    "wide-presser": "Wide Presser",
+    "wide-ball-carrier": "Wide Ball Carrier",
+    "wide-creator": "Wide Creator",
+    "ball-winner": "Ball Winner",
+    "ball-progressor": "Ball Progressor",
+    presser: "Presser",
+    "ball-carrier": "Ball Carrier",
+    "goal-threat": "Goal Threat",
+    "running-threat": "Running Threat",
+    creator: "Creator",
+    "threat-in-behind": "Threat In Behind",
+    "wide-goal-threat": "Wide Goal Threat",
+    "hold-up": "Hold Up",
+  };
+
   function profilesFor(position, player) {
     const wanted = position || "";
     if (!wanted) return [];
+    const lockedIds = LOCKED_PROFILES[wanted] || [];
     const byPos = player?.options?.profiles_by_position
       || state.player?.options?.profiles_by_position
       || {};
-    const catalog = byPos[wanted] || [];
-    if (catalog.length) return catalog;
-    const live = player?.report_profiles || [];
-    if (live.length && wanted === (player?.position || "")) {
-      return live.filter((row) => catalog.length === 0 || catalog.some((item) => item.id === row.id));
+    const fromApi = byPos[wanted] || [];
+    const byId = {};
+    fromApi.forEach((row) => {
+      if (row?.id) byId[row.id] = row;
+    });
+    (player?.report_profiles || []).forEach((row) => {
+      if (row?.id && lockedIds.includes(row.id)) byId[row.id] = { ...byId[row.id], ...row };
+    });
+    if (lockedIds.length) {
+      return lockedIds.map((id) => byId[id] || {
+        id,
+        key: id,
+        label: PROFILE_LABELS[id] || id,
+        score: null,
+        general_prompt: "What did you see in this part of his game?",
+        detailed_prompt: "Break this profile down. Why did it look good or poor?",
+      });
     }
-    return catalog;
+    return fromApi;
   }
 
   function keepProfilesForPosition(profiles, position, player) {

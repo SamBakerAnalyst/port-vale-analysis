@@ -291,20 +291,30 @@ def clean_profiles(row: Any) -> dict[str, str]:
 
 
 def catalog_profile_names(position: str) -> list[str]:
-    """Profile titles for a report position — Impect first, static fallback second."""
+    """Port Vale report catalog for this position — never another role's Impect bag.
+
+    Impect may refine labels when it matches the locked set. It cannot replace
+    a CM with Defensive / Progressor / Deep Creator / Presser.
+    """
     wanted = clean_position(position)
     if not wanted:
         return []
+    locked = list(POSITION_PROFILES.get(wanted, ()))
+    if not locked:
+        return []
+    locked_ids = {profile_id(name) for name in locked}
     try:
         from app.scouting import _profiles_for_position
 
         names = _profiles_for_position(wanted)
         cleaned = [str(name or "").strip() for name in (names or []) if str(name or "").strip()]
-        if cleaned:
-            return cleaned
+        matched = [name for name in cleaned if profile_id(name) in locked_ids]
+        if {profile_id(name) for name in matched} == locked_ids:
+            by_id = {profile_id(name): name for name in matched}
+            return [by_id[profile_id(name)] for name in locked]
     except Exception:
         pass
-    return list(POSITION_PROFILES.get(wanted, ()))
+    return locked
 
 
 def clean_profiles_for_position(row: Any, position: str) -> dict[str, str]:
