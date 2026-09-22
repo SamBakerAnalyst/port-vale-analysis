@@ -45,6 +45,7 @@ CACHE_ROOT = Path(os.environ.get("CACHE_ROOT", DATA_ROOT / "cache"))
 SCOUTING_DISK_CACHE_DIR = CACHE_ROOT / "impect-scouting"
 AVAILABILITY_DATA_DIR = CACHE_ROOT / "impect-availability"
 FIXTURE_PLANNER_DATA_DIR = CACHE_ROOT / "impect-fixture-planner"
+GAMES_TO_WATCH_DATA_DIR = CACHE_ROOT / "impect-games-to-watch"
 CLUB_STRATEGY_CACHE_DIR = CACHE_ROOT / "impect-club-strategy"
 SCHEDULE_DATA_DIR = CACHE_ROOT / "impect-schedule"
 SET_PIECE_CACHE_DIR = CACHE_ROOT / "impect-set-piece"
@@ -69,6 +70,7 @@ def ensure_data_dirs() -> None:
         SCOUTING_DISK_CACHE_DIR,
         AVAILABILITY_DATA_DIR,
         FIXTURE_PLANNER_DATA_DIR,
+        GAMES_TO_WATCH_DATA_DIR,
         CLUB_STRATEGY_CACHE_DIR,
         SCHEDULE_DATA_DIR,
         SET_PIECE_CACHE_DIR,
