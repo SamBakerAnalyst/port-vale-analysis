@@ -8,7 +8,8 @@
 #     {"username":"jsmith","password":"...","role":"scouts","display_name":"Joe Smith"}
 #   ]
 #
-# Roles: admin (everything) | scouts (recruitment + scouts) | analysis (analysis only).
+# Roles: admin (everything) | scouts (recruitment + scouts) | analysis (analysis only)
+#        | ops (Admin rail only — schedule, availability, bonuses, suspensions).
 # display_name is what lands in added_by / moved_by / note authors.
 #
 # Live and Staging both read /opt/port-vale-analysis/.env, and .env is excluded
@@ -52,7 +53,7 @@ except json.JSONDecodeError as exc:
 if not isinstance(rows, list) or not rows:
     sys.exit("accounts file must be a non-empty JSON list")
 
-allowed_roles = {"admin", "scouts", "analysis"}
+allowed_roles = {"admin", "scouts", "analysis", "ops"}
 seen: set[str] = set()
 clean = []
 for i, row in enumerate(rows, 1):

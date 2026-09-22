@@ -7,13 +7,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/availability-tracker.css?v=44" />
+  <link rel="stylesheet" href="/static/availability-tracker.css?v=45" />
 </head>
 <body>
   <div class="av-app">
     <header class="av-toolbar">
       <div class="av-toolbar__left">
-        <p class="av-toolbar__eyebrow">Strategy · <a href="/">← All apps</a></p>
+        <p class="av-toolbar__eyebrow">Admin · <a href="/">← All apps</a></p>
         <h1 class="av-toolbar__title">Squad Availability</h1>
         <p class="av-toolbar__subtitle" id="pageSubtitle">Match availability, injuries, and playing-time metrics from FotMob</p>
       </div>
@@ -28,6 +28,7 @@
       <button type="button" class="av-tab" data-view="roster">Roster</button>
       <button type="button" class="av-tab" data-view="injuries">Injury History</button>
       <button type="button" class="av-tab" data-view="matrix">Matrix</button>
+      <button type="button" class="av-tab" data-view="playing">Playing time</button>
       <button type="button" class="av-tab" data-view="summary">Summary</button>
     </nav>
 
@@ -148,6 +149,23 @@
       <div class="av-matrix-wrap card" id="matrixRoot" aria-live="polite"></div>
     </section>
 
+    <section id="playingView" class="av-view hidden">
+      <div class="av-playing card">
+        <div class="av-playing__header">
+          <div>
+            <h2>League playing time</h2>
+            <p>Replaces the Starts / Appearances and League Minutes sheets — FotMob league starts, apps, and minutes.</p>
+          </div>
+          <div class="av-playing__mode" role="group" aria-label="Playing time mode">
+            <button type="button" class="av-matrix-filter__btn av-matrix-filter__btn--active" data-playing-mode="minutes">Minutes</button>
+            <button type="button" class="av-matrix-filter__btn" data-playing-mode="starts">Starts</button>
+            <button type="button" class="av-matrix-filter__btn" data-playing-mode="apps">Appearances</button>
+          </div>
+        </div>
+        <div class="av-playing__wrap" id="playingRoot"></div>
+      </div>
+    </section>
+
     <section id="summaryView" class="av-view hidden">
       <div class="av-summary-toolbar">
         <p>Minutes, availability, and who’s out — Present fills the screen, Esc to exit.</p>
@@ -231,7 +249,7 @@
     </form>
   </dialog>
 
-  <script defer src="/static/availability-tracker.js?v=44"></script>
+  <script defer src="/static/availability-tracker.js?v=45"></script>
   <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>

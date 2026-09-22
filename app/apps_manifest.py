@@ -38,6 +38,13 @@ APP_GROUPS: list[dict[str, Any]] = [
         "accent": "#f5c518",
     },
     {
+        "id": "admin",
+        "title": "Admin",
+        "subtitle": "Schedule, availability, bonuses, and suspensions",
+        "icon": "⚙️",
+        "accent": "#94a3b8",
+    },
+    {
         "id": "presentations",
         "title": "Presentations",
         "subtitle": "Personal decks — off the daily rail",
@@ -277,7 +284,7 @@ APPS: list[dict[str, Any]] = [
     },
     {
         "id": "schedule",
-        "group": "analysis",
+        "group": "admin",
         "title": "Schedule",
         "description": (
             "First-team calendar — Port Vale fixtures from FotMob, training vs "
@@ -287,7 +294,7 @@ APPS: list[dict[str, Any]] = [
         "icon": "📆",
         "accent": "#22c55e",
         "tags": ["Training", "Fixtures", "Calendar"],
-        "roles": ("analysis", "admin"),
+        "roles": ("analysis", "admin", "ops"),
         "api_prefixes": ("/schedule", "/api/schedule"),
         "router": "schedule",
     },
@@ -647,19 +654,53 @@ APPS: list[dict[str, Any]] = [
     },
     {
         "id": "availability-tracker",
-        "group": "strategy",
+        "group": "admin",
         "title": "Squad Availability",
         "description": (
-            "Training and match availability tracker — log injuries, training "
-            "attendance, and auto-fill minutes from Impect."
+            "Training and match availability — injuries, plus league starts / apps / "
+            "minutes from FotMob (replaces Starts and League Minutes sheets)."
         ),
         "href": "/availability-tracker",
         "icon": "🏥",
         "accent": "#ef4444",
         "tags": ["Squad", "Injuries", "Training"],
-        "roles": ("admin",),
+        "roles": ("admin", "ops"),
         "api_prefixes": ("/availability-tracker", "/api/availability"),
         "router": "availability_tracker",
+    },
+    {
+        "id": "bonus-tracker",
+        "group": "admin",
+        "title": "Bonus Tracker",
+        "description": (
+            "Player contract provisions and matchday bonus log — Appearance, "
+            "Goal/Assist, Clean Sheet, Squad Bonus, payments (replaces Sam Baker sheet)."
+        ),
+        "href": "/bonus-tracker",
+        "icon": "💷",
+        "accent": "#22c55e",
+        "tags": ["Contracts", "Bonuses", "Admin"],
+        "roles": ("admin", "ops"),
+        "api_prefixes": ("/bonus-tracker", "/api/bonus-tracker"),
+        "router": "bonus_tracker",
+        "note": "Demo shell — feedback welcome",
+    },
+    {
+        "id": "suspension-tracker",
+        "group": "admin",
+        "title": "Suspension Tracker",
+        "description": (
+            "FotMob yellow/red cards by competition (L2 / Trophy / Cups) with EFL "
+            "offence codes and staff discipline — replaces the Discipline sheet."
+        ),
+        "href": "/suspension-tracker",
+        "icon": "🟨",
+        "accent": "#eab308",
+        "tags": ["Discipline", "Yellows", "Admin"],
+        "roles": ("admin", "ops"),
+        "api_prefixes": ("/suspension-tracker", "/api/suspension-tracker"),
+        "router": "suspension_tracker",
+        "note": "Demo shell — feedback welcome",
     },
     {
         "id": "league-two-progress",
@@ -889,10 +930,14 @@ LIVE_ESSENTIAL_IDS = frozenset(
         "scout-summary",
         "scouts-calendar",
         # Strategy
-        "availability-tracker",
         "league-two-progress",
         "win-drivers",
         "club-strategy",
+        # Admin
+        "schedule",
+        "availability-tracker",
+        "bonus-tracker",
+        "suspension-tracker",
         # Presentations (one rail link; decks live on the gallery page)
         "presentations",
     }

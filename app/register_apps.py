@@ -20,6 +20,7 @@ from app.auth import current_role, is_authenticated, auth_enabled
 def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
     from app.availability_tracker import register_availability_tracker_routes
     from app.blocks_analysis import register_blocks_analysis_routes
+    from app.bonus_tracker import register_bonus_tracker_routes
     from app.club_strategy import register_club_strategy_routes
     from app.fixture_planner import register_fixture_planner_routes
     from app.hub_origin import register_hub_origin_routes
@@ -41,6 +42,7 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
     from app.squad_planner import register_squad_planner_routes
     from app.squad_review import register_squad_review_routes
     from app.strategy_tracker import register_strategy_tracker_routes
+    from app.suspension_tracker import register_suspension_tracker_routes
     from app.who_to_scout import register_who_to_scout_routes
     from app.win_drivers import register_win_drivers_routes
     from app.goal_involvement import register_goal_involvement_routes
@@ -72,6 +74,8 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
         "goals_analysis": register_goals_analysis_routes,
         "blocks_analysis": register_blocks_analysis_routes,
         "schedule": register_schedule_routes,
+        "bonus_tracker": register_bonus_tracker_routes,
+        "suspension_tracker": register_suspension_tracker_routes,
         "scouting": register_scouting_routes,
         "scoutable_teams": register_scoutable_teams_routes,
         "squad_review": register_squad_review_routes,

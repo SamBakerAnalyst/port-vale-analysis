@@ -24,6 +24,9 @@ def test_presentations_is_the_only_rail_item_in_that_group():
     titles = required_sidebar_titles()
     assert "Presentations" in titles
     assert "Season Progress Report" in titles
+    assert "Bonus Tracker" in titles
+    assert "Suspension Tracker" in titles
+    assert "Schedule" in titles
     for title in DECK_TITLES:
         assert title not in titles
     visible = [app for app in APPS if app.get("group") == "presentations" and app.get("sidebar") is not False]
@@ -38,11 +41,24 @@ def test_strategy_rail_is_dashboards_only():
     ]
     assert strategy == [
         "Squad Comparison",
-        "Squad Availability",
         "Season Progress Report",
         "What Wins Games",
         "Club Strategy",
         "Goals Analysis",
+    ]
+
+
+def test_admin_rail_has_ops_tools():
+    admin = [
+        app["title"]
+        for app in APPS
+        if app["group"] == "admin" and app.get("sidebar") is not False
+    ]
+    assert admin == [
+        "Schedule",
+        "Squad Availability",
+        "Bonus Tracker",
+        "Suspension Tracker",
     ]
 
 

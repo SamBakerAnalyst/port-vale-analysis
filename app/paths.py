@@ -54,6 +54,8 @@ WIN_DRIVERS_CACHE_DIR = CACHE_ROOT / "impect-win-drivers"
 HUB_SNAPSHOTS_DIR = CACHE_ROOT / "hub-snapshots"
 ANALYSIS_CACHE_DIR = CACHE_ROOT / "impect-analysis"
 SQUAD_REVIEW_CACHE_DIR = CACHE_ROOT / "impect-squad-review"
+SUSPENSION_TRACKER_DATA_DIR = CACHE_ROOT / "impect-suspension-tracker"
+BONUS_TRACKER_DATA_DIR = CACHE_ROOT / "impect-bonus-tracker"
 
 # Optional legacy pre-match standalone (port 8002) — not bundled in hub
 PRE_MATCH_STANDALONE_DIR = Path(
@@ -78,6 +80,8 @@ def ensure_data_dirs() -> None:
         HUB_SNAPSHOTS_DIR,
         ANALYSIS_CACHE_DIR,
         SQUAD_REVIEW_CACHE_DIR,
+        SUSPENSION_TRACKER_DATA_DIR,
+        BONUS_TRACKER_DATA_DIR,
         STATIC_DIR / "player-photos",
         STATIC_DIR / "post-match-badges",
         STATIC_DIR / "handout-badges",

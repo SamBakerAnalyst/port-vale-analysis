@@ -9,6 +9,7 @@ const state = {
   view: "log",
   showMatches: true,
   matrixFilter: "all",
+  playingMode: "minutes",
   logMode: "match",
   logSessionKey: "friendly:new",
   logMatchSessionId: "",
@@ -46,6 +47,8 @@ const els = {
   injuryDetailHead: document.getElementById("injuryDetailHead"),
   injuryDetailBody: document.getElementById("injuryDetailBody"),
   matrixRoot: document.getElementById("matrixRoot"),
+  playingView: document.getElementById("playingView"),
+  playingRoot: document.getElementById("playingRoot"),
   summaryView: document.getElementById("summaryView"),
   summarySlide: document.getElementById("summarySlide"),
   presentSummaryBtn: document.getElementById("presentSummaryBtn"),
@@ -568,6 +571,108 @@ function renderSeasonToggle() {
       loadBoard();
     });
   });
+}
+
+function renderPlayingTime() {
+  if (!els.playingRoot) return;
+  const leagueSessions = (state.board?.sessions || []).filter(
+    (session) => session.type === "match" && session.match_category === "league" && session.complete
+  );
+  const players = rosterPlayers().filter((player) => player.active !== false);
+  if (!leagueSessions.length) {
+    els.playingRoot.innerHTML = `<p class="av-empty">No completed league fixtures yet.</p>`;
+    return;
+  }
+  if (!players.length) {
+    els.playingRoot.innerHTML = `<p class="av-empty">Sync squad first.</p>`;
+    return;
+  }
+
+  const mode = state.playingMode || "minutes";
+  const head = leagueSessions
+    .map((session) => {
+      const label = String(session.label || session.date || "").replace(/\s*\([^)]*\)\s*$/, "");
+      return `<th title="${session.date || ""}">${label}<div class="av-playing__date">${session.date || ""}</div></th>`;
+    })
+    .join("");
+
+  const body = players
+    .slice()
+    .sort((a, b) => (b.impact?.league_minutes || 0) - (a.impact?.league_minutes || 0))
+    .map((player) => {
+      const impact = player.impact || {};
+      const cells = leagueSessions
+        .map((session) => {
+          const cell = player.cells?.[session.id] || {};
+          const minutes = Number(cell.minutes || 0);
+          const started = Boolean(cell.started);
+          let value = "—";
+          let cls = "av-playing__cell";
+          if (mode === "minutes") {
+            if (minutes > 0) {
+              value = String(minutes);
+              cls += started ? " av-playing__cell--start" : " av-playing__cell--sub";
+            }
+          } else if (mode === "starts") {
+            if (started && minutes > 0) {
+              value = "1";
+              cls += " av-playing__cell--start";
+            } else if (minutes > 0) {
+              value = "";
+            }
+          } else if (mode === "apps") {
+            if (minutes > 0) {
+              value = "1";
+              cls += started ? " av-playing__cell--start" : " av-playing__cell--sub";
+            }
+          }
+          return `<td class="${cls}">${value}</td>`;
+        })
+        .join("");
+      return `<tr>
+        <th scope="row">
+          <div class="av-playing__name">${player.name}</div>
+          <div class="av-playing__totals">${impact.league_starts || 0} starts · ${impact.league_appearances || 0} apps · ${impact.league_minutes || 0} mins</div>
+        </th>
+        ${cells}
+      </tr>`;
+    })
+    .join("");
+
+  const foot = leagueSessions
+    .map((session) => {
+      let total = 0;
+      for (const player of players) {
+        const cell = player.cells?.[session.id] || {};
+        const minutes = Number(cell.minutes || 0);
+        const started = Boolean(cell.started);
+        if (mode === "minutes") total += minutes > 0 ? minutes : 0;
+        else if (mode === "starts") total += started && minutes > 0 ? 1 : 0;
+        else total += minutes > 0 ? 1 : 0;
+      }
+      return `<td>${total || "—"}</td>`;
+    })
+    .join("");
+
+  els.playingRoot.innerHTML = `
+    <div class="av-playing__scroll">
+      <table class="av-playing__table">
+        <thead>
+          <tr>
+            <th>Player</th>
+            ${head}
+          </tr>
+        </thead>
+        <tbody>${body}</tbody>
+        <tfoot>
+          <tr>
+            <th>${mode === "minutes" ? "Team mins" : mode === "starts" ? "Starters" : "Appearances"}</th>
+            ${foot}
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  `;
 }
 
 function renderMatrix() {
@@ -1146,6 +1251,15 @@ function renderRosterPlayerCard(player) {
       </div>
 
       <div class="av-roster-card__section">
+        <div class="av-roster-card__section-title">League playing time</div>
+        <div class="av-roster-card__stats av-roster-card__stats--3">
+          ${renderRosterStat("L2 starts", impact.league_starts ?? 0, "League starts (FotMob)")}
+          ${renderRosterStat("L2 apps", impact.league_appearances ?? 0, "League appearances")}
+          ${renderRosterStat("L2 mins", impact.league_minutes ?? 0, "League minutes")}
+        </div>
+      </div>
+
+      <div class="av-roster-card__section">
         <div class="av-roster-card__section-title">Minutes played</div>
         <div class="av-roster-card__stats av-roster-card__stats--5">
           ${renderRosterStat("Total mins", impact.minutes ?? 0, "Total minutes played (league + cup)")}
@@ -1481,12 +1595,14 @@ function renderView() {
     tab.classList.toggle("av-tab--active", tab.dataset.view === state.view);
   });
   els.matrixView.classList.toggle("hidden", state.view !== "matrix");
+  els.playingView?.classList.toggle("hidden", state.view !== "playing");
   els.logView.classList.toggle("hidden", state.view !== "log");
   els.rosterView.classList.toggle("hidden", state.view !== "roster");
   els.injuriesView?.classList.toggle("hidden", state.view !== "injuries");
   els.summaryView?.classList.toggle("hidden", state.view !== "summary");
 
   if (state.view === "matrix") renderMatrix();
+  if (state.view === "playing") renderPlayingTime();
   if (state.view === "summary") renderSummary();
   if (state.view === "log") {
     if (state.loggingActive) {
@@ -1864,6 +1980,15 @@ function bindEvents() {
         other.classList.toggle("av-matrix-filter__btn--active", other === btn);
       });
       renderMatrix();
+    });
+  });
+  document.querySelectorAll("[data-playing-mode]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.playingMode = btn.dataset.playingMode || "minutes";
+      document.querySelectorAll("[data-playing-mode]").forEach((other) => {
+        other.classList.toggle("av-matrix-filter__btn--active", other === btn);
+      });
+      renderPlayingTime();
     });
   });
   els.importRosterBtn.addEventListener("click", importRoster);

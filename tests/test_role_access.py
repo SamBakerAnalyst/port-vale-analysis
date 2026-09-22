@@ -26,6 +26,17 @@ def test_scouts_role_is_registered_with_recruitment_and_scouts_groups():
     assert ROLE_HOME_TABS["scouts"] == ("home", "recruitment")
 
 
+def test_ops_role_is_admin_rail_only():
+    assert ROLE_GROUPS["ops"] == ("admin",)
+    assert ROLE_HOME_TABS["ops"] == ("home",)
+    assert _titles_for_role("ops") == {
+        "Schedule",
+        "Squad Availability",
+        "Bonus Tracker",
+        "Suspension Tracker",
+    }
+
+
 def test_every_role_has_home_tabs_and_groups():
     assert set(ROLE_GROUPS) == set(ROLE_HOME_TABS)
     for role, tabs in ROLE_HOME_TABS.items():
@@ -67,6 +78,35 @@ def test_scouts_cannot_open_strategy_or_presentations(app_id):
 
 def test_scouts_and_analysis_roles_do_not_overlap():
     assert not _titles_for_role("scouts") & _titles_for_role("analysis")
+
+
+def test_ops_cannot_open_analysis_recruitment_or_strategy():
+    for path in (
+        "/pre-match",
+        "/api/pre-match",
+        "/who-to-scout",
+        "/watch-list",
+        "/api/watch-list",
+        "/club-strategy",
+        "/api/club-strategy",
+        "/presentations",
+        "/squad-review",
+    ):
+        assert not _path_allowed_for_role(path, "ops"), f"{path} leaked to ops"
+
+
+def test_ops_can_open_admin_tools():
+    for path in (
+        "/schedule",
+        "/api/schedule",
+        "/availability-tracker",
+        "/api/availability",
+        "/bonus-tracker",
+        "/api/bonus-tracker",
+        "/suspension-tracker",
+        "/api/suspension-tracker",
+    ):
+        assert _path_allowed_for_role(path, "ops"), f"ops blocked from {path}"
 
 
 def test_no_app_grants_a_bare_api_wildcard_to_a_non_admin_role():
@@ -162,7 +202,7 @@ def test_shared_paths_and_hub_shell_open_for_every_role():
 
 
 def test_raw_standalone_html_stays_blocked_for_non_admin_roles():
-    for role in ("scouts", "analysis"):
+    for role in ("scouts", "analysis", "ops"):
         assert not _path_allowed_for_role("/standalone/club-strategy.html", role)
         assert _path_allowed_for_role("/standalone/watch-list.js", role)
 

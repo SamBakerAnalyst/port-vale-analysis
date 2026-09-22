@@ -1418,6 +1418,9 @@ def _on_pitch_impact(
         "appearances": 0,
         "starts": 0,
         "minutes": 0,
+        "league_appearances": 0,
+        "league_starts": 0,
+        "league_minutes": 0,
         "goals_for": 0,
         "goals_against": 0,
         "goal_diff": 0,
@@ -1458,6 +1461,11 @@ def _on_pitch_impact(
         # Cup/friendly minutes count as playing time; points / GD stay league-only.
         if not is_league:
             continue
+
+        stats["league_appearances"] += 1
+        stats["league_minutes"] += mins_int
+        if (row or {}).get("started"):
+            stats["league_starts"] += 1
 
         share = float((row or {}).get("match_share") or 0.0)
         if share <= 0:
@@ -1668,6 +1676,7 @@ def build_availability_payload(*, season: str, refresh: bool = False) -> dict[st
 
         for session in merged_sessions:
             play_minutes = None
+            row = None
             match_id = session.get("match_id")
             if session.get("type") == "match" and match_id is not None:
                 row = _roster_minutes_for_match(
@@ -1690,6 +1699,8 @@ def build_availability_payload(*, season: str, refresh: bool = False) -> dict[st
                 play_minutes=play_minutes,
                 has_player_identity=True,
             )
+            if row:
+                cells[str(session["id"])]["started"] = bool(row.get("started"))
 
         availability = _availability_rates(cells, merged_sessions)
         impact = _on_pitch_impact(
