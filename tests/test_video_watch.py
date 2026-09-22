@@ -86,6 +86,11 @@ def test_page_has_both_sheets_and_a_central_profile():
     assert "PVFC player level" in js
     assert "Next action" in js
     assert "Add to pipeline" in js
+    assert 'deskView: "sheet"' in js
+    assert 'params.get("desk") === "formation"' in js
+    assert "keepProfilesForPosition" in js
+    assert "vwGeneralNextSteps" in js
+    assert "Reports Library" in html
     assert "How do they progress the ball" in js
     assert "What sort of headers do they win" in js
     assert "Scoutable Teams" in js
@@ -458,13 +463,40 @@ def test_report_profile_titles_follow_the_player_data(tmp_path, monkeypatch):
         player_profiles=[
             {"key": "PV DEFENDER", "label": "Defender", "score": 44},
             {"key": "PV DEEP CREATOR", "label": "Deep Creator", "score": 40},
+            {"key": "PV GOAL THREAT", "label": "Goal Threat", "score": 70},
         ],
         player_position="RIGHT_WINGBACK_DEFENDER",
     )
     labels = [row["label"] for row in rows]
+    ids = [row["id"] for row in rows]
+    assert "defender" in ids
+    assert "deep-creator" in ids
+    assert "goal-threat" not in ids
     assert "Defender" in labels
     assert "Deep Creator" in labels
-    assert rows[1]["detailed_prompt"].startswith("How do they progress the ball")
+    deep = next(row for row in rows if row["id"] == "deep-creator")
+    assert deep["detailed_prompt"].startswith("How do they progress the ball")
+
+
+def test_central_midfield_profiles_are_the_pv_catalog():
+    from app.player_report_schema import POSITION_PROFILES, profile_entries_for_position, profile_id
+
+    fallback = [profile_id(name) for name in POSITION_PROFILES["CENTRAL_MIDFIELD"]]
+    assert fallback == [
+        "goal-threat",
+        "running-threat",
+        "ball-winner",
+        "creator",
+        "ball-progressor",
+    ]
+    rows = profile_entries_for_position(
+        "CENTRAL_MIDFIELD",
+        player_profiles=[{"key": "PV DEFENDER", "label": "Defender", "score": 40}],
+        player_position="CENTRAL_DEFENDER",
+    )
+    ids = [row["id"] for row in rows]
+    assert "defender" not in ids
+    assert set(fallback).issubset(set(ids)) or ids == fallback
 
 
 def test_detailed_report_stores_level_rating_and_next_action(tmp_path, monkeypatch):
@@ -514,6 +546,49 @@ def test_not_to_standard_marks_level_d(tmp_path, monkeypatch):
     )
     assert saved["pvfc_level"] == "D"
     assert saved["pipeline_stage"] == "not_the_right_fit"
+
+
+def test_general_report_stores_decision_fields_and_identity(tmp_path, monkeypatch):
+    monkeypatch.setattr(reports, "PLAYER_REPORTS_PATH", tmp_path / "player-reports.json")
+    saved = reports.save_general_report(
+        player_id=922,
+        fixture_id="barnet-accrington-1",
+        notes="Comfortable at RWB.",
+        next_steps="Watch again live.",
+        match_rating=8,
+        pvfc_level="B",
+        next_action="high_priority",
+        name="Connor O'Brien",
+        club="Accrington Stanley",
+        league="League Two",
+        fixture_label="Barnet vs Accrington",
+        staff="Dan",
+    )
+    assert saved["match_rating"] == 8
+    assert saved["pvfc_level"] == "B"
+    assert saved["next_action"] == "high_priority"
+    assert saved["name"] == "Connor O'Brien"
+    loaded = reports.general_report_for_player(922, "barnet-accrington-1")
+    assert loaded["next_steps"].startswith("Watch again")
+    detailed = reports.detailed_report_for_player(922, "barnet-accrington-1")
+    assert detailed["match_rating"] == 8
+    assert detailed["pvfc_level"] == "B"
+
+
+def test_general_report_strips_profiles_from_another_position(tmp_path, monkeypatch):
+    monkeypatch.setattr(reports, "PLAYER_REPORTS_PATH", tmp_path / "player-reports.json")
+    saved = reports.save_general_report(
+        player_id=922,
+        fixture_id="barnet-accrington-1",
+        position_in_game="CENTRAL_MIDFIELD",
+        profiles={
+            "goal-threat": "Late box arrivals.",
+            "defender": "Should not persist on a CM report.",
+        },
+        staff="Dan",
+    )
+    assert "goal-threat" in saved["profiles"]
+    assert "defender" not in saved["profiles"]
 
 
 def test_empty_detailed_report_copies_general_physical(tmp_path, monkeypatch):

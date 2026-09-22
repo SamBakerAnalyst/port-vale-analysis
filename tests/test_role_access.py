@@ -43,6 +43,7 @@ def test_every_role_has_home_tabs_and_groups():
         "loans-watch",
         "games-to-watch",
         "video-watch",
+        "reports-library",
         "squad-planner",
         "squad-balance",
         "player-comparison",
@@ -136,6 +137,8 @@ def test_scouts_reach_their_own_tool_pages_and_apis():
         "/player-reports",
         "/video-watch",
         "/api/video-watch",
+        "/reports-library",
+        "/api/reports-library",
         "/efl-transfer-report",
         "/fixture-planner",
     ):

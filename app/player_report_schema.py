@@ -91,6 +91,8 @@ PIPELINE_STAGES: tuple[tuple[str, str], ...] = (
     ("not_the_right_fit", "Not the right fit"),
 )
 
+# Offline fallback when Impect profile definitions are unavailable.
+# Prefer live definitions via catalog_profile_names() — CM matches Port Vale midfield.
 POSITION_PROFILES: dict[str, tuple[str, ...]] = {
     "GOALKEEPER": ("SHOT STOPPING", "BOX GOALKEEPER", "SWEEPER", "BALL PLAYING"),
     "CENTRAL_DEFENDER": ("DEFENSIVE", "DEFENDER", "PROGRESSOR", "BALL PLAYING"),
@@ -110,16 +112,27 @@ POSITION_PROFILES: dict[str, tuple[str, ...]] = {
         "WIDE BALL CARRIER",
         "WIDE CREATOR",
     ),
-    "DEFENSE_MIDFIELD": ("DEFENSIVE", "PROGRESSOR", "DEEP CREATOR", "PRESSER", "BALL CARRIER"),
-    "CENTRAL_MIDFIELD": (
-        "DEFENSIVE",
-        "PROGRESSOR",
+    "DEFENSE_MIDFIELD": (
+        "BALL WINNER",
+        "BALL PROGRESSOR",
         "DEEP CREATOR",
         "PRESSER",
         "BALL CARRIER",
-        "CREATOR",
     ),
-    "ATTACKING_MIDFIELD": ("CREATOR", "GOAL THREAT", "PRESSER", "BALL CARRIER", "THREAT IN BEHIND"),
+    "CENTRAL_MIDFIELD": (
+        "GOAL THREAT",
+        "RUNNING THREAT",
+        "BALL WINNER",
+        "CREATOR",
+        "BALL PROGRESSOR",
+    ),
+    "ATTACKING_MIDFIELD": (
+        "CREATOR",
+        "GOAL THREAT",
+        "PRESSER",
+        "BALL CARRIER",
+        "THREAT IN BEHIND",
+    ),
     "LEFT_WINGER": (
         "WIDE CREATOR",
         "WIDE GOAL THREAT",
@@ -165,6 +178,18 @@ PROFILE_PROMPTS: dict[str, dict[str, str]] = {
     "progressor": {
         "general": "Carries and forward passing through the lines.",
         "detailed": "How do they progress the ball — carry through contact, or pass? Which line did they break, and what was the next action after?",
+    },
+    "ball-progressor": {
+        "general": "Carries and forward passing through the lines.",
+        "detailed": "How do they progress the ball — carry through contact, or pass? Which line did they break, and what was the next action after?",
+    },
+    "ball-winner": {
+        "general": "Duels, interceptions, and how they regain the ball.",
+        "detailed": "Where do they win it? Timing of the duel / intercept, and what they do with the first touch after the regain.",
+    },
+    "running-threat": {
+        "general": "Late runs, box arrivals, and attacking movement.",
+        "detailed": "When do they arrive? Timing of late runs vs occupying. End product after the run.",
     },
     "ball-carrier": {
         "general": "Carries into space and through contact.",
@@ -265,6 +290,32 @@ def clean_profiles(row: Any) -> dict[str, str]:
     return out
 
 
+def catalog_profile_names(position: str) -> list[str]:
+    """Profile titles for a report position — Impect first, static fallback second."""
+    wanted = clean_position(position)
+    if not wanted:
+        return []
+    try:
+        from app.scouting import _profiles_for_position
+
+        names = _profiles_for_position(wanted)
+        cleaned = [str(name or "").strip() for name in (names or []) if str(name or "").strip()]
+        if cleaned:
+            return cleaned
+    except Exception:
+        pass
+    return list(POSITION_PROFILES.get(wanted, ()))
+
+
+def clean_profiles_for_position(row: Any, position: str) -> dict[str, str]:
+    """Keep only profile notes that belong to the selected position catalog."""
+    cleaned = clean_profiles(row)
+    allowed = {profile_id(name) for name in catalog_profile_names(position)}
+    if not allowed:
+        return cleaned
+    return {key: value for key, value in cleaned.items() if key in allowed}
+
+
 def clean_psychology(row: Any) -> dict[str, str]:
     source = row if isinstance(row, dict) else {}
     allowed = {"", "yes", "no", "mixed"}
@@ -314,41 +365,39 @@ def profile_entries_for_position(
     player_profiles: list[dict[str, Any]] | None = None,
     player_position: str = "",
 ) -> list[dict[str, Any]]:
+    """Profiles for the selected report position only — never another role's bag."""
     wanted = clean_position(position) or clean_position(player_position)
-    live: list[dict[str, Any]] = []
-    same_role = bool(wanted) and clean_position(player_position) == wanted
-    if same_role:
-        for row in player_profiles or []:
-            if not isinstance(row, dict):
-                continue
-            raw = str(row.get("key") or row.get("label") or "").strip()
-            if not raw:
-                continue
-            live.append(
-                {
-                    "id": profile_id(raw),
-                    "key": raw,
-                    "label": humanize_profile_name(str(row.get("label") or raw)),
-                    "score": row.get("score"),
-                    "general_prompt": prompts_for(raw)["general"],
-                    "detailed_prompt": prompts_for(raw)["detailed"],
-                }
-            )
-    if live:
-        return live
-    fallback: list[dict[str, Any]] = []
-    for name in POSITION_PROFILES.get(wanted or "", ()):
-        fallback.append(
+    if not wanted:
+        return []
+    names = catalog_profile_names(wanted)
+    scores: dict[str, Any] = {}
+    labels: dict[str, str] = {}
+    # Annotate with live scores only for catalog keys (same or any player bag).
+    for row in player_profiles or []:
+        if not isinstance(row, dict):
+            continue
+        raw = str(row.get("key") or row.get("label") or "").strip()
+        if not raw:
+            continue
+        pid = profile_id(raw)
+        if pid not in {profile_id(name) for name in names}:
+            continue
+        scores[pid] = row.get("score")
+        labels[pid] = humanize_profile_name(str(row.get("label") or raw))
+    out: list[dict[str, Any]] = []
+    for name in names:
+        pid = profile_id(name)
+        out.append(
             {
-                "id": profile_id(name),
+                "id": pid,
                 "key": name,
-                "label": humanize_profile_name(name),
-                "score": None,
+                "label": labels.get(pid) or humanize_profile_name(name),
+                "score": scores.get(pid),
                 "general_prompt": prompts_for(name)["general"],
                 "detailed_prompt": prompts_for(name)["detailed"],
             }
         )
-    return fallback
+    return out
 
 
 def option_fields() -> dict[str, Any]:

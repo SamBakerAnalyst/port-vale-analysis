@@ -24,7 +24,7 @@ from app.player_report_schema import (
     clean_physical,
     clean_pipeline_stage,
     clean_position,
-    clean_profiles,
+    clean_profiles_for_position,
     clean_psychology,
     clean_pvfc_level,
     empty_physical,
@@ -83,12 +83,22 @@ class GeneralReportBody(BaseModel):
     notes: str = ""
     name: str = ""
     club: str = ""
+    league: str = ""
     home_name: str = ""
     away_name: str = ""
     sheet_side: str = ""
     position_in_game: str = ""
+    position: str = ""
+    position_label: str = ""
+    age: int | None = None
     physical: dict[str, str] = Field(default_factory=dict)
     profiles: dict[str, str] = Field(default_factory=dict)
+    next_steps: str = ""
+    match_rating: float | None = None
+    pvfc_level: str = ""
+    add_to_pipeline: bool = False
+    pipeline_stage: str = "video_scouted"
+    next_action: str = ""
 
 
 class DetailedReportBody(BaseModel):
@@ -351,6 +361,52 @@ def _report_key(player_id: int, fixture_id: str) -> str:
     return f"{int(player_id)}:{str(fixture_id or '').strip()}"
 
 
+def _identity_fields(row: dict[str, Any] | None = None, **overrides: Any) -> dict[str, Any]:
+    source = row if isinstance(row, dict) else {}
+    age_raw = overrides.get("age", source.get("age"))
+    age: int | None
+    try:
+        age = int(age_raw) if age_raw not in (None, "") else None
+    except (TypeError, ValueError):
+        age = None
+    return {
+        "name": _clean_text(overrides.get("name", source.get("name")), limit=120),
+        "club": _clean_text(overrides.get("club", source.get("club")), limit=120),
+        "league": _clean_text(overrides.get("league", source.get("league")), limit=80),
+        "fixture_label": _clean_text(
+            overrides.get("fixture_label", source.get("fixture_label")), limit=160
+        ),
+        "position": clean_position(overrides.get("position", source.get("position"))),
+        "position_label": _clean_text(
+            overrides.get("position_label", source.get("position_label")), limit=80
+        ),
+        "age": age,
+    }
+
+
+def _apply_decision_fields(base: dict[str, Any], row: dict[str, Any]) -> None:
+    next_steps = str(row.get("next_steps") or "").strip()
+    rating = clean_match_rating(row.get("match_rating"))
+    level = clean_pvfc_level(row.get("pvfc_level"))
+    action = clean_next_action(row.get("next_action"))
+    stage = clean_pipeline_stage(row.get("pipeline_stage")) or "video_scouted"
+    add = bool(row.get("add_to_pipeline"))
+    if action == "sign":
+        add = True
+        if stage in ("", "video_scouted"):
+            stage = "scout_identified"
+    elif action == "not_to_standard":
+        level = level or "D"
+        if stage in ("", "video_scouted"):
+            stage = "not_the_right_fit"
+    base["next_steps"] = next_steps[:4000]
+    base["match_rating"] = rating
+    base["pvfc_level"] = level
+    base["add_to_pipeline"] = add
+    base["pipeline_stage"] = stage
+    base["next_action"] = action
+
+
 def empty_general_report(player_id: int = 0, fixture_id: str = "") -> dict[str, Any]:
     return {
         "player_id": int(player_id or 0),
@@ -359,6 +415,13 @@ def empty_general_report(player_id: int = 0, fixture_id: str = "") -> dict[str, 
         "physical": empty_physical(),
         "profiles": {},
         "notes": "",
+        "next_steps": "",
+        "match_rating": None,
+        "pvfc_level": "",
+        "add_to_pipeline": False,
+        "pipeline_stage": "video_scouted",
+        "next_action": "",
+        **_identity_fields(),
         "updated_by": "",
         "updated_at": "",
         "filled": False,
@@ -370,20 +433,26 @@ def _general_from_row(player_id: int, fixture_id: str, row: dict[str, Any] | Non
     if not isinstance(row, dict):
         return base
     physical = clean_physical(row.get("physical"))
-    profiles = clean_profiles(row.get("profiles"))
-    notes = str(row.get("notes") or "").strip()
     position = clean_position(row.get("position_in_game"))
+    profiles = clean_profiles_for_position(row.get("profiles"), position)
+    notes = str(row.get("notes") or "").strip()
+    base.update(_identity_fields(row))
+    _apply_decision_fields(base, row)
     base.update(
         {
             "position_in_game": position,
             "physical": physical,
             "profiles": profiles,
-            "notes": notes,
+            "notes": notes[:2000],
             "updated_by": str(row.get("updated_by") or ""),
             "updated_at": str(row.get("updated_at") or ""),
             "filled": bool(
                 position
                 or notes
+                or base.get("next_steps")
+                or base.get("match_rating") is not None
+                or base.get("pvfc_level")
+                or base.get("next_action")
                 or any(physical.values())
                 or any(str(value or "").strip() for value in profiles.values())
             ),
@@ -408,6 +477,19 @@ def save_general_report(
     position_in_game: str = "",
     physical: dict[str, str] | None = None,
     profiles: dict[str, str] | None = None,
+    next_steps: str = "",
+    match_rating: float | None = None,
+    pvfc_level: str = "",
+    add_to_pipeline: bool = False,
+    pipeline_stage: str = "video_scouted",
+    next_action: str = "",
+    name: str = "",
+    club: str = "",
+    league: str = "",
+    fixture_label: str = "",
+    position: str = "",
+    position_label: str = "",
+    age: int | None = None,
     staff: str = "Staff",
 ) -> dict[str, Any]:
     if not player_id:
@@ -423,6 +505,21 @@ def save_general_report(
             "physical": physical or {},
             "profiles": profiles or {},
             "notes": str(notes or "").strip()[:2000],
+            "next_steps": next_steps,
+            "match_rating": match_rating,
+            "pvfc_level": pvfc_level,
+            "add_to_pipeline": add_to_pipeline,
+            "pipeline_stage": pipeline_stage,
+            "next_action": next_action,
+            **_identity_fields(
+                name=name,
+                club=club,
+                league=league,
+                fixture_label=fixture_label,
+                position=position or position_in_game,
+                position_label=position_label,
+                age=age,
+            ),
             "updated_by": str(staff or "").strip() or "Staff",
             "updated_at": _now(),
         },
@@ -448,6 +545,7 @@ def empty_detailed_report(player_id: int = 0, fixture_id: str = "") -> dict[str,
         "add_to_pipeline": False,
         "pipeline_stage": "video_scouted",
         "next_action": "",
+        **_identity_fields(),
         "updated_by": "",
         "updated_at": "",
         "filled": False,
@@ -459,24 +557,12 @@ def _detailed_from_row(player_id: int, fixture_id: str, row: dict[str, Any] | No
     if not isinstance(row, dict):
         return base
     physical = clean_physical(row.get("physical"))
-    profiles = clean_profiles(row.get("profiles"))
     psychology = clean_psychology(row.get("psychology"))
     write_up = str(row.get("write_up") or "").strip()
-    next_steps = str(row.get("next_steps") or "").strip()
-    rating = clean_match_rating(row.get("match_rating"))
-    level = clean_pvfc_level(row.get("pvfc_level"))
-    action = clean_next_action(row.get("next_action"))
-    stage = clean_pipeline_stage(row.get("pipeline_stage")) or "video_scouted"
     position = clean_position(row.get("position_in_game"))
-    add = bool(row.get("add_to_pipeline"))
-    if action == "sign":
-        add = True
-        if stage in ("", "video_scouted"):
-            stage = "scout_identified"
-    elif action == "not_to_standard":
-        level = level or "D"
-        if stage in ("", "video_scouted"):
-            stage = "not_the_right_fit"
+    profiles = clean_profiles_for_position(row.get("profiles"), position)
+    base.update(_identity_fields(row))
+    _apply_decision_fields(base, row)
     base.update(
         {
             "position_in_game": position,
@@ -484,24 +570,23 @@ def _detailed_from_row(player_id: int, fixture_id: str, row: dict[str, Any] | No
             "profiles": profiles,
             "psychology": psychology,
             "write_up": write_up[:4000],
-            "next_steps": next_steps[:4000],
-            "match_rating": rating,
-            "pvfc_level": level,
-            "add_to_pipeline": add,
-            "pipeline_stage": stage,
-            "next_action": action,
             "updated_by": str(row.get("updated_by") or ""),
             "updated_at": str(row.get("updated_at") or ""),
             "filled": bool(
                 position
                 or write_up
-                or next_steps
-                or rating is not None
-                or level
-                or action
+                or base.get("next_steps")
+                or base.get("match_rating") is not None
+                or base.get("pvfc_level")
+                or base.get("next_action")
                 or any(physical.values())
                 or any(str(value or "").strip() for value in profiles.values())
-                or any(str(value or "").strip() for value in psychology.values())
+                or any(
+                    str(value or "").strip()
+                    for key, value in psychology.items()
+                    if key != "notes"
+                )
+                or str(psychology.get("notes") or "").strip()
             ),
         }
     )
@@ -524,6 +609,25 @@ def detailed_report_for_player(player_id: int, fixture_id: str) -> dict[str, Any
         detailed["physical"] = dict(general.get("physical") or empty_physical())
     if not any(str(value or "").strip() for value in detailed["profiles"].values()):
         detailed["profiles"] = dict(general.get("profiles") or {})
+    # Seed decision fields from general when detailed has none yet.
+    if detailed.get("match_rating") is None and general.get("match_rating") is not None:
+        detailed["match_rating"] = general.get("match_rating")
+    if not detailed.get("pvfc_level") and general.get("pvfc_level"):
+        detailed["pvfc_level"] = general.get("pvfc_level")
+    if not detailed.get("next_action") and general.get("next_action"):
+        detailed["next_action"] = general.get("next_action")
+    if not detailed.get("next_steps") and general.get("next_steps"):
+        detailed["next_steps"] = general.get("next_steps")
+    if not detailed.get("pipeline_stage") or detailed.get("pipeline_stage") == "video_scouted":
+        if general.get("pipeline_stage"):
+            detailed["pipeline_stage"] = general.get("pipeline_stage")
+    if not detailed.get("add_to_pipeline") and general.get("add_to_pipeline"):
+        detailed["add_to_pipeline"] = True
+    for key in ("name", "club", "league", "fixture_label", "position_label"):
+        if not detailed.get(key) and general.get(key):
+            detailed[key] = general.get(key)
+    if detailed.get("age") is None and general.get("age") is not None:
+        detailed["age"] = general.get("age")
     return detailed
 
 
@@ -542,6 +646,13 @@ def save_detailed_report(
     add_to_pipeline: bool = False,
     pipeline_stage: str = "video_scouted",
     next_action: str = "",
+    name: str = "",
+    club: str = "",
+    league: str = "",
+    fixture_label: str = "",
+    position: str = "",
+    position_label: str = "",
+    age: int | None = None,
     staff: str = "Staff",
 ) -> dict[str, Any]:
     if not player_id:
@@ -564,6 +675,15 @@ def save_detailed_report(
             "add_to_pipeline": add_to_pipeline,
             "pipeline_stage": pipeline_stage,
             "next_action": next_action,
+            **_identity_fields(
+                name=name,
+                club=club,
+                league=league,
+                fixture_label=fixture_label,
+                position=position or position_in_game,
+                position_label=position_label,
+                age=age,
+            ),
             "updated_by": str(staff or "").strip() or "Staff",
             "updated_at": _now(),
         },
@@ -720,4 +840,110 @@ def report_file_for_player(
         "general_report": general,
         "detailed_report": detailed,
         "cms": cms_for_player(player_id, name=name, club=club),
+    }
+
+
+def _library_pick(*rows: dict[str, Any], key: str, prefer_truthy: bool = True) -> Any:
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        value = row.get(key)
+        if prefer_truthy:
+            if value not in (None, "", [], {}):
+                return value
+        elif value is not None:
+            return value
+    return None
+
+
+def list_library_reports() -> dict[str, Any]:
+    """One library row per player+fixture — detailed wins, else general."""
+    store = _load_store()
+    conditions = store.get("match_conditions") or {}
+    keys = set(store.get("general_reports") or {}) | set(store.get("detailed_reports") or {})
+    reports: list[dict[str, Any]] = []
+    for key in keys:
+        try:
+            player_token, fixture_id = str(key).split(":", 1)
+            player_id = int(player_token)
+        except (TypeError, ValueError):
+            continue
+        fixture_id = str(fixture_id or "").strip()
+        if not player_id or not fixture_id:
+            continue
+        general_row = store["general_reports"].get(key)
+        detailed_row = store["detailed_reports"].get(key)
+        general = _general_from_row(
+            player_id, fixture_id, general_row if isinstance(general_row, dict) else None
+        )
+        detailed = _detailed_from_row(
+            player_id, fixture_id, detailed_row if isinstance(detailed_row, dict) else None
+        )
+        if not general.get("filled") and not detailed.get("filled"):
+            continue
+        cond = conditions.get(fixture_id) if isinstance(conditions, dict) else None
+        fixture_label = str(
+            _library_pick(detailed, general, key="fixture_label")
+            or (cond.get("fixture_label") if isinstance(cond, dict) else "")
+            or ""
+        )
+        match_rating = detailed.get("match_rating")
+        if match_rating is None:
+            match_rating = general.get("match_rating")
+        pvfc_level = str(detailed.get("pvfc_level") or general.get("pvfc_level") or "")
+        next_action = str(detailed.get("next_action") or general.get("next_action") or "")
+        position = str(
+            detailed.get("position_in_game")
+            or general.get("position_in_game")
+            or detailed.get("position")
+            or general.get("position")
+            or ""
+        )
+        source = "detailed" if detailed.get("filled") else "general"
+        reports.append(
+            {
+                "id": key,
+                "player_id": player_id,
+                "fixture_id": fixture_id,
+                "fixture_label": fixture_label,
+                "name": str(_library_pick(detailed, general, key="name") or f"Player {player_id}"),
+                "club": str(_library_pick(detailed, general, key="club") or ""),
+                "league": str(_library_pick(detailed, general, key="league") or ""),
+                "position": position,
+                "position_label": str(
+                    _library_pick(detailed, general, key="position_label") or ""
+                ),
+                "age": _library_pick(detailed, general, key="age"),
+                "match_rating": match_rating,
+                "pvfc_level": pvfc_level,
+                "next_action": next_action,
+                "next_steps": str(
+                    _library_pick(detailed, general, key="next_steps") or ""
+                ),
+                "pipeline_stage": str(
+                    _library_pick(detailed, general, key="pipeline_stage") or ""
+                ),
+                "source": source,
+                "has_detailed": bool(detailed.get("filled")),
+                "has_general": bool(general.get("filled")),
+                "updated_by": str(
+                    _library_pick(detailed, general, key="updated_by") or ""
+                ),
+                "updated_at": str(
+                    _library_pick(detailed, general, key="updated_at") or ""
+                ),
+                "href": f"/player-reports?fixture={fixture_id}&player={player_id}&desk=sheet",
+            }
+        )
+    reports.sort(
+        key=lambda row: (
+            0 if row.get("match_rating") is not None else 1,
+            -(float(row["match_rating"]) if row.get("match_rating") is not None else 0.0),
+            "".join(chr(255 - min(ord(c), 255)) for c in str(row.get("updated_at") or "")[:48]),
+        )
+    )
+    return {
+        "reports": reports,
+        "options": option_catalog(),
+        "count": len(reports),
     }

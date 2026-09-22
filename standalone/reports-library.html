@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reports Library</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/reports-library.css?v=1" />
+</head>
+<body>
+  <div class="rl">
+    <header class="rl-toolbar card">
+      <div class="rl-brand">
+        <p class="rl-eyebrow">Recruitment · <a href="/">← All apps</a> · <a href="/player-reports">Player Reports</a> · <a href="/scoutable-teams">Scoutable Teams</a></p>
+        <h1>Reports Library</h1>
+        <p class="rl-sub" id="rlSub">Every saved scout report. Filter by rating, PVFC level, position, next action, and scout. Notes stay on Scoutable Teams.</p>
+      </div>
+      <div class="rl-kpis" id="rlKpis"></div>
+    </header>
+
+    <p id="rlStatus" class="rl-status hidden" role="status"></p>
+
+    <section class="rl-filters card" id="rlFilters">
+      <div class="rl-filter rl-filter--search">
+        <span class="rl-filter__label">Search</span>
+        <input class="rl-search" id="rlSearch" type="search" placeholder="Player, club, fixture…" autocomplete="off" />
+      </div>
+      <div class="rl-filter">
+        <span class="rl-filter__label">Rating</span>
+        <div class="rl-chips" id="rlRating" role="group" aria-label="Match rating">
+          <button type="button" class="rl-chip is-active" data-rating="all">All</button>
+          <button type="button" class="rl-chip" data-rating="7">7+</button>
+          <button type="button" class="rl-chip" data-rating="8">8+</button>
+          <button type="button" class="rl-chip" data-rating="9">9+</button>
+          <button type="button" class="rl-chip" data-rating="none">No rating</button>
+        </div>
+      </div>
+      <div class="rl-filter">
+        <span class="rl-filter__label">PVFC level</span>
+        <div class="rl-chips" id="rlLevel" role="group" aria-label="PVFC level">
+          <button type="button" class="rl-chip is-active" data-level="all">All</button>
+          <button type="button" class="rl-chip" data-level="A">A</button>
+          <button type="button" class="rl-chip" data-level="B">B</button>
+          <button type="button" class="rl-chip" data-level="C">C</button>
+          <button type="button" class="rl-chip" data-level="D">D</button>
+        </div>
+      </div>
+      <div class="rl-filter">
+        <span class="rl-filter__label">Position</span>
+        <div class="rl-chips" id="rlPosition" role="group" aria-label="Position"></div>
+      </div>
+      <div class="rl-filter">
+        <span class="rl-filter__label">Next action</span>
+        <div class="rl-chips" id="rlAction" role="group" aria-label="Next action"></div>
+      </div>
+      <div class="rl-filter">
+        <span class="rl-filter__label">Scout</span>
+        <div class="rl-chips" id="rlScout" role="group" aria-label="Scout"></div>
+      </div>
+    </section>
+
+    <p class="rl-count" id="rlCount">Loading…</p>
+    <div class="rl-table-wrap card">
+      <table class="rl-table" id="rlTable">
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Club</th>
+            <th>Fixture</th>
+            <th>Pos</th>
+            <th>Rating</th>
+            <th>Level</th>
+            <th>Action</th>
+            <th>Scout</th>
+            <th>Updated</th>
+          </tr>
+        </thead>
+        <tbody id="rlBody">
+          <tr><td colspan="9" class="rl-empty">Loading reports…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script defer src="/static/hub-feedback.js?v=1"></script>
+  <script defer src="/static/reports-library.js?v=1"></script>
+</body>
+</html>
