@@ -78,6 +78,12 @@
       position_in_game: "",
       physical: {},
       profiles: {},
+      next_steps: "",
+      match_rating: "",
+      pvfc_level: "",
+      add_to_pipeline: false,
+      pipeline_stage: "video_scouted",
+      next_action: "",
     },
     detailedDraft: {
       position_in_game: "",
@@ -104,7 +110,7 @@
     loadError: "",
     sortKey: "date",
     sortDir: "desc",
-    deskView: "formation",
+    deskView: "sheet",
     formations: { home: "", away: "" },
   };
 
@@ -304,6 +310,9 @@
         position_in_game: document.getElementById("vwGamePosition")?.value ?? state.generalDraft.position_in_game,
         physical: collectKeyedFields("data-physical"),
         profiles: { ...state.generalDraft.profiles, ...collectKeyedFields("data-profile") },
+        next_steps: document.getElementById("vwGeneralNextSteps")?.value ?? state.generalDraft.next_steps,
+        add_to_pipeline: Boolean(document.getElementById("vwGeneralAddPipeline")?.checked),
+        pipeline_stage: document.getElementById("vwGeneralPipelineStage")?.value ?? state.generalDraft.pipeline_stage,
       };
     }
     const detailedForm = document.getElementById("vwDetailedForm");
@@ -428,6 +437,12 @@
       position_in_game: general.position_in_game || player?.position || "",
       physical: { ...(general.physical || {}) },
       profiles: { ...(general.profiles || {}) },
+      next_steps: general.next_steps || "",
+      match_rating: general.match_rating == null ? "" : String(general.match_rating),
+      pvfc_level: general.pvfc_level || "",
+      add_to_pipeline: Boolean(general.add_to_pipeline),
+      pipeline_stage: general.pipeline_stage || "video_scouted",
+      next_action: general.next_action || "",
     };
   }
 
@@ -452,12 +467,17 @@
       profiles: { ...(detailed.profiles || general.profiles || {}) },
       psychology: { ...(detailed.psychology || {}) },
       write_up: detailed.write_up || "",
-      next_steps: detailed.next_steps || "",
-      match_rating: detailed.match_rating == null ? "" : String(detailed.match_rating),
-      pvfc_level: detailed.pvfc_level || "",
-      add_to_pipeline: Boolean(detailed.add_to_pipeline),
-      pipeline_stage: detailed.pipeline_stage || "video_scouted",
-      next_action: detailed.next_action || "",
+      next_steps: detailed.next_steps || general.next_steps || "",
+      match_rating:
+        detailed.match_rating == null
+          ? general.match_rating == null
+            ? ""
+            : String(general.match_rating)
+          : String(detailed.match_rating),
+      pvfc_level: detailed.pvfc_level || general.pvfc_level || "",
+      add_to_pipeline: Boolean(detailed.add_to_pipeline || general.add_to_pipeline),
+      pipeline_stage: detailed.pipeline_stage || general.pipeline_stage || "video_scouted",
+      next_action: detailed.next_action || general.next_action || "",
     };
   }
 
@@ -498,7 +518,7 @@
     if (state.sortDir && state.sortDir !== "desc") params.set("dir", state.sortDir);
     if (state.fixtureId) params.set("fixture", state.fixtureId);
     if (state.playerId) params.set("player", String(state.playerId));
-    if (state.deskView && state.deskView !== "formation") params.set("desk", state.deskView);
+    if (state.deskView && state.deskView !== "sheet") params.set("desk", state.deskView);
     const next = params.toString();
     window.history.replaceState({}, "", next ? `${window.location.pathname}?${next}` : window.location.pathname);
   }
@@ -566,7 +586,7 @@
     });
     els.tools.querySelectorAll("[data-desk]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        state.deskView = btn.dataset.desk || "formation";
+        state.deskView = btn.dataset.desk || "sheet";
         writeUrl();
         renderSheets();
         renderTools();
@@ -1307,15 +1327,78 @@
     return `<select id="${id}"><option value="">Select position in game</option>${options}</select>`;
   }
 
+  const LOCKED_PROFILES = {
+    GOALKEEPER: ["shot-stopping", "box-goalkeeper", "sweeper", "ball-playing"],
+    CENTRAL_DEFENDER: ["defensive", "defender", "progressor", "ball-playing"],
+    LEFT_WINGBACK_DEFENDER: ["defender", "offensive", "deep-creator", "wide-presser", "wide-ball-carrier", "wide-creator"],
+    RIGHT_WINGBACK_DEFENDER: ["defender", "offensive", "deep-creator", "wide-presser", "wide-ball-carrier", "wide-creator"],
+    DEFENSE_MIDFIELD: ["ball-winner", "ball-progressor", "deep-creator", "presser", "ball-carrier"],
+    CENTRAL_MIDFIELD: ["goal-threat", "running-threat", "ball-winner", "creator", "ball-progressor"],
+    ATTACKING_MIDFIELD: ["creator", "goal-threat", "presser", "ball-carrier", "threat-in-behind"],
+    LEFT_WINGER: ["wide-creator", "wide-goal-threat", "wide-presser", "wide-ball-carrier", "threat-in-behind"],
+    RIGHT_WINGER: ["wide-creator", "wide-goal-threat", "wide-presser", "wide-ball-carrier", "threat-in-behind"],
+    CENTER_FORWARD: ["goal-threat", "hold-up", "presser", "threat-in-behind", "ball-carrier"],
+  };
+  const PROFILE_LABELS = {
+    "shot-stopping": "Shot Stopping",
+    "box-goalkeeper": "Box Goalkeeper",
+    "sweeper": "Sweeper",
+    "ball-playing": "Ball Playing",
+    defensive: "Defensive",
+    defender: "Defender",
+    progressor: "Progressor",
+    offensive: "Offensive",
+    "deep-creator": "Deep Creator",
+    "wide-presser": "Wide Presser",
+    "wide-ball-carrier": "Wide Ball Carrier",
+    "wide-creator": "Wide Creator",
+    "ball-winner": "Ball Winner",
+    "ball-progressor": "Ball Progressor",
+    presser: "Presser",
+    "ball-carrier": "Ball Carrier",
+    "goal-threat": "Goal Threat",
+    "running-threat": "Running Threat",
+    creator: "Creator",
+    "threat-in-behind": "Threat In Behind",
+    "wide-goal-threat": "Wide Goal Threat",
+    "hold-up": "Hold Up",
+  };
+
   function profilesFor(position, player) {
-    const wanted = position || player?.position || "";
-    const byPos = player?.options?.profiles_by_position || {};
-    const live = player?.report_profiles || [];
-    const playerPos = player?.position || "";
-    if (wanted && wanted === playerPos && live.length) return live;
-    if (wanted && byPos[wanted]?.length) return byPos[wanted];
-    if (live.length) return live;
-    return byPos[wanted] || [];
+    const wanted = position || "";
+    if (!wanted) return [];
+    const lockedIds = LOCKED_PROFILES[wanted] || [];
+    const byPos = player?.options?.profiles_by_position
+      || state.player?.options?.profiles_by_position
+      || {};
+    const fromApi = byPos[wanted] || [];
+    const byId = {};
+    fromApi.forEach((row) => {
+      if (row?.id) byId[row.id] = row;
+    });
+    (player?.report_profiles || []).forEach((row) => {
+      if (row?.id && lockedIds.includes(row.id)) byId[row.id] = { ...byId[row.id], ...row };
+    });
+    if (lockedIds.length) {
+      return lockedIds.map((id) => byId[id] || {
+        id,
+        key: id,
+        label: PROFILE_LABELS[id] || id,
+        score: null,
+        general_prompt: "What did you see in this part of his game?",
+        detailed_prompt: "Break this profile down. Why did it look good or poor?",
+      });
+    }
+    return fromApi;
+  }
+
+  function keepProfilesForPosition(profiles, position, player) {
+    const allowed = new Set(profilesFor(position, player).map((row) => row.id));
+    const source = profiles || {};
+    if (!allowed.size) return {};
+    return Object.fromEntries(
+      Object.entries(source).filter(([key]) => allowed.has(key))
+    );
   }
 
   function chipRow(kind, value, rows) {
@@ -1403,59 +1486,7 @@
         </div>`;
   }
 
-  function generalReportBody(player) {
-    const draft = state.generalDraft;
-    const position = draft.position_in_game || player?.position || "";
-    const profiles = profilesFor(position, player);
-    return `<form class="vw-report" id="vwGeneralForm">
-      <section class="vw-report-block">
-        <div>
-          <h3>General</h3>
-          <p>Asked on every position. Match conditions are shared across every player report on this game.</p>
-        </div>
-        ${matchConditionsBlock(player, draft)}
-        <label>Position in game
-          ${positionSelect("vwGamePosition", position)}
-        </label>
-      </section>
-      <section class="vw-report-block">
-        <div>
-          <h3>Physical</h3>
-          <p>Size, mobility, foot, weak foot, physical ability — same questions for every role.</p>
-        </div>
-        ${physicalFields(optionList("physical"), draft.physical || {}, "data-physical", "prompt")}
-      </section>
-      <section class="vw-report-block">
-        <div>
-          <h3>Data profiles</h3>
-          <p>Titles match the data profiles for this position. First look only — Detailed asks for more.</p>
-        </div>
-        ${profileFields(profiles, draft.profiles || {}, "data-profile", "general_prompt")}
-      </section>
-      <section class="vw-report-block">
-        <label>Anything else for this match
-          <textarea id="vwGeneralNotes" class="vw-notes-box" maxlength="2000" placeholder="First look, role, anything that is not position-specific yet.">${escapeHtml(draft.notes || "")}</textarea>
-        </label>
-        <div class="vw-form__row vw-form__row--save">
-          <span></span>
-          <button type="submit" class="vw-save" id="vwSaveGeneral">Save general report</button>
-        </div>
-      </section>
-    </form>`;
-  }
-
-  function detailedReportBody(player) {
-    const conditions = matchConditions();
-    const chips = conditionsChips(conditions);
-    const homeAway = homeAwayCopy(player);
-    const draft = state.detailedDraft;
-    const position = draft.position_in_game || state.generalDraft.position_in_game || player?.position || "";
-    const profiles = profilesFor(position, player);
-    const psych = optionList("psychology");
-    const psychValues = draft.psychology || {};
-    const yesNo = optionList("yes_mixed_no").length
-      ? optionList("yes_mixed_no")
-      : [{ id: "yes", label: "Yes" }, { id: "mixed", label: "Mixed" }, { id: "no", label: "No" }];
+  function decisionOptions() {
     const levels = optionList("pvfc_levels").length
       ? optionList("pvfc_levels")
       : [
@@ -1473,10 +1504,106 @@
           { id: "sign", label: "Sign" },
         ];
     const stages = optionList("pipeline_stages");
+    return { levels, actions, stages };
+  }
+
+  function decisionBlock(draft, player, prefix) {
+    const { levels, actions, stages } = decisionOptions();
+    const ratingId = prefix === "general" ? "match_rating_general" : "match_rating";
     const ratingButtons = Array.from({ length: 11 }, (_, idx) => {
       const on = String(draft.match_rating) === String(idx);
-      return `<button type="button" class="${on ? "is-on" : ""}" data-chip="match_rating" data-value="${idx}">${idx}</button>`;
+      return `<button type="button" class="${on ? "is-on" : ""}" data-chip="${ratingId}" data-value="${idx}">${idx}</button>`;
     }).join("");
+    const nextStepsId = prefix === "general" ? "vwGeneralNextSteps" : "vwNextSteps";
+    const pipelineId = prefix === "general" ? "vwGeneralAddPipeline" : "vwAddPipeline";
+    const stageId = prefix === "general" ? "vwGeneralPipelineStage" : "vwPipelineStage";
+    const saveId = prefix === "general" ? "vwSaveGeneral" : "vwSaveDetailed";
+    const saveLabel = prefix === "general" ? "Save general report" : "Save detailed report";
+    const extraWriteUp = prefix === "detailed"
+      ? `<label>General write up
+          <textarea id="vwWriteUp" class="vw-notes-box vw-notes-box--long" maxlength="4000" placeholder="The match in full — what he is, what he is not, and whether he fits us.">${escapeHtml(draft.write_up || "")}</textarea>
+        </label>`
+      : "";
+    return `
+        ${extraWriteUp}
+        <label>Next step recommendations
+          <textarea id="${nextStepsId}" class="vw-notes-box" maxlength="4000" placeholder="Watch again live, compare vs our 8, leave, or push to the board.">${escapeHtml(draft.next_steps || "")}</textarea>
+        </label>
+        <label>Match rating · 0–10
+          <div class="vw-chips vw-rating">${ratingButtons}</div>
+        </label>
+        <label>PVFC player level
+          ${chipRow(prefix === "general" ? "pvfc_level_general" : "pvfc_level", draft.pvfc_level, levels.map((row) => ({ id: row.id, label: `${row.id} · ${row.label}`, hint: row.hint })))}
+        </label>
+        <label>Next action
+          ${chipRow(prefix === "general" ? "next_action_general" : "next_action", draft.next_action, actions)}
+        </label>
+        <label class="vw-check">
+          <input id="${pipelineId}" type="checkbox" ${draft.add_to_pipeline ? "checked" : ""} />
+          Add to pipeline
+        </label>
+        <label>Pipeline stage
+          <select id="${stageId}">${(stages.length ? stages : [{ id: "video_scouted", label: "Video scouted" }])
+            .map((row) => `<option value="${escapeHtml(row.id)}" ${row.id === (draft.pipeline_stage || "video_scouted") ? "selected" : ""}>${escapeHtml(row.label)}</option>`)
+            .join("")}</select>
+        </label>
+        ${player.pipeline ? `<p>Currently on ${escapeHtml(player.pipeline.stage_title)} · <a href="/player-pipelines">Open pipelines →</a></p>` : `<p><a href="/player-pipelines">Player Pipelines →</a></p>`}
+        <div class="vw-form__row vw-form__row--save">
+          <span></span>
+          <button type="submit" class="vw-save" id="${saveId}">${saveLabel}</button>
+        </div>`;
+  }
+
+  function generalReportBody(player) {
+    const draft = state.generalDraft;
+    const position = draft.position_in_game || "";
+    const profiles = profilesFor(position, player);
+    return `<form class="vw-report" id="vwGeneralForm">
+      <section class="vw-report-block">
+        <div>
+          <h3>General</h3>
+          <p>Asked on every position. Match conditions are shared across every player report on this game. Set the position to load that role’s profiles only.</p>
+        </div>
+        ${matchConditionsBlock(player, draft)}
+        <label>Position in game
+          ${positionSelect("vwGamePosition", position)}
+        </label>
+      </section>
+      <section class="vw-report-block">
+        <div>
+          <h3>Physical</h3>
+          <p>Size, mobility, foot, weak foot, physical ability — same questions for every role.</p>
+        </div>
+        ${physicalFields(optionList("physical"), draft.physical || {}, "data-physical", "prompt")}
+      </section>
+      <section class="vw-report-block">
+        <div>
+          <h3>Data profiles</h3>
+          <p>Titles match the data profiles for the position you set. A CM only gets Goal Threat, Running Threat, Ball Winner, Creator and Ball Progressor.</p>
+        </div>
+        ${profileFields(profiles, draft.profiles || {}, "data-profile", "general_prompt")}
+      </section>
+      <section class="vw-report-block">
+        <label>Anything else for this match
+          <textarea id="vwGeneralNotes" class="vw-notes-box" maxlength="2000" placeholder="First look, role, anything that is not position-specific yet.">${escapeHtml(draft.notes || "")}</textarea>
+        </label>
+        ${decisionBlock(draft, player, "general")}
+      </section>
+    </form>`;
+  }
+
+  function detailedReportBody(player) {
+    const conditions = matchConditions();
+    const chips = conditionsChips(conditions);
+    const homeAway = homeAwayCopy(player);
+    const draft = state.detailedDraft;
+    const position = draft.position_in_game || state.generalDraft.position_in_game || "";
+    const profiles = profilesFor(position, player);
+    const psych = optionList("psychology");
+    const psychValues = draft.psychology || {};
+    const yesNo = optionList("yes_mixed_no").length
+      ? optionList("yes_mixed_no")
+      : [{ id: "yes", label: "Yes" }, { id: "mixed", label: "Mixed" }, { id: "no", label: "No" }];
     const psychBlock = (psych.length ? psych : [
       { id: "work_hard", label: "Worked hard", prompt: "Did he work for the team off the ball?" },
       { id: "leader", label: "Leader", prompt: "Did he organise, demand, or take responsibility?" },
@@ -1529,35 +1656,7 @@
         </label>
       </section>
       <section class="vw-report-block">
-        <label>General write up
-          <textarea id="vwWriteUp" class="vw-notes-box vw-notes-box--long" maxlength="4000" placeholder="The match in full — what he is, what he is not, and whether he fits us.">${escapeHtml(draft.write_up || "")}</textarea>
-        </label>
-        <label>Next step recommendations
-          <textarea id="vwNextSteps" class="vw-notes-box" maxlength="4000" placeholder="Watch again live, compare vs our 8, leave, or push to the board.">${escapeHtml(draft.next_steps || "")}</textarea>
-        </label>
-        <label>Match rating · 0–10
-          <div class="vw-chips vw-rating">${ratingButtons}</div>
-        </label>
-        <label>PVFC player level
-          ${chipRow("pvfc_level", draft.pvfc_level, levels.map((row) => ({ id: row.id, label: `${row.id} · ${row.label}`, hint: row.hint })))}
-        </label>
-        <label>Next action
-          ${chipRow("next_action", draft.next_action, actions)}
-        </label>
-        <label class="vw-check">
-          <input id="vwAddPipeline" type="checkbox" ${draft.add_to_pipeline ? "checked" : ""} />
-          Add to pipeline
-        </label>
-        <label>Pipeline stage
-          <select id="vwPipelineStage">${(stages.length ? stages : [{ id: "video_scouted", label: "Video scouted" }])
-            .map((row) => `<option value="${escapeHtml(row.id)}" ${row.id === (draft.pipeline_stage || "video_scouted") ? "selected" : ""}>${escapeHtml(row.label)}</option>`)
-            .join("")}</select>
-        </label>
-        ${player.pipeline ? `<p>Currently on ${escapeHtml(player.pipeline.stage_title)} · <a href="/player-pipelines">Open pipelines →</a></p>` : `<p><a href="/player-pipelines">Player Pipelines →</a></p>`}
-        <div class="vw-form__row vw-form__row--save">
-          <span></span>
-          <button type="submit" class="vw-save" id="vwSaveDetailed">Save detailed report</button>
-        </div>
+        ${decisionBlock(draft, player, "detailed")}
       </section>
     </form>`;
   }
@@ -1698,6 +1797,16 @@
             state.detailedDraft.position_in_game =
               state.detailedDraft.position_in_game || state.generalDraft.position_in_game;
           }
+          if (!state.detailedDraft.next_steps) state.detailedDraft.next_steps = state.generalDraft.next_steps || "";
+          if (!state.detailedDraft.match_rating) state.detailedDraft.match_rating = state.generalDraft.match_rating || "";
+          if (!state.detailedDraft.pvfc_level) state.detailedDraft.pvfc_level = state.generalDraft.pvfc_level || "";
+          if (!state.detailedDraft.next_action) state.detailedDraft.next_action = state.generalDraft.next_action || "";
+          if (!state.detailedDraft.add_to_pipeline && state.generalDraft.add_to_pipeline) {
+            state.detailedDraft.add_to_pipeline = true;
+          }
+          if (!state.detailedDraft.pipeline_stage || state.detailedDraft.pipeline_stage === "video_scouted") {
+            state.detailedDraft.pipeline_stage = state.generalDraft.pipeline_stage || state.detailedDraft.pipeline_stage;
+          }
         }
         renderProfile();
       });
@@ -1721,11 +1830,21 @@
     document.getElementById("vwGamePosition")?.addEventListener("change", (event) => {
       captureDraft();
       state.generalDraft.position_in_game = event.target.value;
+      state.generalDraft.profiles = keepProfilesForPosition(
+        state.generalDraft.profiles,
+        state.generalDraft.position_in_game,
+        state.player
+      );
       renderProfile();
     });
     document.getElementById("vwDetailedPosition")?.addEventListener("change", (event) => {
       captureDraft();
       state.detailedDraft.position_in_game = event.target.value;
+      state.detailedDraft.profiles = keepProfilesForPosition(
+        state.detailedDraft.profiles,
+        state.detailedDraft.position_in_game,
+        state.player
+      );
       renderProfile();
     });
     els.profile.querySelectorAll("[data-chip]").forEach((btn) => {
@@ -1733,19 +1852,26 @@
         captureDraft();
         const kind = btn.dataset.chip || "";
         const value = btn.dataset.value || "";
-        if (kind === "match_rating") state.detailedDraft.match_rating = value;
-        else if (kind === "pvfc_level") state.detailedDraft.pvfc_level = value;
-        else if (kind === "next_action") {
-          state.detailedDraft.next_action = value;
-          if (value === "sign") {
-            state.detailedDraft.add_to_pipeline = true;
-            state.detailedDraft.pipeline_stage = "scout_identified";
+        const applyDecision = (draft, field, next) => {
+          draft[field] = next;
+          if (field === "next_action") {
+            if (next === "sign") {
+              draft.add_to_pipeline = true;
+              draft.pipeline_stage = "scout_identified";
+            }
+            if (next === "not_to_standard") {
+              draft.pvfc_level = draft.pvfc_level || "D";
+              draft.pipeline_stage = "not_the_right_fit";
+            }
           }
-          if (value === "not_to_standard") {
-            state.detailedDraft.pvfc_level = state.detailedDraft.pvfc_level || "D";
-            state.detailedDraft.pipeline_stage = "not_the_right_fit";
-          }
-        } else if (kind.startsWith("psych:")) {
+        };
+        if (kind === "match_rating") applyDecision(state.detailedDraft, "match_rating", value);
+        else if (kind === "match_rating_general") applyDecision(state.generalDraft, "match_rating", value);
+        else if (kind === "pvfc_level") applyDecision(state.detailedDraft, "pvfc_level", value);
+        else if (kind === "pvfc_level_general") applyDecision(state.generalDraft, "pvfc_level", value);
+        else if (kind === "next_action") applyDecision(state.detailedDraft, "next_action", value);
+        else if (kind === "next_action_general") applyDecision(state.generalDraft, "next_action", value);
+        else if (kind.startsWith("psych:")) {
           const key = kind.slice(6);
           state.detailedDraft.psychology = {
             ...(state.detailedDraft.psychology || {}),
@@ -1846,9 +1972,23 @@
           notes: state.generalDraft.notes,
           position_in_game: state.generalDraft.position_in_game,
           physical: state.generalDraft.physical,
-          profiles: state.generalDraft.profiles,
+          profiles: keepProfilesForPosition(
+            state.generalDraft.profiles,
+            state.generalDraft.position_in_game,
+            player
+          ),
+          next_steps: state.generalDraft.next_steps,
+          match_rating: state.generalDraft.match_rating === "" ? null : Number(state.generalDraft.match_rating),
+          pvfc_level: state.generalDraft.pvfc_level,
+          add_to_pipeline: state.generalDraft.add_to_pipeline,
+          pipeline_stage: state.generalDraft.pipeline_stage,
+          next_action: state.generalDraft.next_action,
           name: player.name || "",
           club: player.club || player.team_name || "",
+          league: player.league || state.sheet?.league || "",
+          position: player.position || "",
+          position_label: player.position_label || "",
+          age: player.age ?? null,
           home_name: ctx.home_name,
           away_name: ctx.away_name,
           sheet_side: ctx.sheet_side,
@@ -1864,7 +2004,13 @@
         sheet_side: player.sheet_side || data.player?.sheet_side || "",
       };
       fillGeneralDraft(state.player);
-      setStatus("General report saved. Weather and pitch will load on every other report for this game.", "is-ok");
+      const pipeline = data.pipeline?.target;
+      const extra = data.pipeline_error
+        ? ` Report saved, but pipeline: ${data.pipeline_error}`
+        : pipeline
+          ? ` On the pipeline.`
+          : "";
+      setStatus(`General report saved.${extra} Weather and pitch will load on every other report for this game.`, "is-ok");
       renderSheets();
       renderProfile();
     } catch (error) {
@@ -1905,7 +2051,11 @@
           age: player.age ?? null,
           position_in_game: state.detailedDraft.position_in_game,
           physical: state.detailedDraft.physical,
-          profiles: state.detailedDraft.profiles,
+          profiles: keepProfilesForPosition(
+            state.detailedDraft.profiles,
+            state.detailedDraft.position_in_game,
+            player
+          ),
           psychology: state.detailedDraft.psychology,
           write_up: state.detailedDraft.write_up,
           next_steps: state.detailedDraft.next_steps,
@@ -2106,7 +2256,7 @@
     state.phase = params.get("phase") || "played";
     state.sortKey = ["date", "match", "watch"].includes(params.get("sort") || "") ? params.get("sort") : "date";
     state.sortDir = params.get("dir") === "asc" ? "asc" : "desc";
-    state.deskView = params.get("desk") === "sheet" ? "sheet" : "formation";
+    state.deskView = params.get("desk") === "formation" ? "formation" : "sheet";
     state.fixtureId = params.get("fixture") || params.get("fixture_id") || "";
     state.playerId = Number(params.get("player") || params.get("player_id") || 0) || null;
     renderLeagues();

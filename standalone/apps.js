@@ -385,6 +385,16 @@ window.IMPECT_APPS = [
     "tags": ["Reports", "Notes", "Scouting", "Team sheet"]
   },
   {
+    "id": "reports-library",
+    "group": "recruitment",
+    "title": "Reports Library",
+    "description": "Every saved scout report. Filter by match rating, PVFC level, position, next action, and scout to find who scored well.",
+    "href": "/reports-library",
+    "icon": "📚",
+    "accent": "#c4b5fd",
+    "tags": ["Reports", "Library", "Scouting", "Scores"]
+  },
+  {
     "id": "squad-planner",
     "group": "recruitment",
     "title": "Squad Planner",

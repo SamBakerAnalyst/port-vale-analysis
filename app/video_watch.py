@@ -598,8 +598,45 @@ def register_video_watch_routes(app: FastAPI) -> None:
             position_in_game=body.position_in_game,
             physical=body.physical,
             profiles=body.profiles,
+            next_steps=body.next_steps,
+            match_rating=body.match_rating,
+            pvfc_level=body.pvfc_level,
+            add_to_pipeline=body.add_to_pipeline,
+            pipeline_stage=body.pipeline_stage,
+            next_action=body.next_action,
+            name=body.name,
+            club=body.club,
+            league=body.league,
+            fixture_label=body.fixture_label,
+            position=body.position or body.position_in_game,
+            position_label=body.position_label,
+            age=body.age,
             staff=staff,
         )
+        pipeline = None
+        pipeline_error = ""
+        if body.add_to_pipeline or general.get("add_to_pipeline"):
+            stage = general.get("pipeline_stage") or "video_scouted"
+            reason = (
+                general.get("next_steps")
+                or general.get("notes")
+                or "Not to standard off this look."
+            )
+            try:
+                pipeline = upsert_pipeline_from_scout(
+                    request,
+                    player_id=body.player_id,
+                    name=body.name,
+                    club=body.club,
+                    league=body.league,
+                    position=body.position_in_game or body.position,
+                    position_label=body.position_label,
+                    age=body.age,
+                    stage=stage,
+                    reason=reason,
+                )
+            except HTTPException as exc:
+                pipeline_error = str(exc.detail or "Could not add to pipeline.")
         player = _player_after_report_save(
             player_id=body.player_id,
             name=body.name,
@@ -609,11 +646,15 @@ def register_video_watch_routes(app: FastAPI) -> None:
             home_name=body.home_name,
             away_name=body.away_name,
             sheet_side=body.sheet_side,
+            position=body.position_in_game or body.position,
+            position_label=body.position_label,
         )
         return {
             "ok": True,
             "match_conditions": conditions,
             "general_report": general,
+            "pipeline": pipeline,
+            "pipeline_error": pipeline_error,
             "player": player,
         }
 
@@ -636,6 +677,13 @@ def register_video_watch_routes(app: FastAPI) -> None:
             add_to_pipeline=body.add_to_pipeline,
             pipeline_stage=body.pipeline_stage,
             next_action=body.next_action,
+            name=body.name,
+            club=body.club,
+            league=body.league,
+            fixture_label=body.fixture_label,
+            position=body.position or body.position_in_game,
+            position_label=body.position_label,
+            age=body.age,
             staff=staff,
         )
         pipeline = None

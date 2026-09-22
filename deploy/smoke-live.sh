@@ -143,6 +143,7 @@ want_open = {
     "Scoutable Teams",
     "Games to Watch",
     "Player Reports",
+    "Reports Library",
     "Club Strategy",
     "What Wins Games",
 }
