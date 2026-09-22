@@ -645,6 +645,49 @@ a:hover { text-decoration: underline; }
 
 .xca-shot-table .col-left { text-align: left; }
 
+.xca-league-wrap { padding: 0; overflow: hidden; }
+
+.xca-league-head {
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+  padding: 1rem 1.1rem .75rem;
+}
+
+.xca-league-head h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+
+.xca-league-note,
+.xca-league-bands {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: .9rem;
+}
+
+.xca-league-table th[data-sort] { cursor: pointer; }
+.xca-league-table th[data-sort]:hover { color: var(--text); }
+
+.xca-league-count {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.xca-league-sub {
+  color: var(--text-muted);
+  font-size: .68rem;
+  font-weight: 500;
+}
+
+.xca-league-table tr.xca-league-row--vale td {
+  background: rgba(61, 139, 253, .12);
+}
+
 .xca-team-pill {
   display: inline-block;
   padding: .1rem .35rem;
