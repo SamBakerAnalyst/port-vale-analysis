@@ -13,6 +13,12 @@ from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 
+from app.availability_squad import (
+    apply_public_match_facts,
+    injury_badge,
+    position_group_for_name,
+    reconcile_26_27_roster,
+)
 from app.paths import AVAILABILITY_DATA_DIR
 from app.scouting import SCOUTING_DIR
 from app.squad_photos import (
@@ -648,11 +654,16 @@ def _close_open_injury_record(records: list[dict[str, Any]], ended_at: str) -> N
 
 
 def _injury_period_end(record: dict[str, Any]) -> str:
-    """Actual end of the injury spell for counts (so far) — never the expected return date."""
+    """Actual end of the injury spell for counts (so far) — never the expected return date.
+
+    A planned end still in the future counts only through today.
+    """
+    today = datetime.now(UTC).date().isoformat()
     ended = record.get("ended_at")
     if ended:
-        return str(ended)[:10]
-    return datetime.now(UTC).date().isoformat()
+        ended_s = str(ended)[:10]
+        return ended_s if ended_s < today else today
+    return today
 
 
 def _days_between_dates(start: str | None, end: str | None) -> int | None:
@@ -674,6 +685,9 @@ def _days_injured(injury: dict[str, Any] | None) -> int | None:
     if not since:
         return None
     today = datetime.now(UTC).date()
+    ended = _parse_date(injury.get("ended_at"))
+    if ended and ended < today:
+        return None
     return max(0, (today - since).days + 1)
 
 
@@ -800,7 +814,10 @@ def _roster_for_season(store: dict[str, Any], season: str) -> list[dict[str, Any
     if not isinstance(roster, list):
         roster = []
         store["roster"][season] = roster
-    if _normalize_roster_position_groups(roster):
+    changed = _normalize_roster_position_groups(roster)
+    if season == "26/27" and reconcile_26_27_roster(store, roster):
+        changed = True
+    if changed:
         store["roster"][season] = roster
         _save_store(store)
     return roster
@@ -1153,9 +1170,14 @@ def _port_vale_matches(iteration_id: int, squad_id: int) -> list[dict[str, Any]]
     return rows
 
 
+# International duty and loans are known before kickoff. Injury is not predicted
+# onto fixtures that have not been played.
+KNOWN_AHEAD_STATUSES = frozenset({"INT", "LOAN"})
+
+
 def _injury_applies(injury: dict[str, Any] | None, session_date: str) -> bool:
-    """True when the session falls inside an unavailable spell (INJ / UN / LOAN)."""
-    return _standing_status_applies(injury, session_date, statuses={"INJ", "UN", "LOAN"})
+    """True when the session falls inside an unavailable spell (INJ / UN / LOAN / INT)."""
+    return _standing_status_applies(injury, session_date, statuses={"INJ", "UN", "LOAN", "INT"})
 
 
 def _managed_minutes_applies(injury: dict[str, Any] | None, session_date: str) -> bool:
@@ -1246,8 +1268,12 @@ def _effective_entry(
                 }
 
     # Never predict injury / MM onto incomplete fixtures — only once the game is done.
-    if complete and _injury_applies(injury, session_date):
-        status = str(injury.get("status") or "INJ").upper()
+    # INT and LOAN are known ahead of kickoff, so those still show before the match.
+    injury_status = str(injury.get("status") or "").upper() if isinstance(injury, dict) else ""
+    if _injury_applies(injury, session_date) and (
+        complete or injury_status in KNOWN_AHEAD_STATUSES
+    ):
+        status = injury_status or "INJ"
         return {
             "status": status,
             "display": STATUS_CODES.get(status, {}).get("short", status),
@@ -1656,6 +1682,9 @@ def build_availability_payload(*, season: str, refresh: bool = False) -> dict[st
     # Training sessions are no longer used for logging or the matrix.
     merged_sessions.sort(key=lambda row: (str(row.get("date") or ""), 0 if row.get("type") == "match" else 1))
 
+    if season == "26/27" and apply_public_match_facts(store, roster, merged_sessions):
+        _save_store(store)
+
     competition = _competition_totals(matches)
     player_rows: list[dict[str, Any]] = []
     for player in sorted(roster, key=lambda row: (row.get("position_group") or "", row.get("sort_order") or 0, row.get("name") or "")):
@@ -1704,6 +1733,7 @@ def build_availability_payload(*, season: str, refresh: bool = False) -> dict[st
             for row in history_records
             if row.get("days_out") is not None
         )
+        stored_injury = injuries.get(player_id) if isinstance(injuries, dict) else None
 
         player_rows.append(
             {
@@ -1715,14 +1745,15 @@ def build_availability_payload(*, season: str, refresh: bool = False) -> dict[st
                 "highlight": player.get("highlight"),
                 "active": player.get("active", True) is not False,
                 "photo_url": _photo_url_for_name(str(player.get("name") or "")),
-                "injury": injuries.get(player_id),
+                "injury": injury_badge(stored_injury if isinstance(stored_injury, dict) else None, today=datetime.now(UTC).date()),
                 "injury_history": history_records,
                 "injury_episodes": len(history_records),
                 "total_days_injured": total_days_injured,
                 "away_from_club": bool(
-                    isinstance(injuries.get(player_id), dict)
-                    and injuries[player_id].get("away_from_club")
-                    and str(injuries[player_id].get("status") or "").upper() == "INJ"
+                    isinstance(stored_injury, dict)
+                    and stored_injury.get("away_from_club")
+                    and str(stored_injury.get("status") or "").upper() == "INJ"
+                    and injury_badge(stored_injury, today=datetime.now(UTC).date()) is not None
                 ),
                 "bracket": _minutes_bracket(total_minutes, sessions_played),
                 "season_minutes": int(round(total_minutes)),
@@ -1865,6 +1896,12 @@ def import_roster_from_impect(*, season: str, replace: bool = False) -> dict[str
             position_minutes=position_minutes,
             catalog_position=catalog_position,
         )
+        # 26/27 board groups come from the club site. Impect files wingers and
+        # attacking midfielders as Attackers, which mis-groups this squad.
+        if season == "26/27":
+            club_group = position_group_for_name(name)
+            if club_group:
+                position_group = club_group
 
         if impect_id in existing_impect:
             existing = existing_impect[impect_id]
@@ -1873,7 +1910,7 @@ def import_roster_from_impect(*, season: str, replace: bool = False) -> dict[str
             if existing.get("active") is False:
                 existing["active"] = True
                 reactivated += 1
-            if existing.get("position_group") != position_group:
+            if season != "26/27" and existing.get("position_group") != position_group:
                 existing["position_group"] = position_group
                 updated += 1
             continue
@@ -1884,7 +1921,7 @@ def import_roster_from_impect(*, season: str, replace: bool = False) -> dict[str
             if existing.get("active") is False:
                 existing["active"] = True
                 reactivated += 1
-            if existing.get("position_group") != position_group:
+            if season != "26/27" and existing.get("position_group") != position_group:
                 existing["position_group"] = position_group
                 updated += 1
             continue
@@ -1904,8 +1941,9 @@ def import_roster_from_impect(*, season: str, replace: bool = False) -> dict[str
 
     left_club = 0
     # Only mark departed when the Impect list is for this season. A prior-season
-    # fallback would incorrectly flag new signings as leavers.
-    if not using_prior_season:
+    # fallback would incorrectly flag new signings as leavers. 26/27 membership
+    # comes from the club site, so an Impect fallback must not drop those rows.
+    if not using_prior_season and season != "26/27":
         for player in roster:
             impect_id = player.get("impect_id")
             name_key = str(player.get("name") or "").casefold()
