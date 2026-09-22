@@ -242,23 +242,45 @@
     .main__top {
       display: flex;
       flex-wrap: wrap;
-      align-items: flex-start;
+      align-items: center;
       justify-content: space-between;
-      gap: 1rem;
-      margin-bottom: 1.25rem;
+      gap: 1.15rem 1.5rem;
+      margin-bottom: 0.85rem;
+      padding-bottom: 1.15rem;
+    }
+
+    .main__identity {
+      min-width: 0;
+      padding: 0.1rem 0 0.15rem;
     }
 
     .main__greeting {
+      position: relative;
+      display: inline-block;
       margin: 0;
-      font-size: 1.55rem;
+      padding-bottom: 0.42rem;
+      font-size: 1.85rem;
       font-weight: 700;
       letter-spacing: -0.02em;
+      line-height: 1.05;
+    }
+
+    .main__greeting::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 2.6rem;
+      height: 2px;
+      background: var(--gold);
     }
 
     .main__subtitle {
-      margin: 0.3rem 0 0;
-      color: var(--text-muted);
-      font-size: 0.9rem;
+      margin: 0.65rem 0 0;
+      max-width: 34rem;
+      color: #c8c6bc;
+      font-size: 0.98rem;
+      line-height: 1.45;
     }
 
     .main__meta {
@@ -559,26 +581,106 @@
       border-bottom: 1px solid var(--border);
     }
     .hub__build {
-      font-family: var(--mono);
+      font-family: var(--font);
       font-size: 0.68rem;
-      font-weight: 700;
-      letter-spacing: 0.04em;
+      font-weight: 600;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: #0c0f14;
-      background: var(--gold);
-      border-radius: 999px;
-      padding: 0.28rem 0.65rem;
+      color: var(--text-muted);
+      background: transparent;
+      border-radius: 0;
+      padding: 0;
       white-space: nowrap;
     }
 
-    .hub__build.is-staging {
-      color: #041018;
-      background: #5ec8ff;
+    .hub__build.is-staging,
+    .hub__build.is-demo {
+      color: var(--gold);
+      background: transparent;
     }
 
-    .hub__build.is-demo {
-      color: #0c0f14;
-      background: #f5c518;
+    .hub-controls {
+      position: relative;
+    }
+
+    .hub-controls__summary {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.28rem 0.1rem;
+      list-style: none;
+      cursor: pointer;
+      color: var(--text-muted);
+      font: inherit;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .hub-controls__summary::-webkit-details-marker,
+    .hub-controls__summary::marker {
+      display: none;
+      content: "";
+    }
+
+    .hub-controls__summary:hover,
+    .hub-controls[open] .hub-controls__summary {
+      color: var(--gold);
+    }
+
+    .hub-controls__summary:focus-visible {
+      outline: 1px solid var(--gold);
+      outline-offset: 3px;
+    }
+
+    .hub-controls__chevron {
+      width: 0.38rem;
+      height: 0.38rem;
+      border-right: 1.5px solid currentColor;
+      border-bottom: 1.5px solid currentColor;
+      transform: rotate(45deg) translateY(-1px);
+      opacity: 0.8;
+    }
+
+    .hub-controls[open] .hub-controls__chevron {
+      transform: rotate(225deg) translateY(-1px);
+    }
+
+    .hub-controls.has-alert .hub-controls__summary::after {
+      content: "";
+      width: 0.42rem;
+      height: 0.42rem;
+      border-radius: 50%;
+      background: #d29922;
+      box-shadow: 0 0 0 2px rgba(210, 153, 34, 0.28);
+    }
+
+    .hub-controls__panel {
+      position: absolute;
+      z-index: 50;
+      top: calc(100% + 0.4rem);
+      right: 0;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.4rem;
+      width: min(28rem, calc(100vw - 2.5rem));
+      padding: 0.65rem;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4);
+    }
+
+    .hub-controls__panel .hub__broke-joke {
+      flex: 1 0 100%;
+      margin-bottom: 0.15rem;
+      padding: 0 0 0.4rem;
+      border: 0;
+      border-bottom: 1px solid var(--border);
+      border-radius: 0;
+      background: transparent;
+      white-space: normal;
     }
 
     .hub-demo-banner {
@@ -597,6 +699,7 @@
       display: block;
     }
 
+    body.is-demo-hub .hub-controls,
     body.is-demo-hub .hub__broke-joke,
     body.is-demo-hub #restartServerBtn,
     body.is-demo-hub #forceRefreshDataBtn,
@@ -2278,7 +2381,7 @@
         <div class="main__identity">
           <p class="main__eyebrow">Port Vale · Analysis Hub</p>
           <h1 class="main__greeting" id="greeting">Football analysis</h1>
-          <p class="main__subtitle" id="hubSubtitle">Live league snapshot · pick an app from the left ribbon</p>
+          <p class="main__subtitle" id="hubSubtitle">Welcome back. The league snapshot is ready — pick a tool from the ribbon.</p>
         </div>
         <div class="hub-search-bar">
           <div class="hub-search" id="hubPlayerSearchWrap">
@@ -2309,19 +2412,27 @@
           <span id="serverStatusText">Checking…</span>
         </div>
         <span class="hub__build" id="hubBuildStamp" title="Product environment">Port Vale Live · __HUB_BUILD__</span>
-        <span
-          class="hub__broke-joke"
-          id="hubBrokeJoke"
-          title="Little joke. Reset by editing standalone/hub-uptime-joke.json when we next break."
-        >— days since we last broke</span>
         <div class="main__ops">
-          <button type="button" class="hub__restart-btn" id="forceRefreshDataBtn" title="Pull fresh match data from Impect after games upload (~10am). Use a couple of times a week.">Force refresh data</button>
-          <button type="button" class="hub__restart-btn" id="restartServerBtn">Restart</button>
-          <a class="hub__restart-btn" id="startServerLink" href="/standalone/restart.command" hidden>Start server</a>
-          <div class="hub__health-wrap" id="cacheHealthWrap" hidden>
-            <button type="button" class="hub__restart-btn hub__health-btn" id="cacheHealthBtn">Data health</button>
-            <div class="hub__health-panel" id="cacheHealthPanel" hidden></div>
-          </div>
+          <details class="hub-controls" id="hubControls">
+            <summary class="hub-controls__summary" title="Refresh, restart, and data health">
+              Hub controls
+              <span class="hub-controls__chevron" aria-hidden="true"></span>
+            </summary>
+            <div class="hub-controls__panel">
+              <span
+                class="hub__broke-joke"
+                id="hubBrokeJoke"
+                title="Little joke. Reset by editing standalone/hub-uptime-joke.json when we next break."
+              >— days since we last broke</span>
+              <button type="button" class="hub__restart-btn" id="forceRefreshDataBtn" title="Pull fresh match data from Impect after games upload (~10am). Use a couple of times a week.">Force refresh data</button>
+              <button type="button" class="hub__restart-btn" id="restartServerBtn">Restart</button>
+              <a class="hub__restart-btn" id="startServerLink" href="/standalone/restart.command" hidden>Start server</a>
+              <div class="hub__health-wrap" id="cacheHealthWrap" hidden>
+                <button type="button" class="hub__restart-btn hub__health-btn" id="cacheHealthBtn">Data health</button>
+                <div class="hub__health-panel" id="cacheHealthPanel" hidden></div>
+              </div>
+            </div>
+          </details>
           <button type="button" class="hub__restart-btn" id="signOutBtn" hidden>Sign out</button>
         </div>
       </div>
@@ -2819,6 +2930,16 @@
       return "Good evening";
     }
 
+    function applyWelcome(name) {
+      const who = String(name || "").trim() || "Port Vale";
+      const greetEl = document.getElementById("greeting");
+      if (greetEl) greetEl.textContent = `${greeting()}, ${who}`;
+      const sub = document.getElementById("hubSubtitle");
+      if (sub) {
+        sub.textContent = "Welcome back. The league snapshot is ready — pick a tool from the ribbon.";
+      }
+    }
+
     function updateClock() {
       const now = new Date();
       document.getElementById("clockTime").textContent = now.toLocaleTimeString(undefined, {
@@ -2974,11 +3095,14 @@
       });
     }
 
+    let hubSawOnline = null;
+
     async function checkServer() {
       const el = document.getElementById("serverStatus");
       const text = document.getElementById("serverStatusText");
       const btn = document.getElementById("restartServerBtn");
       const startLink = document.getElementById("startServerLink");
+      const controls = document.getElementById("hubControls");
       try {
         const res = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(3000) });
         if (res.ok) {
@@ -2986,6 +3110,7 @@
           text.textContent = "Online";
           btn.hidden = false;
           startLink.hidden = true;
+          hubSawOnline = true;
           return true;
         }
       } catch (_) { /* offline */ }
@@ -2993,6 +3118,10 @@
       text.textContent = "Offline";
       btn.hidden = true;
       startLink.hidden = false;
+      if (controls && startLink && !startLink.hidden && hubSawOnline !== false) {
+        controls.open = true;
+      }
+      hubSawOnline = false;
       return false;
     }
 
@@ -3013,7 +3142,7 @@
       if (window.HubHome && canLoadHomeDashboard()) HubHome.load();
     }
 
-    document.getElementById("greeting").textContent = `${greeting()} — Port Vale`;
+    applyWelcome("Port Vale");
     document.title = "Port Vale Hub";
     updateClock();
     setInterval(updateClock, 30_000);
@@ -3045,11 +3174,8 @@
         if (text.includes("Port Vale fixtures")) el.textContent = "Club fixtures";
         if (text.includes("Port Vale vs")) el.textContent = text.replace("Port Vale vs", "Squad vs");
       });
-      if (brand.greeting) {
-        const greetEl = document.getElementById("greeting");
-        if (greetEl && !window.__HUB_DISPLAY_NAME__) {
-          greetEl.textContent = `${greeting()} — ${brand.greeting}`;
-        }
+      if (brand.greeting && !window.__HUB_DISPLAY_NAME__) {
+        applyWelcome(brand.greeting);
       }
     }
 
@@ -3094,15 +3220,23 @@
 
       const problems = Number(payload.problem_count || 0);
       btn.classList.remove("is-ok", "is-warn", "is-bad");
+      const controls = document.getElementById("hubControls");
+      const summary = controls?.querySelector(".hub-controls__summary");
       if (payload.healthy) {
         btn.classList.add("is-ok");
         btn.textContent = "Data healthy";
+        if (controls) controls.classList.remove("has-alert");
+        if (summary) summary.title = "Refresh, restart, and data health";
       } else {
         const worst = (payload.caches || []).some(
           (row) => row.status === "thin" || row.status === "missing",
         );
         btn.classList.add(worst ? "is-bad" : "is-warn");
         btn.textContent = `${problems} data ${problems === 1 ? "issue" : "issues"}`;
+        if (controls) controls.classList.add("has-alert");
+        if (summary) {
+          summary.title = `${problems} data ${problems === 1 ? "issue" : "issues"}`;
+        }
       }
 
       const rows = (payload.caches || [])
@@ -3145,6 +3279,19 @@
       if (wrap && !wrap.contains(event.target)) {
         document.getElementById("cacheHealthPanel").hidden = true;
       }
+      const controls = document.getElementById("hubControls");
+      if (controls && controls.open && !controls.contains(event.target)) {
+        controls.open = false;
+      }
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      const controls = document.getElementById("hubControls");
+      const panel = document.getElementById("cacheHealthPanel");
+      if (!controls?.open) return;
+      controls.open = false;
+      if (panel) panel.hidden = true;
     });
 
     async function forceRefreshAnalysisData() {
@@ -3211,7 +3358,7 @@
           };
           if (me.display_name) {
             window.__HUB_DISPLAY_NAME__ = me.display_name;
-            document.getElementById("greeting").textContent = `${greeting()} — ${me.display_name}`;
+            applyWelcome(me.display_name);
           }
         } else if (res.status === 401) {
           window.location.href = "/login";
