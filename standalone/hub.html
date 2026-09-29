@@ -10,26 +10,26 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Manrope:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
   <style>
     :root {
-      --bg: #10100f;
-      --surface: #181816;
-      --surface-2: #22221e;
-      --border: #33332c;
-      --text: #f2f1ec;
-      --text-muted: #9b9a91;
-      --accent: #e0a800;
-      --green: #c5d4a8;
-      --amber: #e0a800;
-      --danger: #c45c4a;
-      --gold: #e0a800;
-      --radius: 2px;
-      --font: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
-      --display: "Oswald", "Arial Narrow", sans-serif;
-      --mono: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+      --bg: #0c0f14;
+      --surface: #141a22;
+      --surface-2: #1a222d;
+      --border: #2a3544;
+      --text: #e8edf4;
+      --text-muted: #8b9bb0;
+      --accent: #f5c518;
+      --green: #34d399;
+      --amber: #f5c518;
+      --danger: #f87171;
+      --gold: #f5c518;
+      --radius: 12px;
+      --font: "Manrope", system-ui, sans-serif;
+      --display: "Barlow Condensed", sans-serif;
+      --mono: "Manrope", system-ui, sans-serif;
       --rail: 248px;
     }
 
@@ -684,6 +684,14 @@
       display: grid;
       grid-template-columns: 1.35fr 1fr;
       gap: 0.85rem;
+    }
+
+    /* Landing-only roles: keep the home chrome, hide the data widgets.
+       .home-kpis / .home-grid set display:grid and would otherwise beat [hidden]. */
+    #homeDashboard.is-landing-only .home-kpis,
+    #homeDashboard.is-landing-only .home-grid,
+    #homeDashboard.is-landing-only .home-live-grid {
+      display: none !important;
     }
 
     .home-stack {
@@ -1872,44 +1880,44 @@
     }
 
     .home-cal__day--training {
-      background: #1b7a3d;
-      border-color: #2fd46a;
-      box-shadow: inset 0 0 0 1px rgba(47, 212, 106, 0.45);
+      background: #34d399;
+      border-color: #22c07a;
+      box-shadow: none;
     }
 
     .home-cal__day--regen {
-      background: #9b1c2e;
-      border-color: #ff4d6d;
-      box-shadow: inset 0 0 0 1px rgba(255, 77, 109, 0.45);
+      background: #f87171;
+      border-color: #ef4444;
+      box-shadow: none;
     }
 
     .home-cal__day--preseason {
-      background: #0369a1;
-      border-color: #38bdf8;
-      box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.55);
+      background: #8b9bb0;
+      border-color: #6b7a8f;
+      box-shadow: none;
     }
 
     .home-cal__day--match.home-cal__day--home {
-      background: #c9a227;
-      border-color: #ffe566;
-      box-shadow: inset 0 0 0 1px rgba(255, 229, 102, 0.55);
+      background: #f5c518;
+      border-color: #e0a800;
+      box-shadow: none;
     }
 
     .home-cal__day--match.home-cal__day--away {
-      background: #1a4fd6;
-      border-color: #6ea8ff;
-      box-shadow: inset 0 0 0 1px rgba(110, 168, 255, 0.55);
+      background: #e8edf4;
+      border-color: #c5cad3;
+      box-shadow: none;
     }
 
     .home-cal__day--training .home-cal__num,
-    .home-cal__day--regen .home-cal__num,
     .home-cal__day--preseason .home-cal__num,
-    .home-cal__day--match .home-cal__num {
-      color: #fff;
+    .home-cal__day--match.home-cal__day--home .home-cal__num,
+    .home-cal__day--match.home-cal__day--away .home-cal__num {
+      color: #0c0f14;
     }
 
-    .home-cal__day--match.home-cal__day--home .home-cal__num {
-      color: #1a1400;
+    .home-cal__day--regen .home-cal__num {
+      color: #e8edf4;
     }
 
     .home-cal__session {
@@ -1920,15 +1928,20 @@
       font-size: 0.68rem;
       font-weight: 800;
       letter-spacing: 0.05em;
-      color: #fff;
+      color: #0c0f14;
       line-height: 1.15;
-      text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
+      text-shadow: none;
     }
 
     .home-cal__session span {
       font-weight: 700;
       letter-spacing: 0;
-      color: rgba(255, 255, 255, 0.92);
+      color: inherit;
+      opacity: 0.9;
+    }
+
+    .home-cal__day--regen .home-cal__session {
+      color: #e8edf4;
     }
 
     .home-cal__fixture {
@@ -1939,25 +1952,25 @@
       border-radius: 5px;
       border-left: 3px solid transparent;
       min-width: 0;
-      background: rgba(0, 0, 0, 0.22);
+      background: rgba(16, 16, 15, 0.08);
     }
 
     .home-cal__fixture--home {
-      border-left-color: #1a1400;
-      background: rgba(255, 255, 255, 0.28);
+      border-left-color: #0c0f14;
+      background: rgba(16, 16, 15, 0.12);
     }
 
     .home-cal__fixture--home .home-cal__fixture-meta {
-      color: #1a1400;
+      color: #0c0f14;
     }
 
     .home-cal__fixture--away {
-      border-left-color: #dce9ff;
-      background: rgba(0, 0, 0, 0.28);
+      border-left-color: #0c0f14;
+      background: rgba(16, 16, 15, 0.08);
     }
 
     .home-cal__fixture--away .home-cal__fixture-meta {
-      color: #f4f8ff;
+      color: #0c0f14;
     }
 
     .home-cal__day--training.home-cal__day--today,
@@ -2012,17 +2025,6 @@
     .home-cal__dot--live { background: var(--green); }
     .home-cal__dot--video { background: var(--accent); }
 
-    .home-cal__fixture {
-      display: flex;
-      align-items: center;
-      gap: 0.2rem;
-      padding: 0.14rem 0.18rem;
-      border-radius: 5px;
-      border-left: 2px solid transparent;
-      min-width: 0;
-      background: rgba(255, 255, 255, 0.04);
-    }
-
     .home-cal__badge {
       width: 1.55rem;
       height: 1.55rem;
@@ -2040,7 +2042,7 @@
       overflow: hidden;
       font-size: 0.58rem;
       font-weight: 700;
-      color: #e8ecf4;
+      color: #0c0f14;
       line-height: 1.1;
     }
 
@@ -2869,15 +2871,20 @@
         btn.hidden = !(isAdmin || tabs.has(tab));
       });
 
-      // Roles with only the landing tab (analysis) get a plain tool list instead
-      // of league/recruitment widgets their account cannot load.
-      if (!canLoadHomeDashboard()) {
-        document.querySelectorAll(
-          "#homeDashboard .home-kpis, #homeDashboard .home-grid, #homeDashboard .home-live-grid"
-        ).forEach((el) => {
-          el.hidden = true;
-        });
-        let tools = document.getElementById("analysisOnlyTools");
+      // Roles with only the Home tab keep the landing chrome, not the
+      // league / recruitment / live-activity widgets.
+      const dashboard = document.getElementById("homeDashboard");
+      const landingOnly = !canLoadHomeDashboard();
+      if (dashboard) dashboard.classList.toggle("is-landing-only", landingOnly);
+
+      const existingTools = document.getElementById("analysisOnlyTools");
+      // Analysis accounts get a tool list. Admin-rail logins (ops) do not —
+      // their apps stay on the left rail, not under "Analysis tools".
+      const showAnalysisTools = landingOnly && allowedGroups().has("analysis");
+      if (!showAnalysisTools) {
+        existingTools?.remove();
+      } else {
+        let tools = existingTools;
         if (!tools) {
           tools = document.createElement("div");
           tools.id = "analysisOnlyTools";

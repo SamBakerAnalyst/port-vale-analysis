@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "players": {
+    "port-vale::aaron-mcgowan::tranmere-rovers::free": {
+      "position": "",
+      "age": null,
+      "flags": {
+        "manager_liked": false,
+        "recruitment_liked": false,
+        "too_expensive_transfer": false,
+        "too_expensive_wages": false,
+        "player_turned_down": false
+      },
+      "updated_at": "2026-09-07T13:25:54.549187+00:00",
+      "updated_by": "PortVale"
+    }
+  }
+}

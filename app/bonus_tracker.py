@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import threading
 import uuid
 from datetime import UTC, datetime
@@ -39,6 +40,305 @@ MATCHDAY_TYPES = (
     {"id": "squad_bonus", "label": "Squad Bonus"},
     {"id": "personal_win", "label": "Bonus Payment"},
 )
+
+_CLAUSE_SPLIT = re.compile(r"\s+[-–—]\s+")
+_KIND_PATTERNS: tuple[tuple[str, str], ...] = (
+    (r"goal contributions?", "goal_contributions"),
+    (r"league assists|\bassists\b", "league_assists"),
+    (r"league goals|\bgoals\b", "league_goals"),
+    (r"league starts|\bstarts\b", "league_starts"),
+    (r"league apps|league appearances|\bappearances\b|\bapps\b", "league_apps"),
+    (r"minutes", "league_minutes"),
+)
+_KIND_STAT = {
+    "league_starts": "league_starts",
+    "league_apps": "league_appearances",
+    "league_minutes": "league_minutes",
+    "league_goals": "league_goals",
+    "league_assists": "league_assists",
+    "goal_contributions": "goal_contributions",
+}
+_KIND_UNIT = {
+    "league_starts": "league starts",
+    "league_apps": "league apps",
+    "league_minutes": "league minutes",
+    "league_goals": "league goals",
+    "league_assists": "league assists",
+    "goal_contributions": "goal contributions",
+}
+
+
+def _has_bonus_or_clause(player: dict[str, Any]) -> bool:
+    appearance = str(player.get("appearance_bonus") or "none")
+    if appearance != "none":
+        return True
+    return bool(str(player.get("provisions") or "").strip())
+
+
+def parse_provision_clauses(text: str) -> list[dict[str, Any]]:
+    """Split Sam’s provision line into trackable clauses."""
+    raw = str(text or "").strip()
+    if not raw:
+        return []
+    parts = [part.strip(" -–—") for part in _CLAUSE_SPLIT.split(raw) if part.strip(" -–—")]
+    if not parts:
+        parts = [raw]
+    clauses: list[dict[str, Any]] = []
+    for part in parts:
+        kind = "other"
+        for pattern, token in _KIND_PATTERNS:
+            if re.search(pattern, part, re.I):
+                kind = token
+                break
+        if kind == "other" and re.search(r"goal|assist|clean sheet", part, re.I):
+            kind = "matchday"
+        numbers = [int(token) for token in re.findall(r"\d+", part)]
+        # "10 goals or 10 assists" — keep both kinds, same thresholds.
+        if re.search(r"\bor\b", part, re.I) and re.search(r"goal", part, re.I) and re.search(
+            r"assist", part, re.I
+        ):
+            kind = "goals_or_assists"
+        clauses.append({"text": part, "kind": kind, "targets": numbers})
+    return clauses
+
+
+_FIRST_NAME_CANON = {
+    "oli": "oliver",
+    "olly": "oliver",
+    "ollie": "oliver",
+    "oliver": "oliver",
+    "cam": "cameron",
+    "cameron": "cameron",
+    "mo": "mohammed",
+    "mohamed": "mohammed",
+    "mohammed": "mohammed",
+    "joe": "joseph",
+    "joseph": "joseph",
+    "ben": "benjamin",
+    "benjamin": "benjamin",
+    "matt": "matthew",
+    "matty": "matthew",
+    "matthew": "matthew",
+}
+
+
+def _empty_playing_time() -> dict[str, int]:
+    return {
+        "league_starts": 0,
+        "league_appearances": 0,
+        "league_minutes": 0,
+        "league_goals": 0,
+        "league_assists": 0,
+        "goal_contributions": 0,
+    }
+
+
+def _stats_only(row: dict[str, Any]) -> dict[str, int]:
+    stats = {
+        "league_starts": int(row.get("league_starts") or 0),
+        "league_appearances": int(row.get("league_appearances") or 0),
+        "league_minutes": int(row.get("league_minutes") or 0),
+        "league_goals": int(row.get("league_goals") or 0),
+        "league_assists": int(row.get("league_assists") or 0),
+        "goal_contributions": int(row.get("goal_contributions") or 0),
+    }
+    if not stats["goal_contributions"]:
+        stats["goal_contributions"] = stats["league_goals"] + stats["league_assists"]
+    return stats
+
+
+def _name_parts(name: str) -> tuple[str, str]:
+    parts = [part for part in re.split(r"\s+", str(name or "").strip()) if part]
+    if not parts:
+        return "", ""
+    if len(parts) == 1:
+        return parts[0].casefold(), ""
+    return parts[0].casefold(), parts[-1].casefold()
+
+
+def same_player_name(left: str, right: str) -> bool:
+    """Oli Lynch == Oliver Lynch; Cam Humphreys == Cameron Humphreys."""
+    if not left or not right:
+        return False
+    try:
+        from app.availability_tracker import _normalize_player_key
+    except Exception:
+        return left.casefold() == right.casefold()
+    left_key, right_key = _normalize_player_key(left), _normalize_player_key(right)
+    if left_key == right_key:
+        return True
+    if left_key and right_key and (left_key in right_key or right_key in left_key):
+        if min(len(left_key), len(right_key)) >= 6:
+            return True
+    left_first, left_last = _name_parts(left)
+    right_first, right_last = _name_parts(right)
+    if not left_last or left_last != right_last:
+        return False
+    if not left_first or not right_first:
+        return False
+    if _FIRST_NAME_CANON.get(left_first, left_first) == _FIRST_NAME_CANON.get(
+        right_first, right_first
+    ):
+        return True
+    if min(len(left_first), len(right_first)) >= 3 and (
+        left_first.startswith(right_first) or right_first.startswith(left_first)
+    ):
+        return True
+    return False
+
+
+def _playing_time_index(season: str) -> dict[str, dict[str, Any]]:
+    """League starts / apps / minutes / goals from FotMob (+ availability roster)."""
+    index: dict[str, dict[str, Any]] = {}
+    try:
+        from app.availability_tracker import (
+            _normalize_player_key,
+            build_availability_payload,
+            fotmob_league_playing_time,
+        )
+    except Exception:
+        return {}
+
+    try:
+        fotmob = fotmob_league_playing_time(season)
+    except Exception:
+        fotmob = {}
+    for key, row in (fotmob or {}).items():
+        if not key:
+            continue
+        index[key] = {**_stats_only(row), "_name": str(row.get("name") or key)}
+
+    try:
+        payload = build_availability_payload(season=season, refresh=False)
+    except Exception:
+        payload = {}
+    for row in (payload or {}).get("roster") or []:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name") or "").strip()
+        if not name:
+            continue
+        impact = row.get("impact") or {}
+        stats = _stats_only(impact)
+        key = _normalize_player_key(name)
+        if key:
+            index[key] = {**stats, "_name": name}
+    return index
+
+
+def _match_playing_time(name: str, index: dict[str, dict[str, Any]]) -> dict[str, int]:
+    if not index:
+        return _empty_playing_time()
+    try:
+        from app.availability_tracker import _normalize_player_key
+    except Exception:
+        return _empty_playing_time()
+    key = _normalize_player_key(name)
+    if key in index:
+        return _stats_only(index[key])
+
+    hits = [
+        row
+        for row in index.values()
+        if same_player_name(name, str(row.get("_name") or ""))
+    ]
+    if len(hits) == 1:
+        return _stats_only(hits[0])
+
+    _, last = _name_parts(name)
+    if last:
+        last_hits = [
+            row
+            for row in index.values()
+            if _name_parts(str(row.get("_name") or ""))[1] == last
+        ]
+        if len(last_hits) == 1:
+            return _stats_only(last_hits[0])
+    return _empty_playing_time()
+
+
+def _current_for_kind(kind: str, playing: dict[str, int]) -> int | None:
+    if kind == "goals_or_assists":
+        return max(int(playing.get("league_goals") or 0), int(playing.get("league_assists") or 0))
+    stat = _KIND_STAT.get(kind)
+    if not stat:
+        return None
+    return int(playing.get(stat) or 0)
+
+
+def _decorate_clauses(
+    player: dict[str, Any], playing: dict[str, int]
+) -> list[dict[str, Any]]:
+    appearance = str(player.get("appearance_bonus") or "none")
+    clauses: list[dict[str, Any]] = []
+    if appearance == "league_start":
+        clauses.append(
+            {
+                "text": "League Start Bonus",
+                "kind": "league_starts",
+                "targets": [],
+                "per_game": True,
+            }
+        )
+    elif appearance == "league_start_or_sub":
+        clauses.append(
+            {
+                "text": "League Start / Substitute Bonus",
+                "kind": "league_apps",
+                "targets": [],
+                "per_game": True,
+            }
+        )
+    clauses.extend(parse_provision_clauses(str(player.get("provisions") or "")))
+
+    decorated: list[dict[str, Any]] = []
+    for clause in clauses:
+        kind = str(clause.get("kind") or "other")
+        targets = [int(n) for n in (clause.get("targets") or []) if int(n) > 0]
+        current = _current_for_kind(kind, playing)
+        per_game = bool(clause.get("per_game"))
+        unit = _KIND_UNIT.get(kind)
+        if kind == "matchday":
+            text_l = str(clause.get("text") or "").casefold()
+            if "goal" in text_l and "assist" in text_l:
+                current = int(playing.get("goal_contributions") or 0)
+                unit = "goal contributions"
+                per_game = True
+            elif "goal" in text_l and "clean sheet" not in text_l:
+                current = int(playing.get("league_goals") or 0)
+                unit = "league goals"
+                per_game = True
+        thresholds: list[dict[str, Any]] = []
+        for target in targets:
+            met = current is not None and current >= target
+            remaining = None if current is None else max(0, target - current)
+            thresholds.append(
+                {
+                    "target": target,
+                    "current": current,
+                    "met": met,
+                    "remaining": remaining,
+                    "label": (
+                        f"{current} / {target} {_KIND_UNIT.get(kind, '')}".strip()
+                        if current is not None
+                        else f"{target} {_KIND_UNIT.get(kind, '')}".strip()
+                    ),
+                }
+            )
+        next_target = next((row["target"] for row in thresholds if not row["met"]), None)
+        decorated.append(
+            {
+                "text": clause["text"],
+                "kind": kind,
+                "per_game": per_game,
+                "current": current,
+                "unit": unit,
+                "thresholds": thresholds,
+                "next_target": next_target,
+                "met": bool(thresholds) and all(row["met"] for row in thresholds),
+            }
+        )
+    return decorated
 
 
 class PlayerUpsert(BaseModel):
@@ -109,18 +409,19 @@ def _load_seed_players() -> list[dict[str, Any]]:
         appearance = str(row.get("appearance_bonus") or "none")
         if appearance not in APPEARANCE_BONUS_LABELS:
             appearance = "none"
-        out.append(
-            {
-                "id": str(row.get("id") or f"p-{uuid.uuid4().hex[:8]}"),
-                "name": name,
-                "surname": str(row.get("surname") or "").strip() or None,
-                "first_name": str(row.get("first_name") or "").strip() or None,
-                "appearance_bonus": appearance,
-                "provisions": str(row.get("provisions") or "").strip(),
-                "notes": "",
-                "active": True,
-            }
-        )
+        player = {
+            "id": str(row.get("id") or f"p-{uuid.uuid4().hex[:8]}"),
+            "name": name,
+            "surname": str(row.get("surname") or "").strip() or None,
+            "first_name": str(row.get("first_name") or "").strip() or None,
+            "appearance_bonus": appearance,
+            "provisions": str(row.get("provisions") or "").strip(),
+            "notes": "",
+            "active": True,
+        }
+        if not _has_bonus_or_clause(player):
+            continue
+        out.append(player)
     return out
 
 
@@ -197,22 +498,30 @@ def _player_totals(matchday: list[dict[str, Any]], player_id: str) -> dict[str, 
 
 
 def build_bonus_payload(season: str | None = None) -> dict[str, Any]:
+    season_key = season or CURRENT_SEASON
     store = _load_store()
     matchday = list(store.get("matchday") or [])
+    playing_index = _playing_time_index(season_key)
     players_out: list[dict[str, Any]] = []
     for player in store.get("players") or []:
         if not isinstance(player, dict):
             continue
         if player.get("active") is False:
             continue
+        if not _has_bonus_or_clause(player):
+            continue
         pid = str(player.get("id") or "")
         appearance = str(player.get("appearance_bonus") or "none")
+        playing = _match_playing_time(str(player.get("name") or ""), playing_index)
+        clauses = _decorate_clauses(player, playing)
         players_out.append(
             {
                 **player,
                 "appearance_bonus_label": APPEARANCE_BONUS_LABELS.get(
                     appearance, appearance
                 ),
+                "playing_time": playing,
+                "clauses": clauses,
                 "totals": _player_totals(matchday, pid),
             }
         )
@@ -246,13 +555,20 @@ def build_bonus_payload(season: str | None = None) -> dict[str, Any]:
                 for row in players_out
                 if str(row.get("appearance_bonus") or "none") != "none"
             ),
+            "thresholds_met": sum(
+                1
+                for row in players_out
+                for clause in row.get("clauses") or []
+                for step in clause.get("thresholds") or []
+                if step.get("met")
+            ),
             "matchday_logged": len(matchday),
             "unpaid": sum(1 for row in matchday if not row.get("paid")),
         },
         "note": (
-            "Seeded from Sam Baker’s First Team Bonuses Tracker. Log matchday "
-            "Appearance / Goal-Assist / Clean Sheet / Squad / Payment rows here. "
-            "League starts & minutes live on Squad Availability → Playing time."
+            "Each clause is read from the contract line. Starts, apps and minutes "
+            "come from Squad Availability (League Two). Players with no bonus or "
+            "clause are left off this board."
         ),
     }
 

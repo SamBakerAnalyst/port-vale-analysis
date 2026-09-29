@@ -1,4 +1,6 @@
 const FETCH_TIMEOUT_MS = 90000;
+const CUPS_BLOCK_ID = 10;
+const LEAGUE_BLOCK_COUNT = 9;
 
 const state = {
   payload: null,
@@ -79,6 +81,10 @@ function fmtNum(value, digits = 0) {
   });
 }
 
+function isCupsBlock(block) {
+  return block?.kind === "cups" || Number(block?.id) === CUPS_BLOCK_ID;
+}
+
 function shortOpponent(name) {
   const text = String(name || "").replace(/\s+FC$/i, "").trim();
   if (/wolverhampton/i.test(text)) return "Wolves";
@@ -100,12 +106,15 @@ function scoreLine(fixture) {
   return `${stats.goals ?? "?"}–${stats.goalsAgainst ?? "?"}`;
 }
 
-function fixtureCard(fixture, filterId) {
+function fixtureCard(fixture, filterId, options = {}) {
   const tbc = !fixture.matchId;
   const focus = filterId && String(filterId) === String(fixture.matchId);
   const ha = fixture.isHome == null
     ? ""
     : `<span class="ba-fix__ha ${fixture.isHome ? "ba-fix__ha--home" : ""}">${fixture.isHome ? "HOME" : "AWAY"}</span>`;
+  const cupTag = options.cups && fixture.competitionShort
+    ? `<span class="ba-fix__cup">${escapeHtml(fixture.competitionShort)}</span>`
+    : "";
   const badge = fixture.badgeUrl
     ? `<img class="ba-fix__badge" src="${escapeHtml(fixture.badgeUrl)}" alt="" crossorigin="anonymous" />`
     : `<span class="ba-fix__initials">${escapeHtml(fixture.opponentInitials || "?")}</span>`;
@@ -119,6 +128,7 @@ function fixtureCard(fixture, filterId) {
     <article class="ba-fix ${resultClass(fixture.outcome)} ${tbc ? "ba-fix--tbc" : ""} ${focus ? "ba-fix--focus" : ""}" data-match-id="${escapeHtml(fixture.matchId || "")}">
       <div class="ba-fix__top">
         <span class="ba-fix__date">${escapeHtml(date)}</span>
+        ${cupTag}
         ${ha}
       </div>
       ${badge}
@@ -160,24 +170,22 @@ function progressTrack(label, got, target) {
 }
 
 function posterHtml(block) {
+  const cups = isCupsBlock(block);
   const target = block.target || {};
   const totals = block.totals || {};
   const medal = target.medal || "silver";
   const csLabel = Number(target.cleanSheets) === 1 ? "clean sheet" : "clean sheets";
-  return `
-    <section class="ba-poster" data-poster="${block.id}">
-      <header class="ba-poster__head">
-        <div class="ba-poster__head-left">
-          <img class="ba-poster__crest" src="/standalone/port-vale-badge.png?v=2" alt="Port Vale" />
-          <p class="ba-poster__kicker">BLOCK ${block.id} OF 9 • ${escapeHtml(block.title)}</p>
+  const kicker = cups
+    ? `CUPS • ${escapeHtml(block.title || "CUP FIXTURES")}`
+    : `BLOCK ${block.id} OF ${LEAGUE_BLOCK_COUNT} • ${escapeHtml(block.title)}`;
+  const aimSection = cups
+    ? `
+        <div class="ba-cups-note">
+          <p class="ba-cups-note__lead">League block targets do not apply here — pick a cup game below for the full staff report and PDF.</p>
+          <p class="ba-cups-note__meta">${escapeHtml(block.pointsLabel || "")}${Number(totals.cleanSheets) ? ` · ${escapeHtml(fmtNum(totals.cleanSheets))} clean sheet${Number(totals.cleanSheets) === 1 ? "" : "s"}` : ""}</p>
         </div>
-        <p class="ba-poster__score">${escapeHtml(block.pointsLabel)}</p>
-      </header>
-      <div class="ba-poster__body">
-        <h2 class="ba-poster__heading">${escapeHtml(block.heading)}</h2>
-        <div class="ba-fixtures">
-          ${(block.fixtures || []).map((row) => fixtureCard(row, state.filters[block.id])).join("")}
-        </div>
+      `
+    : `
         <div class="ba-aim-wrap">
           <p class="ba-aim-wrap__title">What are we aiming for?</p>
           <div class="ba-medal-pills ba-export-hide">${medalPills(block)}</div>
@@ -199,6 +207,22 @@ function posterHtml(block) {
             </div>
           </div>
         </div>
+      `;
+  return `
+    <section class="ba-poster ${cups ? "ba-poster--cups" : ""}" data-poster="${block.id}">
+      <header class="ba-poster__head">
+        <div class="ba-poster__head-left">
+          <img class="ba-poster__crest" src="/standalone/port-vale-badge.png?v=2" alt="Port Vale" />
+          <p class="ba-poster__kicker">${kicker}</p>
+        </div>
+        <p class="ba-poster__score">${escapeHtml(block.pointsLabel)}</p>
+      </header>
+      <div class="ba-poster__body">
+        <h2 class="ba-poster__heading">${escapeHtml(block.heading)}</h2>
+        <div class="ba-fixtures ${cups ? "ba-fixtures--cups" : ""}">
+          ${(block.fixtures || []).map((row) => fixtureCard(row, state.filters[block.id], { cups })).join("")}
+        </div>
+        ${aimSection}
       </div>
       <footer class="ba-poster__foot">
         <p class="ba-poster__foot-text">${escapeHtml(block.footer)}</p>
@@ -1842,6 +1866,7 @@ function standoutsHtml(players) {
 }
 
 function dashHtml(block) {
+  const cups = isCupsBlock(block);
   const playedInBlock = playedFixtures(block).length;
   const filterId = state.filters[block.id] || "all";
   const pills = [`<button type="button" class="ba-filter__btn ${filterId === "all" ? "is-active" : ""}" data-filter="all" data-block="${block.id}">All games</button>`]
@@ -1851,7 +1876,8 @@ function dashHtml(block) {
         .map((row) => {
           const active = String(filterId) === String(row.matchId);
           const playedTag = row.played ? "" : " · TBC";
-          return `<button type="button" class="ba-filter__btn ${active ? "is-active" : ""} ${row.played ? "" : "ba-filter__btn--tbc"}" data-filter="${row.matchId}" data-block="${block.id}">${escapeHtml(row.slot)}. ${escapeHtml(shortOpponent(row.opponentName))}${playedTag}</button>`;
+          const cupPrefix = cups && row.competitionShort ? `${escapeHtml(row.competitionShort)} · ` : "";
+          return `<button type="button" class="ba-filter__btn ${active ? "is-active" : ""} ${row.played ? "" : "ba-filter__btn--tbc"}" data-filter="${row.matchId}" data-block="${block.id}">${cupPrefix}${escapeHtml(row.slot)}. ${escapeHtml(shortOpponent(row.opponentName))}${playedTag}</button>`;
         })
     )
     .concat(
@@ -1871,7 +1897,7 @@ function dashHtml(block) {
   const reportChrome = `
       <div class="ba-report__chrome ba-export-hide">
         <div class="ba-report__heading">
-          <p class="ba-report__context">Block ${block.id} · ${escapeHtml(block.title || `Games ${block.id}`)}</p>
+          <p class="ba-report__context">${cups ? "Cups" : `Block ${block.id}`} · ${escapeHtml(block.title || (cups ? "Cup fixtures" : `Games ${block.id}`))}</p>
           <div class="ba-report__tabs" role="tablist" aria-label="Report view for block ${block.id}">
           <button type="button" role="tab" class="ba-report__tab ${tab === "staff" ? "is-active" : ""}" data-report-tab="staff" data-block="${block.id}" aria-selected="${tab === "staff"}">Staff report</button>
           <button type="button" role="tab" class="ba-report__tab ${playerExport ? "is-active" : ""}" data-report-tab="player-export" data-block="${block.id}" aria-selected="${playerExport}">Player export</button>
@@ -1895,18 +1921,28 @@ function dashHtml(block) {
   `;
 
   if (!playedInBlock) {
-    const firstWithData = (state.payload?.blocks || []).find((row) => playedFixtures(row).length);
+    const leagueBlocks = (state.payload?.blocks || []).filter((row) => !isCupsBlock(row));
+    const firstWithData = leagueBlocks.find((row) => playedFixtures(row).length)
+      || (state.payload?.blocks || []).find((row) => playedFixtures(row).length);
     const latest = firstWithData ? playedFixtures(firstWithData).slice(-1)[0] : null;
     const oppHint = latest ? ` · ${shortOpponent(latest.opponentName)}` : "";
+    const emptyLead = cups
+      ? "<strong>No cup results in Impect yet.</strong> When FA Cup / Trophy iterations land, they will show here — try Refresh after full time."
+      : `<strong>Block ${block.id} hasn't started yet.</strong> No games played in this block — that's why the report is blank.`;
+    const emptyHint = firstWithData && !cups
+      ? `
+            <p>Your latest match is in <strong>Block ${firstWithData.id}${escapeHtml(oppHint)}</strong>. Open that block and pick the game pill to see numbers, ticks, and player export.</p>
+            <button type="button" class="ba-btn" data-open-block="${firstWithData.id}" data-open-match="${latest?.matchId || ""}">Open Block ${firstWithData.id}${escapeHtml(oppHint)}</button>
+          `
+      : (cups && firstWithData
+        ? `<p>Latest played game is still in <strong>Block ${firstWithData.id}${escapeHtml(oppHint)}</strong>.</p>`
+        : `<p>No league results loaded yet — try Refresh.</p>`);
     return `
       <section class="ba-report">
         ${reportChrome}
         <div class="ba-report__empty">
-          <p><strong>Block ${block.id} hasn't started yet.</strong> No games played in this block — that's why the report is blank.</p>
-          ${firstWithData ? `
-            <p>Your latest match is in <strong>Block ${firstWithData.id}${escapeHtml(oppHint)}</strong>. Open that block and pick the game pill to see numbers, ticks, and player export.</p>
-            <button type="button" class="ba-btn" data-open-block="${firstWithData.id}" data-open-match="${latest?.matchId || ""}">Open Block ${firstWithData.id}${escapeHtml(oppHint)}</button>
-          ` : `<p>No league results loaded yet — try Refresh.</p>`}
+          <p>${emptyLead}</p>
+          ${emptyHint}
         </div>
       </section>
     `;
@@ -1914,10 +1950,12 @@ function dashHtml(block) {
 
   const { stats, single, fixture } = selectedStats(block);
   const payload = state.payload || {};
-  const isDemo = Boolean(fixture?.demo);
-  const kicker = isDemo
-    ? `EFL Cup · ${payload.season || ""}`.trim()
-    : `Block ${block.id} of 9 · ${payload.competition || "League Two"} ${payload.season || ""}`.trim();
+  const cupComp = fixture?.competitionLabel || (cups ? "Cups" : "");
+  const kicker = single && (cups || cupComp)
+    ? `${cupComp || "Cup"} · ${payload.season || ""}`.trim()
+    : cups
+      ? `Cups · ${payload.season || ""}`.trim()
+      : `Block ${block.id} of ${LEAGUE_BLOCK_COUNT} · ${payload.competition || "League Two"} ${payload.season || ""}`.trim();
   const pageTitle = single ? "Match Report" : "Block Report";
   const sheetPages = single ? 8 : 6;
   const mast = { kicker, single, fixture, stats, block, totalPages: sheetPages };
@@ -1984,17 +2022,25 @@ function resolveViewBlockId(payload) {
   if (!blocks.length) return 1;
   const wanted = Number(state.viewBlockId);
   if (blocks.some((block) => block.id === wanted)) return wanted;
-  const withPlayed = blocks.find((block) => playedFixtures(block).length);
-  return withPlayed?.id ?? payload?.currentBlockId ?? blocks[0].id;
+  const leagueBlocks = blocks.filter((row) => !isCupsBlock(row));
+  const withPlayed = leagueBlocks.find((block) => playedFixtures(block).length);
+  return withPlayed?.id ?? payload?.currentBlockId ?? leagueBlocks[0]?.id ?? blocks[0].id;
 }
 
 function renderJump(blocks, viewBlockId) {
-  els.jumpNav.innerHTML = blocks.map((block) => {
+  const league = blocks.filter((row) => !isCupsBlock(row));
+  const cups = blocks.find((row) => isCupsBlock(row));
+  els.jumpNav.innerHTML = league.map((block) => {
     const current = block.id === viewBlockId ? "is-current" : "";
     const done = block.status === "complete" ? "is-complete" : "";
     const live = playedFixtures(block).length ? "has-played" : "";
     return `<button type="button" class="ba-jump__btn ${current} ${done} ${live}" data-jump="${block.id}">Block ${block.id}</button>`;
-  }).join("");
+  }).concat(cups ? (() => {
+    const current = cups.id === viewBlockId ? "is-current" : "";
+    const done = cups.status === "complete" ? "is-complete" : "";
+    const live = playedFixtures(cups).length ? "has-played" : "";
+    return `<button type="button" class="ba-jump__btn ba-jump__btn--cups ${current} ${done} ${live}" data-jump="${cups.id}">Cups</button>`;
+  })() : []).join("");
 }
 
 function blockPageHtml(block) {
@@ -2022,7 +2068,9 @@ function render() {
   state.viewBlockId = viewBlockId;
   const block = blocks.find((row) => row.id === viewBlockId) || blocks[0];
   if (!block) return;
-  els.pageSubtitle.textContent = `${payload.competition || "League Two"} ${payload.season || ""} · ${payload.playedCount || 0} / ${payload.matchCount || 0} league games played · viewing Block ${viewBlockId}`;
+  const viewing = isCupsBlock(block) ? "Cups" : `Block ${viewBlockId}`;
+  const cupLine = payload.cupCount ? ` · ${payload.cupPlayedCount || 0} / ${payload.cupCount} cup games` : "";
+  els.pageSubtitle.textContent = `${payload.competition || "League Two"} ${payload.season || ""} · ${payload.playedCount || 0} / ${payload.matchCount || 0} league games played${cupLine} · viewing ${viewing}`;
   renderJump(blocks, viewBlockId);
   els.blocksRoot.innerHTML = blockPageHtml(block);
   document.body.classList.toggle("is-player-export", isPlayerDeckTab(reportTab(block.id)));
@@ -2043,7 +2091,9 @@ async function load(refresh = false) {
   setStatus("Opening local snapshot…", "loading");
   els.statusBar.textContent = "Loading…";
   try {
-    const payload = await fetchJson("/api/blocks-analysis");
+    const payload = await fetchJson(
+      refresh ? "/api/blocks-analysis?refresh=1" : "/api/blocks-analysis",
+    );
     if (payload?.building && !(payload.blocks || []).length) {
       setStatus("No saved Blocks snapshot yet. Refresh pulls the played games.", "");
       els.statusBar.textContent = "No saved snapshot yet.";
@@ -2066,7 +2116,7 @@ async function load(refresh = false) {
     });
     render();
     setStatus("");
-    els.statusBar.textContent = `Updated ${new Date(payload.generatedAt || Date.now()).toLocaleTimeString("en-GB")} · Block ${payload.currentBlockId} of 9 · Impect Absolute packing`;
+    els.statusBar.textContent = `Updated ${new Date(payload.generatedAt || Date.now()).toLocaleTimeString("en-GB")} · Block ${payload.currentBlockId} of ${LEAGUE_BLOCK_COUNT} · Cups tab for knockout games · Impect Absolute packing`;
   } catch (err) {
     setStatus(err.message || "Failed to load Blocks Analysis", "error");
     els.statusBar.textContent = "Load failed";
@@ -2084,7 +2134,7 @@ function medalDefaults(medal) {
 
 async function saveTarget(blockId, patch) {
   const block = (state.payload?.blocks || []).find((row) => row.id === blockId);
-  if (!block) return;
+  if (!block || isCupsBlock(block)) return;
   const next = {
     medal: patch.medal ?? block.target.medal,
     points: patch.points ?? block.target.points,
@@ -2447,7 +2497,9 @@ async function exportPoster(blockId) {
       useCORS: true,
     });
     const block = (state.payload?.blocks || []).find((row) => row.id === Number(blockId));
-    const name = `Block-${blockId}-${slug(block?.title || "league")}.png`;
+    const name = isCupsBlock(block)
+      ? `Cups-${slug(block?.title || "fixtures")}.png`
+      : `Block-${blockId}-${slug(block?.title || "league")}.png`;
     downloadDataUrl(canvas.toDataURL("image/png"), name);
   } finally {
     document.body.classList.remove("is-exporting");
@@ -2473,7 +2525,7 @@ els.refreshBtn.addEventListener("click", async () => {
             return;
           }
         }
-        await load();
+        await load(true);
         setStatus("Snapshot updated.", "");
       } catch (err) {
         setStatus(err.message || "Refresh failed", "error");
@@ -2492,7 +2544,7 @@ els.exportAllBtn.addEventListener("click", async () => {
   els.exportAllBtn.disabled = true;
   setStatus("Exporting posters…", "loading");
   try {
-    for (const block of state.payload.blocks) {
+    for (const block of state.payload.blocks.filter((row) => !isCupsBlock(row))) {
       await exportPoster(block.id);
       await new Promise((resolve) => setTimeout(resolve, 250));
     }

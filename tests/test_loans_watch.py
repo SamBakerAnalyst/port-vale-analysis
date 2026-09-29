@@ -176,7 +176,8 @@ def test_board_lists_every_teams_loans_with_port_vale_stats():
     assert faal["age"] == 23
     assert faal["starts"] == 6
     assert faal["matches"] == 7
-    assert faal["minutes"] == 540
+    assert faal["minutes"] == 740
+    assert faal["profile_minutes"] == 540
     assert faal["overall"] == 71.2
     assert faal["from_club"] == "Wrexham AFC"
     assert faal["dossier_href"] == "/player/922"

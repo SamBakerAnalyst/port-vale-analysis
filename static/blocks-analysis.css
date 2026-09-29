@@ -94,7 +94,7 @@ a:hover { text-decoration: underline; }
   top: 0;
   z-index: 5;
   padding: .55rem 0 .7rem;
-  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  background: rgba(12, 15, 20, 0.92);
   backdrop-filter: blur(10px);
 }
 
@@ -124,6 +124,49 @@ a:hover { text-decoration: underline; }
 .ba-jump__btn.is-complete.is-current { color: #111; }
 .ba-jump__btn.has-played:not(.is-complete) { color: #f5c518; }
 .ba-jump__btn.has-played.is-current { color: #111; }
+
+.ba-jump__btn--cups {
+  border-color: #4a4230;
+}
+
+.ba-cups-note {
+  margin-top: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #1a1e26;
+}
+
+.ba-cups-note__lead {
+  margin: 0;
+  font-size: .95rem;
+  line-height: 1.45;
+}
+
+.ba-cups-note__meta {
+  margin: .55rem 0 0;
+  font-family: var(--display);
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ba-fixtures--cups {
+  flex-wrap: wrap;
+}
+
+.ba-fix__cup {
+  font-family: var(--display);
+  font-size: .62rem;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: #92400e;
+  background: #fef3c7;
+  border-radius: 4px;
+  padding: .12rem .35rem;
+}
 
 .ba-status {
   margin: 0 0 1rem;
@@ -4026,7 +4069,7 @@ body.is-player-export .ba-app {
   top: 3.1rem;
   z-index: 4;
   padding: .55rem 0 .35rem;
-  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  background: rgba(12, 15, 20, 0.94);
   backdrop-filter: blur(10px);
 }
 
