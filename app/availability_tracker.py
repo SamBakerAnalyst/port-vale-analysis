@@ -222,6 +222,36 @@ def _extract_fotmob_minutes(player_stats: dict[str, Any]) -> float:
     return 0.0
 
 
+def _extract_fotmob_named_stat(player_stats: dict[str, Any], labels: tuple[str, ...]) -> int:
+    wanted = {label.casefold() for label in labels}
+    for block in player_stats.get("stats") or []:
+        if not isinstance(block, dict):
+            continue
+        title = str(block.get("title") or block.get("localizedTitleId") or "").casefold()
+        if title in wanted:
+            try:
+                return int(float(block.get("value") or 0))
+            except (TypeError, ValueError):
+                pass
+        stats = block.get("stats") or {}
+        if not isinstance(stats, dict):
+            continue
+        for key, entry in stats.items():
+            if str(key).casefold() not in wanted:
+                continue
+            if isinstance(entry, dict):
+                stat = entry.get("stat") or entry
+                try:
+                    return int(float(stat.get("value") or 0))
+                except (TypeError, ValueError):
+                    continue
+            try:
+                return int(float(entry))
+            except (TypeError, ValueError):
+                continue
+    return 0
+
+
 def _fotmob_match_minutes_by_name(match_id: int) -> dict[str, dict[str, Any]]:
     cached = _fotmob_minutes_cache.get(match_id)
     now = time.time()
@@ -277,6 +307,8 @@ def _fotmob_match_minutes_by_name(match_id: int) -> dict[str, dict[str, Any]]:
                 "match_share": min(1.0, minutes / 90.0),
                 "started": fotmob_player_id in starter_ids if fotmob_player_id else minutes >= 45,
                 "fotmob_player_id": fotmob_player_id,
+                "goals": _extract_fotmob_named_stat(row, ("Goals", "Goals scored", "Goal")),
+                "assists": _extract_fotmob_named_stat(row, ("Assists", "Assist")),
             }
 
     _fotmob_minutes_cache[match_id] = (now, by_name)
@@ -293,6 +325,49 @@ def _fotmob_minutes_by_match(
         match_id = int(match["match_id"])
         result[match_id] = _fotmob_match_minutes_by_name(match_id)
     return result
+
+
+def fotmob_league_playing_time(season: str) -> dict[str, dict[str, Any]]:
+    """League Two starts / apps / mins / goals keyed by normalised FotMob name."""
+    try:
+        matches = _fotmob_fixtures_for_season(season)
+    except Exception:
+        return {}
+    minutes_by_match = _fotmob_minutes_by_match(matches)
+    totals: dict[str, dict[str, Any]] = {}
+    for match in matches:
+        if not match.get("complete"):
+            continue
+        if str(match.get("match_category") or "league") != "league":
+            continue
+        try:
+            match_id = int(match["match_id"])
+        except (TypeError, ValueError, KeyError):
+            continue
+        for key, row in (minutes_by_match.get(match_id) or {}).items():
+            mins = int(round(float(row.get("minutes") or 0)))
+            if mins <= 0:
+                continue
+            bucket = totals.setdefault(
+                key,
+                {
+                    "name": str(row.get("name") or ""),
+                    "league_starts": 0,
+                    "league_appearances": 0,
+                    "league_minutes": 0,
+                    "league_goals": 0,
+                    "league_assists": 0,
+                    "goal_contributions": 0,
+                },
+            )
+            bucket["league_appearances"] += 1
+            bucket["league_minutes"] += mins
+            if row.get("started"):
+                bucket["league_starts"] += 1
+            bucket["league_goals"] += int(row.get("goals") or 0)
+            bucket["league_assists"] += int(row.get("assists") or 0)
+            bucket["goal_contributions"] = bucket["league_goals"] + bucket["league_assists"]
+    return totals
 
 
 def _roster_minutes_for_match(
@@ -1447,6 +1522,9 @@ def _on_pitch_impact(
         "league_appearances": 0,
         "league_starts": 0,
         "league_minutes": 0,
+        "league_goals": 0,
+        "league_assists": 0,
+        "goal_contributions": 0,
         "goals_for": 0,
         "goals_against": 0,
         "goal_diff": 0,
@@ -1492,6 +1570,8 @@ def _on_pitch_impact(
         stats["league_minutes"] += mins_int
         if (row or {}).get("started"):
             stats["league_starts"] += 1
+        stats["league_goals"] += int((row or {}).get("goals") or 0)
+        stats["league_assists"] += int((row or {}).get("assists") or 0)
 
         share = float((row or {}).get("match_share") or 0.0)
         if share <= 0:
@@ -1546,6 +1626,10 @@ def _on_pitch_impact(
         stats["pct_of_wins"] = round(100 * int(stats["wins_played"]) / team_wins, 2)
     if team_points > 0:
         stats["pct_of_points"] = round(100 * int(stats["points"]) / team_points, 2)
+
+    stats["league_goals"] = int(stats["league_goals"])
+    stats["league_assists"] = int(stats["league_assists"])
+    stats["goal_contributions"] = int(stats["league_goals"]) + int(stats["league_assists"])
 
     return stats
 

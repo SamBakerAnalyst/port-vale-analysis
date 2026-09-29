@@ -127,6 +127,37 @@
       box-shadow: 0 0 0 3px rgba(61, 139, 253, 0.15);
     }
 
+    .login__password {
+      position: relative;
+    }
+
+    .login__password .login__input {
+      padding-right: 4.4rem;
+    }
+
+    .login__peek {
+      position: absolute;
+      top: 50%;
+      right: 0.55rem;
+      transform: translateY(-50%);
+      padding: 0.3rem 0.5rem;
+      font: inherit;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: var(--text-muted);
+      background: transparent;
+      border: 0;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .login__peek:hover,
+    .login__peek:focus-visible {
+      color: var(--text);
+      outline: none;
+    }
+
     .login__error {
       display: none;
       margin-bottom: 1rem;
@@ -192,11 +223,14 @@
     <form id="loginForm" novalidate>
       <div class="login__field">
         <label class="login__label" for="username">Username</label>
-        <input class="login__input" id="username" name="username" type="text" autocomplete="username" placeholder="Username" required autofocus />
+        <input class="login__input" id="username" name="username" type="text" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Username" required autofocus />
       </div>
       <div class="login__field">
         <label class="login__label" for="password">Password</label>
-        <input class="login__input" id="password" name="password" type="password" autocomplete="current-password" required />
+        <div class="login__password">
+          <input class="login__input" id="password" name="password" type="password" autocomplete="current-password" required />
+          <button class="login__peek" type="button" id="togglePassword" aria-pressed="false" aria-controls="password" aria-label="Show password">Show</button>
+        </div>
       </div>
       <button class="login__submit" type="submit" id="submitBtn">Sign in</button>
     </form>
@@ -208,8 +242,19 @@
     const form = document.getElementById("loginForm");
     const errorEl = document.getElementById("loginError");
     const submitBtn = document.getElementById("submitBtn");
+    const passwordInput = document.getElementById("password");
+    const togglePassword = document.getElementById("togglePassword");
     const params = new URLSearchParams(window.location.search);
     const nextUrl = params.get("next") || "/";
+
+    togglePassword.addEventListener("click", () => {
+      const show = passwordInput.type === "password";
+      passwordInput.type = show ? "text" : "password";
+      togglePassword.textContent = show ? "Hide" : "Show";
+      togglePassword.setAttribute("aria-pressed", show ? "true" : "false");
+      togglePassword.setAttribute("aria-label", show ? "Hide password" : "Show password");
+      passwordInput.focus();
+    });
 
     function showError(message) {
       errorEl.textContent = message;

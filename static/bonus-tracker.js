@@ -47,25 +47,54 @@
       <div class="bt-kpi"><p class="bt-kpi__label">Players</p><p class="bt-kpi__value">${s.players ?? 0}</p></div>
       <div class="bt-kpi"><p class="bt-kpi__label">With provisions</p><p class="bt-kpi__value">${s.with_provisions ?? 0}</p></div>
       <div class="bt-kpi"><p class="bt-kpi__label">Appearance bonus</p><p class="bt-kpi__value">${s.appearance_bonus_players ?? 0}</p></div>
+      <div class="bt-kpi"><p class="bt-kpi__label">Thresholds hit</p><p class="bt-kpi__value">${s.thresholds_met ?? 0}</p></div>
       <div class="bt-kpi"><p class="bt-kpi__label">Matchday rows</p><p class="bt-kpi__value">${s.matchday_logged ?? 0}</p></div>
-      <div class="bt-kpi"><p class="bt-kpi__label">Unpaid</p><p class="bt-kpi__value">${s.unpaid ?? 0}</p></div>
     `;
     const q = state.filter.trim().toLowerCase();
     const players = (p.players || []).filter((row) => !q || String(row.name || "").toLowerCase().includes(q));
     els.playerRows.innerHTML = players.map((row) => {
-      const pill = row.appearance_bonus === "none"
-        ? `<span class="bt-pill bt-pill--muted">None</span>`
-        : `<span class="bt-pill">${esc(row.appearance_bonus_label)}</span>`;
+      const time = row.playing_time || {};
       const totals = row.totals || {};
       const logged = (totals.appearance || 0) + (totals.goal_assist || 0) + (totals.clean_sheet || 0) + (totals.squad_bonus || 0) + (totals.personal_win || 0);
+      const pill = row.appearance_bonus !== "none"
+        ? `<div><span class="bt-pill">${esc(row.appearance_bonus_label)}</span></div>`
+        : "";
+      const clauses = (row.clauses || []).map((clause) => {
+        const steps = (clause.thresholds || []).map((step) => {
+          const pct = step.current == null || !step.target
+            ? 0
+            : Math.min(100, Math.round((step.current / step.target) * 100));
+          const cls = step.met ? "is-met" : (clause.next_target === step.target ? "is-next" : "");
+          return `<span class="bt-step ${cls}">
+            <span class="bt-bar ${cls}"><span style="width:${pct}%"></span></span>
+            ${esc(step.label)}${step.met ? " · met" : (step.remaining != null ? ` · ${step.remaining} to go` : "")}
+          </span>`;
+        }).join("");
+        const live = clause.per_game && clause.current != null
+          ? `<div class="bt-meta">${clause.current} ${esc(clause.unit || "")} this season</div>`
+          : "";
+        return `<div class="bt-clause ${clause.met ? "is-met" : ""}">
+          <p class="bt-clause__text">${esc(clause.text)}</p>
+          ${live}
+          ${steps ? `<div class="bt-thresholds">${steps}</div>` : ""}
+        </div>`;
+      }).join("") || `<div class="bt-meta">No trackable clause.</div>`;
       return `<tr>
-        <td><div class="bt-player">${esc(row.name)}</div></td>
-        <td>${pill}</td>
-        <td><div class="bt-meta">${esc(row.provisions || "—")}</div></td>
-        <td>${logged}</td>
-        <td>${totals.unpaid || 0}</td>
+        <td>
+          <div class="bt-player">${esc(row.name)}</div>
+          ${pill}
+        </td>
+        <td class="bt-time">
+          <div><strong>${time.league_starts ?? 0}</strong> starts</div>
+          <div><strong>${time.league_appearances ?? 0}</strong> apps</div>
+          <div><strong>${time.league_minutes ?? 0}</strong> mins</div>
+          <div><strong>${time.league_goals ?? 0}</strong> goals</div>
+          <div><strong>${time.league_assists ?? 0}</strong> assists</div>
+        </td>
+        <td><div class="bt-clauses">${clauses}</div></td>
+        <td>${logged}${totals.unpaid ? `<div class="bt-meta">${totals.unpaid} unpaid</div>` : ""}</td>
       </tr>`;
-    }).join("") || `<tr><td colspan="5">No players.</td></tr>`;
+    }).join("") || `<tr><td colspan="4">No players with a bonus or clause.</td></tr>`;
 
     els.matchdayRows.innerHTML = (p.matchday || []).map((row) => `
       <tr>

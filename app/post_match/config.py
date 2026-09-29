@@ -11,7 +11,7 @@ DEFAULT_SEASON_LABEL = os.getenv("DEFAULT_SEASON_LABEL", "26/27").strip() or "26
 # Fallback only — the dashboard prefers the latest available match from the bar.
 DEFAULT_MATCH_ID = int(os.getenv("DEFAULT_MATCH_ID", "270725"))
 
-# Competitions merged into the post-match match bar (league + cups).
+# Competitions merged into the post-match match bar and Blocks Analysis Cups tab.
 # Add FA Cup / EFL Trophy iteration ids here when Impect publishes them.
 POST_MATCH_COMPETITIONS: list[dict[str, str | int]] = [
     {
@@ -24,6 +24,12 @@ POST_MATCH_COMPETITIONS: list[dict[str, str | int]] = [
         "iterationId": 2227,
         "label": "EFL Cup",
         "shortLabel": "Cup",
+        "season": "26/27",
+    },
+    {
+        "iterationId": 2339,
+        "label": "EFL Trophy",
+        "shortLabel": "Trophy",
         "season": "26/27",
     },
 ]

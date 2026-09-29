@@ -536,14 +536,14 @@
       "homeMonthCal",
       `<div class="home-cal">${weekdays}${cells.join("")}</div>
       <div class="home-cal__legend">
-        <span><i style="background:#c5d4a8"></i> IN</span>
-        <span><i style="background:#c45c4a"></i> Regen</span>
-        <span><i style="background:#9b9a91"></i> Pre-season</span>
+        <span><i style="background:#34d399"></i> IN</span>
+        <span><i style="background:#f87171"></i> Regen</span>
+        <span><i style="background:#8b9bb0"></i> Pre-season</span>
         <span><i class="home-cal__legend-r">R</i> Recruitment in</span>
-        <span><i style="background:#e0a800"></i> Home</span>
-        <span><i style="background:#f2f1ec"></i> Away</span>
-        ${showScoutDots ? `<span><i style="background:#c5d4a8"></i> Scout LIVE</span>
-        <span><i style="background:#e0a800"></i> Scout VIDEO</span>` : ""}
+        <span><i style="background:#f5c518"></i> Home</span>
+        <span><i style="background:#e8edf4"></i> Away</span>
+        ${showScoutDots ? `<span><i style="background:#34d399"></i> Scout LIVE</span>
+        <span><i style="background:#f5c518"></i> Scout VIDEO</span>` : ""}
       </div>
       <p class="home-cal__hint">${ownerLabel} — click: <strong>IN</strong> → <strong>Regen</strong> → <strong>Pre-season</strong> → blank. Shift-click for <strong>R</strong>. Open <a href="/schedule">Full schedule</a> for the big board.</p>`
     );

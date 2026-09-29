@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from app.apps_manifest import APPS, RECRUITMENT_GROUPS, role_path_prefixes
-from app.auth import ROLE_GROUPS, ROLE_HOME_TABS, _path_allowed_for_role
+from app.auth import ROLE_GROUPS, ROLE_HOME_TABS, _find_user, _path_allowed_for_role
 
 
 def _app(app_id: str) -> dict:
@@ -24,6 +24,21 @@ def _titles_for_role(role: str) -> set[str]:
 def test_scouts_role_is_registered_with_recruitment_and_scouts_groups():
     assert ROLE_GROUPS["scouts"] == ("recruitment", "scouts")
     assert ROLE_HOME_TABS["scouts"] == ("home", "recruitment")
+
+
+def test_usernames_match_without_regard_to_case(monkeypatch):
+    monkeypatch.delenv("TEAM_PASSWORD", raising=False)
+    monkeypatch.delenv("ANALYSIS_USERNAME", raising=False)
+    monkeypatch.delenv("ANALYSIS_PASSWORD", raising=False)
+    monkeypatch.setenv(
+        "HUB_USERS",
+        '[{"username":"JessFrost","password":"secretpass","role":"ops","display_name":"Jess Frost"}]',
+    )
+    user = _find_user("jessfrost", "secretpass")
+    assert user is not None
+    assert user["username"] == "JessFrost"
+    assert _find_user("JESSFROST", "secretpass")["role"] == "ops"
+    assert _find_user("JessFrost", "wrong-password") is None
 
 
 def test_ops_role_is_admin_rail_only():

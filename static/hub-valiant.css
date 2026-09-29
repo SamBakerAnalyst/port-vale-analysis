@@ -1,23 +1,23 @@
-/* Valiant desk — Port Vale hub identity. Loaded last on hub.html. */
+/* Hub desk — Manrope / Barlow slate (matches tools). Loaded last on hub.html. */
 
 :root {
-  --bg: #10100f;
-  --surface: #181816;
-  --surface-2: #22221e;
-  --border: #33332c;
-  --text: #f2f1ec;
-  --text-muted: #9b9a91;
-  --muted: #9b9a91;
-  --accent: #e0a800;
-  --accent-hover: #f0bc2a;
-  --green: #c5d4a8;
-  --amber: #e0a800;
-  --danger: #c45c4a;
-  --gold: #e0a800;
-  --radius: 2px;
-  --font: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
-  --display: "Oswald", "Arial Narrow", sans-serif;
-  --mono: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --bg: #0c0f14;
+  --surface: #141a22;
+  --surface-2: #1a222d;
+  --border: #2a3544;
+  --text: #e8edf4;
+  --text-muted: #8b9bb0;
+  --muted: #8b9bb0;
+  --accent: #f5c518;
+  --accent-hover: #fbbf24;
+  --green: #34d399;
+  --amber: #f5c518;
+  --danger: #f87171;
+  --gold: #f5c518;
+  --radius: 12px;
+  --font: "Manrope", system-ui, sans-serif;
+  --display: "Barlow Condensed", sans-serif;
+  --mono: "Manrope", system-ui, sans-serif;
   --rail: 248px;
   --shadow: none;
 }
@@ -35,7 +35,7 @@ body::before {
 
 /* ——— Rail ——— */
 .rail {
-  background: #0c0c0b;
+  background: #0a0d12;
   border-right: 1px solid var(--border);
   backdrop-filter: none;
   box-shadow: inset 3px 0 0 var(--gold);
@@ -76,7 +76,7 @@ body::before {
 .rail__home:hover,
 .rail__home.is-active {
   background: var(--gold);
-  color: #10100f;
+  color: #0c0f14;
   border-color: var(--gold);
 }
 
@@ -85,7 +85,8 @@ body::before {
 .rail__group--recruitment,
 .rail__group--scouts,
 .rail__group--strategy,
-.rail__group--presentations {
+.rail__group--presentations,
+.rail__group--admin {
   --group-accent: var(--text-muted);
 }
 
@@ -128,7 +129,7 @@ body::before {
 
 .rail__soon-badge {
   border-radius: var(--radius);
-  color: #10100f;
+  color: #0c0f14;
   background: var(--gold);
 }
 
@@ -332,7 +333,7 @@ body::before {
   font-weight: 500;
   letter-spacing: 0.12em;
   border-radius: var(--radius);
-  color: #10100f;
+  color: #0c0f14;
   background: var(--gold);
 }
 
@@ -435,6 +436,12 @@ a.home-subtab:hover {
 }
 
 /* ——— KPIs + cards ——— */
+#homeDashboard.is-landing-only .home-kpis,
+#homeDashboard.is-landing-only .home-grid,
+#homeDashboard.is-landing-only .home-live-grid {
+  display: none !important;
+}
+
 .home-kpis {
   gap: 0;
   margin-bottom: 1.15rem;
@@ -681,7 +688,7 @@ a.home-subtab:hover {
 .home-promote-btn:hover {
   border-color: var(--gold);
   background: var(--gold);
-  color: #10100f;
+  color: #0c0f14;
 }
 
 .home-scout-pill {
@@ -765,52 +772,16 @@ a.home-subtab:hover {
   border-radius: 0;
 }
 
-.home-bar__fill.is-age-u21 { background: #e0a800; }
+.home-bar__fill.is-age-u21 { background: #f5c518; }
 .home-bar__fill.is-age-2125 { background: #b08a20; }
 .home-bar__fill.is-age-2629 { background: #7a7a70; }
-.home-bar__fill.is-age-30 { background: #c45c4a; }
-.home-bar__fill.is-poss { background: #e0a800; }
+.home-bar__fill.is-age-30 { background: #f87171; }
+.home-bar__fill.is-poss { background: #f5c518; }
 .home-bar__fill.is-trans { background: #8a8a80; }
-.home-bar__fill.is-set { background: #c5d4a8; }
+.home-bar__fill.is-set { background: #34d399; }
 
 .home-stat {
   border-radius: var(--radius);
-}
-
-.home-cal__day--training {
-  background: #2a3324;
-  border-color: #c5d4a8;
-  box-shadow: none;
-}
-
-.home-cal__day--regen {
-  background: #3a201c;
-  border-color: #c45c4a;
-  box-shadow: none;
-}
-
-.home-cal__day--preseason {
-  background: #2a2a26;
-  border-color: #9b9a91;
-  box-shadow: none;
-}
-
-.home-cal__day--match.home-cal__day--home {
-  background: #e0a800;
-  border-color: #f0bc2a;
-  box-shadow: none;
-}
-
-.home-cal__day--match.home-cal__day--away {
-  background: #1c1c1a;
-  border-color: #e0a800;
-  box-shadow: none;
-}
-
-.home-cal__day--match.home-cal__day--away .home-cal__num,
-.home-cal__day--match.home-cal__day--away .home-cal__session,
-.home-cal__day--match.home-cal__day--away .home-cal__fixture {
-  color: #f2f1ec;
 }
 
 .home-cal {
@@ -836,4 +807,71 @@ a.home-subtab:hover {
   font-family: var(--display);
   font-weight: 600;
   letter-spacing: 0.04em;
+}
+
+/* Solid fills must match the legend — muted tints vanish on the dark desk. */
+.home-cal__day--training {
+  background: #34d399;
+  border-color: #22c07a;
+  box-shadow: none;
+}
+
+.home-cal__day--regen {
+  background: #f87171;
+  border-color: #ef4444;
+  box-shadow: none;
+}
+
+.home-cal__day--preseason {
+  background: #8b9bb0;
+  border-color: #6b7a8f;
+  box-shadow: none;
+}
+
+.home-cal__day--match.home-cal__day--home {
+  background: #f5c518;
+  border-color: #e0a800;
+  box-shadow: none;
+}
+
+.home-cal__day--match.home-cal__day--away {
+  background: #e8edf4;
+  border-color: #c5cad3;
+  box-shadow: none;
+}
+
+.home-cal__day--training .home-cal__num,
+.home-cal__day--training .home-cal__session,
+.home-cal__day--training .home-cal__session span,
+.home-cal__day--preseason .home-cal__num,
+.home-cal__day--preseason .home-cal__session,
+.home-cal__day--preseason .home-cal__session span,
+.home-cal__day--match.home-cal__day--home .home-cal__num,
+.home-cal__day--match.home-cal__day--away .home-cal__num,
+.home-cal__day--match.home-cal__day--away .home-cal__session,
+.home-cal__day--match.home-cal__day--away .home-cal__fixture,
+.home-cal__day--match.home-cal__day--away .home-cal__fixture-meta {
+  color: #0c0f14;
+  text-shadow: none;
+}
+
+.home-cal__day--regen .home-cal__num,
+.home-cal__day--regen .home-cal__session,
+.home-cal__day--regen .home-cal__session span {
+  color: #e8edf4;
+  text-shadow: none;
+}
+
+.home-cal__day--match.home-cal__day--away .home-cal__fixture {
+  background: rgba(16, 16, 15, 0.08);
+  border-left-color: #0c0f14;
+}
+
+.home-cal__day--match.home-cal__day--home .home-cal__fixture {
+  background: rgba(16, 16, 15, 0.12);
+  border-left-color: #0c0f14;
+}
+
+.home-cal__day--match.home-cal__day--home .home-cal__fixture-meta {
+  color: #0c0f14;
 }

@@ -25,14 +25,6 @@
   ],
   "players": [
     {
-      "id": "maleace-asamoah",
-      "surname": "Asamoah",
-      "first_name": "Maleace",
-      "name": "Maleace Asamoah",
-      "appearance_bonus": "none",
-      "provisions": ""
-    },
-    {
       "id": "charlie-bussell",
       "surname": "Bussell",
       "first_name": "Charlie",
@@ -79,14 +71,6 @@
       "name": "Mo Faal",
       "appearance_bonus": "none",
       "provisions": "Goal/Assist bonus when won/drawn - Bonus if team in top 7 and player makes 30 starts - Payments to Wrexham based on goals scored and minutes played"
-    },
-    {
-      "id": "keyrol-figueroa",
-      "surname": "Figueroa",
-      "first_name": "Keyrol",
-      "name": "Keyrol Figueroa",
-      "appearance_bonus": "none",
-      "provisions": ""
     },
     {
       "id": "jordan-gabriel",
@@ -191,30 +175,6 @@
       "name": "Lewis Montsma",
       "appearance_bonus": "league_start",
       "provisions": "Option year after 23 league starts"
-    },
-    {
-      "id": "jasper-moon",
-      "surname": "Moon",
-      "first_name": "Jasper",
-      "name": "Jasper Moon",
-      "appearance_bonus": "none",
-      "provisions": ""
-    },
-    {
-      "id": "keaton-moseley",
-      "surname": "Moseley",
-      "first_name": "Keaton",
-      "name": "Keaton Moseley",
-      "appearance_bonus": "none",
-      "provisions": ""
-    },
-    {
-      "id": "miracle-orisakwe",
-      "surname": "Orisakwe",
-      "first_name": "Miracle",
-      "name": "Miracle Orisakwe",
-      "appearance_bonus": "none",
-      "provisions": ""
     },
     {
       "id": "jack-shorrock",

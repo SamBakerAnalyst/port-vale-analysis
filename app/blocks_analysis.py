@@ -68,6 +68,8 @@ DEMO_MATCH_ID = 285444  # EFL Cup demo match (Wolves)
 
 LONDON = ZoneInfo("Europe/London")
 BLOCK_COUNT = 9
+CUPS_BLOCK_ID = 10
+BLOCKS_PAYLOAD_VERSION = 2
 GAMES_PER_BLOCK = 5
 LEAGUE_TABLE_GAMES = 46
 # Impect Absolute packing KPIs (same as Scout Absolute) — never *_RAW for board views.
@@ -260,6 +262,12 @@ BLOCK_COPY: tuple[dict[str, str], ...] = (
         "footer": "SEE IT THROUGH",
     },
 )
+
+CUPS_COPY = {
+    "title": "CUP FIXTURES",
+    "heading": "CUPS – OUTSIDE THE LEAGUE BLOCKS",
+    "footer": "KNOCKOUT & LEAGUE CUP",
+}
 
 
 class BlockTargetUpdate(BaseModel):
@@ -998,8 +1006,49 @@ def _blocks_player_names(iteration_id: int = BLOCKS_ITERATION_ID) -> dict[int, s
 
 def _merged_player_names() -> dict[int, str]:
     names = dict(_blocks_player_names(BLOCKS_ITERATION_ID))
-    names.update(_blocks_player_names(DEMO_CUP_ITERATION_ID))
+    for iteration_id in _blocks_cup_iteration_ids():
+        names.update(_blocks_player_names(iteration_id))
     return names
+
+
+def _blocks_cup_iteration_ids() -> list[int]:
+    from app.post_match.config import POST_MATCH_COMPETITIONS
+
+    ids: list[int] = []
+    for comp in POST_MATCH_COMPETITIONS:
+        iteration_id = int(comp.get("iterationId") or 0)
+        if iteration_id and iteration_id != BLOCKS_ITERATION_ID:
+            ids.append(iteration_id)
+    if DEMO_CUP_ITERATION_ID not in ids:
+        ids.append(DEMO_CUP_ITERATION_ID)
+    return ids
+
+
+def _fetch_cup_matches() -> list[dict[str, Any]]:
+    from app.post_match.config import POST_MATCH_COMPETITIONS
+
+    matches: list[dict[str, Any]] = []
+    for comp in POST_MATCH_COMPETITIONS:
+        iteration_id = int(comp.get("iterationId") or 0)
+        if iteration_id == BLOCKS_ITERATION_ID or not iteration_id:
+            continue
+        label = str(comp.get("label") or f"Iteration {iteration_id}")
+        short = str(comp.get("shortLabel") or "Cup")
+        season = str(comp.get("season") or BLOCKS_SEASON_LABEL)
+        try:
+            batch = build_season_matches(
+                iteration_id,
+                PORT_VALE_SQUAD_ID,
+                include_upcoming=True,
+                competition_label=label,
+                competition_short=short,
+                season_label=season,
+            )
+            matches.extend(batch)
+        except Exception:  # noqa: BLE001
+            logger.exception("Blocks cup fixtures failed for %s (%s)", label, iteration_id)
+    matches.sort(key=lambda item: item.get("scheduledDate") or "")
+    return matches
 
 
 def _player_match_report(
@@ -2955,6 +3004,9 @@ def _serialize_fixture(
         "scoreLabel": match.get("scoreLabel"),
         "available": bool(match.get("available")),
         "played": result["played"],
+        "competitionLabel": match.get("competitionLabel"),
+        "competitionShort": match.get("competitionShort"),
+        "iterationId": match.get("iterationId"),
         "stats": stats,
     }
 
@@ -3116,42 +3168,59 @@ def _target_payload(block_id: int, saved: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _load_demo_fixture(*, force_refresh: bool = False) -> dict[str, Any] | None:
-    """Wolves EFL Cup — preview the 2-page report before League Two starts."""
-    try:
-        matches = build_season_matches(
-            DEMO_CUP_ITERATION_ID,
-            PORT_VALE_SQUAD_ID,
-            include_upcoming=True,
-            competition_label="EFL Cup",
-            competition_short="Cup",
-            season_label=BLOCKS_SEASON_LABEL,
+def _build_cups_block(
+    cup_matches: list[dict[str, Any]],
+    kpi_by_match: dict[int, dict[str, Any]],
+) -> dict[str, Any]:
+    fixtures: list[dict[str, Any]] = []
+    for slot, match in enumerate(cup_matches, start=1):
+        match_id = int(match.get("matchId") or 0)
+        kpis = kpi_by_match.get(match_id) if match_id else None
+        fixtures.append(
+            _serialize_fixture(
+                match,
+                slot=slot,
+                season_number=None,
+                kpis=kpis,
+            )
         )
-    except Exception:  # noqa: BLE001
-        return None
-    match = next(
-        (row for row in matches if int(row.get("matchId") or 0) == DEMO_MATCH_ID),
-        None,
-    )
-    if match is None:
-        match = next((row for row in matches if row.get("outcome")), None)
-    if match is None:
-        return None
-    kpis = _load_match_kpis([match], force_refresh=force_refresh).get(int(match["matchId"]))
-    if not kpis or not kpis.get("players"):
-        return None
-    fixture = _serialize_fixture(match, slot=0, season_number=None, kpis=kpis)
-    fixture["demo"] = True
-    fixture["competitionShort"] = "CUP"
-    fixture["competitionLabel"] = "EFL Cup"
-    return fixture
+    totals = _aggregate_stats(fixtures)
+    played = int(totals["played"])
+    scheduled = [row for row in fixtures if row.get("matchId")]
+    return {
+        "id": CUPS_BLOCK_ID,
+        "kind": "cups",
+        "title": CUPS_COPY["title"],
+        "heading": CUPS_COPY["heading"],
+        "footer": CUPS_COPY["footer"],
+        "target": {
+            "medal": "silver",
+            "label": "CUPS",
+            "shortLabel": "Cups",
+            "outcome": "",
+            "points": 0,
+            "cleanSheets": 0,
+            "defaults": {},
+        },
+        "fixtures": fixtures,
+        "demoFixtures": [],
+        "totals": totals,
+        "status": (
+            "complete"
+            if played >= len(scheduled) and scheduled
+            else "live"
+            if played
+            else "upcoming"
+        ),
+        "pointsLabel": f"{totals['points']} pts",
+    }
 
 
 def _assemble_blocks_payload(
     matches: list[dict[str, Any]],
     kpi_by_match: dict[int, dict[str, Any]],
     *,
-    include_demo: bool = False,
+    cup_matches: list[dict[str, Any]] | None = None,
     force_refresh: bool = False,
 ) -> dict[str, Any]:
     benchmarks: dict[str, Any] = {}
@@ -3233,13 +3302,8 @@ def _assemble_blocks_payload(
             break
         current_block_id = int(block["id"])
 
-    if include_demo:
-        demo = _load_demo_fixture(force_refresh=force_refresh)
-        if demo:
-            for block in blocks:
-                if int(block["id"]) == current_block_id:
-                    block["demoFixtures"] = [demo]
-                    break
+    cups = cup_matches if cup_matches is not None else _fetch_cup_matches()
+    blocks.append(_build_cups_block(cups, kpi_by_match))
 
     return {
         "generatedAt": datetime.now(UTC).isoformat(),
@@ -3262,6 +3326,9 @@ def _assemble_blocks_payload(
         "benchmarks": benchmarks,
         "matchCount": len(matches),
         "playedCount": sum(1 for match in matches if match.get("outcome")),
+        "cupCount": len(cups),
+        "cupPlayedCount": sum(1 for match in cups if match.get("outcome")),
+        "blocksPayloadVersion": BLOCKS_PAYLOAD_VERSION,
         "kpiBasis": "impect_absolute",
         "kpiBasisNote": (
             "Packing KPIs use Impect Absolute (BYPASSED_DEFENDERS / BYPASSED_OPPONENTS), "
@@ -3319,6 +3386,78 @@ def _fetch_season_matches() -> list[dict[str, Any]]:
     )
 
 
+def _matches_for_kpi_load(
+    league_matches: list[dict[str, Any]],
+    cup_matches: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    combined = list(league_matches) + list(cup_matches)
+    played = [match for match in combined if match.get("outcome")]
+    return played or combined
+
+
+def _kpi_map_from_payload(payload: dict[str, Any]) -> dict[int, dict[str, Any]]:
+    out: dict[int, dict[str, Any]] = {}
+    for block in payload.get("blocks") or []:
+        for fix in (block.get("fixtures") or []) + (block.get("demoFixtures") or []):
+            match_id = fix.get("matchId")
+            stats = fix.get("stats")
+            if match_id and stats:
+                out[int(match_id)] = stats
+    return out
+
+
+def _sync_cups_block(
+    payload: dict[str, Any],
+    *,
+    fetch_missing_kpis: bool = True,
+) -> tuple[dict[str, Any], bool]:
+    """Cup fixtures change independently of league blocks — never serve a stale Cups tab."""
+    cup_matches = _fetch_cup_matches()
+    expected_ids = {int(m.get("matchId") or 0) for m in cup_matches if m.get("matchId")}
+    blocks = list(payload.get("blocks") or [])
+    existing = next((b for b in blocks if b.get("kind") == "cups"), None)
+    existing_ids = {
+        int(f.get("matchId") or 0)
+        for f in (existing.get("fixtures") or [] if existing else [])
+        if f.get("matchId")
+    }
+    version_ok = payload.get("blocksPayloadVersion") == BLOCKS_PAYLOAD_VERSION
+    if version_ok and existing_ids == expected_ids and payload.get("cupCount") == len(cup_matches):
+        return payload, False
+
+    kpi_by_match = _kpi_map_from_payload(payload)
+    if cup_matches:
+        fetched = _load_match_kpis(
+            _matches_for_kpi_load([], cup_matches),
+            force_refresh=False,
+            fetch_missing=fetch_missing_kpis,
+            allow_stale=True,
+        )
+        kpi_by_match.update(fetched)
+
+    league_blocks = [
+        b
+        for b in blocks
+        if b.get("kind") != "cups" and int(b.get("id") or 0) != CUPS_BLOCK_ID
+    ]
+    league_blocks.append(_build_cups_block(cup_matches, kpi_by_match))
+    updated = {
+        **payload,
+        "blocks": league_blocks,
+        "cupCount": len(cup_matches),
+        "cupPlayedCount": sum(1 for m in cup_matches if m.get("outcome")),
+        "blocksPayloadVersion": BLOCKS_PAYLOAD_VERSION,
+    }
+    return updated, True
+
+
+def _finalize_blocks_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    synced, changed = _sync_cups_block(payload)
+    if changed:
+        return _store_blocks_payload(synced)
+    return synced
+
+
 def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, Any]:
     cache_key = "default"
     now = time.time()
@@ -3344,18 +3483,21 @@ def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, A
                 logger.exception("Blocks score refresh from Impect failed")
                 if payload:
                     if _retouch_payload_lineups(payload):
-                        return _store_blocks_payload(payload)
-                    return payload
+                        return _finalize_blocks_payload(payload)
+                    return _finalize_blocks_payload(payload)
             if matches:
-                played = [match for match in matches if match.get("outcome")]
+                cup_matches = _fetch_cup_matches()
                 kpi_by_match = _load_match_kpis(
-                    played or matches,
+                    _matches_for_kpi_load(matches, cup_matches),
                     force_refresh=False,
                     fetch_missing=True,
                     allow_stale=True,
                 )
                 rebuilt = _assemble_blocks_payload(
-                    matches, kpi_by_match, include_demo=False, force_refresh=False
+                    matches,
+                    kpi_by_match,
+                    cup_matches=cup_matches,
+                    force_refresh=False,
                 )
                 if payload and payload.get("benchmarks") and not (
                     rebuilt.get("benchmarks") or {}
@@ -3365,21 +3507,24 @@ def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, A
 
         if payload:
             if _retouch_payload_lineups(payload):
-                return _store_blocks_payload(payload)
-            return payload
+                return _finalize_blocks_payload(payload)
+            return _finalize_blocks_payload(payload)
         if not matches:
             matches = _fetch_season_matches()
             if matches:
                 _save_season_matches_disk(matches)
-        played = [match for match in matches if match.get("outcome")]
+        cup_matches = _fetch_cup_matches()
         kpi_by_match = _load_match_kpis(
-            played or matches,
+            _matches_for_kpi_load(matches, cup_matches),
             force_refresh=False,
             fetch_missing=True,
             allow_stale=True,
         )
         assembled = _assemble_blocks_payload(
-            matches, kpi_by_match, include_demo=False, force_refresh=False
+            matches,
+            kpi_by_match,
+            cup_matches=cup_matches,
+            force_refresh=False,
         )
         if disk and disk.get("benchmarks") and not (assembled.get("benchmarks") or {}).get(
             "goalsAgainst"
@@ -3390,10 +3535,17 @@ def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, A
     matches = _fetch_season_matches()
     if matches:
         _save_season_matches_disk(matches)
-    kpi_by_match = _load_match_kpis(matches, force_refresh=True)
-    return _store_blocks_payload(
+    cup_matches = _fetch_cup_matches()
+    kpi_by_match = _load_match_kpis(
+        _matches_for_kpi_load(matches, cup_matches),
+        force_refresh=True,
+    )
+    return _finalize_blocks_payload(
         _assemble_blocks_payload(
-            matches, kpi_by_match, include_demo=True, force_refresh=True
+            matches,
+            kpi_by_match,
+            cup_matches=cup_matches,
+            force_refresh=True,
         )
     )
 
