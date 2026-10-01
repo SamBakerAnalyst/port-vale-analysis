@@ -5,6 +5,8 @@ Analysis accounts (ANALYSIS_USERNAME / ANALYSIS_PASSWORD, or HUB_USERS JSON)
 can only open Analysis tools + the hub home ribbon for those apps.
 Scout accounts (HUB_USERS with role "scouts") get Recruitment + Scouts tools,
 so their own name lands on Watch list and pipeline notes.
+Ops accounts (HUB_USERS with role "ops") get only the Admin rail — schedule,
+availability, bonuses, and suspensions.
 
 Personal accounts go in the HUB_USERS env var on the server:
 
@@ -99,11 +101,13 @@ def _role_allowed_prefixes(role: str) -> tuple[str, ...]:
 
 
 ROLE_GROUPS = {
-    "admin": ("analysis", "recruitment", "scouts", "strategy", "presentations"),
+    "admin": ("analysis", "recruitment", "scouts", "strategy", "admin", "presentations"),
     "analysis": ("analysis",),
     # Scouts get the recruitment funnel and their own fixtures/reports, but not
     # Strategy or the Presentations decks.
     "scouts": ("recruitment", "scouts"),
+    # Club-office logins — Admin rail only, not analysis or recruitment.
+    "ops": ("admin",),
 }
 
 # Hub home tabs a role may open, keyed to data-tab in hub.html.
@@ -111,6 +115,7 @@ ROLE_HOME_TABS = {
     "admin": ("home", "performance", "recruitment", "strategy"),
     "analysis": ("home",),
     "scouts": ("home", "recruitment"),
+    "ops": ("home",),
 }
 
 

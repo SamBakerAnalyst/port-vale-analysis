@@ -81,6 +81,7 @@ HUB_USERS='[{"username":"jsmith","password":"...","role":"scouts","display_name"
 | `admin` | Everything |
 | `scouts` | Recruitment + Scouts tools — not Strategy or Presentations |
 | `analysis` | Analysis tools only |
+| `ops` | Admin rail only — Schedule, Squad Availability, Bonus Tracker, Suspension Tracker |
 
 Roles are defined in `ROLE_GROUPS` / `ROLE_HOME_TABS` (`app/auth.py`); which
 tools each one opens comes from the `roles` tuple per app in

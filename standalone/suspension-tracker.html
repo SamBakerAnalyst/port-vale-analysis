@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Suspension Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/suspension-tracker.css?v=3" />
+</head>
+<body>
+  <div class="st">
+    <header class="st-banner">
+      <div>
+        <p class="st-eyebrow">Admin · <a href="/">← All apps</a> · <a href="/bonus-tracker">Bonuses</a> · <a href="/availability-tracker">Playing time</a></p>
+        <h1>Suspension Tracker</h1>
+        <p class="st-sub">Replaces the Discipline sheet — FotMob cards by competition, EFL offence codes, and staff cautions.</p>
+      </div>
+      <div class="st-actions">
+        <button type="button" class="st-btn" id="refreshBtn">Refresh from FotMob</button>
+      </div>
+    </header>
+
+    <p id="status" class="st-status" role="status">Loading…</p>
+
+    <div class="st-tabs" id="bucketTabs" role="tablist" aria-label="Competition"></div>
+    <p id="rules" class="st-meta" style="margin:0 0 .75rem"></p>
+    <div class="st-thresholds" id="thresholds"></div>
+    <div class="st-kpis" id="kpis"></div>
+
+    <div class="st-grid">
+      <section class="st-panel">
+        <div class="st-panel__head">
+          <h2 id="playersTitle">Squad</h2>
+          <div class="st-filters" id="playerFilters" role="group" aria-label="Filter players">
+            <button type="button" class="st-chip is-active" data-status="all">All</button>
+            <button type="button" class="st-chip" data-status="Watch">Watch</button>
+            <button type="button" class="st-chip" data-status="Banned">Banned</button>
+            <button type="button" class="st-chip" data-status="OK">OK</button>
+          </div>
+        </div>
+        <div class="st-table-wrap">
+          <table class="st-table">
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th>Y</th>
+                <th>R</th>
+                <th>Risk</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="playerRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="st-panel">
+        <div class="st-panel__head">
+          <h2 id="cardsTitle">Card log</h2>
+          <div class="st-filters" id="cardFilters" role="group" aria-label="Filter cards">
+            <button type="button" class="st-chip is-active" data-card="all">All</button>
+            <button type="button" class="st-chip" data-card="Yellow">Yellow</button>
+            <button type="button" class="st-chip" data-card="Red">Red</button>
+            <button type="button" class="st-chip" data-card="uncoded">Needs code</button>
+          </div>
+        </div>
+        <div class="st-table-wrap">
+          <table class="st-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Player</th>
+                <th>Match</th>
+                <th>Card</th>
+                <th>Offence code</th>
+              </tr>
+            </thead>
+            <tbody id="cardRows"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <section class="st-panel" style="margin-top:1rem">
+      <div class="st-panel__head">
+        <h2>Staff discipline</h2>
+      </div>
+      <p id="staffRules" class="st-meta" style="padding:0 1rem"></p>
+      <form id="staffForm" class="st-staff-form">
+        <input id="staffName" class="st-select" style="width:auto;min-width:10rem" placeholder="Name" required />
+        <input id="staffDate" class="st-select" style="width:auto" type="date" required />
+        <input id="staffCode" class="st-select" style="width:auto;min-width:6rem" placeholder="C1" value="C1" />
+        <input id="staffNotes" class="st-select" style="width:auto;min-width:14rem;flex:1" placeholder="Notes" />
+        <button type="submit" class="st-btn">Add</button>
+      </form>
+      <div class="st-table-wrap">
+        <table class="st-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Name</th>
+              <th>Code</th>
+              <th>Notes</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="staffRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <p class="st-note" id="note"></p>
+  </div>
+
+  <script src="/static/suspension-tracker.js?v=3"></script>
+  <script defer src="/static/hub-feedback.js?v=1"></script>
+</body>
+</html>

@@ -139,6 +139,7 @@ RSYNC_EXCLUDES=(
   --include 'data/transfermarkt-loans-2026.json'
   --include 'data/efl-transfer-badges.json'
   --include 'data/transfer-centre-positions.json'
+  --include 'data/bonus-provisions-seed.json'
   --include 'data/pre-match-two-pager.json'
   --include 'data/'
   --exclude 'data/*'

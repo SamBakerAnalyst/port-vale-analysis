@@ -1,0 +1,276 @@
+{
+  "source": "First Team Bonuses Tracker - Sam Baker.xlsx",
+  "season": "26/27",
+  "matchday_bonus_types": [
+    {
+      "id": "appearance",
+      "label": "Appearance"
+    },
+    {
+      "id": "goal_assist",
+      "label": "Goal / Assist"
+    },
+    {
+      "id": "clean_sheet",
+      "label": "Clean Sheet"
+    },
+    {
+      "id": "squad_bonus",
+      "label": "Squad Bonus"
+    },
+    {
+      "id": "personal_win",
+      "label": "Personal Win / Bonus Payment"
+    }
+  ],
+  "players": [
+    {
+      "id": "maleace-asamoah",
+      "surname": "Asamoah",
+      "first_name": "Maleace",
+      "name": "Maleace Asamoah",
+      "appearance_bonus": "none",
+      "provisions": ""
+    },
+    {
+      "id": "charlie-bussell",
+      "surname": "Bussell",
+      "first_name": "Charlie",
+      "name": "Charlie Bussell",
+      "appearance_bonus": "none",
+      "provisions": "Goal/Assist/Clean Sheet bonus when won/drawn - Basic pay increases after 5, 14 and 28 league apps"
+    },
+    {
+      "id": "george-byers",
+      "surname": "Byers",
+      "first_name": "George",
+      "name": "George Byers",
+      "appearance_bonus": "league_start",
+      "provisions": "Goal bonus - Bonus after 20 goal contributions"
+    },
+    {
+      "id": "matthew-craig",
+      "surname": "Craig",
+      "first_name": "Matthew",
+      "name": "Matthew Craig",
+      "appearance_bonus": "none",
+      "provisions": "Basic increase after 30 and 60 league starts"
+    },
+    {
+      "id": "ryan-croasdale",
+      "surname": "Croasdale",
+      "first_name": "Ryan",
+      "name": "Ryan Croasdale",
+      "appearance_bonus": "none",
+      "provisions": "Clean sheet bonus when won/drawn"
+    },
+    {
+      "id": "kyle-dempsey",
+      "surname": "Dempsey",
+      "first_name": "Kyle",
+      "name": "Kyle Dempsey",
+      "appearance_bonus": "none",
+      "provisions": "Extra year if the player makes 28 league starts - Bonus if promoted and player makes 28 league starts - Bonus if player scores 10 league goals in one season"
+    },
+    {
+      "id": "mo-faal",
+      "surname": "Faal",
+      "first_name": "Mo",
+      "name": "Mo Faal",
+      "appearance_bonus": "none",
+      "provisions": "Goal/Assist bonus when won/drawn - Bonus if team in top 7 and player makes 30 starts - Payments to Wrexham based on goals scored and minutes played"
+    },
+    {
+      "id": "keyrol-figueroa",
+      "surname": "Figueroa",
+      "first_name": "Keyrol",
+      "name": "Keyrol Figueroa",
+      "appearance_bonus": "none",
+      "provisions": ""
+    },
+    {
+      "id": "jordan-gabriel",
+      "surname": "Gabriel",
+      "first_name": "Jordan",
+      "name": "Jordan Gabriel",
+      "appearance_bonus": "league_start",
+      "provisions": "Goal/Assist/Clean Sheet bonus when won/drawn"
+    },
+    {
+      "id": "ben-garrity",
+      "surname": "Garrity",
+      "first_name": "Ben",
+      "name": "Ben Garrity",
+      "appearance_bonus": "none",
+      "provisions": "Goal bonus when won or drawn"
+    },
+    {
+      "id": "liam-gordon",
+      "surname": "Gordon",
+      "first_name": "Liam",
+      "name": "Liam Gordon",
+      "appearance_bonus": "none",
+      "provisions": "Goal/Assist/Clean Sheet bonus when won/drawn"
+    },
+    {
+      "id": "connor-hall",
+      "surname": "Hall",
+      "first_name": "Connor",
+      "name": "Connor Hall",
+      "appearance_bonus": "none",
+      "provisions": "Clean sheet bonus when won/drawn"
+    },
+    {
+      "id": "george-hall",
+      "surname": "Hall",
+      "first_name": "George",
+      "name": "George Hall",
+      "appearance_bonus": "none",
+      "provisions": "Goal/Assist bonus when won/drawn"
+    },
+    {
+      "id": "jaheim-headley",
+      "surname": "Headley",
+      "first_name": "Jaheim",
+      "name": "Jaheim Headley",
+      "appearance_bonus": "none",
+      "provisions": "Goal/Assist/Clean Sheet bonus when won/drawn"
+    },
+    {
+      "id": "onel-hernandez",
+      "surname": "Hernandez",
+      "first_name": "Onel",
+      "name": "Onel Hernandez",
+      "appearance_bonus": "none",
+      "provisions": "Goal/Assist bonus when won/drawn - Bonus if scored 15 league goals - Bonus after 10 league starts - Bonus after 25 league starts"
+    },
+    {
+      "id": "cam-humphreys",
+      "surname": "Humphreys",
+      "first_name": "Cam",
+      "name": "Cam Humphreys",
+      "appearance_bonus": "none",
+      "provisions": "Goal/Assist/Clean Sheet bonus when won/drawn"
+    },
+    {
+      "id": "kyle-john",
+      "surname": "John",
+      "first_name": "Kyle",
+      "name": "Kyle John",
+      "appearance_bonus": "none",
+      "provisions": "Goal/Assist/Clean Sheet bonus when won/drawn"
+    },
+    {
+      "id": "oli-lynch",
+      "surname": "Lynch",
+      "first_name": "Oli",
+      "name": "Oli Lynch",
+      "appearance_bonus": "league_start",
+      "provisions": "Goal bonus when won/drawn - Payments to Luton based on goals and minutes played"
+    },
+    {
+      "id": "marko-marosi",
+      "surname": "Marosi",
+      "first_name": "Marko",
+      "name": "Marko Marosi",
+      "appearance_bonus": "none",
+      "provisions": "Goal/Assist/Clean Sheet bonus when won/drawn"
+    },
+    {
+      "id": "aaron-mcgowan",
+      "surname": "McGowan",
+      "first_name": "Aaron",
+      "name": "Aaron McGowan",
+      "appearance_bonus": "league_start",
+      "provisions": ""
+    },
+    {
+      "id": "lewis-montsma",
+      "surname": "Montsma",
+      "first_name": "Lewis",
+      "name": "Lewis Montsma",
+      "appearance_bonus": "league_start",
+      "provisions": "Option year after 23 league starts"
+    },
+    {
+      "id": "jasper-moon",
+      "surname": "Moon",
+      "first_name": "Jasper",
+      "name": "Jasper Moon",
+      "appearance_bonus": "none",
+      "provisions": ""
+    },
+    {
+      "id": "keaton-moseley",
+      "surname": "Moseley",
+      "first_name": "Keaton",
+      "name": "Keaton Moseley",
+      "appearance_bonus": "none",
+      "provisions": ""
+    },
+    {
+      "id": "miracle-orisakwe",
+      "surname": "Orisakwe",
+      "first_name": "Miracle",
+      "name": "Miracle Orisakwe",
+      "appearance_bonus": "none",
+      "provisions": ""
+    },
+    {
+      "id": "jack-shorrock",
+      "surname": "Shorrock",
+      "first_name": "Jack",
+      "name": "Jack Shorrock",
+      "appearance_bonus": "league_start_or_sub",
+      "provisions": "Goal/Assist/Clean sheet bonus when won/drawn - Increase to basic pay after 10 league goals or 10 league assists"
+    },
+    {
+      "id": "tyreece-simpson",
+      "surname": "Simpson",
+      "first_name": "Tyreece",
+      "name": "Tyreece Simpson",
+      "appearance_bonus": "league_start",
+      "provisions": "Goal bonus when won/drawn - Bonus after 10 league goals and 15 league goals - Basic increase after 10 and 23 league starts"
+    },
+    {
+      "id": "jackson-smith",
+      "surname": "Smith",
+      "first_name": "Jackson",
+      "name": "Jackson Smith",
+      "appearance_bonus": "none",
+      "provisions": "Clean sheet bonus when won/drawn - Basic increase after league starts"
+    },
+    {
+      "id": "ben-waine",
+      "surname": "Waine",
+      "first_name": "Ben",
+      "name": "Ben Waine",
+      "appearance_bonus": "none",
+      "provisions": "Goal/Assist/Clean sheet bonus when won/drawn - Bonus payment for 10 goals, 15 goals or 20 goals, highest amount payable at the end of the season"
+    },
+    {
+      "id": "rhys-walters",
+      "surname": "Walters",
+      "first_name": "Rhys",
+      "name": "Rhys Walters",
+      "appearance_bonus": "league_start_or_sub",
+      "provisions": "Goal/Assist bonus when won/drawn"
+    },
+    {
+      "id": "max-watters",
+      "surname": "Watters",
+      "first_name": "Max",
+      "name": "Max Watters",
+      "appearance_bonus": "none",
+      "provisions": "Goal bonus when won/drawn - Basic increases for next season based on starts and goals - Basic increases following promotion based on starts and goals"
+    },
+    {
+      "id": "joe-williams",
+      "surname": "Williams",
+      "first_name": "Joe",
+      "name": "Joe Williams",
+      "appearance_bonus": "none",
+      "provisions": "Goal/Assist/Clean sheet bonus when won/drawn - Basic pay increases after 5, 14 and 28 league apps"
+    }
+  ]
+}

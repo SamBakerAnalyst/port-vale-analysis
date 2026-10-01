@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bonus Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/bonus-tracker.css?v=2" />
+</head>
+<body>
+  <div class="bt">
+    <header class="bt-banner">
+      <div>
+        <p class="bt-eyebrow">Admin · <a href="/">← All apps</a> · <a href="/availability-tracker">Playing time</a> · <a href="/suspension-tracker">Discipline</a></p>
+        <h1>Bonus Tracker</h1>
+        <p class="bt-sub">Contract provisions and matchday bonus log — replaces Sam Baker’s Bonuses sheet. League starts / minutes live on Squad Availability.</p>
+      </div>
+      <div class="bt-actions">
+        <button type="button" class="bt-btn" id="reseedBtn">Reload provisions seed</button>
+      </div>
+    </header>
+
+    <p id="status" class="bt-status" role="status">Loading…</p>
+    <div class="bt-kpis" id="kpis"></div>
+
+    <div class="bt-tabs" role="tablist">
+      <button type="button" class="bt-tab is-active" data-view="players">Player provisions</button>
+      <button type="button" class="bt-tab" data-view="matchday">Matchday log</button>
+      <button type="button" class="bt-tab" data-view="add">Log a bonus</button>
+    </div>
+
+    <section id="playersView" class="bt-panel">
+      <div class="bt-panel__head">
+        <h2>Squad provisions</h2>
+        <input type="search" id="playerFilter" class="bt-input" placeholder="Filter player…" />
+      </div>
+      <div class="bt-table-wrap">
+        <table class="bt-table">
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>Appearance bonus</th>
+              <th>Provisions</th>
+              <th>Logged</th>
+              <th>Unpaid</th>
+            </tr>
+          </thead>
+          <tbody id="playerRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="matchdayView" class="bt-panel hidden">
+      <div class="bt-panel__head"><h2>Matchday bonuses</h2></div>
+      <div class="bt-table-wrap">
+        <table class="bt-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Player</th>
+              <th>Match</th>
+              <th>Type</th>
+              <th>Amount</th>
+              <th>Tracking</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="matchdayRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="addView" class="bt-panel hidden">
+      <div class="bt-panel__head"><h2>Log matchday bonus</h2></div>
+      <form id="bonusForm" class="bt-form">
+        <label>Player
+          <select id="bonusPlayer" class="bt-input" required></select>
+        </label>
+        <label>Date
+          <input id="bonusDate" class="bt-input" type="date" required />
+        </label>
+        <label>Opponent
+          <input id="bonusOpponent" class="bt-input" type="text" required placeholder="e.g. Walsall" />
+        </label>
+        <label>Result
+          <input id="bonusResult" class="bt-input" type="text" placeholder="W / D / L or score" />
+        </label>
+        <label>Bonus type
+          <select id="bonusType" class="bt-input" required></select>
+        </label>
+        <label>Amount (£)
+          <input id="bonusAmount" class="bt-input" type="number" step="0.01" min="0" />
+        </label>
+        <label>Tracking
+          <input id="bonusTracking" class="bt-input" type="text" placeholder="Paid / Due / Finance ref" />
+        </label>
+        <label class="bt-form__full">Notes
+          <input id="bonusNotes" class="bt-input" type="text" />
+        </label>
+        <div class="bt-form__actions">
+          <button type="submit" class="bt-btn bt-btn--primary">Save bonus</button>
+        </div>
+      </form>
+    </section>
+
+    <p class="bt-note" id="note"></p>
+  </div>
+  <script src="/static/bonus-tracker.js?v=2"></script>
+  <script defer src="/static/hub-feedback.js?v=1"></script>
+</body>
+</html>

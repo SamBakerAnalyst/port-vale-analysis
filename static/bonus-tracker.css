@@ -1,0 +1,71 @@
+:root {
+  --bg: #0c0f14;
+  --surface: #141a22;
+  --surface-2: #1a222d;
+  --border: #2a3544;
+  --text: #e8edf4;
+  --muted: #8b9bb0;
+  --accent: #22c55e;
+  --amber: #eab308;
+  --radius: 12px;
+  --font: "Manrope", system-ui, sans-serif;
+  --display: "Barlow Condensed", sans-serif;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.hidden { display: none !important; }
+.bt { max-width: 1240px; margin: 0 auto; padding: 1.25rem 1.25rem 2.5rem; }
+.bt-banner { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; margin-bottom: 1rem; }
+.bt-eyebrow { margin: 0 0 0.25rem; font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.bt-banner h1 { margin: 0; font-family: var(--display); font-size: clamp(1.8rem, 3vw, 2.4rem); text-transform: uppercase; }
+.bt-sub { margin: 0.35rem 0 0; color: var(--muted); max-width: 46rem; }
+.bt-actions { display: flex; gap: 0.5rem; }
+.bt-btn {
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+  border-radius: 999px; padding: 0.45rem 0.9rem; font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+}
+.bt-btn--primary { background: #14532d; border-color: #166534; color: #dcfce7; }
+.bt-status {
+  margin: 0 0 1rem; padding: 0.65rem 0.9rem; border-radius: var(--radius);
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); font-size: 0.9rem;
+}
+.bt-status.is-bad { color: #fca5a5; border-color: rgba(239,68,68,.4); }
+.bt-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+.bt-kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.85rem 1rem; }
+.bt-kpi__label { margin: 0; font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.bt-kpi__value { margin: 0.2rem 0 0; font-family: var(--display); font-size: 1.75rem; font-weight: 700; }
+.bt-tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; }
+.bt-tab {
+  border: 1px solid var(--border); background: transparent; color: var(--muted);
+  border-radius: 999px; padding: 0.45rem 0.9rem; font: inherit; font-weight: 700; cursor: pointer;
+}
+.bt-tab.is-active { background: #1e293b; color: var(--text); border-color: var(--accent); }
+.bt-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.bt-panel__head { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; justify-content: space-between; padding: 0.85rem 1rem; border-bottom: 1px solid var(--border); }
+.bt-panel__head h2 { margin: 0; font-size: 1rem; }
+.bt-table-wrap { overflow-x: auto; }
+.bt-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.bt-table th, .bt-table td { padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.bt-table th { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); background: var(--surface-2); }
+.bt-player { font-weight: 600; }
+.bt-meta { color: var(--muted); font-size: 0.8rem; }
+.bt-pill { display: inline-flex; padding: 0.15rem 0.5rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700; background: rgba(34,197,94,.15); color: var(--accent); }
+.bt-pill--muted { background: #1e293b; color: var(--muted); }
+.bt-input {
+  width: 100%; background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 0.45rem 0.6rem; font: inherit; font-size: 0.88rem;
+}
+.bt-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; padding: 1rem; }
+.bt-form label { display: grid; gap: 0.3rem; font-size: 0.78rem; color: var(--muted); font-weight: 600; }
+.bt-form__full { grid-column: 1 / -1; }
+.bt-form__actions { grid-column: 1 / -1; }
+.bt-note { margin: 1rem 0 0; color: var(--muted); font-size: 0.85rem; }
+.bt-linkbtn { background: none; border: none; color: var(--accent); cursor: pointer; font: inherit; padding: 0; }
