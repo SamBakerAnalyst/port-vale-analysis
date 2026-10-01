@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Manrope:wght@400;500;600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;1,700;1,800&family=Manrope:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
   <style>
@@ -2279,15 +2279,16 @@
     </aside>
 
     <main class="main">
-      <div class="main__top">
-        <div class="main__identity">
-          <p class="main__eyebrow">Port Vale · Analysis Hub</p>
-          <h1 class="main__greeting" id="greeting">Football analysis</h1>
-          <p class="main__subtitle" id="hubSubtitle">Live league snapshot · pick an app from the left ribbon</p>
+      <header class="topbar masthead">
+        <div class="masthead__art" aria-hidden="true">
+          <span class="masthead__slash"></span>
+          <img class="masthead__crest" id="mastheadCrest" src="/standalone/port-vale-badge.png?v=2" alt="" />
         </div>
+        <div class="masthead__bar">
+        <div class="masthead__tools">
         <div class="hub-search-bar">
           <div class="hub-search" id="hubPlayerSearchWrap">
-            <span class="hub-search__icon" aria-hidden="true">⌕</span>
+            <span class="hub-search__icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15zM16 16l5 5"/></svg></span>
             <input
               id="hubPlayerSearch"
               class="hub-search__input"
@@ -2303,34 +2304,100 @@
             <div id="hubPlayerResults" class="hub-search__results hidden" role="listbox"></div>
           </div>
         </div>
-        <div class="hub__clock" aria-live="polite">
-          <div class="hub__clock-time" id="clockTime">--:--</div>
-          <div class="hub__clock-date" id="clockDate">Loading…</div>
-        </div>
-      </div>
-      <div class="main__statusline">
-        <div class="hub__status" id="serverStatus" role="status">
-          <span class="hub__status-dot"></span>
-          <span id="serverStatusText">Checking…</span>
-        </div>
-        <span class="hub__build" id="hubBuildStamp" title="Product environment">Port Vale Live · __HUB_BUILD__</span>
-        <span
-          class="hub__broke-joke"
-          id="hubBrokeJoke"
-          title="Little joke. Reset by editing standalone/hub-uptime-joke.json when we next break."
-        >— days since we last broke</span>
-        <div class="main__ops">
-          <button type="button" class="hub__restart-btn" id="forceRefreshDataBtn" title="Pull fresh match data from Impect after games upload (~10am). Use a couple of times a week.">Force refresh data</button>
-          <button type="button" class="hub__restart-btn" id="restartServerBtn">Restart</button>
-          <a class="hub__restart-btn" id="startServerLink" href="/standalone/restart.command" hidden>Start server</a>
-          <div class="hub__health-wrap" id="cacheHealthWrap" hidden>
-            <button type="button" class="hub__restart-btn hub__health-btn" id="cacheHealthBtn">Data health</button>
+        <div class="topbar__actions">
+          <span class="topbar__notice" id="hubNotice" role="status" hidden></span>
+          <button type="button" class="masthead__refresh" id="forceRefreshDataBtn" title="Pull the latest games from Impect. Use after games upload (~10am) — a couple of times a week is plenty.">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4z"/></svg>
+            <span class="masthead__refresh-label">Force refresh data</span>
+          </button>
+          <span class="hub__build" id="hubBuildStamp" title="Product environment" hidden>Port Vale Live · __HUB_BUILD__</span>
+          <div class="topbar__status" id="serverStatus" role="status" title="Checking server…">
+            <span class="topbar__status-dot"></span>
+            <span class="topbar__status-text" id="serverStatusText">Checking…</span>
+          </div>
+          <div class="topbar-menu" id="adminMenu">
+            <button
+              type="button"
+              class="topbar__icon-btn"
+              id="adminMenuBtn"
+              aria-haspopup="menu"
+              aria-expanded="false"
+              aria-controls="adminMenuPanel"
+              title="Hub tools"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94a7.4 7.4 0 0 0 .05-.94 7.4 7.4 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7 7 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.8a.5.5 0 0 0-.5.42l-.36 2.54a7 7 0 0 0-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.7 8.48a.5.5 0 0 0 .12.64l2.03 1.58a7.4 7.4 0 0 0 0 1.88L2.82 14.16a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.3.6.22l2.39-.96c.5.38 1.05.7 1.63.94l.36 2.54c.04.24.25.42.5.42h3.8c.25 0 .46-.18.5-.42l.36-2.54a7 7 0 0 0 1.63-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/></svg>
+              <span class="topbar__alert-dot" aria-hidden="true"></span>
+            </button>
+            <div class="topbar-menu__panel" id="adminMenuPanel" role="menu" hidden>
+              <p class="topbar-menu__label">Hub tools</p>
+              <div class="hub__health-wrap" id="cacheHealthWrap" hidden>
+                <button type="button" class="topbar-menu__item hub__health-btn" id="cacheHealthBtn" role="menuitem">
+                  <span class="topbar-menu__title" id="cacheHealthLabel">Data health</span>
+                  <span class="topbar-menu__hint">Check saved data for every tool</span>
+                </button>
+              </div>
+              <button type="button" class="topbar-menu__item" id="restartServerBtn" role="menuitem" hidden>
+                <span class="topbar-menu__title">Restart server</span>
+                <span class="topbar-menu__hint">Takes about 30 seconds</span>
+              </button>
+              <a class="topbar-menu__item" id="startServerLink" href="/standalone/restart.command" role="menuitem" hidden>
+                <span class="topbar-menu__title">Start server</span>
+                <span class="topbar-menu__hint">Server is offline</span>
+              </a>
+            </div>
             <div class="hub__health-panel" id="cacheHealthPanel" hidden></div>
           </div>
-          <button type="button" class="hub__restart-btn" id="signOutBtn" hidden>Sign out</button>
+          <div class="topbar-menu" id="userMenu" hidden>
+            <button
+              type="button"
+              class="topbar__user"
+              id="userMenuBtn"
+              aria-haspopup="menu"
+              aria-expanded="false"
+              aria-controls="userMenuPanel"
+            >
+              <span class="topbar__avatar" id="userAvatar">PV</span>
+              <span class="topbar__user-name" id="userName">Port Vale</span>
+              <svg class="topbar__caret" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+            </button>
+            <div class="topbar-menu__panel topbar-menu__panel--narrow" id="userMenuPanel" role="menu" hidden>
+              <p class="topbar-menu__label" id="userMenuSignedIn">Signed in</p>
+              <button type="button" class="topbar-menu__item" id="signOutBtn" role="menuitem">
+                <span class="topbar-menu__title">Sign out</span>
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
-      <button type="button" class="hub__feedback-link" id="feedbackOpenBtn">Suggestion / bug</button>
+        </div>
+        </div>
+        <div class="masthead__body">
+          <div class="topbar__hello">
+            <p class="masthead__salute" id="greetingSalute">Welcome back</p>
+            <h1 class="masthead__name" id="greeting">Vale</h1>
+            <p class="masthead__date">
+              <span id="clockDate">Today</span>
+              <span class="masthead__dot" aria-hidden="true"></span>
+              <span class="masthead__time" id="clockTime">--:--</span>
+              <span class="masthead__league" id="mastheadLeague" hidden></span>
+            </p>
+          </div>
+          <a class="masthead__next" id="mastheadNext" href="#homePvUpcoming" hidden>
+            <span class="masthead__next-label">Next up</span>
+            <span class="masthead__next-main">
+              <span class="masthead__next-crest" id="mastheadNextCrest"></span>
+              <span class="masthead__next-text">
+                <span class="masthead__next-opp"><span class="masthead__next-ha" id="mastheadNextHa">H</span><span id="mastheadNextOpp">TBC</span></span>
+                <span class="masthead__next-meta" id="mastheadNextMeta"></span>
+              </span>
+              <span class="masthead__next-count">
+                <strong id="mastheadNextCount">—</strong>
+                <span id="mastheadNextUnit">days</span>
+              </span>
+            </span>
+          </a>
+        </div>
+        <span class="masthead__kit" aria-hidden="true"></span>
+      </header>
 
         <section id="homeDashboard" aria-label="Home dashboard">
         <div class="hub-demo-banner" id="hubDemoBanner" hidden></div>
@@ -2837,21 +2904,125 @@
       });
     }
 
+    function isHubAdmin() {
+      return !!(window.HubAuth.allow_all || window.HubAuth.role === "admin");
+    }
+
+    // Shared logins come through as "PortVale" — split camel case before greeting.
+    function humanName(name) {
+      return String(name || "").trim().replace(/([a-z])([A-Z])/g, "$1 $2");
+    }
+
+    function firstName(name) {
+      const clean = humanName(name);
+      return /\s/.test(clean) && clean === String(name || "").trim()
+        ? clean.split(/\s+/)[0]
+        : clean;
+    }
+
+    function setGreeting(name) {
+      document.getElementById("greetingSalute").textContent = greeting();
+      document.getElementById("greeting").textContent = name || "Vale";
+    }
+
+    function formatKickoff(value) {
+      if (!value) return "";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "";
+      const day = date.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+      const hasTime = /T\d{2}:\d{2}/.test(String(value));
+      const time = hasTime ? date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "";
+      return time ? `${day} · ${time}` : day;
+    }
+
+    function ordinal(n) {
+      const s = ["th", "st", "nd", "rd"];
+      const v = n % 100;
+      return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+    }
+
+    window.addEventListener("hub:overview", (event) => {
+      const data = event.detail || {};
+      const league = document.getElementById("mastheadLeague");
+      const pos = Number(data.position);
+      if (league) {
+        league.hidden = !Number.isFinite(pos) || pos <= 0;
+        if (!league.hidden) {
+          league.textContent = `${ordinal(pos)} in League Two${data.points != null ? ` · ${data.points} pts` : ""}`;
+        }
+      }
+
+      const card = document.getElementById("mastheadNext");
+      const next = data.next;
+      if (!card) return;
+      card.hidden = !next;
+      if (!next) return;
+      document.getElementById("mastheadNextOpp").textContent = next.opponent;
+      const ha = document.getElementById("mastheadNextHa");
+      ha.textContent = next.isHome ? "H" : "A";
+      ha.classList.toggle("is-away", !next.isHome);
+      document.getElementById("mastheadNextMeta").textContent = [formatKickoff(next.kickoff), next.competition]
+        .filter(Boolean)
+        .join(" · ");
+      const crest = document.getElementById("mastheadNextCrest");
+      crest.innerHTML = next.badge
+        ? `<img src="${String(next.badge).replace(/"/g, "&quot;")}" alt="" onerror="this.remove()" />`
+        : "";
+      const count = document.getElementById("mastheadNextCount");
+      const unit = document.getElementById("mastheadNextUnit");
+      const days = Number(next.days);
+      if (days === 0) {
+        count.textContent = "Today";
+        unit.textContent = "matchday";
+      } else if (days === 1) {
+        count.textContent = "1";
+        unit.textContent = "day";
+      } else if (Number.isFinite(days) && days > 0) {
+        count.textContent = String(days);
+        unit.textContent = "days";
+      } else {
+        count.textContent = "—";
+        unit.textContent = "TBC";
+      }
+    });
+
+    function initials(name) {
+      const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+      if (!parts.length) return "PV";
+      return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
+    }
+
+    let noticeTimer = null;
+    function showNotice(message) {
+      const el = document.getElementById("hubNotice");
+      if (!el) return;
+      el.textContent = message;
+      el.hidden = false;
+      window.clearTimeout(noticeTimer);
+      noticeTimer = window.setTimeout(() => { el.hidden = true; }, 7000);
+    }
+
     function applyRoleToUi() {
-      const isAdmin = window.HubAuth.allow_all || window.HubAuth.role === "admin";
+      const isAdmin = isHubAdmin();
       const restartBtn = document.getElementById("restartServerBtn");
       const startLink = document.getElementById("startServerLink");
       if (restartBtn) restartBtn.hidden = !isAdmin;
       if (startLink && !isAdmin) startLink.hidden = true;
 
+      const adminMenu = document.getElementById("adminMenu");
+      if (adminMenu) adminMenu.hidden = !isAdmin || !!(window.HUB_BRAND && window.HUB_BRAND.demo);
+
       // Everyone needs a way out now logins are personal — but there is nothing
       // to sign out of on a local server with no password set.
-      const signOut = document.getElementById("signOutBtn");
-      if (signOut) {
-        signOut.hidden = !window.HubAuth.auth_enabled;
-        signOut.title = window.HubAuth.display_name
-          ? `Signed in as ${window.HubAuth.display_name}`
-          : "Sign out";
+      const userMenu = document.getElementById("userMenu");
+      if (userMenu) {
+        const name = window.HubAuth.display_name || window.HubAuth.username || "";
+        userMenu.hidden = !window.HubAuth.auth_enabled;
+        document.getElementById("userAvatar").textContent = initials(humanName(name));
+        document.getElementById("userName").textContent = firstName(name) || "Account";
+        document.getElementById("userMenuSignedIn").textContent = name
+          ? `Signed in as ${name}`
+          : "Signed in";
       }
 
       // Cache health is an admin concern — scouts should not have to care.
@@ -2968,20 +3139,23 @@
       const text = document.getElementById("serverStatusText");
       const btn = document.getElementById("restartServerBtn");
       const startLink = document.getElementById("startServerLink");
+      const isAdmin = isHubAdmin();
       try {
         const res = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(3000) });
         if (res.ok) {
-          el.className = "hub__status hub__status--online";
+          el.className = "topbar__status is-online";
+          el.title = "All systems running";
           text.textContent = "Online";
-          btn.hidden = false;
+          btn.hidden = !isAdmin;
           startLink.hidden = true;
           return true;
         }
       } catch (_) { /* offline */ }
-      el.className = "hub__status hub__status--offline";
+      el.className = "topbar__status is-offline";
+      el.title = "Server is not responding";
       text.textContent = "Offline";
       btn.hidden = true;
-      startLink.hidden = false;
+      startLink.hidden = !isAdmin;
       return false;
     }
 
@@ -2989,7 +3163,9 @@
       const el = document.getElementById("serverStatus");
       const text = document.getElementById("serverStatusText");
       const btn = document.getElementById("restartServerBtn");
+      closeTopbarMenus();
       btn.disabled = true;
+      el.className = "topbar__status is-busy";
       text.textContent = "Restarting…";
       try {
         await fetch(`${BASE}/api/server/restart`, { method: "POST", signal: AbortSignal.timeout(5000) });
@@ -3002,7 +3178,7 @@
       if (window.HubHome && canLoadHomeDashboard()) HubHome.load();
     }
 
-    document.getElementById("greeting").textContent = `${greeting()} — Port Vale`;
+    setGreeting("");
     document.title = "Port Vale Hub";
     updateClock();
     setInterval(updateClock, 30_000);
@@ -3019,7 +3195,8 @@
         badge.src = brand.badge;
         badge.alt = brand.org || badge.alt;
       }
-      const banner = document.getElementById("hubDemoBanner");
+      const crest = document.getElementById("mastheadCrest");
+      if (crest && brand.badge) crest.src = brand.badge;      const banner = document.getElementById("hubDemoBanner");
       if (banner) {
         banner.hidden = !brand.demo;
         if (brand.demo) {
@@ -3035,10 +3212,7 @@
         if (text.includes("Port Vale vs")) el.textContent = text.replace("Port Vale vs", "Squad vs");
       });
       if (brand.greeting) {
-        const greetEl = document.getElementById("greeting");
-        if (greetEl && !window.__HUB_DISPLAY_NAME__) {
-          greetEl.textContent = `${greeting()} — ${brand.greeting}`;
-        }
+        if (!window.__HUB_DISPLAY_NAME__) setGreeting(brand.greeting);
       }
     }
 
@@ -3058,6 +3232,38 @@
     }
     document.getElementById("signOutBtn").addEventListener("click", signOut);
 
+    // ---- Top bar menus ----------------------------------------------------
+    const TOPBAR_MENUS = [
+      { btn: "adminMenuBtn", panel: "adminMenuPanel" },
+      { btn: "userMenuBtn", panel: "userMenuPanel" },
+    ];
+
+    function closeTopbarMenus(except) {
+      TOPBAR_MENUS.forEach(({ btn, panel }) => {
+        if (panel === except) return;
+        document.getElementById(panel).hidden = true;
+        document.getElementById(btn).setAttribute("aria-expanded", "false");
+      });
+      if (except !== "cacheHealthPanel") {
+        document.getElementById("cacheHealthPanel").hidden = true;
+      }
+    }
+
+    TOPBAR_MENUS.forEach(({ btn, panel }) => {
+      document.getElementById(btn).addEventListener("click", (event) => {
+        event.stopPropagation();
+        const el = document.getElementById(panel);
+        const opening = el.hidden;
+        closeTopbarMenus();
+        el.hidden = !opening;
+        event.currentTarget.setAttribute("aria-expanded", String(opening));
+      });
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeTopbarMenus();
+    });
+
     // ---- Cache health -----------------------------------------------------
     // Who To Scout served a broken 3-byte cache for a fortnight and the only
     // symptom was "the page is slow". This puts that on screen instead.
@@ -3065,7 +3271,9 @@
 
     async function loadCacheHealth() {
       const btn = document.getElementById("cacheHealthBtn");
+      const label = document.getElementById("cacheHealthLabel");
       const panel = document.getElementById("cacheHealthPanel");
+      const menuBtn = document.getElementById("adminMenuBtn");
       if (!btn || !panel) return;
       let payload;
       try {
@@ -3076,22 +3284,26 @@
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         payload = await res.json();
       } catch (err) {
-        btn.textContent = "Data health —";
+        label.textContent = "Data health unavailable";
         btn.title = `Could not read cache health: ${err.message}`;
         return;
       }
 
       const problems = Number(payload.problem_count || 0);
       btn.classList.remove("is-ok", "is-warn", "is-bad");
+      menuBtn.classList.remove("has-alert", "is-bad");
       if (payload.healthy) {
         btn.classList.add("is-ok");
-        btn.textContent = "Data healthy";
+        label.textContent = "Data healthy";
       } else {
         const worst = (payload.caches || []).some(
           (row) => row.status === "thin" || row.status === "missing",
         );
         btn.classList.add(worst ? "is-bad" : "is-warn");
-        btn.textContent = `${problems} data ${problems === 1 ? "issue" : "issues"}`;
+        menuBtn.classList.add("has-alert");
+        if (worst) menuBtn.classList.add("is-bad");
+        menuBtn.title = `Hub tools · ${problems} data ${problems === 1 ? "issue" : "issues"}`;
+        label.textContent = `${problems} data ${problems === 1 ? "issue" : "issues"}`;
       }
 
       const rows = (payload.caches || [])
@@ -3125,28 +3337,29 @@
     document.getElementById("cacheHealthBtn").addEventListener("click", (event) => {
       event.stopPropagation();
       const panel = document.getElementById("cacheHealthPanel");
-      panel.hidden = !panel.hidden;
-      if (!panel.hidden) loadCacheHealth();
+      const opening = panel.hidden;
+      closeTopbarMenus("cacheHealthPanel");
+      panel.hidden = !opening;
+      if (opening) loadCacheHealth();
     });
 
     document.addEventListener("click", (event) => {
-      const wrap = document.getElementById("cacheHealthWrap");
-      if (wrap && !wrap.contains(event.target)) {
-        document.getElementById("cacheHealthPanel").hidden = true;
-      }
+      if (!event.target.closest(".topbar-menu")) closeTopbarMenus();
     });
 
     async function forceRefreshAnalysisData() {
       const btn = document.getElementById("forceRefreshDataBtn");
-      const statusText = document.getElementById("serverStatusText");
+      const title = btn?.querySelector(".masthead__refresh-label");
       if (!btn || btn.disabled) return;
+      closeTopbarMenus();
       const ok = window.confirm(
         "Force refresh Analysis data from Impect?\n\nUse after games upload (usually ~10am). Takes a few minutes in the background — tools stay usable."
       );
       if (!ok) return;
       btn.disabled = true;
-      const previous = btn.textContent;
-      btn.textContent = "Refreshing…";
+      btn.classList.add("is-busy");
+      const previous = title.textContent;
+      title.textContent = "Refreshing…";
       try {
         const res = await fetch(`${BASE}/api/hub-snapshots/refresh`, {
           method: "POST",
@@ -3159,19 +3372,18 @@
         if (!res.ok) {
           throw new Error(data.detail || data.error || `Refresh failed (${res.status})`);
         }
-        if (statusText) {
-          statusText.textContent = data.started
-            ? "Analysis refresh started — check back in a few minutes"
-            : data.detail || "Refresh already running";
-        }
+        showNotice(
+          data.started
+            ? "Match data refresh started — ready in a few minutes"
+            : data.detail || "Refresh already running"
+        );
       } catch (err) {
-        if (statusText) {
-          statusText.textContent = err.message || "Force refresh failed";
-        }
+        showNotice(err.message || "Refresh failed");
       } finally {
         window.setTimeout(() => {
           btn.disabled = false;
-          btn.textContent = previous || "Force refresh data";
+          btn.classList.remove("is-busy");
+          title.textContent = previous || "Force refresh data";
         }, 4000);
       }
     }
@@ -3200,7 +3412,7 @@
           };
           if (me.display_name) {
             window.__HUB_DISPLAY_NAME__ = me.display_name;
-            document.getElementById("greeting").textContent = `${greeting()} — ${me.display_name}`;
+            setGreeting(firstName(me.display_name));
           }
         } else if (res.status === 401) {
           window.location.href = "/login";
@@ -3227,11 +3439,14 @@
           const stamp = document.getElementById("hubBuildStamp");
           if (payload.brand) applyHubBrand(payload.brand);
           if (stamp) {
-            const build = (stamp.textContent || "").split("·").pop()?.trim() || "__HUB_BUILD__";
+            const build = stamp.dataset.build || (stamp.textContent || "").split("·").pop()?.trim() || "__HUB_BUILD__";
             const product = payload.product || (payload.staging ? "Port Vale Staging" : "Port Vale Live");
-            stamp.textContent = `${product} · ${build}`;
+            stamp.dataset.build = build;
+            stamp.textContent = payload.product_id === "demo" ? "Demo" : payload.staging ? "Staging" : product;
             stamp.classList.toggle("is-staging", payload.product_id === "staging");
             stamp.classList.toggle("is-demo", payload.product_id === "demo");
+            // Staff on Live don't need a build badge; keep it where it prevents mix-ups.
+            stamp.hidden = !payload.staging && payload.product_id !== "demo";
             stamp.title = (payload.brand && payload.brand.stamp_title) || (
               payload.staging
                 ? "Port Vale Staging — safe break/fix sandbox (not staff)"

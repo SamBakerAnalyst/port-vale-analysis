@@ -286,6 +286,33 @@
     } else {
       setKpi("homeKpiOverviewNext", "—", "No upcoming fixture yet");
     }
+    window.dispatchEvent(
+      new CustomEvent("hub:overview", {
+        detail: {
+          position: pv?.position ?? null,
+          points: pv?.points ?? null,
+          played: pv?.played ?? null,
+          next: upcoming
+            ? {
+                opponent:
+                  (typeof upcoming.opponent === "string"
+                    ? upcoming.opponent
+                    : upcoming.opponent?.name) ||
+                  (upcoming.isHome ? upcoming.away : upcoming.home) ||
+                  "TBC",
+                badge:
+                  upcoming.opponent_badge ||
+                  (upcoming.isHome ? upcoming.away_badge : upcoming.home_badge) ||
+                  "",
+                isHome: Boolean(upcoming.isHome),
+                kickoff: upcoming.kickoff_utc || upcoming.scheduledDate || upcoming.date || "",
+                competition: upcoming.competition || "",
+                days: daysUntil(matchDateKey(upcoming)),
+              }
+            : null,
+        },
+      })
+    );
   }
 
   function renderTodaySchedule(matches, scoutByDate) {
