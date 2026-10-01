@@ -562,6 +562,233 @@ def test_transfermarkt_loans_flag_academy_arrivals_the_report_missed():
     assert rows[1]["transfer"]["status"] == ts.GONE
 
 
+def test_a_nickname_joins_the_loan_the_report_spelled_the_other_way(_report):
+    """Impect says Nicholas. The loan report says Nick. Same surname, same player."""
+    payload = json.loads(_report.read_text())
+    payload["leagues"][1]["teams"].append(
+        {
+            "name": "Crawley Town",
+            "signed": [
+                {
+                    "player": "Nick Michalski",
+                    "other": "Blackburn Rovers",
+                    "kind": "loan",
+                    "fee": "Loan",
+                }
+            ],
+        }
+    )
+    _report.write_text(json.dumps(payload), encoding="utf-8")
+    ts.reset_cache()
+
+    moved = ts.lookup("Nicholas Michalski", "Crawley Town")
+    assert moved["status"] == ts.LOAN_IN
+    assert moved["from"] == "Blackburn Rovers"
+    display = moved["display"]
+    assert display["css"] == "is-loan"
+    assert display["held_club"] == "Crawley Town"
+    assert display["line"] == "on loan from Blackburn Rovers"
+    assert "on loan at" not in display["line"]
+    assert "on loan at" not in display["title"].lower()
+
+
+def test_a_shared_player_id_joins_a_spelling_the_name_rules_miss(_report):
+    """The id is the join when the first name is not a nickname of the report."""
+    payload = json.loads(_report.read_text())
+    payload["leagues"][1]["teams"].append(
+        {
+            "name": "Crawley Town",
+            "signed": [
+                {
+                    "player": "Nick Michalski",
+                    "other": "Blackburn Rovers",
+                    "kind": "loan",
+                    "fee": "Loan",
+                }
+            ],
+        }
+    )
+    _report.write_text(json.dumps(payload), encoding="utf-8")
+    ts.reset_cache()
+
+    watch = [{"name": "ZZ Michalski", "club": "Crawley Town", "player_id": 77}]
+    roster = [{"name": "Nick Michalski", "club": "Blackburn Rovers", "player_id": 77}]
+    ts.annotate_all(watch, roster=roster)
+
+    display = watch[0]["transfer"]["display"]
+    assert watch[0]["transfer"]["status"] == ts.LOAN_IN
+    assert display["css"] == "is-loan"
+    assert display["held_club"] == "Crawley Town"
+    assert display["line"] == "on loan from Blackburn Rovers"
+
+
+def test_a_parent_club_row_shows_the_playing_club_and_on_loan_from(_report):
+    """U21 / parent rows must not read `on loan at {destination}`."""
+    payload = json.loads(_report.read_text())
+    payload["leagues"][1]["teams"].append(
+        {
+            "name": "Shrewsbury Town",
+            "signed": [
+                {
+                    "player": "Kian McMahon-Brown",
+                    "other": "Burnley",
+                    "kind": "loan",
+                    "fee": "Loan",
+                }
+            ],
+        }
+    )
+    _report.write_text(json.dumps(payload), encoding="utf-8")
+    ts.reset_cache()
+
+    rows = [
+        {"name": "Kian McMahon-Brown", "club": "FC Burnley U21"},
+        {"name": "Kian McMahon-Brown", "club": "Shrewsbury Town"},
+    ]
+    ts.annotate_all(rows)
+
+    parent = rows[0]["transfer"]["display"]
+    playing = rows[1]["transfer"]["display"]
+    assert rows[0]["transfer"]["status"] == ts.LOAN_OUT
+    assert parent["css"] == "is-loan"
+    assert parent["held_club"] == "Shrewsbury Town"
+    assert parent["line"] == "on loan from Burnley"
+    assert playing["css"] == "is-loan"
+    assert playing["held_club"] == "Shrewsbury Town"
+    assert playing["line"] == "on loan from Burnley"
+    assert "on loan at" not in parent["line"]
+    assert "on loan at" not in playing["line"]
+
+
+def test_permanent_colour_follows_the_row_data_club(_report):
+    """Red only while the listed data club is the one he has left for good."""
+    payload = json.loads(_report.read_text())
+    payload["leagues"][0]["teams"].append(
+        {
+            "name": "Stockport County",
+            "signed": [
+                {"player": "Owen Brady", "other": "Shelbourne", "fee": "Undisclosed"}
+            ],
+        }
+    )
+    _report.write_text(json.dumps(payload), encoding="utf-8")
+    ts.reset_cache()
+
+    rows = [
+        {"name": "Owen Brady", "club": "Shelbourne", "player_id": 5},
+        {"name": "Owen Brady", "club": "Stockport County", "player_id": 5},
+    ]
+    ts.annotate_all(rows)
+
+    gone = rows[0]["transfer"]["display"]
+    assert rows[0]["transfer"]["status"] == ts.GONE
+    assert gone["css"] == "is-moved"
+    assert gone["struck"] is True
+    assert gone["held_club"] == "Shelbourne"
+    assert gone["line"] == "Stockport County"
+    assert "transfer" not in rows[1]
+
+
+def test_an_unknown_loan_parent_is_not_turned_into_a_permanent_move(_report):
+    payload = json.loads(_report.read_text())
+    payload["leagues"][1]["teams"].append(
+        {
+            "name": "Barnet",
+            "signed": [
+                {"player": "Noah Quill", "other": "unknown", "kind": "loan", "fee": "Loan"}
+            ],
+        }
+    )
+    _report.write_text(json.dumps(payload), encoding="utf-8")
+    ts.reset_cache()
+
+    at_club = ts.lookup("Noah Quill", "Barnet")
+    assert at_club["status"] == ts.LOAN_IN
+    assert at_club["display"]["line"] == "on loan from unknown"
+    assert at_club["display"]["css"] == "is-loan"
+
+    elsewhere = ts.lookup("Noah Quill", "Dundalk FC")
+    assert elsewhere["status"] != ts.GONE
+    assert elsewhere["display"]["line"] == "on loan from unknown"
+    assert "on loan at" not in elsewhere["display"]["line"]
+
+
+def test_shipped_scout_rows_keep_loan_and_permanent_colour(monkeypatch):
+    """The live repros, read from the report we ship. No per-name branch."""
+    monkeypatch.setattr(ts, "TRANSFER_REPORT_CANDIDATES", SHIPPED_CANDIDATES)
+    ts.reset_cache()
+
+    michalski = ts.lookup("Nicholas Michalski", "Crawley Town")
+    assert michalski["status"] == ts.LOAN_IN
+    assert michalski["display"]["css"] == "is-loan"
+    assert michalski["display"]["held_club"] == "Crawley Town"
+    assert michalski["display"]["line"] == "on loan from Blackburn Rovers"
+
+    kian = ts.lookup("Kian McMahon-Brown", "FC Burnley U21")
+    assert kian["display"]["held_club"] == "Shrewsbury Town"
+    assert kian["display"]["line"] == "on loan from Burnley"
+    assert kian["display"]["css"] == "is-loan"
+
+    ajayi = ts.lookup("Damola Ajayi", "Tottenham Hotspur U21")
+    assert ajayi["display"]["held_club"] == "Barnet"
+    assert ajayi["display"]["line"] == "on loan from Tottenham"
+
+    for name, parent_club, playing, parent in (
+        ("Lino Sousa", "Aston Villa U21", "Shrewsbury Town", "Aston Villa"),
+        ("Sam Chambers", "Leeds United U21", "Northampton Town", "Leeds United"),
+        ("Ryan Battrum", "West Ham United U21", "Southend United", "West Ham United U21"),
+        ("Lamin Sillah", "Nottingham Forest U21", "Gillingham", "Nottingham Forest"),
+    ):
+        shown = ts.lookup(name, parent_club)["display"]
+        assert shown["css"] == "is-loan"
+        assert shown["held_club"] == playing
+        assert shown["line"] == f"on loan from {parent}"
+        assert "on loan at" not in shown["line"]
+
+    left = ts.lookup("Harry Wood", "Shelbourne")
+    assert left["status"] == ts.GONE
+    assert left["display"]["css"] == "is-moved"
+    assert left["display"]["line"] == "Stockport County"
+    assert ts.lookup("Harry Wood", "Stockport County") is None
+
+    leigh = ts.lookup("Tommy Leigh", "Bristol Rovers")
+    assert leigh["status"] == ts.LOAN_IN
+    assert leigh["display"]["css"] == "is-loan"
+    assert leigh["display"]["held_club"] == "Bristol Rovers"
+    assert leigh["display"]["line"] == "on loan from Bradford City"
+
+    loupalo = ts.lookup("Aaron Loupalo-Bi", "Fleetwood Town")
+    assert loupalo["status"] == ts.LOAN_IN
+    assert loupalo["display"]["line"] == "on loan from Fulham"
+    assert loupalo["display"]["css"] == "is-loan"
+
+    evans = ts.lookup("Jake Evans", "Cheltenham Town")
+    assert evans["status"] == ts.LOAN_IN
+    assert evans["display"]["held_club"] == "Cheltenham Town"
+    assert evans["display"]["line"] == "on loan from Leicester City"
+    assert evans["display"]["css"] == "is-loan"
+
+
+def test_scout_tables_share_one_club_renderer_and_never_say_on_loan_at():
+    from pathlib import Path
+
+    root = Path("static")
+    pages = Path("standalone")
+    display = (root / "scout-club-display.js").read_text(encoding="utf-8")
+    who = (root / "who-to-scout.js").read_text(encoding="utf-8")
+    watch = (root / "watch-list.js").read_text(encoding="utf-8")
+    who_html = (pages / "who-to-scout.html").read_text(encoding="utf-8")
+    watch_html = (pages / "watch-list.html").read_text(encoding="utf-8")
+
+    for source in (display, who, watch):
+        assert "on loan at" not in source.lower()
+    assert "ScoutClubDisplay.clubCell" in who
+    assert "ScoutClubDisplay.clubCell" in watch
+    assert "transfer?.display" in display
+    assert who_html.index("scout-club-display.js") < who_html.index("who-to-scout.js")
+    assert watch_html.index("scout-club-display.js") < watch_html.index("watch-list.js")
+
+
 def test_loans_endpoint_looks_up_clubs_in_parallel():
     import inspect
 

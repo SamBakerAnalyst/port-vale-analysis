@@ -5,11 +5,17 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from app.player_identity import FIRST_NAME_CANON
+
 SRC = ROOT / "data" / "efl-transfer-sources"
 OUT = ROOT / "data" / "efl-transfer-report-2026.json"
 
@@ -290,70 +296,6 @@ STAFF_NAMES = {
     "jens berthel askou",
     "scott lindsey",
     "stuart maynard",
-}
-
-
-FIRST_NAME_CANON = {
-    "alexander": "alexander",
-    "alex": "alexander",
-    "andrew": "andrew",
-    "andy": "andrew",
-    "benjamin": "benjamin",
-    "ben": "benjamin",
-    "christopher": "christopher",
-    "chris": "christopher",
-    "daniel": "daniel",
-    "dan": "daniel",
-    "danny": "daniel",
-    "james": "james",
-    "jamie": "james",
-    "jim": "james",
-    "jimmy": "james",
-    "joseph": "joseph",
-    "joe": "joseph",
-    "josef": "joseph",
-    "jonathan": "jonathan",
-    "jon": "jonathan",
-    "johnny": "jonathan",
-    "matthew": "matthew",
-    "matt": "matthew",
-    "matty": "matthew",
-    "mattie": "matthew",
-    "michael": "michael",
-    "mike": "michael",
-    "mick": "michael",
-    "nicholas": "nicholas",
-    "nick": "nicholas",
-    "nicky": "nicholas",
-    "oliver": "oliver",
-    "olly": "oliver",
-    "ollie": "oliver",
-    "oli": "oliver",
-    "ismael": "ismael",
-    "ismeal": "ismael",
-    "ruari": "ruari",
-    "ruiri": "ruari",
-    "shumaira": "shumaira",
-    "shim": "shumaira",
-    "richard": "richard",
-    "rich": "richard",
-    "rick": "richard",
-    "ricky": "richard",
-    "robert": "robert",
-    "rob": "robert",
-    "bobby": "robert",
-    "samuel": "samuel",
-    "sam": "samuel",
-    "thomas": "thomas",
-    "tom": "thomas",
-    "tommy": "thomas",
-    "timothy": "timothy",
-    "tim": "timothy",
-    "william": "william",
-    "will": "william",
-    "billy": "william",
-    "joshua": "joshua",
-    "josh": "joshua",
 }
 
 

@@ -189,6 +189,36 @@ def test_board_lists_every_teams_loans_with_port_vale_stats():
     assert scored[0]["overall"] >= scored[-1]["overall"]
 
 
+def test_nickname_impect_row_joins_the_report_loan():
+    """Loans Watch and the scout tables share identity keys. Nick is Nicholas."""
+    report = load_report()
+    board = build_loans_watch(
+        report=report,
+        snapshot={"Crawley Town": []},
+        players=[
+            {
+                "name": "Nicholas Michalski",
+                "club": "Crawley Town",
+                "league": "League Two",
+                "age": 20,
+                "minutes": 300,
+                "matchCount": 4,
+                "starts": 3,
+                "overall": 61.0,
+                "playerId": 4242,
+                "position": "GOALKEEPER",
+            }
+        ],
+    )
+    leagues = {row["id"]: row for row in board["leagues"]}
+    crawley = next(team for team in leagues["league-two"]["teams"] if team["id"] == "crawley-town")
+    michalski = next(row for row in crawley["loans"] if "Michalski" in row["player"])
+    assert michalski["from_club"] == "Blackburn Rovers"
+    assert michalski["club"] == "Crawley Town"
+    assert michalski["player_id"] == 4242
+    assert michalski["minutes"] == 300
+
+
 def test_html_entities_in_parent_club_are_cleaned():
     board = build_loans_watch(
         report={

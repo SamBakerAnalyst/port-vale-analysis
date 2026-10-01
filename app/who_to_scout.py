@@ -371,10 +371,16 @@ def namesake_roster() -> list[dict[str, str]]:
     try:
         disk = _load_standouts_disk(_standouts_raw_cache_key("season"))
         if disk:
-            roster = [
-                {"name": str(row.get("name") or ""), "club": str(row.get("club") or "")}
-                for row in disk[1].get("players") or []
-            ]
+            roster = []
+            for row in disk[1].get("players") or []:
+                entry: dict[str, str] = {
+                    "name": str(row.get("name") or ""),
+                    "club": str(row.get("club") or ""),
+                }
+                player_id = row.get("playerId") or row.get("player_id")
+                if player_id:
+                    entry["player_id"] = player_id
+                roster.append(entry)
     except Exception:  # noqa: BLE001 - a missing roster only costs precision
         logger.warning("Could not read the pool roster for namesake checks")
         roster = []
