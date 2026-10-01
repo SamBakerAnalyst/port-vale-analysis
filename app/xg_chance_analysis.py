@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 import time
 from collections import defaultdict
@@ -29,7 +30,12 @@ from app.squad_review import (
     _resolve_port_vale_iteration,
 )
 
+logger = logging.getLogger(__name__)
+
 SHOT_XG_KPI_ID = 82
+
+# League table columns. Same bands and thresholds as CHANCE_BUCKETS — not a new model.
+LEAGUE_TABLE_BAND_IDS: tuple[str, ...] = ("excellent", "very_good", "ok")
 
 _STOPPAGE_RE = re.compile(r"\(\+(\d+):(\d+(?:\.\d+)?)\)")
 _CLOCK_RE = re.compile(r"(\d+):(\d+(?:\.\d+)?)")
@@ -1465,6 +1471,374 @@ def xg_chance_meta(*, refresh: bool = False) -> dict[str, Any]:
     return meta
 
 
+def _league_table_bands() -> list[dict[str, Any]]:
+    return [dict(bucket) for bucket in CHANCE_BUCKETS if bucket["id"] in LEAGUE_TABLE_BAND_IDS]
+
+
+def _band_threshold_label(bucket: dict[str, Any]) -> str:
+    label = str(bucket.get("label") or bucket.get("id") or "")
+    min_val = bucket.get("min")
+    max_val = bucket.get("max")
+    if min_val is not None and max_val is None:
+        return f"{label} ≥ {float(min_val):.2f} xG"
+    if min_val is not None and max_val is not None:
+        return f"{label} {float(min_val):.2f}–{float(max_val):.2f} xG"
+    if max_val is not None:
+        return f"{label} < {float(max_val):.2f} xG"
+    return label
+
+
+def _new_team_tally() -> dict[str, Any]:
+    return {
+        "matches": 0,
+        "shots": 0,
+        "penalties": 0,
+        "bands": {
+            bucket["id"]: {"count": 0, "penalties": 0}
+            for bucket in CHANCE_BUCKETS
+        },
+    }
+
+
+def tally_league_matches(match_rows: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
+    """Count shots per squad. Ratings must already be page band ids."""
+    known = {bucket["id"] for bucket in CHANCE_BUCKETS}
+    teams: dict[int, dict[str, Any]] = {}
+
+    def ensure(squad_id: int) -> dict[str, Any]:
+        row = teams.get(squad_id)
+        if row is None:
+            row = _new_team_tally()
+            teams[squad_id] = row
+        return row
+
+    for match in match_rows:
+        home = int(match.get("homeSquadId") or 0)
+        away = int(match.get("awaySquadId") or 0)
+        if home <= 0 or away <= 0:
+            continue
+        ensure(home)["matches"] += 1
+        if away != home:
+            ensure(away)["matches"] += 1
+        for shot in match.get("shots") or []:
+            squad_id = int(shot.get("squadId") or 0)
+            if squad_id not in {home, away}:
+                continue
+            rating = str(shot.get("ratingId") or "")
+            if rating not in known:
+                continue
+            row = ensure(squad_id)
+            is_penalty = bool(shot.get("isPenalty"))
+            row["shots"] += 1
+            if is_penalty:
+                row["penalties"] += 1
+            band = row["bands"][rating]
+            band["count"] += 1
+            if is_penalty:
+                band["penalties"] += 1
+    return teams
+
+
+def _visible_band_count(band: dict[str, Any], *, exclude_penalties: bool) -> int:
+    count = int(band.get("count") or 0)
+    if exclude_penalties:
+        count -= int(band.get("penalties") or 0)
+    return max(0, count)
+
+
+def _shot_share(count: int, shots: int) -> float:
+    if shots <= 0:
+        return 0.0
+    return round((count / shots) * 100, 1)
+
+
+def _per_match(count: int, matches: int) -> float:
+    if matches <= 0:
+        return 0.0
+    return round(count / matches, 2)
+
+
+def league_rows_from_tallies(
+    tallies: dict[int, dict[str, Any]],
+    names: dict[int, str],
+    *,
+    exclude_penalties: bool = False,
+) -> list[dict[str, Any]]:
+    """Rank teams by Excellent, then Very Good, then OK (counts)."""
+    rows: list[dict[str, Any]] = []
+    for squad_id, tally in tallies.items():
+        shots = int(tally.get("shots") or 0)
+        penalties = int(tally.get("penalties") or 0)
+        if exclude_penalties:
+            shots = max(0, shots - penalties)
+        matches = int(tally.get("matches") or 0)
+        bands: dict[str, Any] = {}
+        stored = tally.get("bands") or {}
+        for bucket in CHANCE_BUCKETS:
+            band_id = bucket["id"]
+            count = _visible_band_count(stored.get(band_id) or {}, exclude_penalties=exclude_penalties)
+            bands[band_id] = {
+                "id": band_id,
+                "label": bucket["label"],
+                "count": count,
+                "share": _shot_share(count, shots),
+                "perMatch": _per_match(count, matches),
+            }
+        quality = sum(bands[band_id]["count"] for band_id in LEAGUE_TABLE_BAND_IDS)
+        name = str(names.get(squad_id) or f"Squad {squad_id}")
+        rows.append(
+            {
+                "squadId": squad_id,
+                "teamName": name,
+                "isPortVale": _is_port_vale(name),
+                "matches": matches,
+                "shots": shots,
+                "bands": bands,
+                "qualityCount": quality,
+                "qualityShare": _shot_share(quality, shots),
+                "qualityPerMatch": _per_match(quality, matches),
+            }
+        )
+
+    rows.sort(
+        key=lambda row: (
+            -int(row["bands"]["excellent"]["count"]),
+            -int(row["bands"]["very_good"]["count"]),
+            -int(row["bands"]["ok"]["count"]),
+            str(row["teamName"]).casefold(),
+        )
+    )
+    for index, row in enumerate(rows, start=1):
+        row["rank"] = index
+    return rows
+
+
+def _league_table_payload(
+    *,
+    season: str,
+    competition: str,
+    match_count: int,
+    skipped_match_count: int,
+    rows: list[dict[str, Any]],
+    exclude_penalties: bool,
+    updated_at: str | None = None,
+) -> dict[str, Any]:
+    competition_label = competition.strip()
+    season_label = season.strip()
+    window_bits = [bit for bit in (competition_label, season_label) if bit]
+    window = " ".join(window_bits) if window_bits else "Selected season"
+    bands = []
+    for bucket in _league_table_bands():
+        bands.append(
+            {
+                "id": bucket["id"],
+                "label": bucket["label"],
+                "min": bucket.get("min"),
+                "max": bucket.get("max"),
+                "color": bucket.get("color"),
+                "thresholdLabel": _band_threshold_label(bucket),
+            }
+        )
+    return {
+        "season": season_label,
+        "competition": competition_label,
+        "windowLabel": f"{window} · all completed matches",
+        "scopeNote": (
+            "Every completed match in this competition and season. "
+            "Share is the percentage of that team's shots. "
+            "The match and last-6 controls apply to the Vale views only."
+        ),
+        "sort": {
+            "columns": list(LEAGUE_TABLE_BAND_IDS),
+            "direction": "desc",
+            "label": "Most Excellent, then Very Good, then OK",
+        },
+        "bands": bands,
+        "excludePenalties": exclude_penalties,
+        "matchCount": match_count,
+        "skippedMatchCount": skipped_match_count,
+        "teamCount": len(rows),
+        "rows": rows,
+        "updatedAt": updated_at or datetime.now(UTC).isoformat(),
+    }
+
+
+def _shot_xg_map(match_id: int, *, refresh: bool = False) -> dict[int, float]:
+    """Shot xG by event. Fetches on a cache miss; the shared helper does not."""
+    mid = int(match_id)
+    if not refresh:
+        cached = _ekpi_cache.get(mid)
+        if cached:
+            return cached[1]
+        from app.analysis_cache import PACKET_TTL_SECONDS, read_json
+
+        disk = read_json("xg-ekpi", str(mid), ttl=PACKET_TTL_SECONDS, allow_stale=True)
+        if disk is not None:
+            return _fetch_shot_xg_by_event(mid, refresh=False)
+    return _fetch_shot_xg_by_event(mid, refresh=True)
+
+
+def _league_shots_for_match(match_id: int, *, refresh: bool = False) -> list[dict[str, Any]]:
+    events = _fetch_match_events(match_id, refresh=refresh)
+    xg_by_event = _shot_xg_map(match_id, refresh=refresh)
+    shots: list[dict[str, Any]] = []
+    for event in events:
+        if event.get("actionType") != "SHOT":
+            continue
+        event_id = int(event.get("id") or 0)
+        try:
+            xg = round(float(xg_by_event.get(event_id, 0.0)), 3)
+        except (TypeError, ValueError):
+            xg = 0.0
+        rating = _classify_chance(xg)
+        minimal = {
+            "xg": xg,
+            "inBox": _in_box(event),
+            "action": _event_action(event),
+            "isPenalty": _is_penalty_event(event),
+        }
+        shots.append(
+            {
+                "squadId": int(event.get("squadId") or 0),
+                "ratingId": rating["id"],
+                "isPenalty": _is_penalty_shot(minimal),
+            }
+        )
+    return shots
+
+
+def _completed_league_matches(matches_by_id: dict[int, dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for match in matches_by_id.values():
+        if match.get("id") is None or not _match_is_complete(match):
+            continue
+        home = int(match.get("homeSquadId") or -1)
+        away = int(match.get("awaySquadId") or -1)
+        if home <= 0 or away <= 0 or home == away:
+            continue
+        rows.append(match)
+    rows.sort(key=_match_day_index)
+    return rows
+
+
+def _league_cache_key(season: str) -> str:
+    token = (season or "default").replace("/", "-")
+    return f"league_{token}"
+
+
+def _tallies_from_cache(cached: dict[str, Any]) -> tuple[dict[int, dict[str, Any]], dict[int, str]]:
+    tallies: dict[int, dict[str, Any]] = {}
+    for key, tally in (cached.get("teams") or {}).items():
+        if not isinstance(tally, dict):
+            continue
+        tallies[int(key)] = tally
+    names = {
+        int(key): str(name)
+        for key, name in (cached.get("squads") or {}).items()
+        if name
+    }
+    return tallies, names
+
+
+def build_xg_chance_league_table(
+    season: str | None = None,
+    *,
+    exclude_penalties: bool = False,
+    refresh: bool = False,
+) -> dict[str, Any]:
+    """Rank every team in the selected competition/season by chance-quality bands."""
+    from app.analysis_cache import REPORT_TTL_SECONDS, read_json, write_json
+
+    def _read_cache(key: str) -> dict[str, Any] | None:
+        if refresh:
+            return None
+        stored = read_json("xg-league", key, ttl=REPORT_TTL_SECONDS, allow_stale=True)
+        if isinstance(stored, dict) and stored.get("teams"):
+            return stored
+        return None
+
+    cached = _read_cache(_league_cache_key(season or "default")) if season else None
+    iteration: dict[str, Any] | None = None
+    if cached is None:
+        iteration = _resolve_port_vale_iteration(season)
+        season_label = str(iteration.get("season") or season or "")
+        competition = str(iteration.get("competition_name") or "")
+        cached = _read_cache(_league_cache_key(season_label or (season or "default")))
+    else:
+        season_label = str(cached.get("season") or season or "")
+        competition = str(cached.get("competition") or "")
+
+    if cached is None:
+        assert iteration is not None
+        iteration_id = int(iteration["id"])
+        matches_by_id = _iteration_matches_by_id(iteration_id)
+        completed = _completed_league_matches(matches_by_id)
+        squads = _squads_map(iteration_id)
+        names = {
+            int(squad_id): str(squad.get("name") or f"Squad {squad_id}")
+            for squad_id, squad in squads.items()
+        }
+
+        match_rows: list[dict[str, Any]] = []
+        skipped: list[int] = []
+
+        def _one(match: dict[str, Any]) -> dict[str, Any]:
+            mid = int(match["id"])
+            return {
+                "homeSquadId": int(match.get("homeSquadId") or 0),
+                "awaySquadId": int(match.get("awaySquadId") or 0),
+                "shots": _league_shots_for_match(mid, refresh=refresh),
+            }
+
+        if len(completed) <= 1:
+            for match in completed:
+                try:
+                    match_rows.append(_one(match))
+                except Exception:
+                    logger.exception("League table skipped match %s", match.get("id"))
+                    skipped.append(int(match["id"]))
+        else:
+            workers = min(8, len(completed))
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = {pool.submit(_one, match): match for match in completed}
+                for future in as_completed(futures):
+                    match = futures[future]
+                    try:
+                        match_rows.append(future.result())
+                    except Exception:
+                        logger.exception("League table skipped match %s", match.get("id"))
+                        skipped.append(int(match["id"]))
+
+        tallies = tally_league_matches(match_rows)
+        for squad_id in list(tallies):
+            if squad_id not in names:
+                names[squad_id] = f"Squad {squad_id}"
+        updated_at = datetime.now(UTC).isoformat()
+        cached = {
+            "season": season_label,
+            "competition": competition,
+            "matchCount": len(match_rows),
+            "skippedMatchCount": len(skipped),
+            "teams": {str(squad_id): tally for squad_id, tally in tallies.items()},
+            "squads": {str(squad_id): name for squad_id, name in names.items() if squad_id in tallies},
+            "updatedAt": updated_at,
+        }
+        if match_rows and not skipped:
+            write_json("xg-league", _league_cache_key(season_label or (season or "default")), cached)
+
+    tallies, names = _tallies_from_cache(cached)
+    rows = league_rows_from_tallies(tallies, names, exclude_penalties=exclude_penalties)
+    return _league_table_payload(
+        season=str(cached.get("season") or season_label),
+        competition=str(cached.get("competition") or competition),
+        match_count=int(cached.get("matchCount") or 0),
+        skipped_match_count=int(cached.get("skippedMatchCount") or 0),
+        rows=rows,
+        exclude_penalties=exclude_penalties,
+        updated_at=str(cached.get("updatedAt") or "") or None,
+    )
+
+
 def register_xg_chance_analysis_routes(app: FastAPI) -> None:
     @app.get("/xg-chance-analysis")
     def xg_chance_analysis_page() -> FileResponse:
@@ -1499,6 +1873,21 @@ def register_xg_chance_analysis_routes(app: FastAPI) -> None:
                 scope=scope,
                 refresh=False,
                 exclude_penalties=exclude_penalties,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(payload, headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/xg-chance-analysis/league-table")
+    def xg_chance_league_table_route(
+        season: str | None = Query(None),
+        exclude_penalties: bool = Query(False, alias="excludePenalties"),
+    ) -> JSONResponse:
+        try:
+            payload = build_xg_chance_league_table(
+                season=season,
+                exclude_penalties=exclude_penalties,
+                refresh=False,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
