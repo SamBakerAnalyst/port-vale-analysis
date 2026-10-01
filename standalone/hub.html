@@ -2938,35 +2938,14 @@
       root.innerHTML = "";
 
       groups.forEach((group) => {
-        const sectionApps = apps
-          .filter((app) => app.group === group.id)
-          .slice()
-          .sort((a, b) => Number(!!a.comingSoon) - Number(!!b.comingSoon));
+        const sectionApps = apps.filter((app) => app.group === group.id && !app.comingSoon);
         if (!sectionApps.length) return;
 
         const block = document.createElement("div");
         block.className = `rail__group rail__group--${group.id}`;
         block.innerHTML = `<p class="rail__group-label">${group.title}</p>`;
 
-        let soonDividerAdded = false;
         sectionApps.forEach((app) => {
-          if (app.comingSoon) {
-            if (!soonDividerAdded) {
-              const divider = document.createElement("p");
-              divider.className = "rail__soon-divider";
-              divider.textContent = "Coming soon";
-              block.appendChild(divider);
-              soonDividerAdded = true;
-            }
-            const soon = document.createElement("div");
-            soon.className = "rail__link is-soon";
-            soon.setAttribute("aria-disabled", "true");
-            soon.innerHTML = `<span class="rail__icon">${app.icon || "◆"}</span><span class="rail__link-title">${app.title}</span><span class="rail__soon-badge">Soon</span>`;
-            soon.title = app.note || "Coming soon";
-            block.appendChild(soon);
-            return;
-          }
-
           const link = document.createElement("a");
           link.className = "rail__link";
           link.href = appUrl(app.href);
