@@ -265,6 +265,22 @@ APPS: list[dict[str, Any]] = [
         "router": "xg_chance_analysis",
     },
     {
+        "id": "set-plays",
+        "group": "analysis",
+        "title": "Set Plays",
+        "description": (
+            "The full set-play audit — every corner, free kick, long throw and penalty "
+            "for and against, benchmarked against League Two with a goals-and-points plan."
+        ),
+        "href": "/set-plays",
+        "icon": "🚩",
+        "accent": "#f5c518",
+        "tags": ["Set pieces", "xG", "League Two"],
+        "roles": ("analysis", "admin"),
+        "api_prefixes": ("/set-plays", "/api/set-plays"),
+        "router": "set_plays",
+    },
+    {
         "id": "goal-involvement",
         "group": "analysis",
         "title": "Goal Involvement",
@@ -926,6 +942,7 @@ LIVE_ESSENTIAL_IDS = frozenset(
         "post-match",
         "match-day-countdown",
         "xg-chance-analysis",
+        "set-plays",
         "blocks-analysis",
         # Recruitment
         "who-to-scout",

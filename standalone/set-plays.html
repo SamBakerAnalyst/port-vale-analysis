@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Set Plays</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/set-plays-base.css?v=1" />
+  <link rel="stylesheet" href="/static/set-plays.css?v=8" />
+</head>
+<body class="sp-page">
+  <div class="at-app">
+    <header class="at-toolbar">
+      <div class="sp-ident">
+        <img class="sp-ident__crest" src="/standalone/port-vale-badge.png?v=2" width="46" height="57" alt="Port Vale FC crest" />
+        <div>
+          <p class="at-toolbar__eyebrow">Port Vale FC · Analysis · <a href="/">All apps</a></p>
+          <h1 class="at-toolbar__title">Set Plays</h1>
+          <p class="at-toolbar__subtitle">Corners, free kicks, long throws and penalties, for and against, compared with every League Two club.</p>
+        </div>
+      </div>
+      <div class="at-controls">
+        <div class="at-controls__group">
+          <span class="at-controls__label">Season</span>
+          <div id="seasonToggle" class="at-toggle" role="group" aria-label="Season"></div>
+        </div>
+        <div class="at-controls__group">
+          <span class="at-controls__label">Window</span>
+          <div class="at-toggle" role="group" aria-label="Window">
+            <button type="button" class="at-toggle__btn at-toggle__btn--active" data-scope="season">Season</button>
+            <button type="button" class="at-toggle__btn" data-scope="last6">Last 6</button>
+            <button type="button" class="at-toggle__btn" data-scope="match">Match</button>
+          </div>
+        </div>
+        <div class="at-controls__group" id="matchSelectGroup" hidden>
+          <span class="at-controls__label">Match</span>
+          <select id="matchSelect" class="at-select" aria-label="Select match"></select>
+        </div>
+      </div>
+    </header>
+
+    <nav class="at-nav sp-tabs" id="sectionNav" role="tablist" aria-label="Set plays">
+      <a href="#overview" role="tab" class="is-active">Overview</a>
+      <a href="#attack" role="tab">Attacking</a>
+      <a href="#defence" role="tab">Defending</a>
+      <a href="#matches" role="tab">Match by match</a>
+      <a href="#league" role="tab">League</a>
+    </nav>
+
+    <section id="overview" class="at-section sp-tab is-shown" role="tabpanel">
+      <div id="hero" class="at-hero sp-hero card" aria-live="polite"></div>
+      <div id="planTotal" class="sp-plan-total"></div>
+      <div id="insights" class="at-insights"></div>
+      <article class="card sp-ladder-card" id="ladderPanel"></article>
+    </section>
+
+    <section id="attack" class="at-section sp-tab" role="tabpanel" hidden>
+      <header class="at-section__head">
+        <p class="at-kicker">Our set plays</p>
+        <h2>Attacking</h2>
+        <p class="at-section__lede">Our corners, free kicks and throws: where we rank, where the goals are, where they land, who wins the first contact and what comes from it. A second-ball shot is one within 20 seconds of the first phase ending.</p>
+      </header>
+      <div id="attackTiles" class="at-tiles"></div>
+      <div id="planAttack" class="sp-plan-side"></div>
+      <article class="card sp-ladder-card" id="ladderFor"></article>
+      <article class="card" id="attackBuckets"></article>
+      <div class="at-grid sp-grid--map">
+        <article class="card" id="attackMap"></article>
+        <article class="card" id="attackZones"></article>
+      </div>
+      <div class="at-grid at-grid--2">
+        <article class="card" id="attackShots"></article>
+        <article class="card" id="attackFk"></article>
+      </div>
+      <article class="card" id="takerPanel"></article>
+      <article class="card" id="targetPanel"></article>
+      <article class="card" id="goalsFor"></article>
+    </section>
+
+    <section id="defence" class="at-section sp-tab" role="tabpanel" hidden>
+      <header class="at-section__head">
+        <p class="at-kicker">Their set plays</p>
+        <h2>Defending</h2>
+        <p class="at-section__lede">Opposition set plays against us: where we rank, where the goals are, where they land, the first contacts we win and lose, second balls and what our keeper does.</p>
+      </header>
+      <div id="defenceTiles" class="at-tiles"></div>
+      <div id="planDefence" class="sp-plan-side"></div>
+      <article class="card sp-ladder-card" id="ladderAgainst"></article>
+      <article class="card" id="defenceBuckets"></article>
+      <div class="at-grid sp-grid--map">
+        <article class="card" id="defenceMap"></article>
+        <article class="card" id="defenceZones"></article>
+      </div>
+      <div class="at-grid at-grid--2">
+        <article class="card" id="defenceShots"></article>
+        <article class="card" id="defenceExtra"></article>
+      </div>
+      <div class="at-grid at-grid--2">
+        <article class="card" id="defenderPanel"></article>
+        <article class="card" id="threatPanel"></article>
+      </div>
+      <article class="card" id="goalsAgainst"></article>
+    </section>
+
+    <section id="matches" class="at-section sp-tab" role="tabpanel" hidden>
+      <div class="at-grid at-grid--2">
+        <article class="card" id="trendPanel"></article>
+        <article class="card" id="minutePanel"></article>
+      </div>
+      <article class="card" id="matchPanel"></article>
+    </section>
+
+    <section id="league" class="at-section sp-tab" role="tabpanel" hidden>
+      <article class="card" id="tablePanel"></article>
+      <article class="card" id="typeValuePanel"></article>
+    </section>
+
+    <footer id="statusBar" class="at-footer">Reading the data lake…</footer>
+  </div>
+  <script defer src="/static/set-plays.js?v=8"></script>
+  <script defer src="/static/hub-feedback.js?v=1"></script>
+</body>
+</html>
