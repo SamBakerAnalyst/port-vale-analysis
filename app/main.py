@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 
 from app.auth import register_auth
 from app.brand import apply_brand_html, current_brand
+from app.static_cache import versioned_static_cache_control
 from app.label_utils import humanize_metric_label, humanize_profile_name
 from app.logging_config import configure_logging
 from app.profile_resolve import (
@@ -237,6 +238,10 @@ async def pre_match_asset_no_cache(request: Request, call_next):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
+        return response
+    cache = versioned_static_cache_control(path, request.query_params)
+    if cache:
+        response.headers["Cache-Control"] = cache
     return response
 
 

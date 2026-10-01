@@ -3184,9 +3184,50 @@
       document.getElementById("homeDashboard").scrollIntoView({ behavior: "smooth", block: "start" });
     });
 
+    function applyAppsPayload(payload) {
+      if (!payload || typeof payload !== "object") return;
+      // Never wipe a good fallback with an empty payload.
+      if (Array.isArray(payload.groups) && payload.groups.length) {
+        window.IMPECT_APP_GROUPS = payload.groups;
+      }
+      if (Array.isArray(payload.apps) && payload.apps.length) {
+        window.IMPECT_APPS = payload.apps;
+      }
+      const stamp = document.getElementById("hubBuildStamp");
+      if (payload.brand) applyHubBrand(payload.brand);
+      if (stamp) {
+        const build = (stamp.textContent || "").split("·").pop()?.trim() || "__HUB_BUILD__";
+        const product = payload.product || (payload.staging ? "Port Vale Staging" : "Port Vale Live");
+        stamp.textContent = `${product} · ${build}`;
+        stamp.classList.toggle("is-staging", payload.product_id === "staging");
+        stamp.classList.toggle("is-demo", payload.product_id === "demo");
+        stamp.title = (payload.brand && payload.brand.stamp_title) || (
+          payload.staging
+            ? "Port Vale Staging — safe break/fix sandbox (not staff)"
+            : "Port Vale Live — staff / boss product"
+        );
+        document.title = payload.product || (payload.staging ? "Port Vale Staging" : "Port Vale Live");
+      }
+    }
+
+    function paintHubShell() {
+      applyRoleToUi();
+      hideLinksToComingSoonApps();
+      renderRail();
+    }
+
     async function bootHub() {
+      const authPromise = fetch(`${BASE}/api/auth/me`, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(8000),
+      });
+      const appsPromise = fetch(`${BASE}/api/apps`, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(8000),
+      });
+
       try {
-        const res = await fetch(`${BASE}/api/auth/me`, { cache: "no-store", signal: AbortSignal.timeout(8000) });
+        const res = await authPromise;
         if (res.ok) {
           const me = await res.json();
           window.HubAuth = {
@@ -3210,47 +3251,22 @@
         /* keep locked defaults if auth endpoint unavailable */
       }
 
-      try {
-        const appsRes = await fetch(`${BASE}/api/apps`, {
-          cache: "no-store",
-          signal: AbortSignal.timeout(8000),
-        });
-        if (appsRes.ok) {
-          const payload = await appsRes.json();
-          // Never wipe a good fallback with an empty payload.
-          if (Array.isArray(payload.groups) && payload.groups.length) {
-            window.IMPECT_APP_GROUPS = payload.groups;
-          }
-          if (Array.isArray(payload.apps) && payload.apps.length) {
-            window.IMPECT_APPS = payload.apps;
-          }
-          const stamp = document.getElementById("hubBuildStamp");
-          if (payload.brand) applyHubBrand(payload.brand);
-          if (stamp) {
-            const build = (stamp.textContent || "").split("·").pop()?.trim() || "__HUB_BUILD__";
-            const product = payload.product || (payload.staging ? "Port Vale Staging" : "Port Vale Live");
-            stamp.textContent = `${product} · ${build}`;
-            stamp.classList.toggle("is-staging", payload.product_id === "staging");
-            stamp.classList.toggle("is-demo", payload.product_id === "demo");
-            stamp.title = (payload.brand && payload.brand.stamp_title) || (
-              payload.staging
-                ? "Port Vale Staging — safe break/fix sandbox (not staff)"
-                : "Port Vale Live — staff / boss product"
-            );
-            document.title = payload.product || (payload.staging ? "Port Vale Staging" : "Port Vale Live");
-          }
-        }
-      } catch (_) {
-        /* keep standalone/apps.js fallback if API unavailable */
-      }
-
-      applyRoleToUi();
-      hideLinksToComingSoonApps();
-      renderRail();
+      // Rail from apps.js already on the page, filtered the same way as visibleApps().
+      paintHubShell();
       checkServer();
       setInterval(checkServer, 30_000);
       if (window.HubHome && canLoadHomeDashboard()) {
         HubHome.load();
+      }
+
+      try {
+        const appsRes = await appsPromise;
+        if (appsRes.ok) {
+          applyAppsPayload(await appsRes.json());
+          paintHubShell();
+        }
+      } catch (_) {
+        /* keep standalone/apps.js fallback if API unavailable */
       }
     }
     bootHub();
