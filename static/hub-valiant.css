@@ -152,16 +152,17 @@ body::before {
 
 .main__top {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(14rem, 22rem) auto;
-  align-items: end;
-  gap: 1.1rem 1.5rem;
-  margin-bottom: 0.75rem;
-  padding-bottom: 1.05rem;
+  grid-template-columns: minmax(0, 1.45fr) minmax(14rem, 22rem) auto;
+  align-items: center;
+  gap: 1.25rem 1.75rem;
+  margin-bottom: 0.7rem;
+  padding-bottom: 1.2rem;
   border-bottom: 1px solid var(--border);
 }
 
 .main__identity {
   min-width: 0;
+  padding: 0.15rem 0 0.05rem;
 }
 
 .hub-search-bar {
@@ -181,11 +182,12 @@ body::before {
 
 .hub__clock-time {
   font-family: var(--display);
-  font-size: 2.15rem;
+  font-size: 1.7rem;
   font-weight: 500;
   letter-spacing: 0.06em;
   font-variant-numeric: tabular-nums;
   line-height: 0.95;
+  color: #d9d7ce;
 }
 
 .hub__clock-date {
@@ -202,8 +204,9 @@ body::before {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem 0.5rem;
-  margin-bottom: 1.15rem;
+  gap: 0.45rem 0.7rem;
+  margin-bottom: 1.35rem;
+  padding-top: 0.15rem;
 }
 
 .main__ops {
@@ -242,10 +245,13 @@ body::before {
     grid-column: 1 / -1;
     max-width: 28rem;
   }
+  .main__greeting {
+    font-size: 2.05rem;
+  }
 }
 
 .main__eyebrow {
-  margin: 0 0 0.2rem;
+  margin: 0 0 0.5rem;
   font-family: var(--display);
   font-size: 0.68rem;
   font-weight: 500;
@@ -256,15 +262,22 @@ body::before {
 
 .main__greeting {
   font-family: var(--display);
-  font-size: 2.15rem;
+  font-size: 2.55rem;
   font-weight: 500;
-  letter-spacing: 0.02em;
-  line-height: 1.05;
+  letter-spacing: 0.01em;
+  line-height: 1.02;
+}
+
+.main__greeting::after {
+  background: var(--gold);
 }
 
 .main__subtitle {
-  font-size: 0.92rem;
-  max-width: 36rem;
+  margin-top: 0.72rem;
+  font-size: 1rem;
+  line-height: 1.45;
+  max-width: 34rem;
+  color: #c8c6bc;
 }
 
 .hub-search__input {
@@ -328,18 +341,20 @@ body::before {
 }
 
 .hub__build {
-  font-family: var(--display);
-  font-weight: 500;
-  letter-spacing: 0.12em;
-  border-radius: var(--radius);
-  color: #10100f;
-  background: var(--gold);
+  font-family: var(--font);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  border-radius: 0;
+  color: var(--text-muted);
+  background: transparent;
+  padding: 0;
 }
 
-.hub__build.is-staging {
+.hub__build.is-staging,
+.hub__build.is-demo {
   color: var(--gold);
   background: transparent;
-  border: 1px solid var(--gold);
+  border: 0;
 }
 
 .hub__broke-joke {
