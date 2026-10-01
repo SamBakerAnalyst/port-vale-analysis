@@ -5,6 +5,7 @@ Two looks: High scores (profile quality) and Young players (U27s playing).
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import threading
@@ -30,7 +31,7 @@ from app.fixture_planner import (
     _normalize_team_name,
 )
 from app.home_dashboard import STANDOUTS_LEAGUES
-from app.paths import STANDALONE_DIR
+from app.paths import GAMES_TO_WATCH_DATA_DIR, STANDALONE_DIR, ensure_data_dirs
 from app import transfer_status
 from app.analysis_cache import read_json, write_json
 from app.who_to_scout import _load_standouts_raw_payload, build_club_team_sheet
@@ -42,11 +43,15 @@ GAMES_CACHE_STALE_SECONDS = 6 * 3600
 _games_payload_mem: dict[str, tuple[float, dict[str, Any]]] = {}
 _games_payload_lock = threading.Lock()
 _games_refreshing: set[str] = set()
+_watched_lock = threading.Lock()
 
 U27_MAX_AGE = 26
 LIKELY_SQUAD_SIZE = 14
 HEADLINE_COUNT = 3
 LOOKAHEAD_DAYS = 45
+# Fixtures marked watched within this window leave the "Haven't watched recently" section.
+RECENT_WATCHED_DAYS = 21
+WATCHED_PATH = GAMES_TO_WATCH_DATA_DIR / "watched.json"
 
 SCORING_NOTE = (
     "High scores ranks games by profile quality. Young players ranks games by U27s "
@@ -107,6 +112,122 @@ class AssignBody(BaseModel):
     date: str = ""
     kickoff_utc: str | None = None
     watched_players: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class MarkWatchedBody(BaseModel):
+    fixture_id: str
+    home: str = ""
+    away: str = ""
+    league: str = ""
+    date: str = ""
+    season: str = ""
+    clear: bool = False
+
+
+def _empty_watched_store() -> dict[str, Any]:
+    return {"version": 1, "updated_at": None, "watched": {}}
+
+
+def _load_watched_store() -> dict[str, Any]:
+    ensure_data_dirs()
+    with _watched_lock:
+        if not WATCHED_PATH.exists():
+            return _empty_watched_store()
+        try:
+            payload = json.loads(WATCHED_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return _empty_watched_store()
+        if not isinstance(payload, dict):
+            return _empty_watched_store()
+        watched = payload.get("watched")
+        if not isinstance(watched, dict):
+            payload["watched"] = {}
+        return payload
+
+
+def _save_watched_store(payload: dict[str, Any]) -> None:
+    ensure_data_dirs()
+    GAMES_TO_WATCH_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    payload["version"] = 1
+    payload["updated_at"] = datetime.now(UTC).isoformat()
+    temp_path = WATCHED_PATH.with_suffix(".json.tmp")
+    with _watched_lock:
+        temp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        temp_path.replace(WATCHED_PATH)
+
+
+def get_watched_marks() -> dict[str, Any]:
+    """Return fixture_id → {last_watched_at, ...} marks for Games to Watch recency."""
+    store = _load_watched_store()
+    watched: dict[str, Any] = {}
+    for fixture_id, row in dict(store.get("watched") or {}).items():
+        if not isinstance(row, dict):
+            continue
+        stamp = str(row.get("last_watched_at") or "").strip()
+        if not stamp:
+            continue
+        watched[str(fixture_id)] = {
+            "fixture_id": str(fixture_id),
+            "last_watched_at": stamp,
+            "home": str(row.get("home") or ""),
+            "away": str(row.get("away") or ""),
+            "league": str(row.get("league") or ""),
+            "date": str(row.get("date") or "")[:10],
+            "season": str(row.get("season") or ""),
+        }
+    return {
+        "watched": watched,
+        "updated_at": store.get("updated_at"),
+        "recent_days": RECENT_WATCHED_DAYS,
+    }
+
+
+def mark_fixture_watched(body: MarkWatchedBody) -> dict[str, Any]:
+    """Persist last_watched_at for a fixture (or clear it)."""
+    fixture_id = str(body.fixture_id or "").strip()
+    if not fixture_id:
+        raise HTTPException(status_code=400, detail="fixture_id is required")
+    store = _load_watched_store()
+    watched = dict(store.get("watched") or {})
+    if body.clear:
+        watched.pop(fixture_id, None)
+        store["watched"] = watched
+        _save_watched_store(store)
+        return {
+            "ok": True,
+            "fixture_id": fixture_id,
+            "last_watched_at": None,
+            "recent_days": RECENT_WATCHED_DAYS,
+        }
+    now = datetime.now(UTC).isoformat()
+    watched[fixture_id] = {
+        "fixture_id": fixture_id,
+        "last_watched_at": now,
+        "home": str(body.home or "").strip(),
+        "away": str(body.away or "").strip(),
+        "league": str(body.league or "").strip(),
+        "date": str(body.date or "").strip()[:10],
+        "season": str(body.season or "").strip() or DEFAULT_SEASON,
+    }
+    store["watched"] = watched
+    _save_watched_store(store)
+    return {
+        "ok": True,
+        "fixture_id": fixture_id,
+        "last_watched_at": now,
+        "recent_days": RECENT_WATCHED_DAYS,
+        "mark": watched[fixture_id],
+    }
+
+
+def _attach_watched_marks(rows: list[dict[str, Any]]) -> None:
+    marks = get_watched_marks().get("watched") or {}
+    for row in rows:
+        fixture_id = str(row.get("fixture_id") or "")
+        mark = marks.get(fixture_id) if fixture_id else None
+        row["last_watched_at"] = (
+            str(mark.get("last_watched_at") or "") if isinstance(mark, dict) else None
+        ) or None
 
 
 def _club_key(name: str) -> str:
@@ -740,6 +861,7 @@ def build_games_to_watch_payload(*, season: str = DEFAULT_SEASON) -> dict[str, A
             str(row.get("date") or ""),
         )
     )
+    _attach_watched_marks(rows)
     leagues: list[str] = []
     for row in rows:
         league = str(row.get("league") or "").strip()
@@ -777,6 +899,7 @@ def build_games_to_watch_payload(*, season: str = DEFAULT_SEASON) -> dict[str, A
             for team in FIXTURE_STAFF_TEAMS
         ],
         "watch_types": list(WATCH_TYPES),
+        "recent_watched_days": RECENT_WATCHED_DAYS,
         "leagues": [
             {"id": name, "color": _league_color(name)} for name in leagues if name
         ],
@@ -817,6 +940,7 @@ def _empty_building_payload(season: str) -> dict[str, Any]:
             for team in FIXTURE_STAFF_TEAMS
         ],
         "watch_types": list(WATCH_TYPES),
+        "recent_watched_days": RECENT_WATCHED_DAYS,
         "leagues": [
             {"id": name, "color": _league_color(name)}
             for name in STANDOUTS_LEAGUES
@@ -852,15 +976,25 @@ def cached_games_to_watch_payload(*, season: str = DEFAULT_SEASON) -> dict[str, 
     now = time.time()
     cached = _games_payload_mem.get(season)
     if cached and now - cached[0] < GAMES_CACHE_TTL_SECONDS:
-        return cached[1]
+        return _with_fresh_watched_marks(cached[1])
     disk = read_json("games-to-watch", season, ttl=GAMES_CACHE_STALE_SECONDS)
     if disk:
         _games_payload_mem[season] = (now, disk)
         if cached and now - cached[0] >= GAMES_CACHE_TTL_SECONDS:
             _refresh_games_payload(season)
-        return disk
+        return _with_fresh_watched_marks(disk)
     _refresh_games_payload(season)
-    return _empty_building_payload(season)
+    return _with_fresh_watched_marks(_empty_building_payload(season))
+
+
+def _with_fresh_watched_marks(payload: dict[str, Any]) -> dict[str, Any]:
+    """Re-attach last_watched_at on every read so Mark watched is not stuck behind cache."""
+    out = dict(payload)
+    games = [dict(row) for row in list(payload.get("games") or [])]
+    _attach_watched_marks(games)
+    out["games"] = games
+    out["recent_watched_days"] = RECENT_WATCHED_DAYS
+    return out
 
 
 def warm_games_to_watch_cache(*, season: str = DEFAULT_SEASON) -> None:
@@ -1178,6 +1312,12 @@ def build_fixture_sheet(*, season: str, fixture_id: str) -> dict[str, Any]:
         ],
         "watch_types": list(WATCH_TYPES),
         "scoring": {"note": SCORING_NOTE, "notes": dict(SCORING_NOTES)},
+        "recent_watched_days": RECENT_WATCHED_DAYS,
+        "last_watched_at": (
+            (get_watched_marks().get("watched") or {})
+            .get(token, {})
+            .get("last_watched_at")
+        ),
     }
 
 
@@ -1231,6 +1371,14 @@ def register_games_to_watch_routes(app: FastAPI) -> None:
     @app.post("/api/games-to-watch/assign")
     def games_to_watch_assign_route(body: AssignBody) -> dict[str, Any]:
         return assign_game(body)
+
+    @app.get("/api/games-to-watch/watched")
+    def games_to_watch_watched_route() -> dict[str, Any]:
+        return get_watched_marks()
+
+    @app.post("/api/games-to-watch/watched")
+    def games_to_watch_mark_watched_route(body: MarkWatchedBody) -> dict[str, Any]:
+        return mark_fixture_watched(body)
 
     @app.on_event("startup")
     def _warm_games_to_watch() -> None:

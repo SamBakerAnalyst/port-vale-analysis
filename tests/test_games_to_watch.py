@@ -49,6 +49,8 @@ def test_page_is_a_ranked_list_with_team_sheet_and_planner_assign():
     assert 'id="gwList"' in html
     assert 'id="gwSheet"' in html
     assert 'id="gwLeagues"' in html
+    assert 'id="gwRecency"' in html
+    assert "Haven't watched recently" in html
     assert "assign Video into Fixture Planner" in html
     assert 'data-phase="played"' in html
     assert 'id="gwPhase"' in html
@@ -80,6 +82,11 @@ def test_page_is_a_ranked_list_with_team_sheet_and_planner_assign():
     assert "Math.abs(days)" in js
     assert "/api/games-to-watch/assign" in js
     assert "/api/games-to-watch/fixture" in js
+    assert "/api/games-to-watch/watched" in js
+    assert "Mark watched" in js
+    assert "staleGames" in js
+    assert "last_watched_at" in js
+    assert "renderRecency" in js
     assert "/player-reports?fixture=" in js
     assert "Player Reports →" in js
     assert "VIDEO" in js
@@ -91,6 +98,8 @@ def test_page_is_a_ranked_list_with_team_sheet_and_planner_assign():
     ).read_text(encoding="utf-8")
     assert ".gw-row" in css
     assert ".gw-filter--league" in css
+    assert ".gw-recency" in css
+    assert ".gw-mark-watched" in css
     assert ".gw-team" in css
     assert "tr.is-loan" in css
     assert "tr.is-moved" in css
@@ -706,3 +715,81 @@ def test_assign_game_writes_video_into_fixture_planner(monkeypatch):
     assert captured["body"].watch_type == "VIDEO"
     assert captured["body"].fixture_id == "game-1"
     assert result["assignment"]["watch_type"] == "VIDEO"
+
+
+def test_mark_fixture_watched_persists_last_watched_at(tmp_path, monkeypatch):
+    from app import games_to_watch as gtw
+    from app.games_to_watch import MarkWatchedBody
+
+    watched_path = tmp_path / "watched.json"
+    monkeypatch.setattr(gtw, "WATCHED_PATH", watched_path)
+    monkeypatch.setattr(gtw, "GAMES_TO_WATCH_DATA_DIR", tmp_path)
+    monkeypatch.setattr(gtw, "ensure_data_dirs", lambda: None)
+
+    marked = gtw.mark_fixture_watched(
+        MarkWatchedBody(
+            fixture_id="fx-stale-1",
+            home="Kids FC",
+            away="Youth FC",
+            league="League One",
+            date="2026-09-01",
+        )
+    )
+    assert marked["ok"] is True
+    assert marked["fixture_id"] == "fx-stale-1"
+    assert marked["last_watched_at"]
+    assert watched_path.is_file()
+
+    store = gtw.get_watched_marks()
+    assert store["recent_days"] == gtw.RECENT_WATCHED_DAYS
+    assert store["watched"]["fx-stale-1"]["last_watched_at"] == marked["last_watched_at"]
+    assert store["watched"]["fx-stale-1"]["home"] == "Kids FC"
+
+    rows = [
+        {"fixture_id": "fx-stale-1", "home": {"name": "Kids FC"}},
+        {"fixture_id": "fx-never", "home": {"name": "Other FC"}},
+    ]
+    gtw._attach_watched_marks(rows)
+    assert rows[0]["last_watched_at"] == marked["last_watched_at"]
+    assert rows[1]["last_watched_at"] is None
+
+    cleared = gtw.mark_fixture_watched(
+        MarkWatchedBody(fixture_id="fx-stale-1", clear=True)
+    )
+    assert cleared["last_watched_at"] is None
+    assert "fx-stale-1" not in gtw.get_watched_marks()["watched"]
+
+
+def test_cached_payload_refreshes_watched_marks(monkeypatch):
+    from app import games_to_watch as gtw
+
+    monkeypatch.setattr(
+        gtw,
+        "_games_payload_mem",
+        {
+            "26/27": (
+                __import__("time").time(),
+                {
+                    "season": "26/27",
+                    "games": [
+                        {"fixture_id": "a", "last_watched_at": None},
+                        {"fixture_id": "b", "last_watched_at": None},
+                    ],
+                },
+            )
+        },
+    )
+    monkeypatch.setattr(
+        gtw,
+        "get_watched_marks",
+        lambda: {
+            "watched": {"a": {"last_watched_at": "2026-09-01T12:00:00+00:00"}},
+            "updated_at": "2026-09-01T12:00:00+00:00",
+            "recent_days": gtw.RECENT_WATCHED_DAYS,
+        },
+    )
+    payload = gtw.cached_games_to_watch_payload(season="26/27")
+    assert payload["recent_watched_days"] == gtw.RECENT_WATCHED_DAYS
+    by_id = {row["fixture_id"]: row for row in payload["games"]}
+    assert by_id["a"]["last_watched_at"] == "2026-09-01T12:00:00+00:00"
+    assert by_id["b"]["last_watched_at"] is None

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/games-to-watch.css?v=11" />
+  <link rel="stylesheet" href="/static/games-to-watch.css?v=12" />
 </head>
 <body>
   <div class="gw">
@@ -70,13 +70,24 @@
     </section>
 
     <div class="gw-layout">
-      <section class="gw-list card" aria-label="Ranked fixtures">
-        <div class="gw-list__head">
-          <h2 id="gwListTitle">Ranked by high scores</h2>
-          <p id="gwListCount"></p>
-        </div>
-        <div id="gwList" class="gw-list__body"></div>
-      </section>
+      <div class="gw-main">
+        <section class="gw-recency card" aria-label="Haven't watched recently">
+          <div class="gw-list__head">
+            <h2>Haven't watched recently</h2>
+            <p id="gwRecencyCount"></p>
+          </div>
+          <p class="gw-recency__note" id="gwRecencyNote">Never watched and oldest marks first. Mark watched on a team sheet to update.</p>
+          <div id="gwRecency" class="gw-recency__body"></div>
+        </section>
+
+        <section class="gw-list card" aria-label="Ranked fixtures">
+          <div class="gw-list__head">
+            <h2 id="gwListTitle">Ranked by high scores</h2>
+            <p id="gwListCount"></p>
+          </div>
+          <div id="gwList" class="gw-list__body"></div>
+        </section>
+      </div>
 
       <aside class="gw-sheet card" id="gwSheet" aria-label="Team sheet">
         <div class="gw-sheet__empty" id="gwSheetEmpty">
@@ -88,7 +99,7 @@
     </div>
   </div>
 
-  <script defer src="/static/games-to-watch.js?v=13"></script>
+  <script defer src="/static/games-to-watch.js?v=14"></script>
   <script defer src="/static/hub-feedback.js"></script>
 </body>
 </html>

@@ -12,6 +12,9 @@
     list: document.getElementById("gwList"),
     listCount: document.getElementById("gwListCount"),
     listTitle: document.getElementById("gwListTitle"),
+    recency: document.getElementById("gwRecency"),
+    recencyCount: document.getElementById("gwRecencyCount"),
+    recencyNote: document.getElementById("gwRecencyNote"),
     sheetEmpty: document.getElementById("gwSheetEmpty"),
     sheetBody: document.getElementById("gwSheetBody"),
   };
@@ -92,6 +95,42 @@
     const start = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
     const other = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
     return Math.round((other - start) / 86400000);
+  }
+
+  function recentWatchedDays() {
+    const days = Number(state.payload?.recent_watched_days);
+    return Number.isFinite(days) && days > 0 ? days : 21;
+  }
+
+  function parseWatchedAt(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+    const date = new Date(raw);
+    if (Number.isNaN(date.getTime())) return null;
+    return date;
+  }
+
+  function daysSinceWatched(value) {
+    const date = parseWatchedAt(value);
+    if (!date) return null;
+    const today = new Date();
+    const start = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+    const other = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+    return Math.round((start - other) / 86400000);
+  }
+
+  function watchedRecently(game) {
+    const days = daysSinceWatched(game?.last_watched_at);
+    if (days == null) return false;
+    return days <= recentWatchedDays();
+  }
+
+  function formatWatchedAgo(value) {
+    const days = daysSinceWatched(value);
+    if (days == null) return "Never watched";
+    if (days <= 0) return "Watched today";
+    if (days === 1) return "Watched yesterday";
+    return `Watched ${days}d ago`;
   }
 
   function isFootballWeekend(value) {
@@ -284,6 +323,9 @@
         const open = state.openId === game.fixture_id ? " is-open" : "";
         const heads = headlineText(game);
         const rankLbl = lookMeta().lbl;
+        const watchedPill = game.last_watched_at
+          ? `<span class="gw-pill ${watchedRecently(game) ? "is-set" : "is-stale"}">${escapeHtml(formatWatchedAgo(game.last_watched_at))}</span>`
+          : "";
         return `
           <button type="button" class="gw-row${open}" data-open="${escapeHtml(game.fixture_id)}">
             <div class="gw-score">
@@ -307,6 +349,7 @@
               <span class="gw-pill ${label.cls}">${escapeHtml(label.text)}</span>
               ${game.played ? `<span class="gw-pill is-played">Played</span>` : `<span class="gw-pill">Upcoming</span>`}
               ${assigned ? `<span class="gw-pill is-set">${escapeHtml(assigned)}</span>` : ""}
+              ${watchedPill}
             </div>
           </button>
         `;
@@ -314,6 +357,80 @@
       .join("");
     els.list.querySelectorAll("[data-open]").forEach((btn) => {
       btn.addEventListener("click", () => openFixture(btn.dataset.open));
+    });
+  }
+
+  function staleGames() {
+    const rows = visibleGames().filter((game) => !watchedRecently(game));
+    rows.sort((a, b) => {
+      const aStamp = parseWatchedAt(a.last_watched_at);
+      const bStamp = parseWatchedAt(b.last_watched_at);
+      if (!aStamp && !bStamp) {
+        const ap = lookRank(a);
+        const bp = lookRank(b);
+        if (ap == null && bp == null) return String(a.date || "").localeCompare(String(b.date || ""));
+        if (ap == null) return 1;
+        if (bp == null) return -1;
+        if (bp !== ap) return bp - ap;
+        return String(a.date || "").localeCompare(String(b.date || ""));
+      }
+      if (!aStamp) return -1;
+      if (!bStamp) return 1;
+      return aStamp.getTime() - bStamp.getTime();
+    });
+    return rows;
+  }
+
+  function renderRecency() {
+    if (!els.recency) return;
+    const days = recentWatchedDays();
+    if (els.recencyNote) {
+      els.recencyNote.textContent = `Never watched and oldest marks first. Mark watched drops a game for ${days} days.`;
+    }
+    const rows = staleGames();
+    if (els.recencyCount) {
+      els.recencyCount.textContent = rows.length
+        ? `${rows.length} game${rows.length === 1 ? "" : "s"}`
+        : "";
+    }
+    if (!visibleGames().length) {
+      els.recency.innerHTML = `<p class="gw-recency__empty">No fixtures in this filter.</p>`;
+      return;
+    }
+    if (!rows.length) {
+      els.recency.innerHTML = `<p class="gw-recency__empty">Everything in view was watched in the last ${days} days.</p>`;
+      return;
+    }
+    els.recency.innerHTML = rows
+      .slice(0, 12)
+      .map((game) => {
+        const pct = lookRank(game);
+        const open = state.openId === game.fixture_id ? " is-open" : "";
+        const ago = formatWatchedAgo(game.last_watched_at);
+        return `
+          <button type="button" class="gw-row is-stale${open}" data-open-stale="${escapeHtml(game.fixture_id)}">
+            <div class="gw-score">
+              <span class="gw-score__n" style="color:${toneFor(pct)}">${pct == null ? "—" : `${pct}%`}</span>
+              <span class="gw-score__bar"><span style="width:${pct || 0}%;background:${toneFor(pct)}"></span></span>
+              <span class="gw-score__lbl">${lookMeta().lbl}</span>
+            </div>
+            <div class="gw-row__match">
+              <p class="gw-row__teams">${escapeHtml(game.home?.name || "Home")} vs ${escapeHtml(game.away?.name || "Away")}</p>
+              <p class="gw-row__meta">
+                <span class="gw-league-dot" style="--league:${game.league_color || "#3d8bfd"}"></span>
+                ${escapeHtml(game.league || "")} · ${escapeHtml(formatDate(game.date))}
+                ${game.played ? " · Played" : ""}
+              </p>
+            </div>
+            <div class="gw-row__side">
+              <span class="gw-pill is-stale">${escapeHtml(ago)}</span>
+            </div>
+          </button>
+        `;
+      })
+      .join("");
+    els.recency.querySelectorAll("[data-open-stale]").forEach((btn) => {
+      btn.addEventListener("click", () => openFixture(btn.dataset.openStale));
     });
   }
 
@@ -429,6 +546,10 @@
       ? `${(sheet.assignment.staff || []).join(", ") || "Assigned"} · ${sheet.assignment.watch_type || ""}`
       : "Not in Fixture Planner yet";
     const rankLbl = lookMeta().sheet;
+    const watchedLabel = sheet.last_watched_at
+      ? formatWatchedAgo(sheet.last_watched_at)
+      : "Not marked watched";
+    const watchedDone = watchedRecently(sheet);
     els.sheetBody.innerHTML = `
       <div class="gw-sheet__top">
         <p class="gw-eyebrow">${escapeHtml(sheet.league || "")} · ${escapeHtml(formatDate(sheet.date))} ${formatKickoff(sheet.kickoff_utc) ? `· ${escapeHtml(formatKickoff(sheet.kickoff_utc))}` : ""} ${sheet.played ? `· Played${sheet.score ? ` ${escapeHtml(sheet.score)}` : ""}` : "· Upcoming"}</p>
@@ -441,6 +562,7 @@
           <span class="gw-pill ${label.cls}">${escapeHtml(label.text)}</span>
           ${sheet.played ? `<span class="gw-pill is-played">Played${sheet.score ? ` · ${escapeHtml(sheet.score)}` : ""}</span>` : `<span class="gw-pill">Upcoming</span>`}
           <span class="gw-pill ${sheet.assignment ? "is-set" : ""}">${escapeHtml(assigned)}</span>
+          <span class="gw-pill ${watchedDone ? "is-set" : "is-stale"}">${escapeHtml(watchedLabel)}</span>
         </div>
       </div>
       <div class="gw-teams">
@@ -448,7 +570,7 @@
         ${teamColumn("away", sheet.away)}
       </div>
       <form class="gw-assign" id="gwAssignForm">
-        <p class="gw-assign__note">Tick players to watch, pick a scout, assign Video into Fixture Planner. Default is Video so we maximise the tape.</p>
+        <p class="gw-assign__note">Tick players to watch, pick a scout, assign Video into Fixture Planner. Default is Video so we maximise the tape. Mark watched updates the Haven't watched recently section.</p>
         <div class="gw-assign__row">
           <label>Scout
             <select id="gwStaff">${staffOptions(sheet)}</select>
@@ -459,6 +581,7 @@
             `).join("")}
           </div>
           <button type="submit" class="gw-assign__go" id="gwAssignBtn">Assign to Fixture Planner</button>
+          <button type="button" class="gw-mark-watched${watchedDone ? " is-done" : ""}" id="gwMarkWatched">${watchedDone ? "Watched recently" : "Mark watched"}</button>
           <a href="/player-reports?fixture=${encodeURIComponent(sheet.fixture_id || "")}">Player Reports →</a>
           <a href="/fixture-planner">Open planner</a>
         </div>
@@ -487,6 +610,9 @@
     document.getElementById("gwAssignForm")?.addEventListener("submit", (event) => {
       event.preventDefault();
       assignCurrent();
+    });
+    document.getElementById("gwMarkWatched")?.addEventListener("click", () => {
+      markCurrentWatched();
     });
   }
 
@@ -546,10 +672,44 @@
         setStatus("Assigned to Fixture Planner.", "is-ok");
       }
       renderList();
+      renderRecency();
       renderKpis();
       renderSheet();
     } catch (error) {
       setStatus(error.message || "Could not assign", "is-error");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function markCurrentWatched() {
+    const sheet = state.sheet;
+    if (!sheet?.fixture_id) return;
+    const btn = document.getElementById("gwMarkWatched");
+    if (btn) btn.disabled = true;
+    setStatus("Saving watched mark…");
+    try {
+      const data = await fetchJson("/api/games-to-watch/watched", {
+        method: "POST",
+        body: JSON.stringify({
+          fixture_id: sheet.fixture_id,
+          home: sheet.home?.name || "",
+          away: sheet.away?.name || "",
+          league: sheet.league || "",
+          date: sheet.date || "",
+          season: sheet.season || "",
+        }),
+      });
+      const stamp = data.last_watched_at || new Date().toISOString();
+      sheet.last_watched_at = stamp;
+      const listRow = games().find((row) => row.fixture_id === sheet.fixture_id);
+      if (listRow) listRow.last_watched_at = stamp;
+      setStatus("Marked watched — it leaves Haven't watched recently for now.", "is-ok");
+      renderList();
+      renderRecency();
+      renderSheet();
+    } catch (error) {
+      setStatus(error.message || "Could not mark watched", "is-error");
     } finally {
       if (btn) btn.disabled = false;
     }
@@ -587,6 +747,7 @@
     paintChipGroup(els.look, "look");
     applyLookCopy();
     renderKpis();
+    renderRecency();
     renderList();
   }
 
@@ -627,6 +788,7 @@
   els.search?.addEventListener("input", () => {
     state.query = els.search.value || "";
     renderList();
+    renderRecency();
     renderKpis();
   });
 
