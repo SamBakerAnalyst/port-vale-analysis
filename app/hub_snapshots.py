@@ -339,7 +339,7 @@ def refresh_players() -> dict[str, Any]:
 
 
 def refresh_win_drivers() -> dict[str, Any]:
-    from app.win_drivers import build_history, build_table, win_drivers_meta
+    from app.win_drivers import build_breakdown, build_history, build_table, win_drivers_meta
 
     meta = win_drivers_meta(force_refresh=True)
     seasons = list(meta.get("seasons") or [])
@@ -366,6 +366,10 @@ def refresh_win_drivers() -> dict[str, Any]:
     for iid in iteration_ids:
         build_table(iid, force_refresh=True)
         rebuilt.append(iid)
+        try:
+            build_breakdown(iid, force_refresh=True)
+        except Exception:
+            logger.exception("What Wins Games breakdown rebuild failed for iteration %s", iid)
 
     updated_at = _now_iso()
     _write_meta({"win_drivers_updated_at": updated_at})

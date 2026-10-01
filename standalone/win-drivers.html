@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/win-drivers.css?v=7" />
+  <link rel="stylesheet" href="/static/win-drivers.css?v=12" />
 </head>
 <body>
   <div class="app">
@@ -43,7 +43,7 @@
     <section class="vale-panel" aria-label="The 15 stats and Port Vale on each">
       <div class="vale-panel__head">
         <h2 id="valeTitle">The 15 — and where we are</h2>
-        <p id="valeHint" class="vale-panel__hint">Four numbers on every row: our score, our rank in the 24, the average of clubs currently 1st–7th (the play-off pack), and the league average. Click a row to sort the table.</p>
+        <p id="valeHint" class="vale-panel__hint">Four numbers on every row: our score, our rank in the 24, the average of clubs currently 1st–7th (the play-off pack), and the league average. <strong>Click any stat for the full breakdown</strong> — every game, every player. Use the arrow on the right to drop down our trend over the last games.</p>
       </div>
       <div id="whyList" class="why-list"></div>
     </section>
@@ -66,7 +66,15 @@
     </section>
   </div>
 
-  <script defer src="/static/win-drivers.js?v=7"></script>
+  <main id="statDetail" class="detail hidden" aria-labelledby="detailTitle">
+    <nav class="detail__crumbs" aria-label="Breadcrumb">
+      <button type="button" class="detail__back" data-detail-close>← All 15 stats</button>
+      <span class="detail__crumb-text"><a href="/">All apps</a> · What Wins Games · Stat breakdown</span>
+    </nav>
+    <div class="detail__panel" id="detailPanel"></div>
+  </main>
+
+  <script defer src="/static/win-drivers.js?v=16"></script>
   <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>

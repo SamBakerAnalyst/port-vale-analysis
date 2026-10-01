@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
+import threading
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -21,6 +23,8 @@ from app.club_strategy import (
 )
 from app.paths import STANDALONE_DIR, WIN_DRIVERS_CACHE_DIR
 from app.scouting import SCOUTING_DIR
+
+logger = logging.getLogger(__name__)
 
 COMPETITION = "League Two"
 TOP_N = 15
@@ -954,6 +958,446 @@ def build_table(iteration_id: int, *, force_refresh: bool = False) -> dict[str, 
     return payload
 
 
+# Impect player-kpis report these as the team concession while the player was on the pitch.
+ON_PITCH_KEYS = frozenset({"xg_against", "defenders_bypassed_against"})
+BREAKDOWN_CACHE_VERSION = 2
+MATCH_RAW_CACHE_VERSION = 1
+
+POSITION_SHORT = {
+    "GOALKEEPER": "GK",
+    "CENTRAL_DEFENDER": "CB",
+    "LEFT_WINGBACK_DEFENDER": "LB",
+    "RIGHT_WINGBACK_DEFENDER": "RB",
+    "DEFENSE_MIDFIELD": "DM",
+    "CENTRAL_MIDFIELD": "CM",
+    "ATTACKING_MIDFIELD": "AM",
+    "LEFT_WINGER": "LW",
+    "RIGHT_WINGER": "RW",
+    "CENTER_FORWARD": "ST",
+    "SECOND_STRIKER": "SS",
+}
+
+_breakdown_cache: dict[int, tuple[float, dict[str, Any]]] = {}
+_breakdown_locks: dict[int, threading.Lock] = {}
+_breakdown_locks_guard = threading.Lock()
+_breakdown_retrying: set[int] = set()
+BREAKDOWN_RETRY_SECONDS = 10 * 60
+
+
+def player_mode(key: str) -> str:
+    if key == "xg_diff":
+        return "xgd"
+    if key in ON_PITCH_KEYS:
+        return "on_pitch"
+    spec = _candidate_by_key(key)
+    if spec.get("derived") == "rate":
+        return "rate"
+    return "own"
+
+
+def _rate_ids(spec: Candidate, name_to_id: dict[str, int]) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    num_ids = tuple(spec.get("num_ids") or ())
+    den_ids = tuple(spec.get("den_ids") or ())
+    if spec.get("num_names"):
+        num_ids = tuple(name_to_id[name] for name in spec["num_names"] if name in name_to_id)
+    if spec.get("den_names"):
+        den_ids = tuple(name_to_id[name] for name in spec["den_names"] if name in name_to_id)
+    return num_ids, den_ids
+
+
+def _match_raw_path(match_id: int) -> Path:
+    folder = WIN_DRIVERS_CACHE_DIR / "matches"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder / f"{match_id}-v{MATCH_RAW_CACHE_VERSION}.json"
+
+
+def _int_keyed(stats: dict[Any, Any]) -> dict[int, float]:
+    return {int(k): float(v) for k, v in (stats or {}).items() if v is not None}
+
+
+def _fetch_match_raw(match_id: int, *, force_refresh: bool = False) -> dict[str, Any]:
+    """Squad + player KPIs for one finished match. Played matches never change, so cache forever."""
+    path = _match_raw_path(match_id)
+    if not force_refresh:
+        disk = _read_json(path)
+        if disk is not None:
+            return {
+                "squads": {int(k): _int_keyed(v) for k, v in (disk.get("squads") or {}).items()},
+                "players": [
+                    {**row, "kpis": _int_keyed(row.get("kpis") or {})}
+                    for row in disk.get("players") or []
+                ],
+            }
+
+    from app.post_match.impect_client import impect_get, v5_path
+    from app.post_match.report import (
+        _combine_stint_kpi_values,
+        _flatten_player_kpis,
+        _flatten_squad_kpis as _flatten_match_squad_kpis,
+    )
+
+    squads = _flatten_match_squad_kpis(impect_get(v5_path(f"/matches/{match_id}/squad-kpis"))["data"])
+    stints = _flatten_player_kpis(impect_get(v5_path(f"/matches/{match_id}/player-kpis"))["data"], {})
+
+    grouped: dict[int, dict[str, Any]] = {}
+    for row in stints:
+        player_id = int(row.get("playerId") or 0)
+        if player_id <= 0:
+            continue
+        bucket = grouped.setdefault(
+            player_id,
+            {
+                "player_id": player_id,
+                "squad_id": int(row.get("squadId") or 0),
+                "position": row.get("position"),
+                "shirt": row.get("shirtNumber"),
+                "minutes": 0.0,
+                "_best": -1.0,
+                "_kpis": {},
+            },
+        )
+        minutes = float(row.get("minutes") or 0.0)
+        bucket["minutes"] += minutes
+        if minutes > bucket["_best"]:
+            bucket["_best"] = minutes
+            bucket["position"] = row.get("position") or bucket["position"]
+        for kpi_id, value in (row.get("kpis") or {}).items():
+            bucket["_kpis"].setdefault(int(kpi_id), []).append(float(value))
+
+    players: list[dict[str, Any]] = []
+    for bucket in grouped.values():
+        kpis = {kid: _combine_stint_kpi_values(values) for kid, values in bucket.pop("_kpis").items()}
+        bucket.pop("_best", None)
+        bucket["minutes"] = round(bucket["minutes"], 1)
+        bucket["kpis"] = kpis
+        players.append(bucket)
+
+    body = {"squads": squads, "players": players}
+    if not squads:
+        return body
+    _write_json(
+        path,
+        {
+            "squads": {str(k): {str(kid): v for kid, v in stats.items()} for k, stats in squads.items()},
+            "players": [
+                {**row, "kpis": {str(kid): v for kid, v in row["kpis"].items()}} for row in players
+            ],
+        },
+    )
+    return body
+
+
+def _breakdown_disk_path(iteration_id: int) -> Path:
+    WIN_DRIVERS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    return WIN_DRIVERS_CACHE_DIR / f"breakdown-{iteration_id}-v{CACHE_VERSION}.{BREAKDOWN_CACHE_VERSION}.json"
+
+
+def _opponent_badge(squad_id: int, name: str, iteration_id: int) -> tuple[str | None, str]:
+    from app.post_match.squad_badges import resolve_badge_url, squad_initials
+
+    url: str | None = None
+    try:
+        url = resolve_badge_url(squad_id, iteration_id)
+    except Exception:
+        url = None
+    if not url:
+        try:
+            from app.handout_badges import fotmob_crest_url_for_club
+
+            url = fotmob_crest_url_for_club(name)
+        except Exception:
+            url = None
+    return url, squad_initials(name)
+
+
+def _round_or_none(value: float | None, digits: int) -> float | None:
+    if value is None:
+        return None
+    return round(float(value), digits)
+
+
+def _cached_breakdown(iteration_id: int) -> tuple[float, dict[str, Any]] | None:
+    cached = _breakdown_cache.get(iteration_id)
+    if cached:
+        return cached
+    disk = _read_json(_breakdown_disk_path(iteration_id))
+    if not disk:
+        return None
+    entry = (
+        float(disk.get("cached_at_epoch") or 0.0),
+        {key: value for key, value in disk.items() if key != "cached_at_epoch"},
+    )
+    _breakdown_cache[iteration_id] = entry
+    return entry
+
+
+def _breakdown_lock(iteration_id: int) -> threading.Lock:
+    with _breakdown_locks_guard:
+        return _breakdown_locks.setdefault(iteration_id, threading.Lock())
+
+
+def _retry_incomplete_breakdown(iteration_id: int, cached_at: float) -> None:
+    """Fill games Impect refused (rate limit) in the background; callers keep the saved copy."""
+    if time.time() - cached_at < BREAKDOWN_RETRY_SECONDS:
+        return
+    with _breakdown_locks_guard:
+        if iteration_id in _breakdown_retrying:
+            return
+        _breakdown_retrying.add(iteration_id)
+
+    def run() -> None:
+        try:
+            build_breakdown(iteration_id, force_refresh=True)
+        except Exception:
+            logger.exception("What Wins Games breakdown retry failed for iteration %s", iteration_id)
+        finally:
+            with _breakdown_locks_guard:
+                _breakdown_retrying.discard(iteration_id)
+
+    threading.Thread(target=run, daemon=True, name=f"win-drivers-breakdown-{iteration_id}").start()
+
+
+def build_breakdown(iteration_id: int, *, force_refresh: bool = False) -> dict[str, Any]:
+    """Port Vale match-by-match and player-by-player numbers for every one of the 15 stats."""
+    if not force_refresh:
+        entry = _cached_breakdown(iteration_id)
+        if entry:
+            if entry[1].get("incomplete"):
+                _retry_incomplete_breakdown(iteration_id, entry[0])
+            return entry[1]
+
+    with _breakdown_lock(iteration_id):
+        if not force_refresh:
+            entry = _cached_breakdown(iteration_id)
+            if entry:
+                return entry[1]
+        try:
+            return _build_breakdown_now(iteration_id)
+        except HTTPException:
+            entry = _cached_breakdown(iteration_id)
+            if entry:
+                return entry[1]
+            raise
+
+
+def _build_breakdown_now(iteration_id: int) -> dict[str, Any]:
+    now = time.time()
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app.club_strategy import _league_matches, _squads_map
+
+    table = build_table(iteration_id, force_refresh=False)
+    stats = list(table.get("stats") or [])
+    focus_row = next((row for row in table.get("rows") or [] if row.get("focus")), None)
+    base: dict[str, Any] = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "iteration_id": iteration_id,
+        "season_label": table.get("season_label"),
+        "club": (focus_row or {}).get("club") or "Port Vale",
+        "stats": [],
+        "matches": [],
+        "players": [],
+    }
+    if not focus_row:
+        base["message"] = "Port Vale were not in League Two this season."
+        return base
+
+    squad_id = int(focus_row["squad_id"])
+    name_to_id = _kpi_name_lookup()
+    squads = _squads_map(iteration_id)
+    vale_matches = [
+        match
+        for match in _league_matches(iteration_id, COMPETITION)
+        if squad_id in (int(match.get("homeSquadId") or 0), int(match.get("awaySquadId") or 0))
+    ]
+
+    raw_by_match: dict[int, dict[str, Any]] = {}
+    match_ids = [int(match["id"]) for match in vale_matches if match.get("id") is not None]
+    failed: list[int] = []
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = {match_id: pool.submit(_fetch_match_raw, match_id) for match_id in match_ids}
+        for match_id, future in futures.items():
+            try:
+                raw_by_match[match_id] = future.result()
+            except Exception:
+                failed.append(match_id)
+    for match_id in failed:
+        try:
+            raw_by_match[match_id] = _fetch_match_raw(match_id)
+        except Exception:
+            raw_by_match[match_id] = {"squads": {}, "players": []}
+
+    keys = [item["key"] for item in stats]
+    player_keys = list(dict.fromkeys([*keys, "xg_for", "xg_against"]))
+    specs = {key: _candidate_by_key(key) for key in player_keys}
+    rate_ids = {key: _rate_ids(spec, name_to_id) for key, spec in specs.items() if spec.get("derived") == "rate"}
+
+    try:
+        from app.post_match.report import _player_directory
+
+        names = _player_directory(iteration_id)
+    except Exception:
+        names = {}
+
+    matches_out: list[dict[str, Any]] = []
+    players: dict[int, dict[str, Any]] = {}
+    for match in vale_matches:
+        match_id = int(match["id"])
+        home_id = int(match.get("homeSquadId") or 0)
+        away_id = int(match.get("awaySquadId") or 0)
+        is_home = squad_id == home_id
+        opp_id = away_id if is_home else home_id
+        goals = match.get("goals") or {}
+        home_goals = int((goals.get("home") or {}).get("fullTime") or 0)
+        away_goals = int((goals.get("away") or {}).get("fullTime") or 0)
+        scored = home_goals if is_home else away_goals
+        conceded = away_goals if is_home else home_goals
+        raw = raw_by_match.get(match_id) or {"squads": {}, "players": []}
+        vale_stats = raw["squads"].get(squad_id) or {}
+        opp_stats = raw["squads"].get(opp_id) or {}
+        values: dict[str, float | None] = {}
+        opp_values: dict[str, float | None] = {}
+        for item in stats:
+            spec = specs[item["key"]]
+            digits = int(spec.get("digits") or 2) + 1
+            values[item["key"]] = _round_or_none(metric_value(vale_stats, spec, name_to_id=name_to_id), digits)
+            opp_values[item["key"]] = _round_or_none(metric_value(opp_stats, spec, name_to_id=name_to_id), digits)
+        opp_name = squads.get(opp_id) or f"Squad {opp_id}"
+        badge_url, initials = _opponent_badge(opp_id, opp_name, iteration_id)
+        matches_out.append(
+            {
+                "match_id": match_id,
+                "date": str(match.get("scheduledDate") or "")[:10],
+                "venue": "H" if is_home else "A",
+                "opponent": opp_name,
+                "opponent_id": opp_id,
+                "badge_url": badge_url,
+                "initials": initials,
+                "scored": scored,
+                "conceded": conceded,
+                "result": "W" if scored > conceded else ("L" if scored < conceded else "D"),
+                "has_data": bool(vale_stats),
+                "values": values,
+                "opp_values": opp_values,
+            }
+        )
+
+        for row in raw["players"]:
+            if int(row.get("squad_id") or 0) != squad_id:
+                continue
+            minutes = float(row.get("minutes") or 0.0)
+            if minutes <= 0:
+                continue
+            player_id = int(row["player_id"])
+            acc = players.setdefault(
+                player_id,
+                {
+                    "player_id": player_id,
+                    "name": names.get(player_id) or f"Player {player_id}",
+                    "position": row.get("position"),
+                    "_pos_minutes": {},
+                    "minutes": 0.0,
+                    "apps": 0,
+                    "totals": {key: None for key in player_keys},
+                    "counts": {key: [0.0, 0.0] for key in rate_ids},
+                    "by_match": {},
+                },
+            )
+            acc["minutes"] += minutes
+            acc["apps"] += 1
+            pos = str(row.get("position") or "")
+            if pos:
+                acc["_pos_minutes"][pos] = acc["_pos_minutes"].get(pos, 0.0) + minutes
+            kpis = row.get("kpis") or {}
+            cell: dict[str, Any] = {}
+            for key in player_keys:
+                spec = specs[key]
+                if key in rate_ids:
+                    num_ids, den_ids = rate_ids[key]
+                    won = _sum_present(kpis, num_ids) or 0.0
+                    total = _sum_present(kpis, den_ids) or 0.0
+                    acc["counts"][key][0] += won
+                    acc["counts"][key][1] += total
+                    cell[key] = [round(won, 1), round(total, 1)] if total > 0 else None
+                    continue
+                if key == "xg_diff":
+                    continue
+                value = metric_value(kpis, spec, name_to_id=name_to_id)
+                if value is None:
+                    continue
+                acc["totals"][key] = float(acc["totals"][key] or 0.0) + float(value)
+                cell[key] = round(float(value), int(spec.get("digits") or 2) + 1)
+            acc["by_match"][str(match_id)] = {"minutes": round(minutes, 1), "values": cell}
+
+    players_out: list[dict[str, Any]] = []
+    for acc in players.values():
+        minutes = float(acc["minutes"])
+        pos_minutes = acc.pop("_pos_minutes")
+        if pos_minutes:
+            acc["position"] = max(pos_minutes.items(), key=lambda item: item[1])[0]
+        acc["position_short"] = POSITION_SHORT.get(str(acc.get("position") or ""), "—")
+        acc["minutes"] = round(minutes, 1)
+        totals: dict[str, float | None] = {}
+        per90: dict[str, float | None] = {}
+        for key in player_keys:
+            spec = specs[key]
+            digits = int(spec.get("digits") or 2) + 1
+            if key in rate_ids:
+                won, total = acc["counts"][key]
+                totals[key] = round(100.0 * won / total, 1) if total > 0 else None
+                per90[key] = None
+                continue
+            total_value = acc["totals"].get(key)
+            totals[key] = _round_or_none(total_value, digits)
+            per90[key] = round(float(total_value) * 90.0 / minutes, digits) if total_value is not None and minutes >= 1 else None
+        acc["totals"] = totals
+        acc["per90"] = per90
+        acc["counts"] = {key: [round(v[0], 1), round(v[1], 1)] for key, v in acc["counts"].items()}
+        players_out.append(acc)
+    players_out.sort(key=lambda item: (-float(item["minutes"]), str(item["name"])))
+
+    cards = {card["key"]: card for card in (table.get("focus") or {}).get("cards") or []}
+    stats_out: list[dict[str, Any]] = []
+    for item in stats:
+        key = item["key"]
+        card = cards.get(key) or {}
+        stats_out.append(
+            {
+                "key": key,
+                "rank": item.get("rank"),
+                "label": item.get("label"),
+                "short": item.get("short"),
+                "why": item.get("why") or WHY_BY_KEY.get(key, ""),
+                "hint": item.get("hint") or "",
+                "strength": item.get("strength"),
+                "r": item.get("r"),
+                "fmt": item.get("fmt"),
+                "digits": item.get("digits"),
+                "unit": item.get("unit"),
+                "higher_better": item.get("higher_better", True),
+                "player_mode": player_mode(key),
+                "season_value": card.get("value"),
+                "league_rank": card.get("rank"),
+                "of": card.get("of"),
+                "league_avg": card.get("league_avg"),
+                "top7_avg": card.get("top7_avg"),
+            }
+        )
+
+    payload = {
+        **base,
+        "squad_id": squad_id,
+        "player_keys": player_keys,
+        "stats": stats_out,
+        "matches": matches_out,
+        "players": players_out,
+    }
+    payload["incomplete"] = any(not row["has_data"] for row in matches_out)
+    _write_json(_breakdown_disk_path(iteration_id), {"cached_at_epoch": now, **payload})
+    _breakdown_cache[iteration_id] = (now, payload)
+    return payload
+
+
 def _meta_disk_path() -> Path:
     WIN_DRIVERS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     return WIN_DRIVERS_CACHE_DIR / "meta.json"
@@ -1007,3 +1451,7 @@ def register_win_drivers_routes(app: FastAPI) -> None:
         # Click paths always serve the 5am snapshot. Rebuild via hub-snapshots.
         _ = refresh
         return build_table(iteration_id, force_refresh=False)
+
+    @app.get("/api/win-drivers/breakdown")
+    def win_drivers_breakdown_route(iteration_id: int = Query(..., ge=1)) -> dict[str, Any]:
+        return build_breakdown(iteration_id, force_refresh=False)

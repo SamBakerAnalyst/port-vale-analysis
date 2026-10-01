@@ -1,3 +1,4 @@
+from app import win_drivers
 from app.apps_manifest import APPS, LIVE_ESSENTIAL_IDS
 from app.win_drivers import (
     CANDIDATES,
@@ -5,9 +6,65 @@ from app.win_drivers import (
     _mean_stat,
     metric_value,
     pearson,
+    player_mode,
     select_top_stats,
     spearman,
 )
+
+
+def test_player_mode_labels_on_pitch_and_rate_stats():
+    assert player_mode("xg_diff") == "xgd"
+    assert player_mode("xg_against") == "on_pitch"
+    assert player_mode("defenders_bypassed_against") == "on_pitch"
+    assert player_mode("aerial_pct") == "rate"
+    assert player_mode("duel_pct") == "rate"
+    assert player_mode("xg_for") == "own"
+    assert player_mode("shots") == "own"
+
+
+def test_breakdown_route_registered():
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    win_drivers.register_win_drivers_routes(app)
+    paths = {route.path for route in app.routes}
+    assert "/api/win-drivers/breakdown" in paths
+
+
+def test_saved_breakdown_is_served_without_rebuilding(tmp_path, monkeypatch):
+    monkeypatch.setattr(win_drivers, "WIN_DRIVERS_CACHE_DIR", tmp_path)
+    monkeypatch.setattr(win_drivers, "_breakdown_cache", {})
+    calls = []
+
+    def fake_build(iteration_id):
+        calls.append(iteration_id)
+        payload = {"iteration_id": iteration_id, "matches": [], "incomplete": True}
+        win_drivers._write_json(
+            win_drivers._breakdown_disk_path(iteration_id),
+            {"cached_at_epoch": win_drivers.time.time(), **payload},
+        )
+        return payload
+
+    monkeypatch.setattr(win_drivers, "_build_breakdown_now", fake_build)
+    first = win_drivers.build_breakdown(99)
+    second = win_drivers.build_breakdown(99)
+    assert first["incomplete"] is True
+    assert second["iteration_id"] == 99
+    assert calls == [99]
+
+
+def test_empty_match_kpis_are_not_cached(tmp_path, monkeypatch):
+    monkeypatch.setattr(win_drivers, "WIN_DRIVERS_CACHE_DIR", tmp_path)
+
+    import app.post_match.impect_client as client
+    import app.post_match.report as report
+
+    monkeypatch.setattr(client, "impect_get", lambda path: {"data": []})
+    monkeypatch.setattr(report, "_flatten_squad_kpis", lambda raw: {})
+    monkeypatch.setattr(report, "_flatten_player_kpis", lambda raw, names: [])
+    body = win_drivers._fetch_match_raw(123)
+    assert body == {"squads": {}, "players": []}
+    assert not list((tmp_path / "matches").glob("*.json"))
 
 
 def test_spearman_perfect_and_inverse():
