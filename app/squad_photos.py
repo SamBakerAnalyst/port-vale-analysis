@@ -316,6 +316,22 @@ def _position_group_for_club_player(section: str, name: str) -> str:
     return CLUB_SECTION_TO_GROUP.get(section, "MID")
 
 
+def _club_section_before(preceding: str) -> str:
+    """Nearest squad heading above this card.
+
+    A nav link can mention a later section (Attackers) before any player card.
+    The heading that actually groups the card is the one closest above it.
+    """
+    section = "Midfielders"
+    latest = -1
+    for label in CLUB_SECTION_TO_GROUP:
+        index = preceding.rfind(label)
+        if index > latest:
+            latest = index
+            section = label
+    return section
+
+
 def _parse_club_squad_roster_page(
     page_html: str,
     *,
@@ -332,10 +348,7 @@ def _parse_club_squad_roster_page(
     for row in rows[1:]:
         row_start = page_html.find(row)
         preceding = page_html[:row_start] if row_start >= 0 else page_html
-        section = "Midfielders"
-        for label in CLUB_SECTION_TO_GROUP:
-            if label in preceding:
-                section = label
+        section = _club_section_before(preceding)
 
         first_name = _playercard_name_part(row, "first")
         last_name = _playercard_name_part(row, "last")

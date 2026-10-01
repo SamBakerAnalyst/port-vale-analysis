@@ -723,7 +723,8 @@ function renderMatrix() {
     .flatMap((group) => {
       const groupRow = `
         <tr class="av-group-row">
-          <td class="av-sticky-col" colspan="${sessions.length + 1}">${group.label}</td>
+          <td class="av-group-label">${escapeHtml(group.label)}</td>
+          <td colspan="${sessions.length}"></td>
         </tr>
       `;
       const playerRows = group.players.map((player) => {
@@ -784,6 +785,11 @@ function renderMatrix() {
     </table>
     ${renderInjuredAwayNote()}
   `;
+  const head = els.matrixRoot.querySelector("thead");
+  const headHeight = head ? Math.round(head.getBoundingClientRect().height) : 0;
+  els.matrixRoot.querySelectorAll(".av-group-row td").forEach((cell) => {
+    cell.style.top = `${headHeight}px`;
+  });
 }
 
 function cycleStatus(current) {
