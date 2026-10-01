@@ -141,6 +141,13 @@ a:hover { text-decoration: underline; }
   color: var(--muted);
 }
 
+.lw-filter__hint {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: #8b97a8;
+}
+
 .lw-filter--position {
   margin-top: 0.55rem;
 }

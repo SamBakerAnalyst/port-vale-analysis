@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/loans-watch.css?v=7" />
+  <link rel="stylesheet" href="/static/loans-watch.css?v=8" />
 </head>
 <body>
   <div class="lw">
@@ -28,18 +28,18 @@
         <div class="lw-chips" id="lwLeagues" role="group" aria-label="League filter"></div>
       </div>
       <div class="lw-filter lw-filter--position">
-        <span class="lw-filter__label">Position</span>
-        <div class="lw-chips" id="lwPositions" role="group" aria-label="Position filter">
-          <button type="button" class="lw-chip is-active" data-position="all">All</button>
-          <button type="button" class="lw-chip" data-position="gk">GK</button>
-          <button type="button" class="lw-chip" data-position="cb">CB</button>
-          <button type="button" class="lw-chip" data-position="fb">FB</button>
-          <button type="button" class="lw-chip" data-position="dm">DM</button>
-          <button type="button" class="lw-chip" data-position="cm">CM</button>
-          <button type="button" class="lw-chip" data-position="am">AM</button>
-          <button type="button" class="lw-chip" data-position="w">W</button>
-          <button type="button" class="lw-chip" data-position="st">ST</button>
-          <button type="button" class="lw-chip" data-position="none">No pos</button>
+        <span class="lw-filter__label">Position <span class="lw-filter__hint">select more than one</span></span>
+        <div class="lw-chips" id="lwPositions" role="group" aria-label="Position filter. Select more than one.">
+          <button type="button" class="lw-chip is-active" data-position="all" aria-pressed="true">All</button>
+          <button type="button" class="lw-chip" data-position="gk" aria-pressed="false">GK</button>
+          <button type="button" class="lw-chip" data-position="cb" aria-pressed="false">CB</button>
+          <button type="button" class="lw-chip" data-position="fb" aria-pressed="false">FB</button>
+          <button type="button" class="lw-chip" data-position="dm" aria-pressed="false">DM</button>
+          <button type="button" class="lw-chip" data-position="cm" aria-pressed="false">CM</button>
+          <button type="button" class="lw-chip" data-position="am" aria-pressed="false">AM</button>
+          <button type="button" class="lw-chip" data-position="w" aria-pressed="false">W</button>
+          <button type="button" class="lw-chip" data-position="st" aria-pressed="false">ST</button>
+          <button type="button" class="lw-chip" data-position="none" aria-pressed="false">No pos</button>
         </div>
       </div>
       <div class="lw-filter-row">
@@ -104,7 +104,7 @@
     </section>
   </div>
 
-  <script defer src="/static/loans-watch.js?v=7"></script>
+  <script defer src="/static/loans-watch.js?v=8"></script>
   <script defer src="/static/hub-feedback.js"></script>
 </body>
 </html>

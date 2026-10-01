@@ -19,7 +19,7 @@
   const state = {
     payload: null,
     league: "league-two",
-    position: "all",
+    positions: [],
     view: "club",
     usage: "all",
     age: "all",
@@ -97,13 +97,17 @@
     return `${score}<span class="lw-score__mins"> (${formatMinutes(row.profile_minutes)})</span>`;
   }
 
+  function matchesPosition(row) {
+    if (!state.positions.length) return true;
+    return state.positions.some((key) => {
+      if (key === "none") return !row.position_group;
+      return row.position_group === key;
+    });
+  }
+
   function matchesFilters(row) {
     if (state.league !== "all" && row.league_id !== state.league) return false;
-    if (state.position === "none") {
-      if (row.position_group) return false;
-    } else if (state.position !== "all" && row.position_group !== state.position) {
-      return false;
-    }
+    if (!matchesPosition(row)) return false;
     if (state.usage !== "all" && row.usage !== state.usage) return false;
     if (state.age === "u21" && !row.u21) return false;
     if (state.age === "u23" && !row.u23) return false;
@@ -373,6 +377,29 @@
     });
   }
 
+  function syncPositionChips() {
+    const selected = new Set(state.positions);
+    const showAll = selected.size === 0;
+    els.positions?.querySelectorAll("[data-position]").forEach((btn) => {
+      const key = btn.dataset.position;
+      const on = key === "all" ? showAll : selected.has(key);
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  }
+
+  function togglePosition(key) {
+    if (!key || key === "all") {
+      state.positions = [];
+    } else if (state.positions.includes(key)) {
+      state.positions = state.positions.filter((item) => item !== key);
+    } else {
+      state.positions = state.positions.concat(key);
+    }
+    syncPositionChips();
+    render();
+  }
+
   function bindChips(root, key, attr) {
     root?.querySelectorAll(`[data-${attr}]`).forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -384,7 +411,10 @@
   }
 
   async function boot() {
-    bindChips(els.positions, "position", "position");
+    els.positions?.querySelectorAll("[data-position]").forEach((btn) => {
+      btn.addEventListener("click", () => togglePosition(btn.dataset.position));
+    });
+    syncPositionChips();
     bindChips(els.view, "view", "view");
     bindChips(els.usage, "usage", "usage");
     bindChips(els.age, "age", "age");

@@ -4,18 +4,18 @@
  */
 window.IMPECT_APP_GROUPS = [
   {
-    "id": "analysis",
-    "title": "Analysis",
-    "subtitle": "Pre-match prep and post-match review",
-    "icon": "📊",
-    "accent": "#34d399"
-  },
-  {
     "id": "recruitment",
     "title": "Recruitment",
     "subtitle": "Search, compare, and plan the squad",
     "icon": "🔍",
     "accent": "#3d8bfd"
+  },
+  {
+    "id": "strategy",
+    "title": "Strategy",
+    "subtitle": "Squad reviews, benchmarks, and league context",
+    "icon": "📈",
+    "accent": "#f5c518"
   },
   {
     "id": "scouts",
@@ -25,11 +25,32 @@ window.IMPECT_APP_GROUPS = [
     "accent": "#f97316"
   },
   {
-    "id": "strategy",
-    "title": "Strategy",
-    "subtitle": "Squad reviews, benchmarks, and league context",
-    "icon": "📈",
-    "accent": "#f5c518"
+    "id": "analysis",
+    "title": "Analysis",
+    "subtitle": "xG chance analysis",
+    "icon": "🎯",
+    "accent": "#38bdf8"
+  },
+  {
+    "id": "reports",
+    "title": "Reports",
+    "subtitle": "Pre-match, post-match, set pieces, and blocks",
+    "icon": "📋",
+    "accent": "#fbbf24"
+  },
+  {
+    "id": "admin",
+    "title": "Admin",
+    "subtitle": "Schedule, availability, bonuses, and suspensions",
+    "icon": "⚙️",
+    "accent": "#94a3b8"
+  },
+  {
+    "id": "misc",
+    "title": "Misc",
+    "subtitle": "Player cards and the match-day clock",
+    "icon": "🗂️",
+    "accent": "#a8b3c4"
   },
   {
     "id": "presentations",
@@ -43,7 +64,7 @@ window.IMPECT_APP_GROUPS = [
 window.IMPECT_APPS = [
   {
     "id": "pre-match",
-    "group": "analysis",
+    "group": "reports",
     "title": "Pre-Match Report",
     "description": "Opponent prep — full slide deck plus editable Two pager handout.",
     "href": "/pre-match",
@@ -56,7 +77,7 @@ window.IMPECT_APPS = [
   },
   {
     "id": "set-piece-pre-match",
-    "group": "analysis",
+    "group": "reports",
     "title": "Set Piece Pre-Match",
     "description": "Dedicated set-play prep — squad heights, first-contact maps, corner/FK KPIs, and aerial threats.",
     "href": "/set-piece-pre-match",
@@ -83,7 +104,7 @@ window.IMPECT_APPS = [
   },
   {
     "id": "player-cards",
-    "group": "analysis",
+    "group": "misc",
     "title": "Player Cards",
     "description": "Blank opponent squad cards for performance analysis — club site headshots, Impect height and foot, 26/27 fixtures.",
     "href": "/player-cards",
@@ -97,7 +118,7 @@ window.IMPECT_APPS = [
   },
   {
     "id": "post-match",
-    "group": "analysis",
+    "group": "reports",
     "title": "Post-Match Report",
     "description": "Full post-match slide deck — shots, progression, crosses, duels, set plays, xG race and PDF export.",
     "href": "/post-match",
@@ -109,7 +130,7 @@ window.IMPECT_APPS = [
   },
   {
     "id": "match-day-countdown",
-    "group": "analysis",
+    "group": "misc",
     "title": "Match Day Countdown",
     "description": "Dead-simple dressing-room clock — next opponent badges, countdown to kick-off, and the next match-day timing (analysis, warm-up, etc.).",
     "href": "/match-day-countdown",
@@ -225,7 +246,7 @@ window.IMPECT_APPS = [
   },
   {
     "id": "blocks-analysis",
-    "group": "analysis",
+    "group": "reports",
     "title": "Blocks Analysis",
     "description": "Nine blocks of five league games — result colours, editable Silver targets, live block KPIs, and a 2-page A4 match report PDF.",
     "href": "/blocks-analysis",

@@ -85,8 +85,10 @@ body::before {
 .rail__group--recruitment,
 .rail__group--scouts,
 .rail__group--strategy,
+.rail__group--reports,
 .rail__group--presentations,
-.rail__group--admin {
+.rail__group--admin,
+.rail__group--misc {
   --group-accent: var(--text-muted);
 }
 

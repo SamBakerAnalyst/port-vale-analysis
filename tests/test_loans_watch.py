@@ -50,6 +50,10 @@ def test_page_lists_age_starts_matches_minutes_and_score():
     assert 'id="lwPositions"' in html
     assert 'data-position="st"' in html
     assert "row.position_group" in js
+    assert "togglePosition" in js
+    assert "state.positions" in js
+    assert 'aria-pressed="false"' in html
+    assert "select more than one" in html
     assert 'id="lwSortDir"' in html
     assert 'data-dir="asc"' in html
     assert 'data-sort="from"' in html

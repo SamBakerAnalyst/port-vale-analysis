@@ -21,6 +21,29 @@ def _titles_for_role(role: str) -> set[str]:
     return {app["title"] for app in APPS if role in tuple(app.get("roles") or ())}
 
 
+def test_sidebar_order_splits_reports_misc_and_keeps_xg_in_analysis():
+    from app.apps_manifest import APP_GROUPS
+
+    assert [group["id"] for group in APP_GROUPS] == [
+        "recruitment",
+        "strategy",
+        "scouts",
+        "analysis",
+        "reports",
+        "admin",
+        "misc",
+        "presentations",
+    ]
+    assert ROLE_GROUPS["analysis"] == ("analysis", "reports", "misc")
+    assert _app("xg-chance-analysis")["group"] == "analysis"
+    assert _app("pre-match")["group"] == "reports"
+    assert _app("set-piece-pre-match")["group"] == "reports"
+    assert _app("post-match")["group"] == "reports"
+    assert _app("blocks-analysis")["group"] == "reports"
+    assert _app("player-cards")["group"] == "misc"
+    assert _app("match-day-countdown")["group"] == "misc"
+
+
 def test_scouts_role_is_registered_with_recruitment_and_scouts_groups():
     assert ROLE_GROUPS["scouts"] == ("recruitment", "scouts")
     assert ROLE_HOME_TABS["scouts"] == ("home", "recruitment")

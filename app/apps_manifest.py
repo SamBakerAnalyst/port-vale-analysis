@@ -10,25 +10,11 @@ from typing import Any
 
 APP_GROUPS: list[dict[str, Any]] = [
     {
-        "id": "analysis",
-        "title": "Analysis",
-        "subtitle": "Pre-match prep and post-match review",
-        "icon": "📊",
-        "accent": "#34d399",
-    },
-    {
         "id": "recruitment",
         "title": "Recruitment",
         "subtitle": "Search, compare, and plan the squad",
         "icon": "🔍",
         "accent": "#3d8bfd",
-    },
-    {
-        "id": "scouts",
-        "title": "Scouts",
-        "subtitle": "Fixtures, coverage, calendars, travel map, and scout reports",
-        "icon": "🗓️",
-        "accent": "#f97316",
     },
     {
         "id": "strategy",
@@ -38,11 +24,39 @@ APP_GROUPS: list[dict[str, Any]] = [
         "accent": "#f5c518",
     },
     {
+        "id": "scouts",
+        "title": "Scouts",
+        "subtitle": "Fixtures, coverage, calendars, travel map, and scout reports",
+        "icon": "🗓️",
+        "accent": "#f97316",
+    },
+    {
+        "id": "analysis",
+        "title": "Analysis",
+        "subtitle": "Attacking threat and chance quality",
+        "icon": "🎯",
+        "accent": "#38bdf8",
+    },
+    {
+        "id": "reports",
+        "title": "Reports",
+        "subtitle": "Pre-match, post-match, set pieces, and blocks",
+        "icon": "📋",
+        "accent": "#fbbf24",
+    },
+    {
         "id": "admin",
         "title": "Admin",
         "subtitle": "Schedule, availability, bonuses, and suspensions",
         "icon": "⚙️",
         "accent": "#94a3b8",
+    },
+    {
+        "id": "misc",
+        "title": "Misc",
+        "subtitle": "Player cards and the match-day clock",
+        "icon": "🗂️",
+        "accent": "#a8b3c4",
     },
     {
         "id": "presentations",
@@ -58,7 +72,7 @@ APP_GROUPS: list[dict[str, Any]] = [
 APPS: list[dict[str, Any]] = [
     {
         "id": "pre-match",
-        "group": "analysis",
+        "group": "reports",
         "title": "Pre-Match Report",
         "description": (
             "Opponent prep — full slide deck plus editable Two pager handout."
@@ -73,7 +87,7 @@ APPS: list[dict[str, Any]] = [
     },
     {
         "id": "set-piece-pre-match",
-        "group": "analysis",
+        "group": "reports",
         "title": "Set Piece Pre-Match",
         "description": (
             "Dedicated set-play prep — squad heights, first-contact maps, "
@@ -115,7 +129,7 @@ APPS: list[dict[str, Any]] = [
     },
     {
         "id": "player-cards",
-        "group": "analysis",
+        "group": "misc",
         "title": "Player Cards",
         "description": (
             "Blank opponent squad cards for performance analysis — club site "
@@ -131,7 +145,7 @@ APPS: list[dict[str, Any]] = [
     },
     {
         "id": "post-match",
-        "group": "analysis",
+        "group": "reports",
         "title": "Post-Match Report",
         "description": (
             "Full post-match slide deck — shots, progression, crosses, duels, "
@@ -147,7 +161,7 @@ APPS: list[dict[str, Any]] = [
     },
     {
         "id": "match-day-countdown",
-        "group": "analysis",
+        "group": "misc",
         "title": "Match Day Countdown",
         "description": (
             "Dead-simple dressing-room clock — next opponent badges, countdown "
@@ -251,6 +265,22 @@ APPS: list[dict[str, Any]] = [
         "router": "xg_chance_analysis",
     },
     {
+        "id": "attacking-threat",
+        "group": "analysis",
+        "title": "Attacking Threat",
+        "description": (
+            "How Port Vale create attacking threat — the second strongest League Two "
+            "win driver. League rank, actions, phases, zones, and threatening pass maps."
+        ),
+        "href": "/attacking-threat",
+        "icon": "⚡",
+        "accent": "#f5c518",
+        "tags": ["PXT", "Passes", "Phases"],
+        "roles": ("analysis", "admin"),
+        "api_prefixes": ("/attacking-threat", "/api/attacking-threat"),
+        "router": "attacking_threat",
+    },
+    {
         "id": "goal-involvement",
         "group": "analysis",
         "title": "Goal Involvement",
@@ -268,7 +298,7 @@ APPS: list[dict[str, Any]] = [
     },
     {
         "id": "blocks-analysis",
-        "group": "analysis",
+        "group": "reports",
         "title": "Blocks Analysis",
         "description": (
             "Nine blocks of five league games — result colours, editable Silver "
@@ -912,6 +942,7 @@ LIVE_ESSENTIAL_IDS = frozenset(
         "post-match",
         "match-day-countdown",
         "xg-chance-analysis",
+        "attacking-threat",
         "blocks-analysis",
         # Recruitment
         "who-to-scout",

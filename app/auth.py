@@ -101,8 +101,17 @@ def _role_allowed_prefixes(role: str) -> tuple[str, ...]:
 
 
 ROLE_GROUPS = {
-    "admin": ("analysis", "recruitment", "scouts", "strategy", "admin", "presentations"),
-    "analysis": ("analysis",),
+    "admin": (
+        "recruitment",
+        "strategy",
+        "scouts",
+        "analysis",
+        "reports",
+        "admin",
+        "misc",
+        "presentations",
+    ),
+    "analysis": ("analysis", "reports", "misc"),
     # Scouts get the recruitment funnel and their own fixtures/reports, but not
     # Strategy or the Presentations decks.
     "scouts": ("recruitment", "scouts"),
