@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Attacking Threat</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/attacking-threat.css?v=15" />
+</head>
+<body>
+  <div class="at-glow" aria-hidden="true"></div>
+  <div class="at-app">
+    <header class="at-toolbar">
+      <div>
+        <p class="at-toolbar__eyebrow">Analysis · <a href="/">← All apps</a></p>
+        <h1 class="at-toolbar__title">Attacking <span>Threat</span></h1>
+        <p class="at-toolbar__subtitle">How Port Vale create danger — the actions, the chains, the partnerships — and where it ranks in League Two</p>
+      </div>
+      <div class="at-controls">
+        <div class="at-controls__group">
+          <span class="at-controls__label">Season</span>
+          <div id="seasonToggle" class="at-toggle" role="group" aria-label="Season"></div>
+        </div>
+        <div class="at-controls__group">
+          <span class="at-controls__label">Window</span>
+          <div class="at-toggle" role="group" aria-label="Window">
+            <button type="button" class="at-toggle__btn at-toggle__btn--active" data-scope="season">Season</button>
+            <button type="button" class="at-toggle__btn" data-scope="last6">Last 6</button>
+            <button type="button" class="at-toggle__btn" data-scope="match">Match</button>
+          </div>
+        </div>
+        <div class="at-controls__group" id="matchSelectGroup" hidden>
+          <span class="at-controls__label">Match</span>
+          <select id="matchSelect" class="at-select" aria-label="Select match"></select>
+        </div>
+      </div>
+    </header>
+
+    <nav class="at-nav" id="sectionNav" aria-label="Sections">
+      <a href="#overview" class="is-active">Overview</a>
+      <a href="#chains">Threat chains</a>
+      <a href="#links">Player links</a>
+      <a href="#actions">Actions</a>
+      <a href="#map">Pitch</a>
+      <a href="#players">Players</a>
+      <a href="#league">League</a>
+    </nav>
+
+    <section id="overview" class="at-section">
+      <div id="hero" class="at-hero card" aria-live="polite"></div>
+      <div id="leagueStrip" class="at-strip card"></div>
+      <div id="insights" class="at-insights"></div>
+      <div class="at-grid at-grid--2">
+        <article class="card" id="componentPanel"></article>
+        <article class="card" id="phasePanel"></article>
+      </div>
+    </section>
+
+    <section id="chains" class="at-section">
+      <header class="at-section__head">
+        <p class="at-kicker">Possession by possession</p>
+        <h2>Threat chains</h2>
+        <p class="at-section__lede">Every Port Vale possession, broken into the actions that added threat. Which sequences hurt teams, how they start, and the best moves of the window — replayed on the pitch.</p>
+      </header>
+      <div id="chainSummary" class="at-tiles"></div>
+      <div class="at-grid at-grid--chains">
+        <article class="card" id="patternPanel"></article>
+        <article class="card at-explorer" id="explorerPanel"></article>
+      </div>
+      <div class="at-grid at-grid--2">
+        <article class="card" id="originPanel"></article>
+        <article class="card" id="lengthPanel"></article>
+      </div>
+    </section>
+
+    <section id="links" class="at-section">
+      <header class="at-section__head">
+        <p class="at-kicker">Who combines with who</p>
+        <h2>Player links</h2>
+        <p class="at-section__lede">Threat is a team sport. A link is the threat of a pass plus what the receiver does next. The network sits each player at their average spot on the ball.</p>
+      </header>
+      <div class="at-grid at-grid--map">
+        <article class="card" id="networkPanel"></article>
+        <article class="card" id="pairPanel"></article>
+      </div>
+      <div class="at-grid at-grid--links2">
+        <article class="card" id="matrixPanel"></article>
+        <article class="card" id="trioPanel"></article>
+      </div>
+    </section>
+
+    <section id="actions" class="at-section">
+      <article class="card" id="actionPanel"></article>
+    </section>
+
+    <section id="map" class="at-section">
+      <div class="at-grid at-grid--map">
+        <article class="card" id="mapPanel"></article>
+        <article class="card" id="zonePanel"></article>
+      </div>
+    </section>
+
+    <section id="players" class="at-section">
+      <article class="card" id="playerPanel"></article>
+    </section>
+
+    <section id="league" class="at-section">
+      <article class="card" id="tablePanel"></article>
+    </section>
+
+    <footer id="statusBar" class="at-footer">Reading the data lake…</footer>
+  </div>
+  <script defer src="/static/attacking-threat.js?v=15"></script>
+  <script defer src="/static/hub-feedback.js?v=1"></script>
+</body>
+</html>

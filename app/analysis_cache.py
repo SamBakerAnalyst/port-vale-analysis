@@ -182,7 +182,17 @@ def clear_all() -> dict[str, int]:
 # Played pre-match packets stay valid; wiping them on Force refresh left old
 # opposition two-pagers empty. The fixture list must NOT be preserved — that
 # is how a finished game (Exeter 12 Sep 2026) stayed "upcoming" after refresh.
-_PRESERVE_ON_FORCE = frozenset({"pre-match", "pre-match-meta", "sp-pack"})
+_PRESERVE_ON_FORCE = frozenset(
+    {
+        "pre-match",
+        "pre-match-meta",
+        "at-match",
+        "at-events",
+        "at-players",
+        "at-league",
+        "sp-pack",
+    }
+)
 
 _RESULT_SCORE_RE = re.compile(r"^(\d+)\s*[:\-]\s*(\d+)")
 KICKOFF_FINISH_GRACE = timedelta(hours=2)
@@ -588,6 +598,16 @@ def refresh_analysis_data(*, force: bool = True) -> dict[str, Any]:
     except Exception as exc:
         logger.exception("Analysis refresh: xg_chance failed")
         result["steps"]["xg_chance"] = {"ok": False, "error": str(exc)}
+
+    # Attacking threat — written into the analysis lake. The page only reads it.
+    try:
+        from app.attacking_threat import warm_attacking_threat
+
+        threat = warm_attacking_threat()
+        result["steps"]["attacking_threat"] = threat
+    except Exception as exc:
+        logger.exception("Analysis refresh: attacking threat failed")
+        result["steps"]["attacking_threat"] = {"ok": False, "error": str(exc)}
 
     # Set plays — every League Two match packed once; the page only reads the lake.
     try:

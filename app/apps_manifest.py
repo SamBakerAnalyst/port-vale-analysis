@@ -265,6 +265,22 @@ APPS: list[dict[str, Any]] = [
         "router": "xg_chance_analysis",
     },
     {
+        "id": "attacking-threat",
+        "group": "analysis",
+        "title": "Attacking Threat",
+        "description": (
+            "How Port Vale create attacking threat — the second strongest League Two "
+            "win driver. League rank, actions, phases, zones, and threatening pass maps."
+        ),
+        "href": "/attacking-threat",
+        "icon": "⚡",
+        "accent": "#f5c518",
+        "tags": ["PXT", "Passes", "Phases"],
+        "roles": ("analysis", "admin"),
+        "api_prefixes": ("/attacking-threat", "/api/attacking-threat"),
+        "router": "attacking_threat",
+    },
+    {
         "id": "set-plays",
         "group": "analysis",
         "title": "Set Plays",
@@ -942,6 +958,7 @@ LIVE_ESSENTIAL_IDS = frozenset(
         "post-match",
         "match-day-countdown",
         "xg-chance-analysis",
+        "attacking-threat",
         "set-plays",
         "blocks-analysis",
         # Recruitment
