@@ -102,14 +102,35 @@ function ordinal(n) {
   return `${num}${suffix}`;
 }
 
-function heatColor(value, min, max, higherBetter = true) {
+const HEAT_STOPS = [
+  [0, [92, 10, 10]],
+  [0.25, [176, 32, 32]],
+  [0.5, [150, 98, 12]],
+  [0.75, [24, 128, 62]],
+  [1, [8, 60, 30]],
+];
+
+function heatColor(rank, total) {
+  const r = Number(rank);
+  if (!Number.isFinite(r) || !total || total < 2) return "rgba(55, 65, 81, 0.8)";
+  const score = Math.min(1, Math.max(0, (total - r) / (total - 1)));
+  for (let i = 1; i < HEAT_STOPS.length; i += 1) {
+    const [p1, c1] = HEAT_STOPS[i];
+    if (score <= p1) {
+      const [p0, c0] = HEAT_STOPS[i - 1];
+      const f = (score - p0) / (p1 - p0);
+      const mix = c0.map((v, k) => Math.round(v + (c1[k] - v) * f));
+      return `rgb(${mix.join(", ")})`;
+    }
+  }
+  return `rgb(${HEAT_STOPS[HEAT_STOPS.length - 1][1].join(", ")})`;
+}
+
+function rankInColumn(value, range, higherBetter) {
   const n = Number(value);
-  if (Number.isNaN(n) || min === max) return "rgba(55, 65, 81, 0.8)";
-  const t = (n - min) / (max - min);
-  const score = higherBetter ? t : 1 - t;
-  if (score >= 0.66) return "rgba(22, 101, 52, 0.95)";
-  if (score >= 0.33) return "rgba(133, 77, 14, 0.92)";
-  return "rgba(153, 27, 27, 0.95)";
+  if (!Number.isFinite(n) || !range?.values?.length) return null;
+  const better = range.values.filter((v) => (higherBetter ? v > n : v < n)).length;
+  return better + 1;
 }
 
 function columns() {
@@ -365,8 +386,9 @@ function tableCells(row, cols, ranges, { pinned = false } = {}) {
       if (col.heat === false || raw == null) {
         return `<td>${text}${rankHtml}</td>`;
       }
-      const range = ranges[col.key] || { min: 0, max: 0 };
-      const bg = heatColor(raw, range.min, range.max, col.higherBetter !== false);
+      const range = ranges[col.key];
+      const colRank = rank || rankInColumn(raw, range, col.higherBetter !== false);
+      const bg = heatColor(colRank, range?.values?.length || 0);
       return `<td class="heat-cell" style="background:${bg}">${text}${rankHtml}</td>`;
     })
     .join("");
@@ -386,7 +408,7 @@ function renderTable() {
   const ranges = Object.fromEntries(
     heatCols.map((col) => {
       const values = rows.map((row) => Number(row[col.key])).filter((n) => Number.isFinite(n));
-      return [col.key, { min: values.length ? Math.min(...values) : 0, max: values.length ? Math.max(...values) : 0 }];
+      return [col.key, { values }];
     }),
   );
 
