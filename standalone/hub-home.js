@@ -232,7 +232,7 @@
   function renderHomeOverview(pv, averages, seasonLabel, strategySnapshot, matches) {
     setText("homeOverviewSeason", seasonLabel || COMPETITION);
     const pace = strategySnapshot?.pace || {};
-    const upcoming = (matches || []).find((m) => !m.outcome);
+    const upcoming = (matches || []).find(isNextFixture);
     const fotmobLeaguePlayed = (matches || []).filter((m) => {
       const comp = String(m.competition || "").toLowerCase();
       const isL2 = comp.includes("league two") || comp.includes("league 2");
@@ -1066,7 +1066,7 @@
       .join("");
     setHtml("homeForm", `<div class="home-form__row">${pills}</div>`);
 
-    const upcoming = (matches || []).find((m) => !m.outcome);
+    const upcoming = (matches || []).find(isNextFixture);
     if (!upcoming) {
       setHtml("homeNext", `<p class="home-empty">Season complete — no next fixture.</p>`);
       return;
