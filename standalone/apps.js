@@ -304,6 +304,23 @@ window.IMPECT_APPS = [
     ]
   },
   {
+    "id": "pv-archetypes",
+    "group": "recruitment",
+    "title": "Port Vale Archetypes",
+    "description": "Our 3-5-2 / 3-4-3 position book — every role named and explained, player archetypes built from PV profile blends, and the best fits in the pool.",
+    "href": "/pv-archetypes",
+    "icon": "🧬",
+    "accent": "#f5c518",
+    "tags": [
+      "Archetypes",
+      "3-5-2",
+      "3-4-3",
+      "Profiles"
+    ],
+    "comingSoon": true,
+    "note": "Coming soon"
+  },
+  {
     "id": "squad-balance",
     "group": "recruitment",
     "title": "Squad Balance",

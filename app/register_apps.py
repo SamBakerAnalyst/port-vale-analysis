@@ -32,6 +32,7 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
     from app.player_cards import register_player_cards_routes
     from app.player_pipelines import register_player_pipelines_routes
     from app.presentations import register_presentations_routes
+    from app.pv_archetypes import register_pv_archetypes_routes
     from app.post_match.routes import register_post_match_routes
     from app.pre_match import register_pre_match_routes
     from app.schedule import register_schedule_routes
@@ -91,6 +92,7 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
         "availability_tracker": register_availability_tracker_routes,
         "scouting_address": register_scouting_address_routes,
         "who_to_scout": register_who_to_scout_routes,
+        "pv_archetypes": register_pv_archetypes_routes,
         "player_pipelines": register_player_pipelines_routes,
         "presentations": register_presentations_routes,
         "strategy_tracker": register_strategy_tracker_routes,

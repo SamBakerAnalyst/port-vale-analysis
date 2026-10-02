@@ -395,6 +395,26 @@ APPS: list[dict[str, Any]] = [
         "router": "who_to_scout",
     },
     {
+        "id": "pv-archetypes",
+        "group": "recruitment",
+        "title": "Port Vale Archetypes",
+        "description": (
+            "Our 3-5-2 / 3-4-3 position book — every role named and explained, player "
+            "archetypes built from PV profile blends, and the best fits in the pool."
+        ),
+        "href": "/pv-archetypes",
+        "icon": "🧬",
+        "accent": "#f5c518",
+        "tags": ["Archetypes", "3-5-2", "3-4-3", "Profiles"],
+        "roles": ("scouts", "admin"),
+        "api_prefixes": (
+            "/pv-archetypes",
+            "/api/pv-archetypes",
+            "/api/player-pipelines",
+        ),
+        "router": "pv_archetypes",
+    },
+    {
         "id": "squad-balance",
         "group": "recruitment",
         "title": "Squad Balance",

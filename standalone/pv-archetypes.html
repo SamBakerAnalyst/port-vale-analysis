@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Port Vale Archetypes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/pv-archetypes.css?v=2" />
+</head>
+<body>
+  <div class="app">
+    <header class="page-head card">
+      <div class="page-head__row">
+        <div class="page-head__brand">
+          <img class="page-head__badge" src="/standalone/port-vale-badge.png" alt="" onerror="this.remove()" />
+          <div>
+            <p class="page-head__eyebrow">Recruitment · <a href="/">← Home</a></p>
+            <h1 class="page-head__title">Port Vale Archetypes</h1>
+            <p class="page-head__sub">Our 3-5-2 / 3-4-3 position book — every role, every player type, and the best fits in the pool.</p>
+          </div>
+        </div>
+        <div class="page-head__actions">
+          <div class="seg" id="formationSeg" role="group" aria-label="Formation"></div>
+          <div class="seg" id="viewSeg" role="group" aria-label="View">
+            <button type="button" class="seg__btn is-active" data-view="pitch">Pitch</button>
+            <button type="button" class="seg__btn" data-view="board">Archetype board</button>
+          </div>
+          <a class="btn btn--ghost" href="/watch-list">Watch list</a>
+          <button type="button" class="btn btn--ghost" id="editBtn" hidden>Edit position book</button>
+        </div>
+      </div>
+      <p class="page-head__note" id="formationNote"></p>
+    </header>
+
+    <section class="filters card">
+      <div class="filter filter--grow">
+        <span class="filter__label">Leagues</span>
+        <div class="chips" id="leagueChips"></div>
+      </div>
+      <label class="filter filter--num">
+        <span class="filter__label">Min minutes</span>
+        <input type="number" id="minMinutes" min="0" step="45" value="270" />
+      </label>
+      <label class="filter filter--num">
+        <span class="filter__label">Max age</span>
+        <input type="number" id="maxAge" min="15" max="45" placeholder="—" />
+      </label>
+      <label class="filter filter--check">
+        <input type="checkbox" id="hideMoved" checked />
+        <span>Hide players who have moved</span>
+      </label>
+      <label class="filter filter--check">
+        <input type="checkbox" id="footStrict" />
+        <span>Preferred foot only</span>
+      </label>
+      <p class="filters__meta" id="poolMeta">Loading player pool…</p>
+    </section>
+
+    <div id="statusBanner" class="status-banner" hidden></div>
+
+    <main id="pitchView" class="pitch-view">
+      <aside class="pitch-col">
+        <div class="pitch card">
+          <div class="pitch__field" id="pitchField">
+            <svg class="pitch__lines" viewBox="0 0 68 105" preserveAspectRatio="none" aria-hidden="true">
+              <rect x="1" y="1" width="66" height="103" />
+              <line x1="1" y1="52.5" x2="67" y2="52.5" />
+              <circle cx="34" cy="52.5" r="9.15" />
+              <rect x="13.84" y="1" width="40.32" height="16.5" />
+              <rect x="24.84" y="1" width="18.32" height="5.5" />
+              <rect x="13.84" y="87.5" width="40.32" height="16.5" />
+              <rect x="24.84" y="98.5" width="18.32" height="5.5" />
+            </svg>
+            <div class="pitch__attack">Attack ↑</div>
+            <div id="slotLayer" class="slot-layer"></div>
+          </div>
+          <p class="pitch__hint">Click a position. Each disc shows the archetype picked for that slot and the pool's best fit.</p>
+        </div>
+      </aside>
+      <section class="role-col" id="rolePanel">
+        <div class="card empty-card">Loading position book…</div>
+      </section>
+    </main>
+
+    <main id="boardView" class="board-view" hidden></main>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script defer src="/static/pv-archetypes.js?v=2"></script>
+  <script defer src="/static/hub-feedback.js?v=1"></script>
+</body>
+</html>
