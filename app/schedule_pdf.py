@@ -129,16 +129,23 @@ def _cell_html(day: date, payload: dict[str, Any]) -> str:
         classes.append("cell--preseason")
         body = '<div class="session"><div class="label label--sm">PRE-SEASON</div></div>'
 
+    if events:
+        classes.append("cell--has-notes")
     notes = "".join(
-        f'<div class="note">{escape(" · ".join(x for x in (ev.get("time"), ev.get("title")) if x))}</div>'
-        for ev in events
+        '<div class="note">'
+        + '<span class="note-body">'
+        + (f'<span class="note-time">{escape(str(ev.get("time")))}</span>' if ev.get("time") else "")
+        + f'{escape(str(ev.get("title") or "Note"))}</span></div>'
+        for ev in events[:2]
     )
+    if len(events) > 2:
+        notes += f'<div class="note-more">+{len(events) - 2} more</div>'
     r_flag = '<span class="r">R</span>' if entry.get("recruitment_in") else ""
     return f"""
       <div class="{' '.join(classes)}">
         <div class="head"><span class="num">{day.day}</span>{r_flag}</div>
-        {f'<div class="notes">{notes}</div>' if notes else ""}
         {body}
+        {f'<div class="notes">{notes}</div>' if notes else ""}
       </div>"""
 
 
@@ -278,12 +285,24 @@ h1 {
 .cell--away { background: linear-gradient(160deg, #2a4fc4, #1b3592); border-color: #1b3592; }
 .cell--in .num, .cell--in-late .num, .cell--regen .num, .cell--preseason .num, .cell--away .num { color: rgba(255,255,255,0.85); }
 .cell--home .num { color: rgba(30,22,0,0.7); }
-.notes { display: flex; flex-direction: column; gap: 0.6mm; margin-top: 0.4mm; }
+.notes { display: flex; flex-direction: column; gap: 0.6mm; margin-top: 0.8mm; }
+.note-body { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.cell--has-notes .notes { flex-shrink: 0; }
+.cell--has-notes .session, .cell--has-notes .match { flex: 1 0 auto; min-height: auto; justify-content: center; }
+.cell--has-notes .comp { display: none; }
+.cell--has-notes .head { height: 3.6mm; }
 .note {
-  background: #fde2ee; color: #7a0f3f; border-left: 0.8mm solid #e75a96; border-radius: 0.6mm;
-  font-size: 6.2pt; font-weight: 700; padding: 0.5mm 1.2mm; line-height: 1.2;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  padding: 0.6mm 1.3mm; border-radius: 1mm; border-left: 0.8mm solid #e75a96;
+  background: #fff; color: #111827; font-size: 6.4pt; font-weight: 700; line-height: 1.25;
+  box-shadow: 0 0.2mm 0.6mm rgba(0,0,0,0.15);
 }
+.note-time { margin-right: 1mm; color: #be185d; font-weight: 800; }
+.note-more { font-size: 5.8pt; font-weight: 800; opacity: 0.85; }
+.cell--has-notes .label { font-size: 15pt; }
+.cell--has-notes .label--sm { font-size: 11pt; }
+.cell--has-notes .crest { width: 7mm; height: 7mm; }
+.cell--has-notes .crest img { width: 5.2mm; height: 5.2mm; }
+.cell--has-notes .session, .cell--has-notes .match { gap: 0.6mm; }
 .session, .match { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 1mm; }
 .label { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; font-weight: 800; font-size: 19pt; line-height: 1; letter-spacing: 0.05em; color: #fff; }
 .label--sm { font-size: 13pt; }

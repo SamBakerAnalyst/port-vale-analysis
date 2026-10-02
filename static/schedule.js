@@ -294,12 +294,17 @@ function renderCalendar() {
       classes.push("pv-sch__cell--preseason");
     }
 
-    const travelHtml = events
-      .map((event) => {
-        const label = [event.time, event.title].filter(Boolean).join(" · ");
-        return `<div class="pv-sch__travel">${escapeHtml(label || "Event")}</div>`;
-      })
-      .join("");
+    if (events.length) classes.push("pv-sch__cell--has-notes");
+    const shownEvents = events.slice(0, 2);
+    const moreCount = events.length - shownEvents.length;
+    const travelHtml = events.length
+      ? `<div class="pv-sch__notes">${shownEvents
+          .map((event) => {
+            const tip = [event.time, event.title, event.notes].filter(Boolean).join(" · ");
+            return `<div class="pv-sch__note" title="${escapeHtml(tip)}"><span class="pv-sch__note-body">${event.time ? `<span class="pv-sch__note-time">${escapeHtml(event.time)}</span>` : ""}${escapeHtml(event.title || "Note")}</span></div>`;
+          })
+          .join("")}${moreCount > 0 ? `<div class="pv-sch__note-more">+${moreCount} more</div>` : ""}</div>`
+      : "";
 
     const body = match ? renderMatchBody(match) : renderSessionBody(dateKey, type);
 
@@ -312,8 +317,8 @@ function renderCalendar() {
           ${hasR ? '<span class="pv-sch__r" title="Recruitment in">R</span>' : ""}
         </div>
         <div class="pv-sch__cell-body">
-          ${travelHtml}
           ${body}
+          ${travelHtml}
         </div>
       </button>
     `);
@@ -328,6 +333,7 @@ function renderCalendar() {
     btn.addEventListener("click", async (event) => {
       const dateKey = btn.dataset.date;
       if (!dateKey || state.saving) return;
+      const wasSelected = state.selectedDate === dateKey;
       state.selectedDate = dateKey;
       renderCalendar();
       renderPanel();
@@ -335,8 +341,10 @@ function renderCalendar() {
         await toggleRecruitment(dateKey);
       } else if (event.altKey) {
         await togglePreseason(dateKey);
-      } else {
+      } else if (wasSelected) {
         await cycleDay(dateKey);
+      } else {
+        els.statusBar.textContent = `${formatLongDate(dateKey)} selected · click again to change`;
       }
     });
     btn.addEventListener("contextmenu", async (event) => {
