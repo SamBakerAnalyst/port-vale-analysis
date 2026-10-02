@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import logging
 import re
+import threading
 import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -28,6 +30,8 @@ from app.squad_review import (
     _default_port_vale_season,
     _resolve_port_vale_iteration,
 )
+
+logger = logging.getLogger(__name__)
 
 SHOT_XG_KPI_ID = 82
 
@@ -1383,6 +1387,282 @@ def build_xg_chance_pack(season: str | None = None) -> dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------------
+# League table: chance-quality counts for every club in the competition.
+# Per-match summaries live in the lake ("xg-league-match"); the table itself
+# ("xg-league") is rebuilt in the background so a click never waits on Impect.
+# ---------------------------------------------------------------------------
+
+LEAGUE_MATCH_KIND = "xg-league-match"
+LEAGUE_TABLE_KIND = "xg-league"
+LEAGUE_FETCH_WORKERS = 2
+LEAGUE_GAP_RETRY_SECONDS = 10 * 60
+
+_league_build_lock = threading.Lock()
+_league_builds: dict[str, dict[str, Any]] = {}
+
+
+def _empty_league_buckets() -> dict[str, dict[str, float]]:
+    return {
+        bucket["id"]: {"count": 0, "goals": 0, "xg": 0.0, "penCount": 0, "penGoals": 0, "penXg": 0.0}
+        for bucket in CHANCE_BUCKETS
+    }
+
+
+def summarize_match_chances(
+    events: list[dict[str, Any]],
+    xg_by_event: dict[int, float],
+    home_id: int,
+    away_id: int,
+) -> dict[str, Any]:
+    """Shot counts per chance bucket for both clubs in one match."""
+    squads = {str(home_id): _empty_league_buckets(), str(away_id): _empty_league_buckets()}
+    for event in events:
+        if event.get("actionType") != "SHOT":
+            continue
+        squad_key = str(int(event.get("squadId") or 0))
+        if squad_key not in squads:
+            continue
+        xg = round(float(xg_by_event.get(int(event.get("id") or 0), 0.0)), 3)
+        row = squads[squad_key][_classify_chance(xg)["id"]]
+        goal = _shot_outcome(event) == "goal"
+        row["count"] += 1
+        row["xg"] += xg
+        row["goals"] += int(goal)
+        if _is_penalty_event(event):
+            row["penCount"] += 1
+            row["penXg"] += xg
+            row["penGoals"] += int(goal)
+    for buckets in squads.values():
+        for row in buckets.values():
+            row["xg"] = round(row["xg"], 3)
+            row["penXg"] = round(row["penXg"], 3)
+    return {"homeSquadId": int(home_id), "awaySquadId": int(away_id), "squads": squads}
+
+
+def _league_match_summary(match: dict[str, Any], *, allow_fetch: bool) -> dict[str, Any] | None:
+    from app.analysis_cache import click_json, write_json
+
+    mid = int(match["id"])
+    cached = click_json(LEAGUE_MATCH_KIND, str(mid))
+    if cached and isinstance(cached.get("squads"), dict):
+        return cached
+    if not allow_fetch:
+        return None
+    events = _fetch_match_events(mid)
+    if not events:
+        return None
+    xg_by_event = _fetch_shot_xg_by_event(mid) or _fetch_shot_xg_by_event(mid, refresh=True)
+    has_shots = any(event.get("actionType") == "SHOT" for event in events)
+    if has_shots and not xg_by_event:
+        return None
+    summary = summarize_match_chances(
+        events,
+        xg_by_event,
+        int(match.get("homeSquadId") or 0),
+        int(match.get("awaySquadId") or 0),
+    )
+    summary["matchId"] = mid
+    write_json(LEAGUE_MATCH_KIND, str(mid), summary)
+    return summary
+
+
+def aggregate_league_chances(summaries: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Fold match summaries into created / conceded buckets per club."""
+    clubs: dict[str, dict[str, Any]] = {}
+
+    def _club(key: str) -> dict[str, Any]:
+        return clubs.setdefault(
+            key, {"games": 0, "created": _empty_league_buckets(), "conceded": _empty_league_buckets()}
+        )
+
+    for summary in summaries:
+        home = str(summary.get("homeSquadId") or "")
+        away = str(summary.get("awaySquadId") or "")
+        squads = summary.get("squads") or {}
+        for team, opp in ((home, away), (away, home)):
+            if not team:
+                continue
+            club = _club(team)
+            club["games"] += 1
+            for target, source in (("created", squads.get(team) or {}), ("conceded", squads.get(opp) or {})):
+                for bucket_id, row in source.items():
+                    into = club[target].get(bucket_id)
+                    if into is None:
+                        continue
+                    for field in into:
+                        into[field] += row.get(field) or 0
+    return clubs
+
+
+def _finalize_side(buckets: dict[str, dict[str, float]], *, exclude_penalties: bool) -> dict[str, Any]:
+    out: dict[str, Any] = {"buckets": {}, "shots": 0, "goals": 0, "xg": 0.0, "penalties": 0}
+    for bucket in CHANCE_BUCKETS:
+        row = buckets.get(bucket["id"]) or {}
+        count = int(row.get("count") or 0)
+        goals = int(row.get("goals") or 0)
+        xg = float(row.get("xg") or 0)
+        if exclude_penalties:
+            count -= int(row.get("penCount") or 0)
+            goals -= int(row.get("penGoals") or 0)
+            xg -= float(row.get("penXg") or 0)
+        out["buckets"][bucket["id"]] = {"count": count, "goals": goals, "xg": round(xg, 3)}
+        out["shots"] += count
+        out["goals"] += goals
+        out["xg"] += xg
+        out["penalties"] += int(row.get("penCount") or 0)
+    out["xg"] = round(out["xg"], 3)
+    out["highQuality"] = out["buckets"]["excellent"]["count"] + out["buckets"]["very_good"]["count"]
+    out["lowQuality"] = out["buckets"]["poor"]["count"] + out["buckets"]["very_poor"]["count"]
+    return out
+
+
+def finalize_league_table(stored: dict[str, Any], *, exclude_penalties: bool = False) -> dict[str, Any]:
+    rows = []
+    penalties = 0
+    for club in stored.get("clubs") or []:
+        created = _finalize_side(club.get("created") or {}, exclude_penalties=exclude_penalties)
+        conceded = _finalize_side(club.get("conceded") or {}, exclude_penalties=exclude_penalties)
+        penalties += created["penalties"]
+        rows.append(
+            {
+                "squadId": club.get("squadId"),
+                "name": club.get("name"),
+                "imageUrl": club.get("imageUrl"),
+                "isVale": bool(club.get("isVale")),
+                "games": int(club.get("games") or 0),
+                "created": created,
+                "conceded": conceded,
+            }
+        )
+    return {
+        "season": stored.get("season"),
+        "competition": stored.get("competition"),
+        "chanceBuckets": list(CHANCE_BUCKETS),
+        "matchesIncluded": stored.get("matchesIncluded", 0),
+        "matchesTotal": stored.get("matchesTotal", 0),
+        "updatedAt": stored.get("updatedAt"),
+        "excludePenalties": bool(exclude_penalties),
+        "penaltyCount": penalties,
+        "rows": rows,
+    }
+
+
+def _league_key(season: str | None) -> str:
+    return str(season or ALLOWED_SEASONS[0]).replace("/", "-")
+
+
+def build_xg_league_table(season: str | None = None, *, allow_fetch: bool = True) -> dict[str, Any]:
+    """Rebuild the stored league table. Impect only for matches not yet in the lake."""
+    from app.analysis_cache import write_json
+
+    key = _league_key(season)
+    iteration = _resolve_port_vale_iteration(season)
+    iteration_id = int(iteration["id"])
+    port_vale_id = _resolve_port_vale_squad_id(iteration_id)
+    squads = _squads_map(iteration_id)
+    completed = sorted(
+        (m for m in _iteration_matches_by_id(iteration_id).values() if _match_is_complete(m)),
+        key=lambda m: str(m.get("scheduledDate") or ""),
+    )
+    progress = {"done": 0, "total": len(completed), "running": True}
+    with _league_build_lock:
+        _league_builds[key] = progress
+
+    summaries: list[dict[str, Any]] = []
+    rate_limited = threading.Event()
+
+    def _summary(match: dict[str, Any]) -> dict[str, Any] | None:
+        try:
+            return _league_match_summary(match, allow_fetch=allow_fetch and not rate_limited.is_set())
+        except Exception as exc:
+            if "429" in str(exc) or "rate limit" in str(exc).lower():
+                rate_limited.set()
+                return _league_match_summary(match, allow_fetch=False)
+            logger.exception("xG league table: match %s failed", match.get("id"))
+            return None
+
+    with ThreadPoolExecutor(max_workers=LEAGUE_FETCH_WORKERS) as pool:
+        for summary in pool.map(_summary, completed):
+            if summary:
+                summaries.append(summary)
+            progress["done"] += 1
+    if rate_limited.is_set():
+        logger.warning("xG league table: Impect rate limit hit; %s of %s matches stored", len(summaries), len(completed))
+
+    clubs = aggregate_league_chances(summaries)
+    rows = []
+    for squad_key, club in clubs.items():
+        squad_id = int(squad_key)
+        squad = squads.get(squad_id) or {}
+        rows.append(
+            {
+                "squadId": squad_id,
+                "name": str(squad.get("name") or f"Squad {squad_id}"),
+                "imageUrl": squad.get("imageUrl"),
+                "isVale": squad_id == port_vale_id,
+                **club,
+            }
+        )
+    stored = {
+        "season": str(iteration.get("season") or season or ""),
+        "competition": str(iteration.get("competition_name") or ""),
+        "matchesIncluded": len(summaries),
+        "matchesTotal": len(completed),
+        "updatedAt": datetime.now(UTC).isoformat(),
+        "clubs": rows,
+    }
+    write_json(LEAGUE_TABLE_KIND, key, stored)
+    progress["running"] = False
+    progress["finishedAt"] = time.time()
+    return stored
+
+
+def _kick_league_build(season: str | None) -> None:
+    key = _league_key(season)
+    with _league_build_lock:
+        current = _league_builds.get(key)
+        if current and current.get("running"):
+            return
+        _league_builds[key] = {"done": 0, "total": 0, "running": True}
+
+    def _run() -> None:
+        try:
+            build_xg_league_table(season, allow_fetch=True)
+        except Exception:
+            logger.exception("xG league table build failed for %s", key)
+        finally:
+            with _league_build_lock:
+                entry = _league_builds.setdefault(key, {})
+                entry["running"] = False
+                entry.setdefault("finishedAt", time.time())
+
+    threading.Thread(target=_run, name=f"xg-league-{key}", daemon=True).start()
+
+
+def read_xg_league_table(season: str | None, *, exclude_penalties: bool = False) -> dict[str, Any]:
+    """Click path: serve the stored table; fill gaps in the background."""
+    from app.analysis_cache import click_json
+
+    key = _league_key(season)
+    stored = click_json(LEAGUE_TABLE_KIND, key)
+    progress = dict(_league_builds.get(key) or {})
+    if not stored:
+        _kick_league_build(season)
+        progress = dict(_league_builds.get(key) or {})
+        return {"ready": False, "building": True, "season": season, "progress": progress}
+    missing = int(stored.get("matchesIncluded") or 0) < int(stored.get("matchesTotal") or 0)
+    last_finished = float(progress.get("finishedAt") or 0)
+    if missing and time.time() - last_finished > LEAGUE_GAP_RETRY_SECONDS:
+        _kick_league_build(season)
+        progress = dict(_league_builds.get(key) or {})
+    payload = finalize_league_table(stored, exclude_penalties=exclude_penalties)
+    payload["ready"] = True
+    payload["building"] = bool(progress.get("running"))
+    payload["progress"] = progress
+    return payload
+
+
 class XgChanceReportRequest(BaseModel):
     season: str | None = None
     match_id: int | None = Field(default=None, alias="matchId")
@@ -1483,6 +1763,14 @@ def register_xg_chance_analysis_routes(app: FastAPI) -> None:
             "fixtures": fixtures,
             "defaultMatchId": _default_fixture_match_id(fixtures),
         }
+
+    @app.get("/api/xg-chance-analysis/league-table")
+    def xg_chance_league_table_route(
+        season: str | None = Query(None),
+        exclude_penalties: bool = Query(False, alias="excludePenalties"),
+    ) -> JSONResponse:
+        payload = read_xg_league_table(season, exclude_penalties=exclude_penalties)
+        return JSONResponse(payload, headers={"Cache-Control": "no-store"})
 
     @app.get("/api/xg-chance-analysis/report")
     def xg_chance_report_route(

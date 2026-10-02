@@ -1,16 +1,16 @@
 const state = { season: "", scope: "season", matchId: null, fixtures: [], report: null, attackFilter: "corner", defenceFilter: "corner", sort: { key: "xgDiff", dir: -1 } };
 const OUTCOME = {
   goal: { label: "Goal", color: "#f5c518" },
-  shot: { label: "Shot", color: "#e8edf4" },
-  won: { label: "First contact won", color: "#b08a20" },
+  shot: { label: "Shot", color: "#ffffff" },
+  won: { label: "First contact won", color: "#38bdf8" },
   lost: { label: "First contact lost", color: "#8b9bb0" },
   none: { label: "No contact", color: "#4b5563" },
 };
 const DEF_OUTCOME = {
   goal: { label: "Goal conceded", color: "#f87171" },
-  shot: { label: "Shot conceded", color: "#e8edf4" },
-  won: { label: "They won first contact", color: "#b45454" },
-  lost: { label: "We won first contact", color: "#f5c518" },
+  shot: { label: "Shot conceded", color: "#ffffff" },
+  won: { label: "They won first contact", color: "#fb923c" },
+  lost: { label: "We won first contact", color: "#38bdf8" },
   none: { label: "No contact", color: "#4b5563" },
 };
 const MAP_FILTERS = [
@@ -91,25 +91,58 @@ function deliveryLayer(points, palette) {
     const s = hp(p.sx, p.sy); const e = hp(p.dx, p.dy);
     const color = (palette[p.outcome] || palette.none).color;
     const big = p.outcome === "goal" || p.outcome === "shot";
-    const tip = `${p.minute}' ${p.opponent ? `vs ${p.opponent} · ` : ""}${p.taker} · ${palette[p.outcome].label}${p.xg ? ` · ${fmt(p.xg, 2)} xG` : ""}`;
+    const goal = p.outcome === "goal";
     const lineOk = p.sub !== "short" && Math.abs(s.y - e.y) + Math.abs(s.x - e.x) > 8;
-    return `<g class="at-pop" style="animation-delay:${Math.min(i * 6, 600)}ms"><title>${escapeHtml(tip)}</title>
+    return `<g class="at-pop sp-dot" data-tip="${escapeHtml(deliveryTip(p, palette))}" style="animation-delay:${Math.min(i * 6, 600)}ms">
       ${lineOk ? `<line x1="${s.x.toFixed(1)}" y1="${s.y.toFixed(1)}" x2="${e.x.toFixed(1)}" y2="${e.y.toFixed(1)}" stroke="${color}" stroke-opacity="${big ? 0.75 : 0.22}" stroke-width="${big ? 2 : 1.2}"/>` : ""}
-      <circle cx="${e.x.toFixed(1)}" cy="${e.y.toFixed(1)}" r="${big ? 7 : 4.5}" fill="${color}" fill-opacity="${big ? 1 : 0.8}" stroke="#0b0f15" stroke-width="1.2"/></g>`;
+      ${goal ? `<circle cx="${e.x.toFixed(1)}" cy="${e.y.toFixed(1)}" r="13" fill="none" stroke="${color}" stroke-opacity="0.55" stroke-width="2"/>` : ""}
+      <circle cx="${e.x.toFixed(1)}" cy="${e.y.toFixed(1)}" r="${goal ? 9 : big ? 7 : 4.5}" fill="${color}" fill-opacity="${big ? 1 : 0.85}" stroke="#0b0f15" stroke-width="1.2"/>
+      <circle cx="${e.x.toFixed(1)}" cy="${e.y.toFixed(1)}" r="${goal ? 12 : big ? 9 : 7}" fill="transparent"/></g>`;
   }).join("");
 }
-function shotLayer(shots, goalColor) {
-  return [...shots].sort((a, b) => Number(a.goal) - Number(b.goal)).map((s, i) => {
-    const p = hp(s.x, s.y);
-    const r = 4 + Math.sqrt(Math.max(0, Number(s.xg) || 0)) * 22;
-    const fill = s.goal ? goalColor : s.phase === "second" ? "#8b9bb0" : "#e8edf4";
-    const tip = `${s.minute}' ${s.player}${s.opponent ? ` vs ${s.opponent}` : ""} · ${fmt(s.xg, 2)} xG${s.head ? " · header" : ""}${s.goal ? " · GOAL" : ""}`;
-    return `<g class="at-pop" style="animation-delay:${Math.min(i * 12, 700)}ms"><title>${escapeHtml(tip)}</title>
-      ${s.head ? `<rect x="${(p.x - r).toFixed(1)}" y="${(p.y - r).toFixed(1)}" width="${(2 * r).toFixed(1)}" height="${(2 * r).toFixed(1)}" transform="rotate(45 ${p.x.toFixed(1)} ${p.y.toFixed(1)})" fill="${fill}" fill-opacity="${s.goal ? 1 : s.phase === "second" ? 0.7 : 0.9}" stroke="#0b0f15" stroke-width="1.2"/>`
-        : `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r.toFixed(1)}" fill="${fill}" fill-opacity="${s.goal ? 1 : s.phase === "second" ? 0.7 : 0.9}" stroke="#0b0f15" stroke-width="1.2"/>`}</g>`;
-  }).join("");
+function deliveryTip(p, palette) {
+  const out = palette[p.outcome] || palette.none;
+  const shotLike = p.outcome === "goal" || p.outcome === "shot";
+  let who = "";
+  let how = "";
+  if (shotLike && p.shooter) {
+    who = p.shooter;
+    how = p.shotHead ? "header" : "shot";
+  } else if ((p.outcome === "won" || p.outcome === "lost") && p.contact) {
+    who = p.contact;
+    how = p.contactGk ? "keeper" : p.contactHead ? "header" : "first touch";
+  } else if (p.outcome === "none") {
+    who = "Nobody got a touch";
+  } else {
+    who = p.taker || "Unknown";
+  }
+  const when = `${p.minute ?? "?"}'${p.opponent ? ` vs ${escapeHtml(p.opponent)}` : ""}`;
+  return `<b>${escapeHtml(who)}</b>${how ? ` <small>${how}</small>` : ""}
+    <span class="sp-tip__out"><i style="background:${out.color}"></i>${escapeHtml(out.label)}${p.xg ? ` · ${fmt(p.xg, 2)} xG` : ""}</span>
+    <span class="sp-tip__meta">${when} · delivered by ${escapeHtml(p.taker || "?")}</span>`;
 }
-
+function bindMapTips() {
+  if (bindMapTips.done) return;
+  bindMapTips.done = true;
+  const tip = document.createElement("div");
+  tip.className = "sp-tip";
+  document.body.appendChild(tip);
+  document.addEventListener("mouseover", (event) => {
+    const dot = event.target.closest?.(".sp-dot");
+    if (!dot) { tip.classList.remove("is-on"); return; }
+    tip.innerHTML = dot.dataset.tip || "";
+    tip.classList.add("is-on");
+  });
+  document.addEventListener("mousemove", (event) => {
+    if (!tip.classList.contains("is-on")) return;
+    const pad = 14;
+    const w = tip.offsetWidth; const h = tip.offsetHeight;
+    let x = event.clientX + pad; let y = event.clientY - h - pad;
+    if (x + w > window.innerWidth - 8) x = event.clientX - w - pad;
+    if (y < 8) y = event.clientY + pad;
+    tip.style.transform = `translate(${x}px, ${y}px)`;
+  });
+}
 /* ---------- controls ---------- */
 function renderSeasons(meta) {
   $("seasonToggle").innerHTML = (meta.seasons || []).map((row) => `<button type="button" class="at-toggle__btn${row.value === state.season ? " at-toggle__btn--active" : ""}" data-season="${escapeHtml(row.value)}">${escapeHtml(row.label || row.value)}</button>`).join("");
@@ -140,7 +173,7 @@ function renderHero(report) {
         <div class="at-kpi"><strong>${pct(h.shareFor)}</strong><span>Of our goals from set plays, pens excluded <em>(league ${pct(h.leagueShareFor)})</em></span></div>
         <div class="at-kpi"><strong>${pct(h.shareAgainst)}</strong><span>Of goals conceded from set plays, pens excluded</span></div>
         <div class="at-kpi"><strong>${h.pensScored ?? 0}/${h.pensFor ?? 0} <small style="color:var(--muted);font-size:.8rem">v</small> ${h.pensConceded ?? 0}/${h.pensAgainst ?? 0}</strong><span>Penalties scored/won v conceded/given</span></div>
-        <div class="at-kpi"><strong class="at-up">+${fmt(h.goalsSwingTop3 ?? h.goalsSwing, 1)}</strong><span>Goals a season if our set plays matched the top three (≈ ${fmt(h.pointsSwingTop3 ?? h.pointsSwing, 0)} pts)</span></div>
+        ${h.vsAvg != null ? `<div class="at-kpi"><strong class="${Number(h.vsAvg) >= 0 ? "at-up" : "at-down"}">${signed(h.vsAvg, 1)}</strong><span>xG so far against an average League Two side (corners, wide free kicks, long throws, both ends)</span></div>` : ""}
       </div>
     </div>`;
 }
@@ -163,13 +196,25 @@ function renderLadder(report) {
     if (!values.length) return "";
     const lo = Math.min(...values); const hi = Math.max(...values);
     const pos = (v) => { if (hi === lo) return 50; const t = (Number(v) - lo) / (hi - lo); return (b.better === "high" ? t : 1 - t) * 100; };
-    const dots = values.map((v) => `<span class="sp-track__dot" style="left:${pos(v).toFixed(1)}%"></span>`).join("");
+    const focusRow = table.find((r) => r.focus);
+    const dots = table
+      .filter((r) => !r.focus && r[b.id] != null && Number.isFinite(Number(r[b.id])))
+      .map((r) => {
+        const left = pos(r[b.id]).toFixed(1);
+        const tip = escapeHtml(`${r.club} · ${benchValue(b, Number(r[b.id]))}`);
+        return r.badge
+          ? `<img class="sp-track__badge" src="${escapeHtml(r.badge)}" alt="${escapeHtml(r.club)}" title="${tip}" style="left:${left}%" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'sp-track__dot',style:'left:${left}%'}))" />`
+          : `<span class="sp-track__dot" title="${tip}" style="left:${left}%"></span>`;
+      }).join("");
+    const valeMark = b.vale == null ? "" : focusRow?.badge
+      ? `<span class="sp-track__vale sp-track__vale--badge" title="${escapeHtml(`Port Vale · ${benchValue(b, b.vale)}`)}" style="left:${pos(b.vale).toFixed(1)}%"><img src="${escapeHtml(focusRow.badge)}" alt="Port Vale" /></span>`
+      : `<span class="sp-track__vale" style="left:${pos(b.vale).toFixed(1)}%"></span>`;
     return `<div class="sp-ladder__row" title="${escapeHtml(`League avg ${benchValue(b, b.leagueAvg)} · top-3 avg ${benchValue(b, b.top3Avg)} · best ${benchValue(b, b.best)} (${b.bestClub})`)}">
       <div class="sp-ladder__label">${escapeHtml(b.label)}</div>
       <div class="sp-track"><div class="sp-track__line"></div>${dots}
         <span class="sp-track__mark" style="left:${pos(b.leagueAvg).toFixed(1)}%"></span>
         <span class="sp-track__mark sp-track__mark--top3" style="left:${pos(b.top3Avg).toFixed(1)}%"></span>
-        ${b.vale != null ? `<span class="sp-track__vale" style="left:${pos(b.vale).toFixed(1)}%"></span>` : ""}</div>
+        ${valeMark}</div>
       <div class="sp-ladder__value">${benchValue(b, b.vale)}</div>
       ${rankChip(b.rank, b.of)}
     </div>`;
@@ -177,7 +222,7 @@ function renderLadder(report) {
   const groups = LADDER_GROUPS.map((g) => ({ ...g, marks: g.ids.map((id) => byId[id]).filter(Boolean) }));
   const extra = marks.filter((b) => !grouped.has(b.id));
   if (extra.length) groups[0].marks.push(...extra);
-  const key = `<div class="sp-key"><span><i class="sp-key__vale"></i>Port Vale</span><span><i class="sp-key__team"></i>Other clubs</span><span><i class="sp-key__avg"></i>League average</span><span><i class="sp-key__top3"></i>Top-3 average</span><span>Right is always better</span></div>`;
+  const key = `<div class="sp-key"><span><i class="sp-key__vale"></i>Port Vale</span><span>Other clubs (hover a badge for the club)</span><span><i class="sp-key__avg"></i>League average</span><span><i class="sp-key__top3"></i>Top-3 average</span><span>Right is always better</span></div>`;
   const kicker = `Season, every League Two side · ${report.leagueMatches || 0} matches`;
   const panel = (id, title, group) => {
     const body = group ? group.marks.map(row).join("") : "";
@@ -192,9 +237,6 @@ function renderLadder(report) {
 /* ---------- plan ---------- */
 function renderPlan(report) {
   const plan = report.plan || [];
-  const h = report.headline || {};
-  const top3Goals = plan.reduce((s, r) => s + Number(r.goalsAtTop3 || 0), 0);
-  const top3Pts = plan.reduce((s, r) => s + Number(r.pointsAtTop3 || 0), 0);
   if (!plan.length) {
     const empty = `<p class="at-empty">The plan needs a few more league games before the comparison is fair.</p>`;
     $("planTotal").innerHTML = "";
@@ -202,52 +244,76 @@ function renderPlan(report) {
     $("planDefence").innerHTML = empty;
     return;
   }
-  const sideGoals = (end) => plan.filter((r) => r.end === end).reduce((s, r) => s + Number(r.goalsAtTop3 || 0), 0);
-  $("planTotal").innerHTML = `<div class="sp-plan-sum">
-      <p>Get our set plays up to the level of League Two's top three teams and we gain about</p>
-      <div class="sp-plan-sum__nums"><span><strong>${fmt(top3Goals, 1)}</strong> goals a season</span><span><strong>${fmt(top3Pts, 0)}</strong> points</span></div>
-      <div class="sp-plan-sum__split">
-        <a href="#attack"><b>+${fmt(sideGoals("attack"), 1)}</b> scoring more from ours →</a>
-        <a href="#defence" class="is-against"><b>+${fmt(sideGoals("defence"), 1)}</b> conceding fewer from theirs →</a>
+  const sideTotal = (end) => plan.filter((r) => r.end === end).reduce((s, r) => s + Number(r.vsAvg || 0), 0);
+  const tone = (v) => (v >= 0 ? "is-good" : "is-bad");
+  const att = sideTotal("attack");
+  const dfn = sideTotal("defence");
+  $("planTotal").innerHTML = `<div class="sp-vs">
+      <p class="sp-vs__kicker">Set plays so far · against an average League Two side</p>
+      <div class="sp-vs__nums">
+        <a href="#attack" class="sp-vs__num ${tone(att)}"><strong>${signed(att, 1)}</strong><span>xG from ours</span></a>
+        <a href="#defence" class="sp-vs__num ${tone(dfn)}"><strong>${signed(dfn, 1)}</strong><span>xG from theirs</span></a>
+        <div class="sp-vs__num sp-vs__num--net ${tone(att + dfn)}"><strong>${signed(att + dfn, 1)}</strong><span>overall</span></div>
       </div>
-      <p class="sp-plan-sum__small">Match the single best team at every one of them and it is ${fmt(h.goalsSwing, 1)} goals (about ${fmt(h.pointsSwing, 0)} points).</p>
+      <p class="sp-vs__small">Same number of corners, wide free kicks and long throws, compared with what an average team would create or concede from them. Plus = better than average, minus = worse.</p>
     </div>`;
   const card = (row) => {
     const attack = row.end === "attack";
     const name = PLAN_NAMES[row.id] || row.title;
-    const us = Number(row.vale) * 100;
-    const top = Number(row.top3) * 100;
-    const season = Math.round(Number(row.valeVolume) * 46);
-    const gain = Number(row.goalsAtTop3 || 0);
-    const max = Math.max(us, top, 0.1);
-    const bar = (label, value, cls) => `<div class="sp-lever__bar"><span>${label}</span><div class="at-bar"><span class="${cls}" style="width:${(value / max) * 100}%"></span></div><b>${fmt(value, 1)}</b></div>`;
-    const sentence = attack
-      ? `We take about <b>${season}</b> a season. Every 100 of them is worth <b>${fmt(us, 1)}</b> goals to us. The top three get <b>${fmt(top, 1)}</b>.`
-      : `We face about <b>${season}</b> a season. Every 100 of them costs us <b>${fmt(us, 1)}</b> goals. The top three concede <b>${fmt(top, 1)}</b>.`;
-    return `<article class="sp-lever sp-lever--${row.end}">
-      <div class="sp-lever__prize"><strong>${gain > 0 ? `+${fmt(gain, 1)}` : "✓"}</strong><span>${gain > 0 ? "goals a season" : "already top three"}</span></div>
-      <div class="sp-lever__body">
-        <h3>${escapeHtml(name)} ${rankChip(row.rank, row.of)}</h3>
-        <p class="sp-lever__what">${sentence}</p>
-        <div class="sp-lever__bars">
-          ${bar("Port Vale", us, "sp-bar--vale")}
-          ${bar("Top three", top, "sp-bar--top")}
-        </div>
+    const noun = PLAN_NOUNS[row.id] || "set plays";
+    const vs = Number(row.vsAvg || 0);
+    const verdictWord = attack ? (vs >= 0 ? "more" : "short") : (vs >= 0 ? "better" : "worse");
+    const ours = Number(row.xg || 0);
+    const avg = Number(row.avgXg || 0);
+    const max = Math.max(ours, avg, 0.01);
+    const bar = (label, value, cls) => `<div class="sp-sc__bar"><span>${label}</span><div class="at-bar"><span class="${cls}" style="width:${(value / max) * 100}%"></span></div><b>${fmt(value, 1)} xG</b></div>`;
+    const every = (rate) => (Number(rate) > 0 ? Math.max(1, Math.round(1 / Number(rate))) : null);
+    const ourEvery = every(row.valeRate);
+    const leagueEvery = every(row.leagueRate);
+    const bestEvery = every(row.bestRate);
+    const fact = (value, label) => `<div class="sp-sc__fact"><strong>${value}</strong><span>${label}</span></div>`;
+    return `<article class="sp-sc sp-sc--${row.end} ${tone(vs)}">
+      <header class="sp-sc__head">
+        <h3>${escapeHtml(name)}</h3>
+        ${rankChip(row.rank, row.of)}
+        <span class="sp-sc__verdict">${fmt(Math.abs(vs), 1)} xG ${verdictWord}</span>
+      </header>
+      <div class="sp-sc__facts">
+        ${fact(row.count, `${attack ? "taken" : "faced"} · ${fmt(row.perGame, 1)} a game`)}
+        ${fact(row.shots, `led to a shot`)}
+        ${fact(row.goals, attack ? "goals" : "goals conceded")}
+        ${fact(row.fcPct != null ? pct(row.fcPct) : "—", `first contacts won <em>(league ${pct(row.leagueFcPct)})</em>`)}
       </div>
+      <p class="sp-sc__line">From these ${row.count} ${noun}, an average League Two ${attack ? "attack would have created" : "defence would have conceded"} <b>${fmt(avg, 1)} xG</b>. We have ${attack ? "created" : "conceded"} <b>${fmt(ours, 1)}</b>.</p>
+      <div class="sp-sc__bars">
+        ${bar("Port Vale", ours, "sp-bar--vale")}
+        ${bar("Average side", avg, "sp-bar--top")}
+      </div>
+      <p class="sp-sc__foot">${ourEvery ? `A goal's worth of chances every <b>${ourEvery}</b> ${noun.replace(" crossed in", "")}` : `No real chances ${attack ? "created" : "conceded"} yet`} · league average every ${leagueEvery ?? "—"} · best is ${escapeHtml(row.bestClub)}${bestEvery ? ` at every ${bestEvery}` : attack ? " (none created)" : " (none conceded)"}${row.smallSample ? ` · <span class="sp-sc__warn">small sample</span>` : ""}</p>
     </article>`;
   };
   const column = (end, title, sub) => {
-    const rows = plan.filter((r) => r.end === end).sort((a, b) => Number(b.goalsAtTop3) - Number(a.goalsAtTop3));
-    const total = rows.reduce((s, r) => s + Number(r.goalsAtTop3 || 0), 0);
+    const rows = plan.filter((r) => r.end === end).sort((a, b) => Number(a.vsAvg) - Number(b.vsAvg));
+    const total = rows.reduce((s, r) => s + Number(r.vsAvg || 0), 0);
     return `<div class="sp-plan__col sp-plan__col--${end}">
-      <header><h3>${title}</h3><span>+${fmt(total, 1)} goals</span></header>
+      <header><h3>${title}</h3><span class="${tone(total)}">${signed(total, 1)} xG vs average</span></header>
       <p class="sp-plan__sub">${sub}</p>
       ${rows.map(card).join("") || `<p class="at-empty">Not enough of these yet to compare.</p>`}
     </div>`;
   };
-  $("planAttack").innerHTML = column("attack", "Where the goals are: score more", "If each of our set plays was as good as League Two's top three. Goals per 100 set plays — higher is better.");
-  $("planDefence").innerHTML = column("defence", "Where the goals are: concede fewer", "If we defended each set play as well as League Two's top three. Goals conceded per 100 set plays — lower is better.");
+  $("planAttack").innerHTML = column("attack", "Our set plays vs an average side",
+    "Each type of set play so far this season: what we have created, against what an average League Two attack creates from the same number. xG = expected goals, the quality of the chances. Worst first.");
+  $("planDefence").innerHTML = column("defence", "Their set plays vs an average side",
+    "Each type of set play against us so far this season: what we have conceded, against what an average League Two defence concedes from the same number. Worst first.");
 }
+const PLAN_NOUNS = {
+  corner_attack: "corners",
+  fk_attack: "free kicks crossed in",
+  throw_attack: "long throws",
+  corner_defence: "corners",
+  fk_defence: "free kicks crossed in",
+  throw_defence: "long throws",
+};
 const PLAN_NAMES = {
   corner_attack: "Our corners",
   fk_attack: "Our free kicks into the box",
@@ -288,7 +354,8 @@ function renderMapPanel(id, points, filterKey, attacking) {
     <div class="sp-filters">${chips}</div>
     ${halfPitch(deliveryLayer(shown, palette), attacking ? "Their goal" : "Our goal")}
     <div class="sp-legend">${legend}</div>
-    <p class="at-note">Dot = where the delivery ended. Hover for the minute, opponent and taker. Short corners show where the follow-up ball landed.</p>`;
+    <p class="at-note">Dot = where the delivery ended. Hover any dot to see who shot or won the first contact, plus the minute, opponent and taker. Short corners show where the follow-up ball landed.</p>`;
+  bindMapTips();
 }
 function renderZones(id, zones, attacking) {
   const max = Math.max(...zones.map((z) => z.n), 1);
@@ -299,14 +366,73 @@ function renderZones(id, zones, attacking) {
     <div class="at-table-wrap"><table class="sp-table sp-num2"><thead><tr><th>Zone</th><th>Balls</th><th>Share</th><th>${attacking ? "1st won" : "We win 1st"}</th><th>xG each</th><th>Goals</th></tr></thead><tbody>${body}</tbody></table></div>
     <p class="at-note">Near and far post are relative to the side the ball comes from. ${best ? `${attacking ? "Our most dangerous" : "Their most dangerous"} zone: <b>${escapeHtml(best.label)}</b> at ${fmt(best.xgPer, 3)} xG per delivery.` : ""}</p>`;
 }
-function renderShotPanel(id, shots, attacking) {
+const SHOT_ZONES = [
+  { id: "six", label: "Six-yard box", d: [0, 5.5], y: [-9.16, 9.16] },
+  { id: "central", label: "Central box", d: [5.5, 16.5], y: [-9.16, 9.16] },
+  { id: "left", label: "Box, left side", d: [0, 16.5], y: [9.16, 20.16] },
+  { id: "right", label: "Box, right side", d: [0, 16.5], y: [-20.16, -9.16] },
+  { id: "edge", label: "Edge of the box", d: [16.5, 25], y: [-20.16, 20.16] },
+  { id: "long", label: "Long range / wide", d: [25, 34], y: [-34, 34] },
+];
+function shotZoneId(s) {
+  const d = 52.5 - Number(s.x);
+  const y = Number(s.y);
+  const ay = Math.abs(y);
+  if (d <= 5.5 && ay <= 9.16) return "six";
+  if (d <= 16.5 && ay <= 9.16) return "central";
+  if (d <= 16.5 && ay <= 20.16) return y > 0 ? "left" : "right";
+  if (d <= 25 && ay <= 20.16) return "edge";
+  return "long";
+}
+function shotZoneStats(shots) {
+  const stats = Object.fromEntries(SHOT_ZONES.map((z) => [z.id, { ...z, shots: 0, xg: 0, goals: 0, headers: 0, second: 0, players: {} }]));
+  shots.forEach((s) => {
+    const z = stats[shotZoneId(s)];
+    z.shots += 1;
+    z.xg += Number(s.xg || 0);
+    if (s.goal) z.goals += 1;
+    if (s.head) z.headers += 1;
+    if (s.phase === "second") z.second += 1;
+    if (s.player) z.players[s.player] = (z.players[s.player] || 0) + 1;
+  });
+  return SHOT_ZONES.map((z) => stats[z.id]);
+}
+function shotZoneLayer(zones, rgb) {
+  const maxXg = Math.max(...zones.map((z) => z.xg), 0.01);
+  return zones.map((z) => {
+    const a = hp(52.5 - z.d[0], z.y[1]);
+    const b = hp(52.5 - z.d[1], z.y[0]);
+    const x = Math.min(a.x, b.x) + 2; const w = Math.abs(b.x - a.x) - 4;
+    const y = Math.min(a.y, b.y) + 2; const h = Math.abs(b.y - a.y) - 4;
+    const alpha = z.shots ? 0.12 + 0.6 * (z.xg / maxXg) : 0.03;
+    const cx = x + w / 2; const cy = y + h / 2;
+    const top = Object.entries(z.players).sort((p, q) => q[1] - p[1]).slice(0, 3)
+      .map(([name, n]) => `${escapeHtml(name)} (${n})`).join(", ");
+    const tip = `<b>${escapeHtml(z.label)}</b>
+      <span class="sp-tip__out">${z.shots} shots · ${fmt(z.xg, 2)} xG · ${z.goals} goal${z.goals === 1 ? "" : "s"}</span>
+      <span class="sp-tip__meta">${z.headers} headers · ${z.second} from second balls${top ? `<br>Most shots: ${top}` : ""}</span>`;
+    const small = h < 70;
+    return `<g class="sp-dot sp-zone" data-tip="${escapeHtml(tip)}">
+      <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="6" fill="rgba(${rgb},${alpha.toFixed(2)})" stroke="rgba(${rgb},${z.shots ? 0.7 : 0.15})" stroke-width="1.5"/>
+      <text x="${cx.toFixed(1)}" y="${(cy + (small ? 2 : -4)).toFixed(1)}" text-anchor="middle" class="sp-zone__n">${z.shots}</text>
+      <text x="${cx.toFixed(1)}" y="${(cy + (small ? 18 : 14)).toFixed(1)}" text-anchor="middle" class="sp-zone__xg">${fmt(z.xg, 2)} xG${z.goals ? ` · ${z.goals} goal${z.goals === 1 ? "" : "s"}` : ""}</text>
+      ${small ? "" : `<text x="${cx.toFixed(1)}" y="${(cy + 30).toFixed(1)}" text-anchor="middle" class="sp-zone__label">${escapeHtml(z.label)}</text>`}
+    </g>`;
+  }).join("");
+}
+function renderShotPanel(id, allShots, attacking) {
+  const shots = allShots.filter((s) => s.type !== "penalty");
   const total = shots.reduce((s, r) => s + Number(r.xg || 0), 0);
   const goals = shots.filter((s) => s.goal).length;
   const headers = shots.filter((s) => s.head).length;
-  $(id).innerHTML = `${panelHead(attacking ? "Shots from our set plays" : "Shots from their set plays", attacking ? "Shot map" : "Shot map against")}
-    ${halfPitch(shotLayer(shots, attacking ? "#f5c518" : "#f87171"), attacking ? "Their goal" : "Our goal")}
-    <div class="sp-legend"><span><i style="background:${attacking ? "#f5c518" : "#f87171"}"></i>Goal</span><span><i style="background:#e8edf4"></i>First phase</span><span><i style="background:#8b9bb0"></i>Second ball</span><span>◆ header · size = xG</span></div>
-    <p class="at-note">${shots.length} shots · ${fmt(total, 2)} xG · ${goals} goals · ${headers} headers. Penalties included.</p>`;
+  const zones = shotZoneStats(shots);
+  const rgb = attacking ? "245,197,24" : "248,113,113";
+  const rows = zones.map((z) => `<tr><td>${escapeHtml(z.label)}</td><td>${z.shots}</td><td>${z.headers}</td><td>${z.second}</td><td>${fmt(z.xg, 2)}</td><td>${z.shots ? fmt(z.xg / z.shots, 2) : "—"}</td><td class="${z.goals ? (attacking ? "sp-good" : "sp-bad") : ""}">${z.goals}</td></tr>`).join("");
+  $(id).innerHTML = `${panelHead(attacking ? "Shots from our set plays" : "Shots from their set plays", attacking ? "Shot zones" : "Shot zones against")}
+    ${halfPitch(shotZoneLayer(zones, rgb), attacking ? "Their goal" : "Our goal")}
+    <div class="at-table-wrap"><table class="sp-table sp-num2"><thead><tr><th>Zone</th><th>Shots</th><th>Headers</th><th>2nd ball</th><th>xG</th><th>xG/shot</th><th>Goals</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="at-note">${shots.length} shots · ${fmt(total, 2)} xG · ${goals} goal${goals === 1 ? "" : "s"} · ${headers} headers. Penalties excluded. Darker zone = more xG. Hover a zone for who shot from there.</p>`;
+  bindMapTips();
 }
 function renderFkPanel(id, rows, title) {
   const max = Math.max(...rows.map((r) => r.n), 1);

@@ -281,6 +281,22 @@ APPS: list[dict[str, Any]] = [
         "router": "attacking_threat",
     },
     {
+        "id": "interventions",
+        "group": "analysis",
+        "title": "Interventions",
+        "description": (
+            "Ball wins, offensive and defensive interventions, and duels — by pitch zone, "
+            "unit and player, with which battles actually win League Two games."
+        ),
+        "href": "/interventions",
+        "icon": "🧲",
+        "accent": "#f97316",
+        "tags": ["Ball wins", "Duels", "Zones"],
+        "roles": ("analysis", "admin"),
+        "api_prefixes": ("/interventions", "/api/interventions"),
+        "router": "interventions",
+    },
+    {
         "id": "set-plays",
         "group": "analysis",
         "title": "Set Plays",
@@ -802,6 +818,22 @@ APPS: list[dict[str, Any]] = [
         "router": "win_drivers",
     },
     {
+        "id": "shadow-teams",
+        "group": "strategy",
+        "title": "Shadow Teams",
+        "description": (
+            "Lincoln, Stockport and Bradford — how they won: ownership, coaches, style, "
+            "squad archetype, patterns and recruitment history, side by side with Port Vale."
+        ),
+        "href": "/shadow-teams",
+        "icon": "🧭",
+        "accent": "#f5c518",
+        "tags": ["Strategy", "Benchmarks", "Recruitment"],
+        "roles": ("admin",),
+        "api_prefixes": ("/shadow-teams", "/api/shadow-teams"),
+        "router": "shadow_teams",
+    },
+    {
         "id": "club-strategy",
         "group": "strategy",
         "title": "Club Strategy",
@@ -980,6 +1012,7 @@ LIVE_ESSENTIAL_IDS = frozenset(
         "match-day-countdown",
         "xg-chance-analysis",
         "attacking-threat",
+        "interventions",
         "set-plays",
         "blocks-analysis",
         # Recruitment

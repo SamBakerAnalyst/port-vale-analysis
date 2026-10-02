@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Interventions</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/attacking-threat.css?v=15" />
+  <link rel="stylesheet" href="/static/interventions.css?v=1" />
+</head>
+<body>
+  <div class="at-glow" aria-hidden="true"></div>
+  <div class="at-app">
+    <header class="at-toolbar">
+      <div>
+        <p class="at-toolbar__eyebrow">Analysis · <a href="/">← All apps</a></p>
+        <h1 class="at-toolbar__title">Inter<span>ventions</span></h1>
+        <p class="at-toolbar__subtitle">Where, how and by whom Port Vale win the ball back — ball wins, offensive and defensive interventions, duels — and which of those battles actually win games</p>
+      </div>
+      <div class="at-controls">
+        <div class="at-controls__group">
+          <span class="at-controls__label">Season</span>
+          <div id="seasonToggle" class="at-toggle" role="group" aria-label="Season"></div>
+        </div>
+        <div class="at-controls__group">
+          <span class="at-controls__label">Window</span>
+          <div class="at-toggle" role="group" aria-label="Window">
+            <button type="button" class="at-toggle__btn at-toggle__btn--active" data-scope="season">Season</button>
+            <button type="button" class="at-toggle__btn" data-scope="last6">Last 6</button>
+            <button type="button" class="at-toggle__btn" data-scope="match">Match</button>
+          </div>
+        </div>
+        <div class="at-controls__group" id="matchSelectGroup" hidden>
+          <span class="at-controls__label">Match</span>
+          <select id="matchSelect" class="at-select" aria-label="Select match"></select>
+        </div>
+      </div>
+    </header>
+
+    <nav class="at-nav" id="sectionNav" aria-label="Sections">
+      <a href="#overview" class="is-active">Overview</a>
+      <a href="#winning">What wins games</a>
+      <a href="#pitch">Pitch zones</a>
+      <a href="#players">Players</a>
+      <a href="#how">Units &amp; types</a>
+      <a href="#matches">Match by match</a>
+      <a href="#league">League</a>
+    </nav>
+
+    <section id="overview" class="at-section">
+      <div id="hero" class="at-hero card" aria-live="polite"></div>
+      <div id="insights" class="at-insights"></div>
+    </section>
+
+    <section id="winning" class="at-section">
+      <header class="at-section__head">
+        <p class="at-kicker">The key to winning games</p>
+        <h2>Which battles win games</h2>
+        <p class="at-section__lede">For every match, who won each intervention battle — and what that did to the result. League Two first (every match this season), then our own games.</p>
+      </header>
+      <div class="at-grid iv-grid--win">
+        <article class="card" id="evidencePanel"></article>
+        <article class="card" id="leagueBattlePanel"></article>
+      </div>
+      <div class="at-grid at-grid--2">
+        <article class="card" id="valeBattlePanel"></article>
+        <article class="card" id="resultsPanel"></article>
+      </div>
+    </section>
+
+    <section id="pitch" class="at-section">
+      <header class="at-section__head">
+        <p class="at-kicker">Where on the pitch</p>
+        <h2>Pitch zones</h2>
+        <p class="at-section__lede">Fifteen zones — thirds by lanes. We attack left to right. Switch to Opponents to see where teams win the ball off us. Click a zone for who wins it there.</p>
+      </header>
+      <div class="at-grid at-grid--map">
+        <article class="card" id="mapPanel"></article>
+        <article class="card" id="zonePanel"></article>
+      </div>
+    </section>
+
+    <section id="players" class="at-section">
+      <article class="card" id="playerPanel"></article>
+    </section>
+
+    <section id="how" class="at-section">
+      <div class="at-grid iv-grid--3">
+        <article class="card" id="unitPanel"></article>
+        <article class="card" id="typePanel"></article>
+        <article class="card" id="periodPanel"></article>
+      </div>
+    </section>
+
+    <section id="matches" class="at-section">
+      <article class="card" id="matchPanel"></article>
+    </section>
+
+    <section id="league" class="at-section">
+      <article class="card" id="tablePanel"></article>
+    </section>
+
+    <footer id="statusBar" class="at-footer">Reading the data lake…</footer>
+  </div>
+  <script defer src="/static/interventions.js?v=2"></script>
+  <script defer src="/static/hub-feedback.js?v=1"></script>
+</body>
+</html>

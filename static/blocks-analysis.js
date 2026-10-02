@@ -447,10 +447,56 @@ function unitBaselinesForFormation(formation) {
   return { DEF: 4, MID: 3, ATT: 3 };
 }
 
+function formationLabel(formation) {
+  const parts = formationParts(formation);
+  return parts.length ? parts.join("-") : "";
+}
+
+function formationTarget(formation, unit, metricKey) {
+  const label = formationLabel(formation);
+  if (!label) return null;
+  const value = state.payload?.benchmarks?.unitsByFormation?.[label]?.[unit]?.[metricKey];
+  return value == null || Number.isNaN(Number(value)) ? null : Number(value);
+}
+
+// Top-7 Req built for the shape itself (per-position averages summed over its slots).
+function formationReq(metricKey, unit, single, stats, rate) {
+  if (single) return formationTarget(stats?.formation, unit, metricKey);
+  const shapes = (stats?.formations || []).filter(Boolean);
+  if (!shapes.length) return null;
+  const values = shapes.map((shape) => formationTarget(shape, unit, metricKey));
+  if (values.some((value) => value == null)) return null;
+  const sum = values.reduce((acc, value) => acc + value, 0);
+  const mean = sum / values.length;
+  if (rate) return mean;
+  const games = Math.max(values.length, 5);
+  return sum + mean * (games - values.length);
+}
+
+function reqBasisText(stats, single) {
+  const shapes = single
+    ? [formationLabel(stats?.formation)]
+    : [...new Set((stats?.formations || []).map(formationLabel))];
+  const known = shapes.filter((shape) => shape && state.payload?.benchmarks?.unitsByFormation?.[shape]);
+  if (!known.length || known.length !== shapes.length) return "";
+  return known.join(" / ");
+}
+
 function unitBenchValues(metricKey, unit, single, played, unitRow, stats) {
   const spec = state.payload?.benchmarks?.units?.[unit]?.[metricKey];
   if (!spec) return { team: null, top7: null, spec: null };
   const games = spec.rate ? 1 : (single ? 1 : Math.max(Number(played) || 0, 5));
+  const shaped = formationReq(metricKey, unit, single, stats, Boolean(spec.rate));
+  if (shaped != null) {
+    return {
+      team: spec.team == null ? null : spec.team * games,
+      top7: shaped,
+      spec,
+      starters: Number(unitRow?.starters || 0),
+      baseline: Number(stats?.unitBaselines?.[unit] || 0),
+      formation: true,
+    };
+  }
   // Top-7 Req is a 4/3/3 sample. Scale by who actually started — not the
   // formation baseline, or a 2-man mid is asked to hit a 3-man total.
   const sampleSize = Number(
@@ -525,7 +571,7 @@ const UNIT_SLIDES = [
     id: "DEF",
     title: "Defence",
     who: "Centre-backs & full-backs",
-    note: "Full-backs count here. Wing-backs in a back three do not.",
+    note: "Full-backs count here. In a 3-5-2 / 3-4-3 the wing-backs count in midfield.",
     groups: [
       {
         label: "Out of possession",
@@ -877,9 +923,10 @@ function playerExportSlideHtml(slide, { stats, single, fixture, page, totalPages
     : "";
   const rows = specs.map((spec, index) => playerExportTargetRow(spec, slide.id, stats, single, index, { reqOnly })).join("");
   const reqOnlyClass = reqOnly ? " ba-pe-slide--req-only" : "";
+  const basis = reqBasisText(stats, single);
   const strapText = reqOnly
-    ? "LEAGUE TWO TOP-7 REQ · SCALED TO THIS XI"
-    : `${hit} OF ${specs.length} TARGETS AT REQ`;
+    ? (basis ? `LEAGUE TWO TOP-7 REQ · ${basis}` : "LEAGUE TWO TOP-7 REQ · SCALED TO THIS XI")
+    : `${hit} OF ${specs.length} TARGETS AT REQ${basis ? ` · ${basis}` : ""}`;
   const strapClass = reqOnly ? "ba-pe-slide__strap--req-only" : `ba-pe-slide__strap--${strapTone}`;
   return `
     <article class="ba-pe-slide ba-pe-slide--${slide.id.toLowerCase()} ba-pe-slide--rows-${specs.length}${reqOnlyClass}">
@@ -1865,6 +1912,57 @@ function standoutsHtml(players) {
   return `<div class="ba-stars">${cards}</div>`;
 }
 
+const FORMATION_CHOICES = ["4-4-2", "4-3-3", "4-2-3-1", "3-5-2", "3-4-3"];
+
+function formationPickerHtml(block) {
+  const filterId = state.filters[block.id];
+  if (!filterId || filterId === "all") return "";
+  const fixture = reportFixtures(block).find((row) => String(row.matchId) === String(filterId));
+  if (!fixture?.matchId) return "";
+  const stats = fixture.stats || {};
+  const manual = stats.formationSource === "manual";
+  const current = formationLabel(stats.formation);
+  const detected = formationLabel(manual ? stats.autoFormation : stats.formation);
+  const choices = state.payload?.formationOptions || FORMATION_CHOICES;
+  const autoLabel = detected ? `Auto · ${detected}` : "Auto";
+  const buttons = [
+    `<button type="button" class="ba-filter__btn ${manual ? "" : "is-active"}" data-formation="auto" data-formation-match="${escapeHtml(fixture.matchId)}" aria-pressed="${!manual}">${escapeHtml(autoLabel)}</button>`,
+  ].concat(choices.map((shape) => {
+    const active = manual && current === shape;
+    return `<button type="button" class="ba-filter__btn ${active ? "is-active" : ""}" data-formation="${escapeHtml(shape)}" data-formation-match="${escapeHtml(fixture.matchId)}" aria-pressed="${active}">${escapeHtml(shape)}</button>`;
+  })).join("");
+  const ready = Object.keys(state.payload?.benchmarks?.unitsByFormation || {}).length > 0;
+  const note = ready
+    ? `Req is the League Two top-7 for the shape you pick${manual ? "" : " (Auto uses Impect's kick-off shape)"}.`
+    : "Top-7 targets per formation are still building — Req stays scaled to the XI until they land.";
+  return `
+    <div class="ba-formation" role="group" aria-label="Match formation for ${escapeHtml(shortOpponent(fixture.opponentName))}">
+      <span class="ba-formation__label">Formation</span>
+      <div class="ba-filter">${buttons}</div>
+      <span class="ba-formation__note">${escapeHtml(note)}</span>
+    </div>
+  `;
+}
+
+async function saveFormation(matchId, formation) {
+  if (state.saving) return;
+  state.saving = true;
+  setStatus(formation === "auto" ? "Back to Impect's formation…" : `Setting ${formation} — recalculating targets…`, "loading");
+  try {
+    await fetchJson("/api/blocks-analysis/formation", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ matchId: Number(matchId), formation }),
+    });
+    state.saving = false;
+    await load(false);
+  } catch (err) {
+    setStatus(err.message || "Could not save formation", "error");
+  } finally {
+    state.saving = false;
+  }
+}
+
 function dashHtml(block) {
   const cups = isCupsBlock(block);
   const playedInBlock = playedFixtures(block).length;
@@ -1917,6 +2015,7 @@ function dashHtml(block) {
             `}
           </div>
         </div>
+        ${formationPickerHtml(block)}
       </div>
   `;
 
@@ -1964,7 +2063,10 @@ function dashHtml(block) {
     .map((spec) => playerBoardHtml(spec, players))
     .join("");
   const outcome = (single && fixture?.outcome) || "";
-  const foot = "Req = League Two top-7 line, scaled to this XI";
+  const basis = reqBasisText(stats, single);
+  const foot = basis
+    ? `Req = League Two top-7 line for a ${basis}`
+    : "Req = League Two top-7 line, scaled to this XI";
   const unitSheets = UNIT_SLIDES.map((slide, index) => unitSheetHtml(slide, {
     mast,
     stats,
@@ -2575,6 +2677,11 @@ els.blocksRoot.addEventListener("click", async (event) => {
       points: defaults.points,
       cleanSheets: defaults.cleanSheets,
     });
+    return;
+  }
+  const formationBtn = event.target.closest("[data-formation]");
+  if (formationBtn) {
+    await saveFormation(formationBtn.dataset.formationMatch, formationBtn.dataset.formation);
     return;
   }
   const filterBtn = event.target.closest("[data-filter]");

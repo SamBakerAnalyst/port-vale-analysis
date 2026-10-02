@@ -1,0 +1,115 @@
+/* Interventions — extends attacking-threat.css */
+.iv-grid--win { grid-template-columns: 0.85fr 1.4fr; }
+.iv-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 0; }
+
+.iv-htiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
+.iv-htile { position: relative; padding: .9rem 1rem 1rem; border-radius: 14px; background: rgba(10,13,18,.6); border: 1px solid var(--border); overflow: hidden; }
+.iv-htile::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: rgba(148,163,184,.35); }
+.iv-htile--good::before { background: var(--good); } .iv-htile--bad::before { background: var(--bad); }
+.iv-htile__top { display: flex; justify-content: space-between; align-items: center; gap: .4rem; }
+.iv-htile__label { color: var(--muted); font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.iv-htile strong { display: block; margin: .35rem 0 .15rem; font: 700 2rem/1.05 var(--mono); }
+.iv-htile--good strong { color: #6ee7b7; } .iv-htile--bad strong { color: #fca5a5; }
+.iv-htile small { display: block; color: var(--muted); font-size: .78rem; line-height: 1.35; }
+.iv-htile small b { color: var(--text); font-family: var(--mono); }
+.iv-vs { display: flex; height: 6px; border-radius: 999px; overflow: hidden; margin-top: .55rem; background: rgba(255,255,255,.06); }
+.iv-vs i { display: block; height: 100%; animation: at-grow .9s ease-out both; }
+.iv-vs__us { background: linear-gradient(90deg, #f59e0b, #ffe27a); }
+.iv-vs__them { background: rgba(248,113,113,.65); }
+
+/* Evidence */
+.iv-ev { display: grid; gap: .6rem; margin-top: .3rem; }
+.iv-ev__row { display: grid; grid-template-columns: 11rem 1fr 3.4rem; gap: .7rem; align-items: center; font-size: .9rem; }
+.iv-ev__track { position: relative; height: 10px; border-radius: 999px; background: rgba(255,255,255,.06); }
+.iv-ev__track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; border-left: 1px dashed rgba(255,255,255,.3); }
+.iv-ev__bar { position: absolute; top: 0; bottom: 0; border-radius: 999px; animation: at-grow .9s ease-out both; }
+.iv-ev__row b { font: 700 .92rem var(--mono); text-align: right; }
+
+/* Battles */
+.iv-battles { display: grid; gap: .55rem; }
+.iv-battle { display: grid; grid-template-columns: minmax(10rem, 1.1fr) 2fr 4.6rem; gap: .9rem; align-items: center; padding: .6rem .75rem; border-radius: 12px; background: rgba(10,13,18,.5); border: 1px solid var(--border); }
+.iv-battle--top { border-color: var(--border-strong); background: linear-gradient(90deg, rgba(245,197,24,.08), rgba(10,13,18,.5) 60%); }
+.iv-battle__name { font-weight: 700; font-size: .93rem; }
+.iv-battle__name small { display: block; color: var(--muted); font-weight: 500; font-size: .76rem; }
+.iv-battle__bars { display: grid; gap: .3rem; }
+.iv-battle__bar { display: grid; grid-template-columns: 4.6rem 1fr 7.6rem; gap: .5rem; align-items: center; font-size: .76rem; color: var(--muted); }
+.iv-battle__bar .at-bar { height: 8px; }
+.iv-battle__bar em { font-style: normal; font-family: var(--mono); color: #cbd5e1; text-align: right; white-space: nowrap; }
+.iv-battle__gap { text-align: right; font: 800 1.25rem var(--mono); }
+.iv-battle__gap small { display: block; font: 500 .68rem var(--font); color: var(--muted); letter-spacing: .04em; }
+.iv-wdl { display: inline-flex; gap: 2px; vertical-align: middle; }
+
+/* Results split */
+.iv-split { width: 100%; }
+.iv-split td, .iv-split th { text-align: right; }
+.iv-split td:first-child, .iv-split th:first-child { text-align: left; }
+.iv-hi { color: #6ee7b7; font-weight: 700; } .iv-lo { color: #fca5a5; }
+
+/* Map */
+.iv-tools { display: flex; flex-wrap: wrap; gap: .55rem .9rem; align-items: center; margin-bottom: .8rem; }
+.iv-tools .at-toggle__btn { padding: .34rem .75rem; font-size: .82rem; }
+.iv-tools select { min-width: 190px; padding: .38rem .7rem; font-size: .86rem; }
+.iv-zone { cursor: pointer; transition: opacity .15s; }
+.iv-zone rect { transition: stroke .15s, stroke-width .15s; }
+.iv-zone:hover rect, .iv-zone.is-on rect { stroke: #ffe27a; stroke-width: 4; }
+.iv-zone text { pointer-events: none; font-family: "JetBrains Mono", monospace; font-weight: 700; }
+.iv-pitch-wrap { position: relative; }
+.iv-thirds { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; margin-top: .7rem; }
+.iv-third { padding: .55rem .7rem; border-radius: 10px; background: rgba(10,13,18,.55); border: 1px solid var(--border); text-align: center; }
+.iv-third b { display: block; font: 700 1.35rem var(--mono); }
+.iv-third span { color: var(--muted); font-size: .74rem; }
+
+.iv-zone-detail h3 { margin: 0 0 .2rem; font-family: var(--display); font-size: 1.45rem; letter-spacing: .02em; text-transform: uppercase; }
+.iv-zone-detail p { margin: 0 0 .7rem; color: var(--muted); font-size: .86rem; }
+.iv-zstats { display: grid; grid-template-columns: repeat(3, 1fr); gap: .45rem; margin-bottom: .8rem; }
+.iv-zstats div { padding: .45rem .55rem; border-radius: 9px; background: rgba(7,9,13,.6); border: 1px solid var(--border); }
+.iv-zstats b { display: block; font: 700 1.1rem var(--mono); }
+.iv-zstats span { color: var(--muted); font-size: .7rem; }
+.iv-zlist { display: grid; gap: .3rem; }
+.iv-zlist__row { display: grid; grid-template-columns: 1.4rem 1fr auto; gap: .5rem; align-items: center; font-size: .86rem; padding: .3rem .45rem; border-radius: 8px; background: rgba(10,13,18,.45); }
+.iv-zlist__row b { font-family: var(--mono); }
+.iv-zlist__n { color: var(--gold); font-family: var(--display); font-weight: 800; }
+
+/* Players */
+.iv-ptools { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; margin: -.3rem 0 .8rem; }
+.iv-ptable th { cursor: pointer; user-select: none; }
+.iv-ptable th.is-sorted { color: var(--gold); }
+.iv-ptable td { font-family: var(--mono); font-size: .88rem; }
+.iv-ptable td:nth-child(2) { font-family: var(--font); font-weight: 700; }
+.iv-ptable tr { cursor: pointer; }
+.iv-ptable tr.is-on td { background: rgba(245,197,24,.1); }
+.iv-unit { display: inline-block; padding: .06rem .45rem; border-radius: 999px; font: 700 .68rem var(--font); letter-spacing: .05em; text-transform: uppercase; }
+.iv-unit--DEF { background: rgba(96,165,250,.16); color: #93c5fd; }
+.iv-unit--MID { background: rgba(52,211,153,.14); color: #6ee7b7; }
+.iv-unit--ATT { background: rgba(248,113,113,.16); color: #fca5a5; }
+.iv-unit--GK { background: rgba(148,163,184,.14); color: var(--muted); }
+.iv-heat { display: inline-block; min-width: 2.6rem; padding: .08rem .35rem; border-radius: 6px; }
+
+/* Units / types / periods */
+.iv-unitcard { display: grid; gap: .65rem; }
+.iv-unitrow { padding: .65rem .75rem; border-radius: 12px; background: rgba(10,13,18,.5); border: 1px solid var(--border); }
+.iv-unitrow__top { display: flex; justify-content: space-between; align-items: baseline; }
+.iv-unitrow__top b { font: 700 1.2rem var(--mono); }
+.iv-unitrow__stats { display: flex; flex-wrap: wrap; gap: .25rem .9rem; color: var(--muted); font-size: .78rem; margin-top: .3rem; }
+.iv-unitrow__stats b { color: var(--text); font-family: var(--mono); }
+.iv-periods { display: grid; grid-template-columns: repeat(6, 1fr); gap: .4rem; align-items: end; height: 170px; margin-top: .6rem; }
+.iv-period { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: .25rem; height: 100%; }
+.iv-period__bars { display: flex; gap: 3px; align-items: flex-end; height: 130px; width: 100%; justify-content: center; }
+.iv-period__bars i { display: block; width: 38%; border-radius: 4px 4px 0 0; min-height: 2px; transform-origin: bottom; animation: at-rise .9s both; }
+.iv-period span { font: 600 .7rem var(--mono); color: var(--muted); }
+
+/* Match table */
+.iv-mt td { font-family: var(--mono); font-size: .86rem; }
+.iv-mt td:nth-child(2) { font-family: var(--font); font-weight: 600; }
+.iv-mt .iv-cmp { display: inline-flex; gap: .3rem; align-items: baseline; }
+.iv-mt .iv-cmp small { color: var(--muted); font-size: .72rem; }
+.iv-won { color: #6ee7b7; } .iv-lost { color: #fca5a5; }
+
+@media (max-width: 1200px) {
+  .iv-grid--win, .iv-grid--3 { grid-template-columns: 1fr; }
+  .iv-htiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+  .iv-battle { grid-template-columns: 1fr; }
+  .iv-ev__row { grid-template-columns: 8rem 1fr 3rem; }
+}

@@ -417,7 +417,7 @@ def _impect_get_once(path: str, params: dict[str, Any] | None = None) -> dict[st
 
     for attempt in range(4):
         if time.time() < _rate_limited_until:
-            time.sleep(min(2.0, _rate_limited_until - time.time()))
+            time.sleep(max(0.0, min(2.0, _rate_limited_until - time.time())))
         try:
             with _impect_semaphore:
                 response = _http.get(

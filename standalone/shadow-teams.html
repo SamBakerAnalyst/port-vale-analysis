@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shadow Teams</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/attacking-threat.css?v=15" />
+  <link rel="stylesheet" href="/static/shadow-teams.css?v=1" />
+</head>
+<body>
+  <div class="at-glow" aria-hidden="true"></div>
+  <div class="at-app">
+    <header class="at-toolbar">
+      <div>
+        <p class="at-toolbar__eyebrow">Strategy · <a href="/">← All apps</a></p>
+        <h1 class="at-toolbar__title">Shadow <span>Teams</span></h1>
+        <p class="at-toolbar__subtitle">Clubs we can learn from. How Lincoln, Stockport and Bradford got successful: ownership, coaches, style, squad archetype, patterns and recruitment, every season Impect covers, side by side with Port Vale.</p>
+      </div>
+      <div class="at-controls">
+        <div class="at-controls__group">
+          <span class="at-controls__label">Shadow team</span>
+          <div id="clubToggle" class="at-toggle" role="group" aria-label="Shadow team"></div>
+        </div>
+        <div class="at-controls__group" id="seasonGroup">
+          <span class="at-controls__label">Season</span>
+          <select id="seasonSelect" class="st-select" aria-label="Season"></select>
+        </div>
+        <div class="at-controls__group">
+          <span class="at-controls__label">Port Vale season to compare</span>
+          <select id="valeSelect" class="st-select" aria-label="Port Vale season"></select>
+        </div>
+      </div>
+    </header>
+
+    <nav class="at-nav" id="sectionNav" aria-label="Sections"></nav>
+
+    <main id="view"></main>
+
+    <footer id="statusBar" class="at-footer">Loading Shadow Teams…</footer>
+  </div>
+  <script defer src="/static/shadow-teams.js?v=1"></script>
+  <script defer src="/static/hub-feedback.js?v=1"></script>
+</body>
+</html>

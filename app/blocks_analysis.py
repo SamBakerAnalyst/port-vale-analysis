@@ -111,7 +111,7 @@ PAYLOAD_CACHE_TTL = 45
 PLAYER_NAMES_TTL = 6 * 3600
 BENCHMARK_CACHE_TTL = 600
 UNIT_TOP7_TTL = 24 * 3600
-UNIT_TOP7_VERSION = 7
+UNIT_TOP7_VERSION = 8
 UNIT_TOP7_GAMES_PER_SQUAD = 8
 # Fallback Req when sampled top-7 rows are empty (early season / sparse Impect).
 UNIT_TOP7_REQ_FLOORS: dict[tuple[str, str], float] = {
@@ -121,6 +121,45 @@ UNIT_TOP7_REQ_FLOORS: dict[tuple[str, str], float] = {
 FORM_BASELINE_GAMES = 7
 UNITS: tuple[str, ...] = ("DEF", "MID", "ATT")
 UNIT_BASELINE_STARTERS: dict[str, int] = {"DEF": 4, "MID": 3, "ATT": 3}
+# Shapes staff can pin on a match. Req for each is built from top-7 per-position
+# averages, summed over the slots that shape puts in each unit.
+FORMATION_OPTIONS: tuple[str, ...] = ("4-4-2", "4-3-3", "4-2-3-1", "3-5-2", "3-4-3")
+FORMATION_SLOTS: dict[str, dict[str, tuple[str, ...]]] = {
+    "4-4-2": {"DEF": ("CB", "CB", "FB", "FB"), "MID": ("DM", "CM"), "ATT": ("WIDE", "WIDE", "CF", "CF")},
+    "4-3-3": {"DEF": ("CB", "CB", "FB", "FB"), "MID": ("DM", "CM", "CM"), "ATT": ("WIDE", "WIDE", "CF")},
+    "4-2-3-1": {"DEF": ("CB", "CB", "FB", "FB"), "MID": ("DM", "DM"), "ATT": ("AM", "WIDE", "WIDE", "CF")},
+    "3-5-2": {"DEF": ("CB", "CB", "CB"), "MID": ("WB", "WB", "DM", "CM", "CM"), "ATT": ("CF", "CF")},
+    "3-4-3": {"DEF": ("CB", "CB", "CB"), "MID": ("WB", "WB", "DM", "CM"), "ATT": ("WIDE", "WIDE", "CF")},
+    "5-3-2": {"DEF": ("CB", "CB", "CB", "WB", "WB"), "MID": ("DM", "DM", "AM"), "ATT": ("CF", "CF")},
+    "5-2-3": {"DEF": ("CB", "CB", "CB", "WB", "WB"), "MID": ("DM", "DM"), "ATT": ("AM", "AM", "CF")},
+}
+SLOT_FALLBACKS: dict[str, tuple[str, ...]] = {
+    "CB": ("FB", "WB"),
+    "FB": ("WB", "CB"),
+    "WB": ("FB", "WIDE"),
+    "DM": ("CM",),
+    "CM": ("DM", "AM"),
+    "AM": ("CM", "WIDE"),
+    "WIDE": ("AM", "CF"),
+    "CF": ("AM", "WIDE"),
+}
+# Back-to-front order used to fill a pinned shape from the starting XI.
+POSITION_DEPTH: dict[str, int] = {
+    "CENTRAL_DEFENDER": 0,
+    "LEFT_WINGBACK_DEFENDER": 1,
+    "RIGHT_WINGBACK_DEFENDER": 1,
+    "DEFENSE_MIDFIELD": 2,
+    "CENTRAL_MIDFIELD": 3,
+    "LEFT_CENTRAL_MIDFIELD": 3,
+    "RIGHT_CENTRAL_MIDFIELD": 3,
+    "LEFT_MIDFIELD": 4,
+    "RIGHT_MIDFIELD": 4,
+    "ATTACKING_MIDFIELD": 5,
+    "LEFT_WINGER": 6,
+    "RIGHT_WINGER": 6,
+    "SECOND_STRIKER": 7,
+    "CENTER_FORWARD": 8,
+}
 UNIT_METRIC_SPECS: dict[str, dict[str, Any]] = {
     "defendersBypassed": {"higherBetter": True, "rate": False, "digits": 1},
     "ballProgression": {"higherBetter": True, "rate": False, "digits": 1},
@@ -182,6 +221,7 @@ TARGETS_PATH = DATA_DIR / "targets.json"
 KPI_CACHE_PATH = DATA_DIR / "match-kpis.json"
 UNIT_TOP7_PATH = DATA_DIR / "unit-top7.json"
 SEASON_MATCHES_PATH = DATA_DIR / "season-matches.json"
+FORMATIONS_PATH = DATA_DIR / "formations.json"
 
 _store_lock = threading.Lock()
 _payload_cache: dict[str, tuple[float, dict[str, Any]]] = {}
@@ -275,6 +315,13 @@ class BlockTargetUpdate(BaseModel):
     medal: str = "silver"
     points: int = Field(ge=0, le=18)
     clean_sheets: int = Field(alias="cleanSheets", ge=0, le=6)
+
+    model_config = {"populate_by_name": True}
+
+
+class MatchFormationUpdate(BaseModel):
+    match_id: int = Field(alias="matchId", gt=0)
+    formation: str | None = None
 
     model_config = {"populate_by_name": True}
 
@@ -418,6 +465,61 @@ def _save_unit_top7_disk(payload: dict[str, Any]) -> None:
     with _store_lock:
         temp_path.write_text(json.dumps(payload), encoding="utf-8")
         temp_path.replace(UNIT_TOP7_PATH)
+
+
+def _normalize_formation_choice(value: Any) -> str | None:
+    text = str(value or "").strip().lower()
+    if not text or text == "auto":
+        return None
+    label = _clean_formation_label(text)
+    if label not in FORMATION_OPTIONS:
+        raise ValueError(f"formation must be one of {', '.join(FORMATION_OPTIONS)} or auto")
+    return label
+
+
+def _load_formation_overrides() -> dict[str, str]:
+    if not FORMATIONS_PATH.exists():
+        return {}
+    try:
+        payload = json.loads(FORMATIONS_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    rows = payload.get("matches") if isinstance(payload, dict) else None
+    if not isinstance(rows, dict):
+        return {}
+    out: dict[str, str] = {}
+    for key, value in rows.items():
+        label = _clean_formation_label(value)
+        if label in FORMATION_OPTIONS:
+            out[str(key)] = label
+    return out
+
+
+def _save_formation_override(match_id: int, formation: str | None) -> dict[str, str]:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with _store_lock:
+        rows: dict[str, str] = {}
+        if FORMATIONS_PATH.exists():
+            try:
+                payload = json.loads(FORMATIONS_PATH.read_text(encoding="utf-8"))
+                if isinstance(payload, dict) and isinstance(payload.get("matches"), dict):
+                    rows = dict(payload["matches"])
+            except (OSError, json.JSONDecodeError):
+                rows = {}
+        if formation:
+            rows[str(int(match_id))] = formation
+        else:
+            rows.pop(str(int(match_id)), None)
+        temp_path = FORMATIONS_PATH.with_suffix(".json.tmp")
+        temp_path.write_text(
+            json.dumps(
+                {"matches": rows, "updated_at": datetime.now(UTC).isoformat()},
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        temp_path.replace(FORMATIONS_PATH)
+    return _load_formation_overrides()
 
 
 def _load_season_matches_disk() -> list[dict[str, Any]]:
@@ -830,6 +932,7 @@ def _lineup_roles(match_id: int, squad_id: int) -> dict[int, dict[str, Any]]:
                 "unit": unit,
                 "started": False,
                 "position": to_pos,
+                "replaced": off_id or None,
             }
     except Exception:  # noqa: BLE001
         return roles
@@ -1128,6 +1231,10 @@ def _apply_lineup_roles(players: list[dict[str, Any]], roles: dict[int, dict[str
         if unit in UNITS or unit == "WB":
             player["unit"] = unit
         player["started"] = bool(role.get("started"))
+        if role.get("position"):
+            player["position"] = role.get("position")
+        if role.get("replaced"):
+            player["replacedPlayerId"] = int(role["replaced"])
 
 
 def _units_from_report(players: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -1222,6 +1329,221 @@ def _retouch_byers_532_stats(stats: dict[str, Any]) -> bool:
     stats["unitBaselines"] = _unit_baselines_for_formation("5-3-2")
     stats["units"] = _units_from_report(players)
     return True
+
+
+def _formation_unit_counts(formation: str | None) -> dict[str, int] | None:
+    slots = FORMATION_SLOTS.get(_clean_formation_label(formation) or "")
+    if not slots:
+        return None
+    return {unit: len(slots[unit]) for unit in UNITS}
+
+
+def _position_depth(position: Any) -> int:
+    text = _normalize_position(position)
+    if text in POSITION_DEPTH:
+        return POSITION_DEPTH[text]
+    if "WINGBACK" in text or "FULL_BACK" in text or "FULLBACK" in text:
+        return 1
+    if "DEFEND" in text:
+        return 0
+    if "WINGER" in text:
+        return 6
+    if "FORWARD" in text or "STRIKER" in text:
+        return 8
+    return 3
+
+
+def _assign_units_for_formation(players: list[dict[str, Any]], formation: str) -> bool:
+    """Fill the pinned shape back-to-front from the XI; subs take the unit they replaced."""
+    counts = _formation_unit_counts(formation)
+    if not counts or not players:
+        return False
+    starters = [
+        player
+        for player in players
+        if player.get("started")
+        and player.get("position")
+        and "GOAL" not in _normalize_position(player.get("position"))
+    ]
+    if not starters:
+        return False
+    ordered = sorted(starters, key=lambda player: _position_depth(player.get("position")))
+    by_id: dict[int, str] = {}
+    cursor = 0
+    for unit in UNITS:
+        for _ in range(counts[unit]):
+            if cursor >= len(ordered):
+                break
+            ordered[cursor]["unit"] = unit
+            cursor += 1
+    for player in ordered[cursor:]:
+        player["unit"] = "ATT"
+    for player in ordered:
+        by_id[int(player.get("playerId") or 0)] = player["unit"]
+    pending = [
+        player
+        for player in players
+        if not player.get("started") and player.get("position")
+    ]
+    for _ in range(3):
+        still: list[dict[str, Any]] = []
+        for player in pending:
+            replaced = int(player.get("replacedPlayerId") or 0)
+            unit = by_id.get(replaced)
+            if unit is None and replaced:
+                still.append(player)
+                continue
+            if unit is None:
+                unit = _unit_for_position(
+                    player.get("position"),
+                    formation,
+                    on_as_sub=True,
+                    player_id=player.get("playerId"),
+                )
+            if unit == "WB":
+                unit = "MID" if counts["DEF"] == 3 else "DEF"
+            player["unit"] = unit if unit in UNITS else None
+            by_id[int(player.get("playerId") or 0)] = player["unit"]
+        if not still:
+            break
+        pending = still
+    else:
+        for player in pending:
+            unit = _unit_for_position(player.get("position"), formation, on_as_sub=True)
+            player["unit"] = unit if unit in UNITS else None
+    return True
+
+
+def _position_slot(position: Any, back_three: bool) -> str | None:
+    text = _normalize_position(position)
+    if not text or "GOAL" in text:
+        return None
+    if text == "CENTRAL_DEFENDER":
+        return "CB"
+    if "WINGBACK" in text or "WING_BACK" in text or "FULL_BACK" in text or "FULLBACK" in text:
+        return "WB" if back_three else "FB"
+    if text == "DEFENSE_MIDFIELD":
+        return "DM"
+    if text == "ATTACKING_MIDFIELD":
+        return "AM"
+    if text in {"LEFT_MIDFIELD", "RIGHT_MIDFIELD"} or "WINGER" in text:
+        return "WIDE"
+    if "FORWARD" in text or "STRIKER" in text:
+        return "CF"
+    if "DEFEND" in text:
+        return "CB"
+    if "MID" in text:
+        return "CM"
+    return None
+
+
+SLOT_SUM_KEYS: tuple[str, ...] = (
+    *UNIT_COUNT_KEYS,
+    "duelWon",
+    "duelTotal",
+    "aerialWon",
+    "aerialTotal",
+)
+
+
+def _slot_sums_from_report(
+    report: list[dict[str, Any]],
+    roles: dict[int, dict[str, Any]],
+) -> dict[str, Any]:
+    """Per-position totals for one team-match. Subs count in the slot they replaced."""
+    starter_positions = [
+        _normalize_position(role.get("position"))
+        for role in roles.values()
+        if role.get("started")
+    ]
+    back_three = sum(1 for code in starter_positions if code == "CENTRAL_DEFENDER") >= 3
+    slot_of: dict[int, str | None] = {}
+    starters: dict[str, int] = defaultdict(int)
+    for pid, role in roles.items():
+        if not role.get("started"):
+            continue
+        slot = _position_slot(role.get("position"), back_three)
+        slot_of[int(pid)] = slot
+        if slot:
+            starters[slot] += 1
+    for pid, role in roles.items():
+        if role.get("started"):
+            continue
+        replaced = int(role.get("replaced") or 0)
+        slot_of[int(pid)] = slot_of.get(replaced) or _position_slot(role.get("position"), back_three)
+    sums: dict[str, dict[str, float]] = {}
+    for player in report:
+        try:
+            pid = int(player.get("playerId") or 0)
+        except (TypeError, ValueError):
+            continue
+        slot = slot_of.get(pid)
+        if not slot:
+            continue
+        bucket = sums.setdefault(slot, {key: 0.0 for key in SLOT_SUM_KEYS})
+        for key in SLOT_SUM_KEYS:
+            bucket[key] += float(player.get(key) or 0)
+    return {"sums": sums, "starters": dict(starters)}
+
+
+def _per_slot_averages(acc: dict[str, Any]) -> dict[str, dict[str, float]]:
+    out: dict[str, dict[str, float]] = {}
+    for slot, sums in (acc.get("sums") or {}).items():
+        count = float((acc.get("starters") or {}).get(slot) or 0)
+        if count <= 0:
+            continue
+        out[slot] = {key: float(sums.get(key) or 0) / count for key in SLOT_SUM_KEYS}
+    return out
+
+
+def _slot_average(per_slot: dict[str, dict[str, float]], slot: str) -> dict[str, float] | None:
+    if slot in per_slot:
+        return per_slot[slot]
+    for alt in SLOT_FALLBACKS.get(slot, ()):
+        if alt in per_slot:
+            return per_slot[alt]
+    return None
+
+
+def _formation_targets_from_slots(
+    per_slot: dict[str, dict[str, float]],
+    generic_top7: dict[str, dict[str, float | None]] | None = None,
+) -> dict[str, dict[str, dict[str, float | None]]]:
+    """Top-7 Req per shape: sum the per-position averages for the slots in each unit."""
+    out: dict[str, dict[str, dict[str, float | None]]] = {}
+    if not per_slot:
+        return out
+    for formation, units in FORMATION_SLOTS.items():
+        shape: dict[str, dict[str, float | None]] = {}
+        for unit in UNITS:
+            rows = [_slot_average(per_slot, slot) for slot in units[unit]]
+            rows = [row for row in rows if row]
+            if not rows:
+                shape[unit] = {key: None for key in UNIT_METRIC_SPECS}
+                continue
+            totals = {key: sum(row[key] for row in rows) for key in SLOT_SUM_KEYS}
+            values: dict[str, float | None] = {}
+            for key, spec in UNIT_METRIC_SPECS.items():
+                if key in UNIT_RATE_FIELDS:
+                    won_key, total_key = UNIT_RATE_FIELDS[key]
+                    total = totals[total_key]
+                    values[key] = _round_or_none(
+                        (100.0 * totals[won_key] / total) if total > 0 else None,
+                        spec["digits"],
+                    )
+                else:
+                    values[key] = _round_or_none(totals.get(key), spec["digits"])
+            if unit == "ATT" and generic_top7:
+                # Attack carries the team cross threat, not just its own players' crosses.
+                team_cross = (generic_top7.get("ATT") or {}).get("crossPxt")
+                if team_cross is not None:
+                    values["crossPxt"] = team_cross
+            for (floor_unit, floor_key), floor in UNIT_TOP7_REQ_FLOORS.items():
+                if floor_unit == unit and float(values.get(floor_key) or 0) <= 0:
+                    values[floor_key] = floor
+            shape[unit] = values
+        out[formation] = shape
+    return out
 
 
 def _retouch_payload_lineups(payload: dict[str, Any] | None) -> bool:
@@ -2619,10 +2941,11 @@ def _iteration_top7_sample_matches(
 def _fetch_match_unit_stats(
     match_id: int,
     squad_id: int,
-) -> dict[str, dict[str, Any]]:
-    """Unit rows for benchmarks — open-play shots and cross threat need event hydration."""
+) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
+    """Unit rows + per-position sums for benchmarks — shots and crosses need event hydration."""
     names = dict(_merged_player_names())
     names.update(_match_roster_names(match_id))
+    empty_slots: dict[str, Any] = {"sums": {}, "starters": {}}
     try:
         players = _flatten_player_kpis(
             impect_get(v5_path(f"/matches/{match_id}/player-kpis"))["data"],
@@ -2630,7 +2953,8 @@ def _fetch_match_unit_stats(
         )
         formation = _match_starting_formation(match_id, squad_id)
         report = _player_match_report(players, squad_id, names, formation)
-        _apply_lineup_roles(report, _lineup_roles(match_id, squad_id))
+        roles = _lineup_roles(match_id, squad_id)
+        _apply_lineup_roles(report, roles)
         stats: dict[str, Any] = {
             "players": report,
             "units": _units_from_report(report),
@@ -2638,15 +2962,16 @@ def _fetch_match_unit_stats(
         }
         _hydrate_open_play_shots(stats, squad_id, match_id, fetch_remote=True)
         units = stats.get("units")
-        return units if isinstance(units, dict) else _empty_units()
+        slots = _slot_sums_from_report(stats.get("players") or report, roles)
+        return (units if isinstance(units, dict) else _empty_units()), slots
     except Exception:  # noqa: BLE001
-        return _empty_units()
+        return _empty_units(), empty_slots
 
 
 def _fetch_match_player_units(
     match_id: int,
     squad_ids: list[int],
-) -> dict[int, dict[str, dict[str, Any]]]:
+) -> dict[int, tuple[dict[str, dict[str, Any]], dict[str, Any]]]:
     return {
         int(squad_id): _fetch_match_unit_stats(match_id, int(squad_id))
         for squad_id in squad_ids
@@ -2712,10 +3037,15 @@ def _unit_averages_from_stats_list(
 
 def _build_unit_top7_from_sample(
     iteration_id: int,
-) -> tuple[dict[str, dict[str, float | None]], dict[str, dict[str, float | None]]]:
+) -> tuple[
+    dict[str, dict[str, float | None]],
+    dict[str, dict[str, float | None]],
+    dict[str, dict[str, dict[str, float | None]]],
+]:
     top7_ids = set(_iteration_table_top7_ids(iteration_id))
     matches = _iteration_top7_sample_matches(iteration_id, top7_ids)
     acc: dict[int, dict[str, dict[str, Any]]] = {}
+    slot_acc: dict[str, Any] = {"sums": {}, "starters": defaultdict(int)}
 
     def cell(squad_id: int, unit: str) -> dict[str, Any]:
         squad = acc.setdefault(squad_id, {})
@@ -2747,7 +3077,15 @@ def _build_unit_top7_from_sample(
                 for squad_id in (int(match["homeSquadId"]), int(match["awaySquadId"])):
                     if squad_id not in top7_ids:
                         continue
-                    units = by_squad.get(squad_id) or {}
+                    units, slots = by_squad.get(squad_id) or ({}, {})
+                    for slot, count in (slots.get("starters") or {}).items():
+                        slot_acc["starters"][slot] += int(count)
+                    for slot, sums in (slots.get("sums") or {}).items():
+                        bucket = slot_acc["sums"].setdefault(
+                            slot, {key: 0.0 for key in SLOT_SUM_KEYS}
+                        )
+                        for key in SLOT_SUM_KEYS:
+                            bucket[key] += float(sums.get(key) or 0)
                     for unit in UNITS:
                         row = units.get(unit) or {}
                         bucket = cell(squad_id, unit)
@@ -2801,7 +3139,61 @@ def _build_unit_top7_from_sample(
         }
         for unit in UNITS
     }
-    return top7, pv_avg
+    by_formation = _formation_targets_from_slots(_per_slot_averages(slot_acc), top7)
+    return top7, pv_avg, by_formation
+
+
+_formation_targets_lock = threading.Lock()
+_formation_targets_building = False
+
+
+def _rebuild_unit_top7_disk() -> tuple[dict[str, Any], dict[str, Any]]:
+    top7, pv_prev, by_formation = _build_unit_top7_from_sample(BLOCKS_ITERATION_ID)
+    _save_unit_top7_disk(
+        {
+            "v": UNIT_TOP7_VERSION,
+            "fetchedAt": time.time(),
+            "iterationId": BLOCKS_ITERATION_ID,
+            "top7": top7,
+            "teamPrevious": pv_prev,
+            "byFormation": by_formation,
+        }
+    )
+    return top7, pv_prev
+
+
+def _formation_targets_background() -> None:
+    global _formation_targets_building
+    try:
+        _rebuild_unit_top7_disk()
+    except Exception:  # noqa: BLE001
+        logger.exception("Blocks per-formation top-7 targets build failed")
+    finally:
+        with _formation_targets_lock:
+            _formation_targets_building = False
+
+
+def formation_unit_targets(*, start_build: bool = True) -> dict[str, Any] | None:
+    """Per-shape top-7 Req from disk. Kicks a background build when missing or stale."""
+    global _formation_targets_building
+    disk = _load_unit_top7_disk()
+    by_formation = disk.get("byFormation") if isinstance(disk.get("byFormation"), dict) else None
+    current = (
+        disk.get("v") == UNIT_TOP7_VERSION
+        and disk.get("iterationId") == BLOCKS_ITERATION_ID
+        and by_formation
+    )
+    stale = time.time() - float(disk.get("fetchedAt") or 0) >= UNIT_TOP7_TTL
+    if start_build and (not current or stale):
+        with _formation_targets_lock:
+            if not _formation_targets_building:
+                _formation_targets_building = True
+                threading.Thread(
+                    target=_formation_targets_background,
+                    name="blocks-formation-top7",
+                    daemon=True,
+                ).start()
+    return by_formation if current else None
 
 
 def build_unit_benchmarks(
@@ -2828,16 +3220,7 @@ def build_unit_benchmarks(
             pass
         else:
             try:
-                top7, pv_prev = _build_unit_top7_from_sample(BLOCKS_ITERATION_ID)
-                _save_unit_top7_disk(
-                    {
-                        "v": UNIT_TOP7_VERSION,
-                        "fetchedAt": now,
-                        "iterationId": BLOCKS_ITERATION_ID,
-                        "top7": top7,
-                        "teamPrevious": pv_prev,
-                    }
-                )
+                top7, pv_prev = _rebuild_unit_top7_disk()
             except Exception:  # noqa: BLE001 — keep the dashboard live without unit top-7
                 top7 = top7 or {}
                 pv_prev = pv_prev or {}
@@ -3458,6 +3841,77 @@ def _finalize_blocks_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return synced
 
 
+def _ensure_player_positions(stats: dict[str, Any], match_id: int) -> bool:
+    """Older cached rows lack positions — pull the lineup once so a pinned shape can retag."""
+    players = stats.get("players") or []
+    if not players or all(player.get("position") for player in players if player.get("started")):
+        return False
+    try:
+        roles = _lineup_roles(int(match_id), PORT_VALE_SQUAD_ID)
+    except Exception:  # noqa: BLE001
+        return False
+    if not roles:
+        return False
+    _apply_lineup_roles(players, roles)
+    return True
+
+
+def _apply_formation_to_stats(stats: dict[str, Any], formation: str) -> None:
+    stats["autoFormation"] = stats.get("formation")
+    stats["formation"] = formation
+    stats["formationSource"] = "manual"
+    stats["unitBaselines"] = _formation_unit_counts(formation) or _unit_baselines_for_formation(formation)
+    players = stats.get("players") or []
+    if players and _assign_units_for_formation(players, formation):
+        stats["units"] = _units_from_report(players)
+        shots = list(((stats.get("xgRace") or {}).get("shots")) or [])
+        _assign_unattributed_shots_to_attack(stats, shots, PORT_VALE_SQUAD_ID)
+        _assign_team_cross_pxt_to_attack(stats)
+
+
+def apply_formation_overrides(payload: dict[str, Any]) -> dict[str, Any]:
+    """Pinned match shapes + per-shape top-7 Req, layered on a copy of the cached payload."""
+    if not isinstance(payload, dict) or not payload.get("blocks"):
+        return payload
+    import copy
+
+    overrides = _load_formation_overrides()
+    positions_added = False
+    for block in payload.get("blocks") or []:
+        for fixture in block.get("fixtures") or []:
+            match_id = str(fixture.get("matchId") or "")
+            if match_id in overrides and fixture.get("played"):
+                if _ensure_player_positions(fixture.get("stats") or {}, int(match_id)):
+                    positions_added = True
+    if positions_added:
+        _store_blocks_payload(payload)
+
+    out = copy.deepcopy(payload)
+    for block in out.get("blocks") or []:
+        touched = False
+        for fixture in block.get("fixtures") or []:
+            stats = fixture.setdefault("stats", {})
+            match_id = str(fixture.get("matchId") or "")
+            formation = overrides.get(match_id)
+            if formation:
+                _apply_formation_to_stats(stats, formation)
+                touched = True
+            else:
+                stats["formationSource"] = "auto"
+        if touched:
+            totals = _aggregate_stats(block.get("fixtures") or [])
+            block["totals"] = {**(block.get("totals") or {}), **totals}
+        block.setdefault("totals", {})["formations"] = [
+            (fixture.get("stats") or {}).get("formation")
+            for fixture in block.get("fixtures") or []
+            if fixture.get("played")
+        ]
+    benchmarks = out.setdefault("benchmarks", {})
+    benchmarks["unitsByFormation"] = formation_unit_targets() or {}
+    out["formationOptions"] = list(FORMATION_OPTIONS)
+    return out
+
+
 def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, Any]:
     cache_key = "default"
     now = time.time()
@@ -3571,7 +4025,18 @@ def register_blocks_analysis_routes(app: FastAPI) -> None:
                 status_code=502,
                 detail=f"Blocks Analysis failed to load fixtures: {exc}",
             ) from exc
-        return JSONResponse(payload, headers={"Cache-Control": "no-store"})
+        return JSONResponse(
+            apply_formation_overrides(payload), headers={"Cache-Control": "no-store"}
+        )
+
+    @app.put("/api/blocks-analysis/formation")
+    def blocks_analysis_save_formation(body: MatchFormationUpdate) -> dict[str, Any]:
+        try:
+            formation = _normalize_formation_choice(body.formation)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        overrides = _save_formation_override(body.match_id, formation)
+        return {"ok": True, "matchId": body.match_id, "formation": formation, "overrides": overrides}
 
     @app.put("/api/blocks-analysis/targets")
     def blocks_analysis_save_target(body: BlockTargetUpdate) -> dict[str, Any]:

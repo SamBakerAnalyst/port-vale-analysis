@@ -161,19 +161,52 @@
     const notes = state.payload?.scoring?.notes || {};
     const note = notes[state.look] || state.payload?.scoring?.note || "";
     if (els.sub && note) els.sub.textContent = note;
-    if (els.listTitle) els.listTitle.textContent = lookMeta().title;
+    if (els.listTitle) {
+      els.listTitle.textContent = state.coverage === "rare"
+        ? `Teams not watched often · ${lookMeta().title.toLowerCase()}`
+        : lookMeta().title;
+    }
   }
 
   function games() {
     return state.payload?.games || [];
   }
 
+  const RARE_WATCH_MAX = 1;
+
+  function teamKey(name) {
+    return String(name || "").trim().toLowerCase();
+  }
+
+  function teamWatchCounts() {
+    const counts = new Map();
+    games().forEach((game) => {
+      if (!game.assignment) return;
+      [game.home?.name, game.away?.name].forEach((name) => {
+        const key = teamKey(name);
+        if (key) counts.set(key, (counts.get(key) || 0) + 1);
+      });
+    });
+    return counts;
+  }
+
+  function watchCount(counts, name) {
+    return counts.get(teamKey(name)) || 0;
+  }
+
+  function fewestWatches(counts, game) {
+    return Math.min(watchCount(counts, game.home?.name), watchCount(counts, game.away?.name));
+  }
+
   function visibleGames() {
     const q = state.query.trim().toLowerCase();
+    const rare = state.coverage === "rare";
+    const counts = rare ? teamWatchCounts() : null;
     const rows = games().filter((game) => {
       if (state.league !== "ALL" && game.league !== state.league) return false;
       if (state.coverage === "assigned" && !game.assignment) return false;
       if (state.coverage === "unassigned" && game.assignment) return false;
+      if (rare && (game.assignment || fewestWatches(counts, game) > RARE_WATCH_MAX)) return false;
       if (state.phase === "played" && !game.played) return false;
       if (state.phase === "upcoming" && game.played) return false;
       const days = daysFromToday(game.date);
@@ -196,6 +229,10 @@
       return hay.includes(q);
     });
     rows.sort((a, b) => {
+      if (rare) {
+        const gap = fewestWatches(counts, a) - fewestWatches(counts, b);
+        if (gap) return gap;
+      }
       const ap = lookRank(a);
       const bp = lookRank(b);
       if (ap == null && bp == null) return String(a.date || "").localeCompare(String(b.date || ""));
@@ -274,6 +311,12 @@
       els.list.innerHTML = `<p class="gw-assign__note" style="padding:.8rem">No fixtures in this filter.</p>`;
       return;
     }
+    const counts = state.coverage === "rare" ? teamWatchCounts() : null;
+    const watchedLine = (game) => {
+      if (!counts) return "";
+      const side = (name) => `${escapeHtml(name || "")} ${watchCount(counts, name)}×`;
+      return `<p class="gw-row__meta">Watched this season: ${side(game.home?.name)} · ${side(game.away?.name)}</p>`;
+    };
     els.list.innerHTML = rows
       .map((game) => {
         const pct = lookRank(game);
@@ -302,6 +345,7 @@
                 ${game.quality_pct != null ? ` · avg ${game.quality_pct}` : ""}
               </p>
               ${heads ? `<p class="gw-row__heads">${escapeHtml(heads)}</p>` : ""}
+              ${watchedLine(game)}
             </div>
             <div class="gw-row__side">
               <span class="gw-pill ${label.cls}">${escapeHtml(label.text)}</span>

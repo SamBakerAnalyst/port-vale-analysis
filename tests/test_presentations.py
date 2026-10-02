@@ -43,6 +43,7 @@ def test_strategy_rail_is_dashboards_only():
         "Squad Comparison",
         "Season Progress Report",
         "What Wins Games",
+        "Shadow Teams",
         "Club Strategy",
         "Goals Analysis",
     ]

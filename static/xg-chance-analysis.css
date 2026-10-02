@@ -972,3 +972,161 @@ a:hover { text-decoration: underline; }
     grid-template-columns: 1fr;
   }
 }
+
+/* League table */
+.xca-league-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.xca-league-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: .85rem;
+}
+
+.xca-league-note--warn { color: var(--gold); }
+
+.xca-league-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem;
+}
+
+.xca-league-vale {
+  margin-bottom: 1rem;
+  padding: .85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(61, 139, 253, .06);
+}
+
+.xca-league-vale__title {
+  margin-bottom: .6rem;
+  font-family: var(--display);
+  font-size: 1.05rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.xca-league-vale__title span {
+  font-family: var(--font);
+  font-size: .78rem;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+
+.xca-league-vale__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: .5rem;
+}
+
+.xca-league-rank {
+  padding: .55rem .6rem;
+  border-radius: 8px;
+  border-top: 3px solid var(--border);
+  background: var(--surface-2);
+  text-align: center;
+}
+
+.xca-league-rank__label {
+  font-size: .7rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--text-muted);
+}
+
+.xca-league-rank__value {
+  font-family: var(--display);
+  font-size: 1.6rem;
+  line-height: 1.1;
+}
+
+.xca-league-rank__sub {
+  font-family: var(--mono);
+  font-size: .72rem;
+  color: var(--text-muted);
+}
+
+.xca-league-scroll { overflow-x: auto; }
+
+.xca-league-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .9rem;
+}
+
+.xca-league-table th,
+.xca-league-table td {
+  padding: .45rem .55rem;
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.xca-league-table th {
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--text-muted);
+}
+
+.xca-league-table th.col-left { text-align: left; }
+
+.xca-league-sort { cursor: pointer; user-select: none; }
+.xca-league-sort:hover,
+.xca-league-sort.is-sorted { color: var(--text); }
+
+.xca-league-pos {
+  width: 2rem;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
+
+.xca-league-table td.xca-league-team {
+  text-align: left;
+  font-weight: 600;
+}
+
+.xca-league-team__inner {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+}
+
+.xca-league-crest {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  flex: none;
+}
+
+.xca-league-crest--blank {
+  display: inline-block;
+  border-radius: 50%;
+  background: var(--surface-2);
+}
+
+.xca-league-num { font-family: var(--mono); }
+.xca-league-num--strong { font-weight: 700; }
+
+.xca-league-row--vale td {
+  border-top: 1px solid var(--vale);
+  border-bottom: 1px solid var(--vale);
+}
+
+.xca-league-row--vale .xca-league-team,
+.xca-league-row--vale .xca-league-pos {
+  color: var(--vale);
+  background: rgba(61, 139, 253, .12);
+}
+
+@media (max-width: 1100px) {
+  .xca-league-vale__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}

@@ -22,7 +22,6 @@ from app.paths import STANDALONE_DIR
 from app.set_plays_engine import (
     BUCKETS,
     FK_AREA_LABELS,
-    SEASON_GAMES,
     SUB_LABELS,
     ZONE_LABELS,
     benchmarks,
@@ -253,6 +252,9 @@ def _map_points(records: list[dict], players: dict, fixtures: dict[int, dict]) -
         if record.get("type") == "throw_in" and record.get("sub") != "long":
             continue
         fixture = fixtures.get(int(record["m"])) or {}
+        contact = record.get("fc") or {}
+        shots = record.get("shots") or []
+        key_shot = max(shots, key=lambda s: (bool(s.get("goal")), _num(s.get("xg"))), default=None)
         points.append({
             "type": record["type"],
             "sub": record["sub"],
@@ -264,6 +266,11 @@ def _map_points(records: list[dict], players: dict, fixtures: dict[int, dict]) -
             "outcome": _outcome(record),
             "xg": round(record_xg(record), 3),
             "taker": _name(players, record.get("del") or record.get("taker")),
+            "contact": _name(players, contact["pl"]) if contact.get("pl") else None,
+            "contactHead": bool(contact.get("head")),
+            "contactGk": bool(contact.get("gk")),
+            "shooter": _name(players, key_shot["pl"]) if key_shot and key_shot.get("pl") else None,
+            "shotHead": bool(key_shot and key_shot.get("head")),
             "minute": record.get("min"),
             "opponent": fixture.get("opponent"),
         })
@@ -541,6 +548,24 @@ LEVERS: tuple[dict[str, Any], ...] = (
 )
 
 
+LEVER_LABELS = {
+    "corner_attack": "Our corners",
+    "fk_attack": "Our free kicks into the box",
+    "throw_attack": "Our long throws",
+    "corner_defence": "Corners against us",
+    "fk_defence": "Free kicks into our box",
+    "throw_defence": "Long throws against us",
+}
+LEVER_NOUNS = {
+    "corner_attack": "corners we have taken",
+    "fk_attack": "free kicks we have crossed in",
+    "throw_attack": "long throws we have taken",
+    "corner_defence": "corners we have faced",
+    "fk_defence": "free kicks crossed into our box",
+    "throw_defence": "long throws we have faced",
+}
+
+
 def _squad_bucket_rates(records: list[dict], games: dict[int, int]) -> dict[int, dict[str, dict[str, float]]]:
     """xG per set play for every squad and lever, shrunk towards the league rate by sample size."""
     out: dict[int, dict[str, dict[str, float]]] = defaultdict(dict)
@@ -558,16 +583,37 @@ def _squad_bucket_rates(records: list[dict], games: dict[int, int]) -> dict[int,
             pool = by_for.get(squad, []) if lever["end"] == "attack" else by_against.get(squad, [])
             subset = [r for r in pool if in_bucket(r, lever["bucket"])]
             xg = sum(record_xg(r) for r in subset)
+            own_side = "att" if lever["end"] == "attack" else "def"
+            contested = [r for r in subset if (r.get("fc") or {}).get("team")]
             out[squad][lever["id"]] = {
                 "n": len(subset),
                 "perGame": len(subset) / played,
+                "xg": xg,
+                "goals": sum(record_goals(r) for r in subset),
+                "shots": sum(1 for r in subset if r.get("shots")),
+                "contested": len(contested),
+                "fcWon": sum(1 for r in contested if r["fc"]["team"] == own_side),
                 "raw": xg / len(subset) if subset else 0.0,
                 "xgPer": (xg + LEVER_PRIOR * league_rate) / (len(subset) + LEVER_PRIOR),
+                "leagueRate": league_rate,
             }
     return out
 
 
-def build_plan(records: list[dict], games: dict[int, int], names: dict, vale_id: int, ppg: float) -> list[dict]:
+def _league_fc_pct(records: list[dict], bucket: str, attacking: bool) -> float | None:
+    contested = [r for r in records if in_bucket(r, bucket) and (r.get("fc") or {}).get("team")]
+    if not contested:
+        return None
+    att_won = sum(1 for r in contested if r["fc"]["team"] == "att")
+    share = att_won / len(contested)
+    return round(100 * (share if attacking else 1 - share), 1)
+
+
+def build_plan(records: list[dict], games: dict[int, int], names: dict, vale_id: int) -> list[dict]:
+    """Each set-play type so far this season against what an average League Two side does with the same volume.
+
+    ``vsAvg`` is in xG and always reads "positive = better than average".
+    """
     rates = _squad_bucket_rates(records, games)
     vale = rates.get(vale_id) or {}
     plan = []
@@ -585,35 +631,32 @@ def build_plan(records: list[dict], games: dict[int, int], names: dict, vale_id:
         best_squad, best = sorted(others, key=lambda item: item[1]["xgPer"], reverse=attack)[0]
         pool = others + [(vale_id, mine)]
         ordered = sorted(pool, key=lambda item: item[1]["xgPer"], reverse=attack)
-        top3 = sum(item[1]["xgPer"] for item in ordered[:3]) / 3
-        avg = sum(item[1]["xgPer"] for item in pool) / len(pool)
         rank = next(i for i, (squad, _) in enumerate(ordered, start=1) if squad == vale_id)
-        volume = mine["perGame"] * SEASON_GAMES
-        gap_best = (best["xgPer"] - mine["xgPer"]) if attack else (mine["xgPer"] - best["xgPer"])
-        gap_top3 = (top3 - mine["xgPer"]) if attack else (mine["xgPer"] - top3)
-        goals_best = max(0.0, gap_best) * volume
-        goals_top3 = max(0.0, gap_top3) * volume
+        league_rate = mine["leagueRate"]
+        expected = league_rate * mine["n"]
+        vs_avg = (mine["xg"] - expected) if attack else (expected - mine["xg"])
         plan.append({
             "id": lever["id"],
             "end": lever["end"],
             "title": lever["title"],
-            "what": lever["what"],
-            "vale": round(mine["xgPer"], 4),
-            "valeRaw": round(mine["raw"], 4),
-            "valeCount": mine["n"],
-            "valeVolume": round(mine["perGame"], 2),
+            "count": mine["n"],
+            "perGame": round(mine["perGame"], 2),
+            "xg": round(mine["xg"], 2),
+            "goals": mine["goals"],
+            "shots": mine["shots"],
+            "fcPct": round(100 * mine["fcWon"] / mine["contested"], 1) if mine["contested"] else None,
+            "leagueFcPct": _league_fc_pct(records, lever["bucket"], attack),
+            "avgXg": round(expected, 2),
+            "vsAvg": round(vs_avg, 2),
+            "valeRate": round(mine["raw"], 4),
+            "leagueRate": round(league_rate, 4),
+            "bestRate": round(best["raw"], 4),
+            "bestClub": names.get(str(best_squad)) or f"Squad {best_squad}",
             "rank": rank,
             "of": len(pool),
-            "leagueAvg": round(avg, 4),
-            "top3": round(top3, 4),
-            "best": round(best["xgPer"], 4),
-            "bestClub": names.get(str(best_squad)) or f"Squad {best_squad}",
-            "goalsAtBest": round(goals_best, 1),
-            "goalsAtTop3": round(goals_top3, 1),
-            "pointsAtBest": round(goals_best * ppg, 1),
-            "pointsAtTop3": round(goals_top3 * ppg, 1),
+            "smallSample": mine["n"] < LEVER_MIN_EVENTS,
         })
-    plan.sort(key=lambda row: (-row["goalsAtTop3"], -row["goalsAtBest"]))
+    plan.sort(key=lambda row: row["vsAvg"])
     return plan
 
 
@@ -637,26 +680,29 @@ def build_insights(report: dict) -> list[dict]:
     plan = report.get("plan") or []
     marks = {row["id"]: row for row in report.get("benchmarks") or []}
 
-    if plan and plan[0]["goalsAtTop3"] > 0:
-        top = plan[0]
-        scored = top["end"] == "attack"
+    if plan and plan[0]["vsAvg"] < 0:
+        worst = plan[0]
+        noun = LEVER_NOUNS.get(worst["id"], "set plays")
+        attacking = worst["end"] == "attack"
         out.append({
             "tone": "bad",
-            "title": f"Biggest win available: {top['title'].lower()}",
+            "title": f"Biggest problem: {LEVER_LABELS.get(worst['id'], worst['title']).lower()}",
             "text": (
-                f"We are {_ordinal(top['rank'])} of {top['of']} in League Two. Getting this up to the level of the top three "
-                f"is worth about {top['goalsAtTop3']:.1f} {'more goals scored' if scored else 'fewer goals conceded'} "
-                f"a season — roughly {top['pointsAtTop3']:.0f} points."
+                f"From the {worst['count']} {noun} so far, an average League Two side would have "
+                f"{'created' if attacking else 'conceded'} {worst['avgXg']:.1f} xG. We have "
+                f"{'created' if attacking else 'conceded'} {worst['xg']:.1f} — {abs(worst['vsAvg']):.1f} "
+                f"{'short' if attacking else 'worse'}. {_ordinal(worst['rank'])} of {worst['of']} in League Two."
             ),
         })
-    total_top3 = sum(row["goalsAtTop3"] for row in plan)
-    if total_top3 >= 1:
+    if plan:
+        net = sum(row["vsAvg"] for row in plan)
         out.append({
-            "tone": "info",
-            "title": f"Set plays are worth {total_top3:.0f} goals a season to us",
+            "tone": "good" if net >= 0 else "bad",
+            "title": f"Set plays so far: {'+' if net >= 0 else '−'}{abs(net):.1f} xG against an average side",
             "text": (
-                f"If every type of set play — ours and theirs — was as good as League Two's top three, we would gain "
-                f"about {total_top3:.1f} goals and {sum(row['pointsAtTop3'] for row in plan):.0f} points over a season."
+                "Adds up corners, wide free kicks and long throws at both ends, compared with what an average "
+                "League Two team would create or concede from the same number. "
+                + ("We are ahead overall." if net >= 0 else "Overall they are costing us chances.")
             ),
         })
     if att.get("n"):
@@ -760,7 +806,7 @@ def build_report(base: dict, packs: dict[int, dict], scope: str, match_id: int |
     table = league_table(league_records, dict(games), int_names, dict(goals_total), vale)
     marks = benchmarks(table, vale)
     ppg = points_per_goal([(m["home"], m["away"], m["hg"], m["ag"]) for m in base.get("matches") or []])
-    plan = build_plan(league_records, dict(games), names, vale, ppg)
+    plan = build_plan(league_records, dict(games), names, vale)
 
     window_ids = {int(row["matchId"]) for row in selected}
     window_games = len(selected)
@@ -813,10 +859,9 @@ def build_report(base: dict, packs: dict[int, dict], scope: str, match_id: int |
             "pensScored": sum(record_goals(r) for r in pens_for),
             "pensAgainst": len(pens_against),
             "pensConceded": sum(record_goals(r) for r in pens_against),
-            "pointsSwing": round(sum(row["pointsAtBest"] for row in plan), 1),
-            "goalsSwing": round(sum(row["goalsAtBest"] for row in plan), 1),
-            "pointsSwingTop3": round(sum(row["pointsAtTop3"] for row in plan), 1),
-            "goalsSwingTop3": round(sum(row["goalsAtTop3"] for row in plan), 1),
+            "vsAvgAttack": round(sum(row["vsAvg"] for row in plan if row["end"] == "attack"), 2),
+            "vsAvgDefence": round(sum(row["vsAvg"] for row in plan if row["end"] == "defence"), 2),
+            "vsAvg": round(sum(row["vsAvg"] for row in plan), 2),
         },
         "benchmarks": marks,
         "plan": plan,
@@ -972,7 +1017,22 @@ def read_report(season: str | None, scope: str | None, match_id: int | None = No
             "ready": False, "fromLake": True, "season": season or ALLOWED_SEASONS[0],
             "scope": normalized, "matchId": match_id, "why": WHY, "message": LAKE_EMPTY,
         }
-    return {**cached, "ready": True, "fromLake": True}
+    return {**cached, "table": _with_badges(cached.get("table") or []), "ready": True, "fromLake": True}
+
+
+def _with_badges(rows: list) -> list:
+    """Crest per club from disk or FotMob ids. No Impect."""
+    from app.handout_badges import hydrate_team_badge
+
+    out = []
+    for row in rows:
+        item = dict(row)
+        try:
+            item["badge"] = hydrate_team_badge({"id": item.get("squadId"), "name": item.get("club")}).get("badge_url")
+        except Exception:
+            item["badge"] = None
+        out.append(item)
+    return out
 
 
 def register_set_plays_routes(app: FastAPI) -> None:

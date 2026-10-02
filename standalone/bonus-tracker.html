@@ -6,53 +6,71 @@
   <title>Bonus Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/bonus-tracker.css?v=4" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/bonus-tracker.css?v=7" />
 </head>
 <body>
+  <div class="bt-kit" aria-hidden="true"></div>
   <div class="bt">
-    <header class="bt-banner">
-      <div>
-        <p class="bt-eyebrow">Admin · <a href="/">← All apps</a> · <a href="/availability-tracker">Playing time</a> · <a href="/suspension-tracker">Discipline</a></p>
-        <h1>Bonus Tracker</h1>
-        <p class="bt-sub">Each contract clause, with league starts / apps / minutes against the trigger. Players with no bonus or clause are off this board.</p>
+    <header class="bt-hero">
+      <div class="bt-hero__copy">
+        <p class="bt-eyebrow"><a href="/">← All apps</a><span>·</span><a href="/availability-tracker">Playing time</a><span>·</span><a href="/suspension-tracker">Discipline</a></p>
+        <div class="bt-title">
+          <img class="bt-crest" src="/static/transfer-badges/port-vale.png" alt="Port Vale" />
+          <h1>Bonus <span>Tracker</span></h1>
+        </div>
+        <p class="bt-sub" id="status" role="status">Loading…</p>
       </div>
-      <div class="bt-actions">
-        <button type="button" class="bt-btn" id="reseedBtn">Reload provisions seed</button>
+      <div class="bt-hero__side">
+        <nav class="bt-seg" role="tablist" aria-label="View">
+          <button type="button" class="bt-tab is-active" data-view="players">Players</button>
+          <button type="button" class="bt-tab" data-view="matchday">Matchday log</button>
+          <button type="button" class="bt-tab" data-view="add">+ Log a bonus</button>
+        </nav>
+        <button type="button" class="bt-ghost" id="reseedBtn" title="Reload contract provisions from the seed file">Reload provisions</button>
       </div>
     </header>
 
-    <p id="status" class="bt-status" role="status">Loading…</p>
-    <div class="bt-kpis" id="kpis"></div>
+    <section class="bt-kpis" id="kpis" aria-label="Summary"></section>
 
-    <div class="bt-tabs" role="tablist">
-      <button type="button" class="bt-tab is-active" data-view="players">Player provisions</button>
-      <button type="button" class="bt-tab" data-view="matchday">Matchday log</button>
-      <button type="button" class="bt-tab" data-view="add">Log a bonus</button>
-    </div>
+    <section id="playersView">
+      <div class="bt-spot" id="spotWrap">
+        <div class="bt-section-head">
+          <h2>Next to trigger</h2>
+          <p>Closest players to a contract milestone</p>
+        </div>
+        <div class="bt-spot__rail" id="spotlight"></div>
+      </div>
 
-    <section id="playersView" class="bt-panel">
-      <div class="bt-panel__head">
-        <h2>Squad provisions</h2>
-        <input type="search" id="playerFilter" class="bt-input" placeholder="Filter player…" />
+      <div class="bt-toolbar">
+        <label class="bt-search">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 3a7.5 7.5 0 0 1 5.96 12.05l4.25 4.24-1.42 1.42-4.24-4.25A7.5 7.5 0 1 1 10.5 3Zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z"/></svg>
+          <input type="search" id="playerFilter" placeholder="Search player…" autocomplete="off" />
+        </label>
+        <div class="bt-chips" id="filterChips" role="group" aria-label="Filter">
+          <button type="button" class="bt-fchip is-active" data-filter="all">All</button>
+          <button type="button" class="bt-fchip" data-filter="close">Within 3</button>
+          <button type="button" class="bt-fchip" data-filter="milestones">Milestone clauses</button>
+          <button type="button" class="bt-fchip" data-filter="met">Milestone hit</button>
+        </div>
+        <label class="bt-sort">Sort
+          <select id="sortBy">
+            <option value="close">Closest to trigger</option>
+            <option value="name">Name</option>
+            <option value="minutes">Minutes</option>
+            <option value="starts">Starts</option>
+          </select>
+        </label>
       </div>
-      <div class="bt-table-wrap">
-        <table class="bt-table">
-          <thead>
-            <tr>
-              <th>Player</th>
-              <th>League time</th>
-              <th>Clauses</th>
-              <th>Logged</th>
-            </tr>
-          </thead>
-          <tbody id="playerRows"></tbody>
-        </table>
-      </div>
+
+      <div class="bt-grid" id="playerRows"></div>
     </section>
 
     <section id="matchdayView" class="bt-panel hidden">
-      <div class="bt-panel__head"><h2>Matchday bonuses</h2></div>
+      <div class="bt-section-head bt-section-head--panel">
+        <h2>Matchday bonuses</h2>
+        <p>Every logged appearance, goal, clean sheet and squad bonus</p>
+      </div>
       <div class="bt-table-wrap">
         <table class="bt-table">
           <thead>
@@ -61,8 +79,8 @@
               <th>Player</th>
               <th>Match</th>
               <th>Type</th>
-              <th>Amount</th>
-              <th>Tracking</th>
+              <th class="num">Amount</th>
+              <th>Paid</th>
               <th></th>
             </tr>
           </thead>
@@ -72,7 +90,10 @@
     </section>
 
     <section id="addView" class="bt-panel hidden">
-      <div class="bt-panel__head"><h2>Log matchday bonus</h2></div>
+      <div class="bt-section-head bt-section-head--panel">
+        <h2>Log a matchday bonus</h2>
+        <p>Saved straight to the matchday log</p>
+      </div>
       <form id="bonusForm" class="bt-form">
         <label>Player
           <select id="bonusPlayer" class="bt-input" required></select>
@@ -99,14 +120,14 @@
           <input id="bonusNotes" class="bt-input" type="text" />
         </label>
         <div class="bt-form__actions">
-          <button type="submit" class="bt-btn bt-btn--primary">Save bonus</button>
+          <button type="submit" class="bt-btn">Save bonus</button>
         </div>
       </form>
     </section>
 
     <p class="bt-note" id="note"></p>
   </div>
-  <script src="/static/bonus-tracker.js?v=4"></script>
+  <script src="/static/bonus-tracker.js?v=7"></script>
   <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>

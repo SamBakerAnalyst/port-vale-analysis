@@ -25,6 +25,7 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
     from app.club_strategy import register_club_strategy_routes
     from app.fixture_planner import register_fixture_planner_routes
     from app.hub_origin import register_hub_origin_routes
+    from app.interventions import register_interventions_routes
     from app.match_dashboards import register_match_dashboards_routes
     from app.match_day_countdown import register_match_day_countdown_routes
     from app.meeting_front_pages import register_meeting_front_pages_routes
@@ -41,6 +42,7 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
     from app.scoutable_teams import register_scoutable_teams_routes
     from app.set_piece_pre_match import register_set_piece_pre_match_routes
     from app.set_plays import register_set_plays_routes
+    from app.shadow_teams import register_shadow_teams_routes
     from app.squad_balance import register_squad_balance_routes
     from app.squad_planner import register_squad_planner_routes
     from app.squad_review import register_squad_review_routes
@@ -67,7 +69,9 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
         "player_cards": register_player_cards_routes,
         "xg_chance_analysis": register_xg_chance_analysis_routes,
         "attacking_threat": register_attacking_threat_routes,
+        "interventions": register_interventions_routes,
         "set_plays": register_set_plays_routes,
+        "shadow_teams": register_shadow_teams_routes,
         "goal_involvement": register_goal_involvement_routes,
         "hub_origin": register_hub_origin_routes,
         "window_review": register_window_review_routes,

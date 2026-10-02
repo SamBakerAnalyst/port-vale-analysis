@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/xg-chance-analysis.css?v=10" />
+  <link rel="stylesheet" href="/static/xg-chance-analysis.css?v=11" />
 </head>
 <body>
   <div class="xca-app">
@@ -28,7 +28,7 @@
         <span class="xca-controls__label">Season</span>
         <div id="seasonToggle" class="xca-season-toggle" role="group" aria-label="Season"></div>
       </div>
-      <div class="xca-controls__group">
+      <div class="xca-controls__group" id="scopeGroup">
         <span class="xca-controls__label">Scope</span>
         <div class="xca-scope-toggle" role="group" aria-label="Analysis scope">
           <button type="button" class="xca-scope-btn xca-scope-btn--active" data-scope="match">Latest match</button>
@@ -48,6 +48,7 @@
           <button type="button" class="xca-view-btn xca-view-btn--active" data-view="summary">Summary</button>
           <button type="button" class="xca-view-btn" data-view="shots">Shot log</button>
           <button type="button" class="xca-view-btn" data-view="players">Players</button>
+          <button type="button" class="xca-view-btn" data-view="league">League table</button>
         </div>
       </div>
       <div class="xca-controls__group">
@@ -90,10 +91,14 @@
       </div>
     </main>
 
+    <main id="leagueView" class="xca-main hidden" aria-live="polite">
+      <section class="card xca-league" id="leaguePanel"></section>
+    </main>
+
     <footer id="statusBar" class="xca-footer">Loading…</footer>
   </div>
 
-  <script defer src="/static/xg-chance-analysis.js?v=20"></script>
+  <script defer src="/static/xg-chance-analysis.js?v=21"></script>
   <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>

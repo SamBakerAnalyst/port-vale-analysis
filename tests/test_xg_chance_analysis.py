@@ -108,3 +108,45 @@ def test_remove_penalties_drops_penalty_xg_and_keeps_score():
     assert all(not shot.get("isPenalty") for shot in stripped["shots"])
     assert stripped["playerBreakdown"]["vale"][0]["playerName"] == "Ben Garrity"
     assert stripped["heroStats"]["bestChance"]["isPenalty"] is False
+
+
+def test_league_table_counts_created_and_conceded_per_bucket():
+    from app.xg_chance_analysis import (
+        aggregate_league_chances,
+        finalize_league_table,
+        summarize_match_chances,
+    )
+
+    events = [
+        {"id": 1, "actionType": "SHOT", "squadId": 10, "action": "OPEN_PLAY_SHOT", "result": "SUCCESS"},
+        {"id": 2, "actionType": "SHOT", "squadId": 10, "action": "PENALTY_KICK", "result": "FAIL"},
+        {"id": 3, "actionType": "SHOT", "squadId": 20, "action": "OPEN_PLAY_SHOT", "result": "FAIL"},
+        {"id": 4, "actionType": "PASS", "squadId": 20},
+    ]
+    xg = {1: 0.2, 2: 0.78, 3: 0.02}
+    summary = summarize_match_chances(events, xg, 10, 20)
+    clubs = aggregate_league_chances([summary])
+    stored = {
+        "clubs": [
+            {"squadId": int(k), "name": k, "isVale": k == "10", **v} for k, v in clubs.items()
+        ],
+        "matchesIncluded": 1,
+        "matchesTotal": 1,
+    }
+
+    table = finalize_league_table(stored)
+    home = next(r for r in table["rows"] if r["squadId"] == 10)
+    away = next(r for r in table["rows"] if r["squadId"] == 20)
+    assert home["games"] == 1 and away["games"] == 1
+    assert home["created"]["buckets"]["very_good"] == {"count": 1, "goals": 1, "xg": 0.2}
+    assert home["created"]["buckets"]["excellent"]["count"] == 1
+    assert home["created"]["highQuality"] == 2
+    assert home["conceded"]["buckets"]["very_poor"]["count"] == 1
+    assert away["conceded"]["highQuality"] == 2
+    assert table["penaltyCount"] == 1
+
+    no_pens = finalize_league_table(stored, exclude_penalties=True)
+    home = next(r for r in no_pens["rows"] if r["squadId"] == 10)
+    assert home["created"]["buckets"]["excellent"]["count"] == 0
+    assert home["created"]["shots"] == 1
+    assert home["created"]["xg"] == 0.2

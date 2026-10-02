@@ -190,7 +190,10 @@ _PRESERVE_ON_FORCE = frozenset(
         "at-events",
         "at-players",
         "at-league",
+        "iv-match",
+        "iv-league-match",
         "sp-pack",
+        "xg-league-match",
     }
 )
 
@@ -599,6 +602,20 @@ def refresh_analysis_data(*, force: bool = True) -> dict[str, Any]:
         logger.exception("Analysis refresh: xg_chance failed")
         result["steps"]["xg_chance"] = {"ok": False, "error": str(exc)}
 
+    # xG league table — every club's chance-quality counts. Only new matches hit Impect.
+    try:
+        from app.xg_chance_analysis import build_xg_league_table
+
+        league = build_xg_league_table(None)
+        result["steps"]["xg_league_table"] = {
+            "ok": True,
+            "matches": league.get("matchesIncluded"),
+            "of": league.get("matchesTotal"),
+        }
+    except Exception as exc:
+        logger.exception("Analysis refresh: xg league table failed")
+        result["steps"]["xg_league_table"] = {"ok": False, "error": str(exc)}
+
     # Attacking threat — written into the analysis lake. The page only reads it.
     try:
         from app.attacking_threat import warm_attacking_threat
@@ -608,6 +625,15 @@ def refresh_analysis_data(*, force: bool = True) -> dict[str, Any]:
     except Exception as exc:
         logger.exception("Analysis refresh: attacking threat failed")
         result["steps"]["attacking_threat"] = {"ok": False, "error": str(exc)}
+
+    # Interventions — Vale match events plus League Two match KPIs; the page only reads the lake.
+    try:
+        from app.interventions import warm_interventions
+
+        result["steps"]["interventions"] = warm_interventions()
+    except Exception as exc:
+        logger.exception("Analysis refresh: interventions failed")
+        result["steps"]["interventions"] = {"ok": False, "error": str(exc)}
 
     # Set plays — every League Two match packed once; the page only reads the lake.
     try:

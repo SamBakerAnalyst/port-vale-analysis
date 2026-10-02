@@ -231,3 +231,37 @@ def test_byers_goal_contribution_progress(tmp_path, monkeypatch):
     contrib = next(c for c in row["clauses"] if "20 goal contributions" in c["text"])
     assert contrib["thresholds"][0]["label"] == "2 / 20 goal contributions"
     assert contrib["thresholds"][0]["remaining"] == 18
+
+
+def test_real_minutes_include_added_time():
+    from app.availability_tracker import fotmob_real_minutes
+
+    status = {
+        "halfs": {
+            "firstHalfStarted": "19.09.2026 15:00:00",
+            "firstHalfEnded": "19.09.2026 15:50:00",
+            "secondHalfStarted": "19.09.2026 16:05:00",
+            "secondHalfEnded": "19.09.2026 16:56:00",
+        }
+    }
+    events = [
+        {"type": "Half", "time": 45, "halfStrShort": "HT"},
+        {"type": "Substitution", "time": 46, "overloadTime": 0, "isHome": True,
+         "swap": [{"id": "3"}, {"id": "2"}]},
+        {"type": "Substitution", "time": 70, "overloadTime": 0, "isHome": False,
+         "swap": [{"id": "9"}, {"id": "1"}]},
+        {"type": "Card", "time": 90, "overloadTime": 2, "isHome": True,
+         "card": "Red", "playerId": 3},
+    ]
+    real = fotmob_real_minutes(status=status, events=events, starter_ids={1, 2}, is_home=True)
+    assert real[1] == 101.0
+    assert real[2] == 50.0
+    assert real[3] == 46.0
+    assert 9 not in real
+
+
+def test_bonus_minutes_prefer_real_minutes():
+    from app.bonus_tracker import _stats_only
+
+    assert _stats_only({"league_minutes": 90, "league_minutes_real": 99})["league_minutes"] == 99
+    assert _stats_only({"league_minutes": 90})["league_minutes"] == 90

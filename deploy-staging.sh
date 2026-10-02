@@ -10,7 +10,9 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 
 SERVER="root@178.128.161.215"
-REMOTE="/opt/port-vale-analysis"
+# Staging has its own tree. Rsyncing onto /opt/port-vale-analysis used to
+# overwrite Live Caddy's bind-mounted /static (pvfc.sportsanalysis.ai).
+REMOTE="/opt/port-vale-staging"
 SSH_KEY="${PORTVALE_SSH_KEY:-}"
 for candidate in "$HOME/.ssh/portvale_deploy" "$HOME/.ssh/portvale_analysis" "$HOME/.ssh/id_ed25519"; do
   if [[ -z "$SSH_KEY" && -f "$candidate" ]]; then
@@ -45,6 +47,7 @@ RSYNC_EXCLUDES=(
   # developer's copy up only risks overwriting good data with a local stub.
   --include 'data/squad-planner.json'
   --include 'data/efl-transfer-report-2026.json'
+  --include 'data/shadow-teams.json'
   --include 'data/transfermarkt-loans-2026.json'
   --include 'data/efl-transfer-badges.json'
   --include 'data/transfer-centre-positions.json'
@@ -72,18 +75,22 @@ echo ""
 echo "2/2 Rebuilding Port Vale Staging on server…"
 REMOTE_CMD=$(cat <<'EOF'
 set -euo pipefail
-cd /opt/port-vale-analysis
+mkdir -p /opt/port-vale-staging /opt/port-vale-analysis/shared
+# Staging reads the same login secrets as Live, but must not share the code tree.
+if [[ ! -e /opt/port-vale-staging/.env && -f /opt/port-vale-analysis/.env ]]; then
+  ln -s /opt/port-vale-analysis/.env /opt/port-vale-staging/.env
+fi
+cd /opt/port-vale-staging
 # Allow staff Macs to reach staging (idempotent).
 if command -v ufw >/dev/null 2>&1; then
   ufw allow 8080/tcp comment 'port-vale staging' >/dev/null 2>&1 || true
 fi
-mkdir -p /opt/port-vale-analysis/shared
 if [[ ! -f /opt/port-vale-analysis/shared/pre-match-two-pager.json && -f data/pre-match-two-pager.json ]]; then
   cp data/pre-match-two-pager.json /opt/port-vale-analysis/shared/pre-match-two-pager.json
 fi
 # Compose can leave a hash-prefixed name after a failed recreate.
 docker ps -a --format '{{.Names}}' | grep -E '^[0-9a-f]+_port-vale-staging-hub-1$' | xargs -r docker rm -f || true
-docker compose --project-directory /opt/port-vale-analysis \
+docker compose --project-directory /opt/port-vale-staging \
   -f deploy/docker-compose.staging.yml \
   -p port-vale-staging \
   up -d --build --remove-orphans

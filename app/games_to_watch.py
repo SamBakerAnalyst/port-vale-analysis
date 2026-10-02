@@ -863,6 +863,25 @@ def cached_games_to_watch_payload(*, season: str = DEFAULT_SEASON) -> dict[str, 
     return _empty_building_payload(season)
 
 
+def with_fresh_assignments(payload: dict[str, Any]) -> dict[str, Any]:
+    """Cached rows can lag Fixture Planner; coverage tabs need today's assignments."""
+    games = payload.get("games")
+    if not isinstance(games, list) or not games:
+        return payload
+    try:
+        assignments = get_fixture_assignments().get("assignments") or {}
+    except Exception:
+        logger.exception("Could not overlay fixture assignments on games-to-watch")
+        return payload
+    fresh_games = [
+        {**row, "assignment": _assignment_summary(str(row.get("fixture_id") or ""), assignments)}
+        if isinstance(row, dict)
+        else row
+        for row in games
+    ]
+    return {**payload, "games": fresh_games}
+
+
 def warm_games_to_watch_cache(*, season: str = DEFAULT_SEASON) -> None:
     _refresh_games_payload(season)
 
@@ -1219,7 +1238,7 @@ def register_games_to_watch_routes(app: FastAPI) -> None:
     def games_to_watch_list_route(
         season: str = Query(DEFAULT_SEASON),
     ) -> dict[str, Any]:
-        return cached_games_to_watch_payload(season=season)
+        return with_fresh_assignments(cached_games_to_watch_payload(season=season))
 
     @app.get("/api/games-to-watch/fixture")
     def games_to_watch_fixture_route(

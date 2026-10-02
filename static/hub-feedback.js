@@ -10,6 +10,13 @@
   const path = window.location.pathname || "";
   if (path === "/login" || path.endsWith("/login.html")) return;
 
+  if (!window.__SYSTEM_LOCK_BOOTED__) {
+    var lockScript = document.createElement("script");
+    lockScript.src = "/static/system-lock.js?v=3";
+    lockScript.defer = true;
+    document.head.appendChild(lockScript);
+  }
+
   const BASE =
     window.location.protocol === "http:" || window.location.protocol === "https:"
       ? window.location.origin

@@ -252,6 +252,110 @@ def _extract_fotmob_named_stat(player_stats: dict[str, Any], labels: tuple[str, 
     return 0
 
 
+_FOTMOB_HALF_FORMAT = "%d.%m.%Y %H:%M:%S"
+
+
+def _fotmob_half_seconds(status: dict[str, Any]) -> tuple[float, float] | None:
+    """Real length of each half (stoppage included) from FotMob kick-off / whistle stamps."""
+    halfs = (status or {}).get("halfs") or {}
+    if halfs.get("firstExtraHalfStarted") or halfs.get("secondExtraHalfStarted"):
+        return None
+    try:
+        first = (
+            datetime.strptime(halfs["firstHalfEnded"], _FOTMOB_HALF_FORMAT)
+            - datetime.strptime(halfs["firstHalfStarted"], _FOTMOB_HALF_FORMAT)
+        ).total_seconds()
+        second = (
+            datetime.strptime(halfs["secondHalfEnded"], _FOTMOB_HALF_FORMAT)
+            - datetime.strptime(halfs["secondHalfStarted"], _FOTMOB_HALF_FORMAT)
+        ).total_seconds()
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not (40 * 60 <= first <= 70 * 60 and 40 * 60 <= second <= 70 * 60):
+        return None
+    return first, second
+
+
+def fotmob_real_minutes(
+    *,
+    status: dict[str, Any],
+    events: list[dict[str, Any]],
+    starter_ids: set[int],
+    is_home: bool,
+) -> dict[int, float]:
+    """Minutes on the pitch per FotMob player id, counting added time in both halves.
+
+    FotMob's own "Minutes played" caps a full game at 90; contract minutes need the
+    real elapsed time, so on/off moments are mapped onto the measured half lengths.
+    """
+    halves = _fotmob_half_seconds(status)
+    if halves is None:
+        return {}
+    first_len, second_len = halves
+    full_len = first_len + second_len
+
+    def elapsed(clock: Any, added: Any, second_half: bool) -> float:
+        try:
+            minute = float(clock or 0)
+        except (TypeError, ValueError):
+            minute = 0.0
+        try:
+            extra = float(added or 0)
+        except (TypeError, ValueError):
+            extra = 0.0
+        # FotMob minute m means "during the m-th minute"; half-time subs show as 46.
+        if second_half:
+            into = (max(minute, 46.0) - 46.0 + extra) * 60.0
+            return first_len + min(second_len, max(0.0, into))
+        into = (min(minute, 45.0) - 1.0 + extra) * 60.0
+        return min(first_len, max(0.0, into))
+
+    on_at: dict[int, float] = {pid: 0.0 for pid in starter_ids}
+    off_at: dict[int, float] = {}
+    second_half = False
+    for event in events or []:
+        if not isinstance(event, dict):
+            continue
+        kind = event.get("type")
+        if kind == "Half":
+            if str(event.get("halfStrShort") or "").upper() == "HT":
+                second_half = True
+            continue
+        if bool(event.get("isHome")) != is_home:
+            continue
+        clock = event.get("time")
+        if not second_half:
+            try:
+                second_half = float(clock or 0) > 45
+            except (TypeError, ValueError):
+                pass
+        moment = elapsed(clock, event.get("overloadTime"), second_half)
+        if kind == "Substitution":
+            swap = event.get("swap") or []
+            ids: list[int | None] = []
+            for entry in swap[:2]:
+                try:
+                    ids.append(int((entry or {}).get("id")))
+                except (TypeError, ValueError):
+                    ids.append(None)
+            if len(ids) == 2:
+                on_id, off_id = ids
+                if on_id is not None:
+                    on_at.setdefault(on_id, moment)
+                if off_id is not None:
+                    off_at[off_id] = moment
+        elif kind == "Card" and str(event.get("card") or "") in {"Red", "YellowRed"}:
+            try:
+                off_at[int(event.get("playerId") or (event.get("player") or {}).get("id"))] = moment
+            except (TypeError, ValueError):
+                pass
+
+    return {
+        pid: round(max(0.0, off_at.get(pid, full_len) - start) / 60.0, 1)
+        for pid, start in on_at.items()
+    }
+
+
 def _fotmob_match_minutes_by_name(match_id: int) -> dict[str, dict[str, Any]]:
     cached = _fotmob_minutes_cache.get(match_id)
     now = time.time()
@@ -271,13 +375,21 @@ def _fotmob_match_minutes_by_name(match_id: int) -> dict[str, dict[str, Any]]:
     player_stats = content.get("playerStats") or {}
     lineup = content.get("lineup") or {}
     starter_ids: set[int] = set()
+    is_home = False
     for side_key in ("homeTeam", "awayTeam"):
         side = lineup.get(side_key) or {}
         if int(side.get("id") or 0) != FOTMOB_TEAM_ID:
             continue
+        is_home = side_key == "homeTeam"
         for player in side.get("starters") or []:
             if isinstance(player, dict) and player.get("id") is not None:
                 starter_ids.add(int(player["id"]))
+    real_by_id = fotmob_real_minutes(
+        status=(payload.get("header") or {}).get("status") or {},
+        events=((content.get("matchFacts") or {}).get("events") or {}).get("events") or [],
+        starter_ids=starter_ids,
+        is_home=is_home,
+    )
 
     by_name: dict[str, dict[str, Any]] = {}
     if isinstance(player_stats, dict):
@@ -301,9 +413,11 @@ def _fotmob_match_minutes_by_name(match_id: int) -> dict[str, dict[str, Any]]:
             except (TypeError, ValueError):
                 fotmob_player_id = None
             key = _normalize_player_key(name)
+            real = real_by_id.get(fotmob_player_id) if fotmob_player_id else None
             by_name[key] = {
                 "name": name,
                 "minutes": minutes,
+                "real_minutes": real if real and real >= minutes else minutes,
                 "match_share": min(1.0, minutes / 90.0),
                 "started": fotmob_player_id in starter_ids if fotmob_player_id else minutes >= 45,
                 "fotmob_player_id": fotmob_player_id,
@@ -355,6 +469,7 @@ def fotmob_league_playing_time(season: str) -> dict[str, dict[str, Any]]:
                     "league_starts": 0,
                     "league_appearances": 0,
                     "league_minutes": 0,
+                    "league_minutes_real": 0.0,
                     "league_goals": 0,
                     "league_assists": 0,
                     "goal_contributions": 0,
@@ -362,11 +477,14 @@ def fotmob_league_playing_time(season: str) -> dict[str, dict[str, Any]]:
             )
             bucket["league_appearances"] += 1
             bucket["league_minutes"] += mins
+            bucket["league_minutes_real"] += float(row.get("real_minutes") or mins)
             if row.get("started"):
                 bucket["league_starts"] += 1
             bucket["league_goals"] += int(row.get("goals") or 0)
             bucket["league_assists"] += int(row.get("assists") or 0)
             bucket["goal_contributions"] = bucket["league_goals"] + bucket["league_assists"]
+    for bucket in totals.values():
+        bucket["league_minutes_real"] = int(round(bucket["league_minutes_real"]))
     return totals
 
 
@@ -1522,6 +1640,7 @@ def _on_pitch_impact(
         "league_appearances": 0,
         "league_starts": 0,
         "league_minutes": 0,
+        "league_minutes_real": 0,
         "league_goals": 0,
         "league_assists": 0,
         "goal_contributions": 0,
@@ -1544,6 +1663,7 @@ def _on_pitch_impact(
     }
 
     stats = dict(empty)
+    real_league_minutes = 0.0
     goal_pm = 0.0
     points_pm = 0.0
     for match in matches:
@@ -1568,6 +1688,7 @@ def _on_pitch_impact(
 
         stats["league_appearances"] += 1
         stats["league_minutes"] += mins_int
+        real_league_minutes += float((row or {}).get("real_minutes") or minutes)
         if (row or {}).get("started"):
             stats["league_starts"] += 1
         stats["league_goals"] += int((row or {}).get("goals") or 0)
@@ -1598,6 +1719,7 @@ def _on_pitch_impact(
             points_pm += (int(points) - 1) * share
 
     stats["minutes"] = int(stats["minutes"])
+    stats["league_minutes_real"] = int(round(real_league_minutes))
     stats["mins_in_wins"] = int(stats["mins_in_wins"])
     stats["mins_in_points"] = int(stats["mins_in_points"])
     stats["goal_plus_minus"] = round(goal_pm, 1)

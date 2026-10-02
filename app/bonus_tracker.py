@@ -137,7 +137,7 @@ def _stats_only(row: dict[str, Any]) -> dict[str, int]:
     stats = {
         "league_starts": int(row.get("league_starts") or 0),
         "league_appearances": int(row.get("league_appearances") or 0),
-        "league_minutes": int(row.get("league_minutes") or 0),
+        "league_minutes": int(row.get("league_minutes_real") or row.get("league_minutes") or 0),
         "league_goals": int(row.get("league_goals") or 0),
         "league_assists": int(row.get("league_assists") or 0),
         "goal_contributions": int(row.get("goal_contributions") or 0),
@@ -497,6 +497,15 @@ def _player_totals(matchday: list[dict[str, Any]], player_id: str) -> dict[str, 
     return totals
 
 
+def _photo_url(name: str) -> str | None:
+    try:
+        from app.availability_tracker import _photo_url_for_name
+
+        return _photo_url_for_name(name)
+    except Exception:
+        return None
+
+
 def build_bonus_payload(season: str | None = None) -> dict[str, Any]:
     season_key = season or CURRENT_SEASON
     store = _load_store()
@@ -517,6 +526,7 @@ def build_bonus_payload(season: str | None = None) -> dict[str, Any]:
         players_out.append(
             {
                 **player,
+                "photo_url": _photo_url(str(player.get("name") or "")),
                 "appearance_bonus_label": APPEARANCE_BONUS_LABELS.get(
                     appearance, appearance
                 ),
@@ -567,7 +577,9 @@ def build_bonus_payload(season: str | None = None) -> dict[str, Any]:
         },
         "note": (
             "Each clause is read from the contract line. Starts, apps and minutes "
-            "come from Squad Availability (League Two). Players with no bonus or "
+            "come from Squad Availability (League Two). Minutes are real time on "
+            "the pitch, including added time (FotMob kick-off and whistle times). "
+            "Players with no bonus or "
             "clause are left off this board."
         ),
     }

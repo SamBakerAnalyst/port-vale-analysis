@@ -29,6 +29,103 @@ from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
+# ---------------------------------------------------------------------------
+# System lock — owner-controlled service suspension.
+#
+# When the lock is on, every signed-in account EXCEPT the admin/owner is shown
+# an uncloseable "SYSTEM LOCKED" page and blocked from every tool and API. The
+# block is enforced here on the server, so it cannot be dismissed by editing the
+# page in the browser. The admin/owner keeps full access and toggles the lock via
+# POST /api/system-lock.
+# ---------------------------------------------------------------------------
+
+LOCK_TITLE = "SYSTEM LOCKED"
+LOCK_MESSAGE = (
+    "Contractual Payment Terms ignored, therefore the system is "
+    "locked until further notice"
+)
+
+# Paths a locked-out (non-admin) account may still reach — just enough to read
+# the lock state and sign out. Everything else is blocked.
+_LOCK_ALLOWED_EXACT = frozenset(
+    {"/login", "/api/auth/login", "/api/auth/logout", "/api/auth/me", "/api/system-lock"}
+)
+
+
+def _lock_path() -> "Path":
+    from app.paths import DATA_ROOT
+
+    return DATA_ROOT / "system_lock.json"
+
+
+def system_locked() -> bool:
+    """Off unless the admin/owner has explicitly locked the hub."""
+    try:
+        raw = _lock_path().read_text(encoding="utf-8")
+    except (FileNotFoundError, OSError):
+        return False
+    try:
+        return bool(json.loads(raw).get("locked"))
+    except (json.JSONDecodeError, AttributeError):
+        return False
+
+
+def set_system_locked(locked: bool) -> bool:
+    path = _lock_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"locked": bool(locked)}), encoding="utf-8")
+    return bool(locked)
+
+
+def _lock_page_html() -> str:
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{LOCK_TITLE}</title>
+<style>
+  html, body {{ height: 100%; margin: 0; }}
+  body {{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0b0d10; color: #f5f5f5;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 24px; box-sizing: border-box;
+  }}
+  .lock-box {{
+    max-width: 560px; width: 100%; text-align: center;
+    background: #15181d; border: 1px solid #2a2f37; border-radius: 16px;
+    padding: 48px 40px; box-shadow: 0 24px 60px rgba(0,0,0,.5);
+  }}
+  .lock-box h1 {{
+    margin: 0 0 16px; font-size: 40px; letter-spacing: 2px;
+    color: #ff5a5f; font-weight: 800;
+  }}
+  .lock-box p {{ margin: 0; font-size: 18px; line-height: 1.5; color: #cfd4db; }}
+  .lock-actions {{ margin-top: 32px; }}
+  .lock-actions a {{
+    display: inline-block; color: #9aa3ad; font-size: 13px;
+    text-decoration: underline; cursor: pointer;
+  }}
+</style>
+</head>
+<body>
+  <div class="lock-box" role="alertdialog" aria-modal="true" aria-labelledby="lockTitle">
+    <h1 id="lockTitle">{LOCK_TITLE}</h1>
+    <p>{LOCK_MESSAGE}</p>
+    <div class="lock-actions"><a href="#" id="lockSignOut">Sign out</a></div>
+  </div>
+  <script>
+    document.getElementById('lockSignOut').addEventListener('click', function (e) {{
+      e.preventDefault();
+      fetch('/api/auth/logout', {{ method: 'POST' }}).finally(function () {{
+        window.location.href = '/login';
+      }});
+    }});
+  </script>
+</body>
+</html>"""
+
 PUBLIC_PATHS = frozenset(
     {
         "/health",
@@ -41,6 +138,7 @@ PUBLIC_PATHS = frozenset(
         "/static/goal-involvement.css",
         "/static/goal-involvement-link.css",
         "/static/goal-involvement-link.js",
+        "/static/system-lock.js",
     }
 )
 PUBLIC_PREFIXES = (
@@ -60,7 +158,7 @@ PUBLIC_PREFIXES = (
 
 # Paths any signed-in account may hit (prefix match, except "/" which is exact).
 ROLE_ALLOWED_EXACT = frozenset(
-    {"/", "/hub", "/api/auth/me", "/api/auth/logout", "/api/apps"}
+    {"/", "/hub", "/api/auth/me", "/api/auth/logout", "/api/apps", "/api/system-lock"}
 )
 ANALYSIS_ALLOWED_EXACT = ROLE_ALLOWED_EXACT
 
@@ -234,6 +332,12 @@ def current_user_payload(request: Request) -> dict[str, Any]:
         "groups": list(ROLE_GROUPS.get(role, ROLE_GROUPS["analysis"])),
         "home_tabs": list(ROLE_HOME_TABS.get(role, ROLE_HOME_TABS["analysis"])),
         "allow_all": role == "admin",
+        "system_lock": {
+            "locked": system_locked(),
+            "title": LOCK_TITLE,
+            "message": LOCK_MESSAGE,
+            "can_close": role == "admin",
+        },
     }
 
 
@@ -281,6 +385,22 @@ class HubAuthMiddleware(BaseHTTPMiddleware):
             return RedirectResponse(url=f"/login?next={quote(next_path, safe='')}", status_code=302)
 
         role = current_role(request)
+
+        # Owner-controlled service suspension. Admin/owner is exempt; everyone
+        # else gets the uncloseable lock page and is blocked from every tool.
+        if role != "admin" and system_locked() and path not in _LOCK_ALLOWED_EXACT:
+            accept = request.headers.get("accept", "")
+            if path.startswith("/api/") or "application/json" in accept:
+                return JSONResponse(
+                    status_code=423,
+                    content={"detail": LOCK_MESSAGE, "locked": True},
+                )
+            return HTMLResponse(
+                _lock_page_html(),
+                status_code=423,
+                headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"},
+            )
+
         if not _path_allowed_for_role(path, role):
             accept = request.headers.get("accept", "")
             if path.startswith("/api/") or "application/json" in accept:
@@ -348,3 +468,24 @@ def register_auth(app: FastAPI, login_html_path: Path) -> None:
     def logout(request: Request) -> dict[str, bool]:
         request.session.clear()
         return {"ok": True}
+
+    @app.get("/api/system-lock")
+    def system_lock_status(request: Request) -> dict[str, Any]:
+        role = current_role(request)
+        return {
+            "locked": system_locked(),
+            "title": LOCK_TITLE,
+            "message": LOCK_MESSAGE,
+            # Only the admin/owner may toggle the lock from the UI.
+            "can_control": role == "admin" and auth_enabled(),
+        }
+
+    class SystemLockRequest(BaseModel):
+        locked: bool
+
+    @app.post("/api/system-lock")
+    def system_lock_set(request: Request, body: SystemLockRequest) -> dict[str, Any]:
+        if auth_enabled() and current_role(request) != "admin":
+            raise HTTPException(status_code=403, detail="Admin only")
+        set_system_locked(body.locked)
+        return {"ok": True, "locked": body.locked}

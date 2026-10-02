@@ -14,6 +14,13 @@ const state = {
   loadToken: 0,
   abort: null,
   forceRefresh: false,
+  league: null,
+  leagueSeason: "",
+  leagueSide: "created",
+  leagueMode: "total",
+  leagueSort: { key: "highQuality", dir: "desc" },
+  leaguePollTimer: null,
+  leagueToken: 0,
 };
 
 const els = {
@@ -38,6 +45,9 @@ const els = {
   shotTable: document.getElementById("shotTable"),
   valePlayersPanel: document.getElementById("valePlayersPanel"),
   oppPlayersPanel: document.getElementById("oppPlayersPanel"),
+  scopeGroup: document.getElementById("scopeGroup"),
+  leagueView: document.getElementById("leagueView"),
+  leaguePanel: document.getElementById("leaguePanel"),
 };
 
 function setStatus(message, kind = "") {
@@ -142,6 +152,7 @@ function showLoadingPanels(message) {
     els.matchHeader.classList.remove("hidden");
     els.matchHeader.innerHTML = `<p class="xca-empty">${escapeHtml(message)}</p>`;
   }
+  applyViewChrome();
 }
 
 function filteredSeasons() {
@@ -168,6 +179,7 @@ function renderSeasonToggle() {
       state.season = btn.dataset.season;
       state.matchId = "";
       renderSeasonToggle();
+      if (state.view === "league") loadLeague();
       await loadFixtures();
       await loadReport();
     });
@@ -192,7 +204,7 @@ function renderMatchSelect() {
   }
   els.matchSelect.innerHTML = options.join("") || '<option value="">No completed matches</option>';
   if (els.matchSelectGroup) {
-    els.matchSelectGroup.classList.toggle("hidden", state.scope !== "match");
+    els.matchSelectGroup.classList.toggle("hidden", state.scope !== "match" || state.view === "league");
   }
 }
 
@@ -201,7 +213,7 @@ function renderScopeToggle() {
     btn.classList.toggle("xca-scope-btn--active", btn.dataset.scope === state.scope);
   });
   if (els.matchSelectGroup) {
-    els.matchSelectGroup.classList.toggle("hidden", state.scope !== "match");
+    els.matchSelectGroup.classList.toggle("hidden", state.scope !== "match" || state.view === "league");
   }
 }
 
@@ -214,7 +226,9 @@ function penaltyPill(count) {
 function renderPenaltiesToggle() {
   const btn = els.penaltiesBtn;
   if (!btn) return;
-  const count = Number(state.report?.penaltySummary?.count || 0);
+  const count = state.view === "league"
+    ? Number(state.league?.penaltyCount || 0)
+    : Number(state.report?.penaltySummary?.count || 0);
   btn.disabled = count <= 0 && !state.excludePenalties;
   btn.classList.toggle("xca-scope-btn--active", state.excludePenalties);
   btn.setAttribute("aria-pressed", state.excludePenalties ? "true" : "false");
@@ -857,7 +871,20 @@ function renderPlayersView() {
   renderPlayerPanel(els.oppPlayersPanel, "Opposition — shot quality by player", report.playerBreakdown?.opp, "opp");
 }
 
+function applyViewChrome() {
+  const league = state.view === "league";
+  els.scopeGroup?.classList.toggle("hidden", league);
+  if (els.matchSelectGroup) {
+    els.matchSelectGroup.classList.toggle("hidden", league || state.scope !== "match");
+  }
+  if (league) {
+    els.matchHeader.classList.add("hidden");
+    els.trendsPanel?.classList.add("hidden");
+  }
+}
+
 function setView(view) {
+  const wasLeague = state.view === "league";
   state.view = view;
   document.querySelectorAll(".xca-view-btn").forEach((btn) => {
     btn.classList.toggle("xca-view-btn--active", btn.dataset.view === view);
@@ -865,6 +892,279 @@ function setView(view) {
   els.summaryView.classList.toggle("hidden", view !== "summary");
   els.shotsView.classList.toggle("hidden", view !== "shots");
   els.playersView.classList.toggle("hidden", view !== "players");
+  els.leagueView.classList.toggle("hidden", view !== "league");
+  if (view === "league") {
+    applyViewChrome();
+    renderPenaltiesToggle();
+    if (!state.league || state.leagueSeason !== state.season) {
+      loadLeague();
+    } else {
+      renderLeague();
+    }
+    return;
+  }
+  if (wasLeague) {
+    renderScopeToggle();
+    renderMatchHeader();
+    renderTrendsPanel();
+    renderPenaltiesToggle();
+  }
+}
+
+const LEAGUE_BUCKETS = [
+  { id: "excellent", label: "Excellent", color: "#166534" },
+  { id: "very_good", label: "Very Good", color: "#22c55e" },
+  { id: "ok", label: "OK", color: "#facc15" },
+  { id: "poor", label: "Poor", color: "#f97316" },
+  { id: "very_poor", label: "Very Poor", color: "#ef4444" },
+];
+
+const LEAGUE_MODES = [
+  { id: "total", label: "Totals" },
+  { id: "perGame", label: "Per game" },
+  { id: "share", label: "% of shots" },
+];
+
+function ordinal(n) {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return `${n}th`;
+  return `${n}${({ 1: "st", 2: "nd", 3: "rd" })[n % 10] || "th"}`;
+}
+
+function leagueCount(row, key) {
+  const side = row[state.leagueSide] || {};
+  if (key === "highQuality") return Number(side.highQuality || 0);
+  if (key === "shots") return Number(side.shots || 0);
+  return Number(side.buckets?.[key]?.count || 0);
+}
+
+function leagueValue(row, key) {
+  const side = row[state.leagueSide] || {};
+  const games = Math.max(1, Number(row.games || 0));
+  if (key === "name") return String(row.name || "");
+  if (key === "games") return Number(row.games || 0);
+  if (key === "xgPerShot") return side.shots ? Number(side.xg || 0) / side.shots : 0;
+  if (key === "xg") return state.leagueMode === "perGame" ? Number(side.xg || 0) / games : Number(side.xg || 0);
+  if (key === "goals") return state.leagueMode === "perGame" ? Number(side.goals || 0) / games : Number(side.goals || 0);
+  const count = leagueCount(row, key);
+  if (state.leagueMode === "perGame") return count / games;
+  if (state.leagueMode === "share" && key !== "shots") return side.shots ? (count / side.shots) * 100 : 0;
+  return count;
+}
+
+function formatLeagueValue(key, value) {
+  if (key === "xg" || key === "xgPerShot") return value.toFixed(key === "xgPerShot" ? 3 : 2);
+  if (key === "games") return String(value);
+  if (state.leagueMode === "perGame") return value.toFixed(2);
+  if (state.leagueMode === "share" && key !== "shots" && key !== "goals") return `${value.toFixed(1)}%`;
+  return String(Math.round(value));
+}
+
+function sortedLeagueRows(rows, key, dir) {
+  const sign = dir === "asc" ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const av = leagueValue(a, key);
+    const bv = leagueValue(b, key);
+    if (key === "name") return sign * av.localeCompare(bv);
+    if (av !== bv) return sign * (av - bv);
+    return String(a.name || "").localeCompare(String(b.name || ""));
+  });
+}
+
+function leagueRankOf(rows, key, squadId) {
+  const ordered = sortedLeagueRows(rows, key, "desc");
+  const target = ordered.find((row) => row.squadId === squadId);
+  if (!target) return null;
+  const value = leagueValue(target, key);
+  return ordered.findIndex((row) => leagueValue(row, key) === value) + 1;
+}
+
+function leagueHeat(value, max, color) {
+  if (!max || value <= 0) return "";
+  const alpha = 0.1 + 0.6 * Math.min(1, value / max);
+  const hex = Math.round(alpha * 255).toString(16).padStart(2, "0");
+  return `background:${color}${hex}`;
+}
+
+function renderLeagueValeStrip(rows) {
+  const vale = rows.find((row) => row.isVale);
+  if (!vale) return "";
+  const of = rows.length;
+  const items = [
+    ...LEAGUE_BUCKETS.map((b) => ({ key: b.id, label: b.label, color: b.color })),
+    { key: "highQuality", label: "Exc + VG", color: "#34d399" },
+    { key: "xg", label: "xG", color: "#3d8bfd" },
+  ];
+  const verb = state.leagueSide === "created" ? "created" : "conceded";
+  const cards = items
+    .map((item) => {
+      const rank = leagueRankOf(rows, item.key, vale.squadId);
+      return `
+        <div class="xca-league-rank" style="border-top-color:${item.color}">
+          <div class="xca-league-rank__label">${escapeHtml(item.label)}</div>
+          <div class="xca-league-rank__value">${rank ? ordinal(rank) : "—"}</div>
+          <div class="xca-league-rank__sub">${formatLeagueValue(item.key, leagueValue(vale, item.key))} ${verb}</div>
+        </div>`;
+    })
+    .join("");
+  return `
+    <div class="xca-league-vale">
+      <div class="xca-league-vale__title">Port Vale rank of ${of} <span>(1st = most ${verb})</span></div>
+      <div class="xca-league-vale__grid">${cards}</div>
+    </div>`;
+}
+
+function renderLeague() {
+  const panel = els.leaguePanel;
+  const data = state.league;
+  if (!panel) return;
+  if (!data || !data.ready) {
+    const progress = data?.progress || {};
+    const bits = progress.total ? ` (${progress.done || 0} of ${progress.total} matches)` : "";
+    panel.innerHTML = `<p class="xca-empty">Building the league table from every ${escapeHtml(state.season)} match${bits}. This fills in on its own — first build takes a few minutes.</p>`;
+    return;
+  }
+
+  const rows = data.rows || [];
+  const { key: sortKey, dir } = state.leagueSort;
+  const ordered = sortedLeagueRows(rows, sortKey, dir);
+  const maxBy = {};
+  for (const bucket of LEAGUE_BUCKETS) {
+    maxBy[bucket.id] = Math.max(0, ...rows.map((row) => leagueValue(row, bucket.id)));
+  }
+  maxBy.highQuality = Math.max(0, ...rows.map((row) => leagueValue(row, "highQuality")));
+
+  const arrow = (key) => (sortKey === key ? (dir === "desc" ? " ▼" : " ▲") : "");
+  const th = (key, label, extra = "") =>
+    `<th class="xca-league-sort ${sortKey === key ? "is-sorted" : ""} ${extra}" data-sort="${key}">${label}${arrow(key)}</th>`;
+
+  const body = ordered
+    .map((row, index) => {
+      const crest = row.imageUrl
+        ? `<img class="xca-league-crest" src="${escapeHtml(row.imageUrl)}" alt="" loading="lazy" />`
+        : `<span class="xca-league-crest xca-league-crest--blank"></span>`;
+      const bucketCells = LEAGUE_BUCKETS.map((bucket) => {
+        const value = leagueValue(row, bucket.id);
+        return `<td class="xca-league-num" style="${leagueHeat(value, maxBy[bucket.id], bucket.color)}">${formatLeagueValue(bucket.id, value)}</td>`;
+      }).join("");
+      const hq = leagueValue(row, "highQuality");
+      return `
+        <tr class="${row.isVale ? "xca-league-row--vale" : ""}">
+          <td class="xca-league-pos">${index + 1}</td>
+          <td class="xca-league-team"><div class="xca-league-team__inner">${crest}<span>${escapeHtml(row.name || "")}</span></div></td>
+          <td>${row.games}</td>
+          ${bucketCells}
+          <td class="xca-league-num xca-league-num--strong" style="${leagueHeat(hq, maxBy.highQuality, "#34d399")}">${formatLeagueValue("highQuality", hq)}</td>
+          <td class="xca-league-num">${formatLeagueValue("shots", leagueValue(row, "shots"))}</td>
+          <td class="xca-league-num">${formatLeagueValue("goals", leagueValue(row, "goals"))}</td>
+          <td class="xca-league-num">${formatLeagueValue("xg", leagueValue(row, "xg"))}</td>
+          <td class="xca-league-num">${formatLeagueValue("xgPerShot", leagueValue(row, "xgPerShot"))}</td>
+        </tr>`;
+    })
+    .join("");
+
+  const sideBtns = [
+    { id: "created", label: "Chances created" },
+    { id: "conceded", label: "Chances conceded" },
+  ]
+    .map((opt) => `<button type="button" class="xca-scope-btn ${state.leagueSide === opt.id ? "xca-scope-btn--active" : ""}" data-league-side="${opt.id}">${opt.label}</button>`)
+    .join("");
+  const modeBtns = LEAGUE_MODES
+    .map((opt) => `<button type="button" class="xca-scope-btn ${state.leagueMode === opt.id ? "xca-scope-btn--active" : ""}" data-league-mode="${opt.id}">${opt.label}</button>`)
+    .join("");
+
+  const partial = data.matchesIncluded < data.matchesTotal
+    ? `<span class="xca-league-note--warn">${data.matchesIncluded} of ${data.matchesTotal} matches in${data.building ? " · adding the rest now" : ""}</span>`
+    : `<span>${data.matchesTotal} matches</span>`;
+  const penNote = data.excludePenalties ? " · penalties removed" : "";
+
+  panel.innerHTML = `
+    <div class="xca-league-head">
+      <div>
+        <h2 class="xca-panel-title">xG league table · ${escapeHtml(data.competition || "")} ${escapeHtml(data.season || "")}</h2>
+        <p class="xca-league-note">${partial}${penNote} · click any column to rank by it</p>
+      </div>
+      <div class="xca-league-controls">
+        <div class="xca-scope-toggle">${sideBtns}</div>
+        <div class="xca-scope-toggle">${modeBtns}</div>
+      </div>
+    </div>
+    ${renderLeagueValeStrip(rows)}
+    <div class="xca-league-scroll">
+      <table class="xca-league-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            ${th("name", "Team", "col-left")}
+            ${th("games", "GP")}
+            ${LEAGUE_BUCKETS.map((b) => th(b.id, `<span class="xca-rating-pill" style="background:${b.color}">${b.label}</span>`)).join("")}
+            ${th("highQuality", "Exc + VG")}
+            ${th("shots", "Shots")}
+            ${th("goals", "Goals")}
+            ${th("xg", "xG")}
+            ${th("xgPerShot", "xG / shot")}
+          </tr>
+        </thead>
+        <tbody>${body || '<tr><td colspan="13">No matches yet</td></tr>'}</tbody>
+      </table>
+    </div>`;
+
+  panel.querySelectorAll("[data-sort]").forEach((cell) => {
+    cell.addEventListener("click", () => {
+      const key = cell.dataset.sort;
+      if (state.leagueSort.key === key) {
+        state.leagueSort = { key, dir: state.leagueSort.dir === "desc" ? "asc" : "desc" };
+      } else {
+        state.leagueSort = { key, dir: key === "name" ? "asc" : "desc" };
+      }
+      renderLeague();
+    });
+  });
+  panel.querySelectorAll("[data-league-side]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.leagueSide = btn.dataset.leagueSide;
+      renderLeague();
+    });
+  });
+  panel.querySelectorAll("[data-league-mode]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.leagueMode = btn.dataset.leagueMode;
+      renderLeague();
+    });
+  });
+}
+
+function scheduleLeaguePoll(ms) {
+  if (state.leaguePollTimer) window.clearTimeout(state.leaguePollTimer);
+  state.leaguePollTimer = window.setTimeout(() => {
+    state.leaguePollTimer = null;
+    if (state.view === "league") loadLeague({ quiet: true });
+  }, ms);
+}
+
+async function loadLeague({ quiet = false } = {}) {
+  const token = ++state.leagueToken;
+  const season = state.season;
+  if (!quiet) {
+    state.league = null;
+    if (els.leaguePanel) els.leaguePanel.innerHTML = '<p class="xca-empty">Loading league table…</p>';
+  }
+  try {
+    const params = new URLSearchParams({ season });
+    if (state.excludePenalties) params.set("excludePenalties", "true");
+    const data = await fetchJson(`/api/xg-chance-analysis/league-table?${params}`);
+    if (token !== state.leagueToken) return;
+    state.league = data;
+    state.leagueSeason = season;
+    renderLeague();
+    renderPenaltiesToggle();
+    if (data.building) scheduleLeaguePoll(data.ready ? 10000 : 4000);
+  } catch (err) {
+    if (token !== state.leagueToken) return;
+    if (els.leaguePanel) {
+      els.leaguePanel.innerHTML = `<p class="xca-empty">${escapeHtml(err.message || "Could not load the league table")}</p>`;
+    }
+  }
 }
 
 function renderAll() {
@@ -887,6 +1187,7 @@ function renderAll() {
   renderShotTable();
   renderPlayersView();
   renderPenaltiesToggle();
+  applyViewChrome();
 
   const penNote = report.penaltySummary?.count
     ? report.excludePenalties
@@ -1111,6 +1412,10 @@ els.penaltiesBtn?.addEventListener("click", async () => {
   if (els.penaltiesBtn.disabled) return;
   state.excludePenalties = !state.excludePenalties;
   renderPenaltiesToggle();
+  if (state.view === "league") {
+    state.leagueSeason = "";
+    await loadLeague({ quiet: true });
+  }
   await loadReport();
 });
 

@@ -114,7 +114,7 @@ def test_points_per_goal_is_bounded():
 
 def test_plan_needs_enough_events():
     records = _corner_goal_match()["records"]
-    assert build_plan(records, {VALE: 1, OPP: 1}, {}, VALE, 0.75) == []
+    assert build_plan(records, {VALE: 1, OPP: 1}, {}, VALE) == []
 
 
 def test_build_report_from_packs():
