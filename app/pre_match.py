@@ -16,7 +16,18 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel
 
+from app.pre_match_board import load_squad_board, save_squad_board
 from app.pre_match_notes import load_two_pager_board, save_two_pager_board
+from app.pre_match_squad_overrides import (
+    apply_club_squad_overrides,
+    availability_defaults_for_rows,
+    corrected_shirt_number,
+    normalize_person_name,
+    predicted_xi_spec,
+    synthetic_player_id,
+    verified_match_script,
+    xi_suggestions_for_rows,
+)
 from app.opponent_photos import (
     attach_pitch_player_photos,
     fetch_opponent_photo_bytes,
@@ -165,7 +176,7 @@ AVERAGE_SHAPE_MATCH_LIMIT = 8
 MIN_PITCH_MINUTES = 45
 PITCH_STARTER_LIMIT = 11
 PREVIOUS_XI_LIMIT = 3
-LAST_GAME_PHASE_LIMIT = 3
+LAST_GAME_PHASE_LIMIT = 4
 TWO_MATCH_LIMIT = 2
 TWO_PAGER_MIN_MINUTES_PER90 = 45.0
 
@@ -187,99 +198,116 @@ BAND_Y: dict[str, float] = {
 }
 
 POSITION_Y: dict[str, float] = {
-    "GOALKEEPER": 94.0,
+    "GOALKEEPER": 91.0,
     "CENTRAL_DEFENDER": 76.0,
     "LEFT_WINGBACK_DEFENDER": 72.0,
     "RIGHT_WINGBACK_DEFENDER": 72.0,
-    "DEFENSE_MIDFIELD": 54.0,
-    "CENTRAL_MIDFIELD": 46.0,
-    "ATTACKING_MIDFIELD": 30.0,
-    "LEFT_WINGER": 20.0,
-    "RIGHT_WINGER": 20.0,
-    "CENTER_FORWARD": 12.0,
-    "SECOND_STRIKER": 16.0,
+    "DEFENSE_MIDFIELD": 55.0,
+    "CENTRAL_MIDFIELD": 48.0,
+    "ATTACKING_MIDFIELD": 34.0,
+    "LEFT_WINGER": 34.0,
+    "RIGHT_WINGER": 34.0,
+    "CENTER_FORWARD": 20.0,
+    "SECOND_STRIKER": 22.0,
 }
 
 # (slot position, x%, y%, preferred side)
 # y% maps to pitch top: low = attack, high = defence/GK (matches reference handout layouts).
+# y% is the distance from the opponent's goal: low = attack, high = our goal.
+# The penalty boxes occupy roughly the top and bottom 16% of the pitch, so
+# outfield lines stay between 18 and 80. Full-backs and wingers sit inset
+# from the touchline. Each line is evenly spaced.
 FORMATION_TEMPLATES: dict[str, list[tuple[str, float, float, str]]] = {
     "4-2-3-1": [
-        ("GOALKEEPER", 50.0, 94.0, "any"),
-        ("LEFT_WINGBACK_DEFENDER", 9.0, 74.0, "left"),
-        ("CENTRAL_DEFENDER", 32.0, 76.0, "left"),
-        ("CENTRAL_DEFENDER", 68.0, 76.0, "right"),
-        ("RIGHT_WINGBACK_DEFENDER", 91.0, 74.0, "right"),
-        ("DEFENSE_MIDFIELD", 34.0, 50.0, "left"),
-        ("DEFENSE_MIDFIELD", 66.0, 50.0, "right"),
-        ("LEFT_WINGER", 10.0, 24.0, "left"),
-        ("ATTACKING_MIDFIELD", 50.0, 36.0, "center"),
-        ("RIGHT_WINGER", 90.0, 24.0, "right"),
-        ("CENTER_FORWARD", 50.0, 11.0, "center"),
+        ("GOALKEEPER", 50.0, 91.0, "any"),
+        ("LEFT_WINGBACK_DEFENDER", 16.0, 76.0, "left"),
+        ("CENTRAL_DEFENDER", 38.7, 76.0, "left"),
+        ("CENTRAL_DEFENDER", 61.3, 76.0, "right"),
+        ("RIGHT_WINGBACK_DEFENDER", 84.0, 76.0, "right"),
+        ("DEFENSE_MIDFIELD", 36.0, 55.0, "left"),
+        ("DEFENSE_MIDFIELD", 64.0, 55.0, "right"),
+        ("LEFT_WINGER", 18.0, 38.0, "left"),
+        ("ATTACKING_MIDFIELD", 50.0, 38.0, "center"),
+        ("RIGHT_WINGER", 82.0, 38.0, "right"),
+        ("CENTER_FORWARD", 50.0, 18.0, "center"),
     ],
     "4-4-2": [
-        ("GOALKEEPER", 50.0, 94.0, "any"),
-        ("LEFT_WINGBACK_DEFENDER", 9.0, 74.0, "left"),
-        ("CENTRAL_DEFENDER", 32.0, 76.0, "left"),
-        ("CENTRAL_DEFENDER", 68.0, 76.0, "right"),
-        ("RIGHT_WINGBACK_DEFENDER", 91.0, 74.0, "right"),
-        ("LEFT_WINGER", 10.0, 48.0, "left"),
-        ("CENTRAL_MIDFIELD", 36.0, 48.0, "left"),
-        ("CENTRAL_MIDFIELD", 64.0, 48.0, "right"),
-        ("RIGHT_WINGER", 90.0, 48.0, "right"),
-        ("CENTER_FORWARD", 36.0, 12.0, "left"),
-        ("CENTER_FORWARD", 64.0, 12.0, "right"),
+        ("GOALKEEPER", 50.0, 91.0, "any"),
+        ("LEFT_WINGBACK_DEFENDER", 16.0, 76.0, "left"),
+        ("CENTRAL_DEFENDER", 38.7, 76.0, "left"),
+        ("CENTRAL_DEFENDER", 61.3, 76.0, "right"),
+        ("RIGHT_WINGBACK_DEFENDER", 84.0, 76.0, "right"),
+        ("LEFT_WINGER", 16.0, 48.0, "left"),
+        ("CENTRAL_MIDFIELD", 38.7, 48.0, "left"),
+        ("CENTRAL_MIDFIELD", 61.3, 48.0, "right"),
+        ("RIGHT_WINGER", 84.0, 48.0, "right"),
+        ("CENTER_FORWARD", 36.0, 20.0, "left"),
+        ("CENTER_FORWARD", 64.0, 20.0, "right"),
     ],
     "4-3-3": [
-        ("GOALKEEPER", 50.0, 94.0, "any"),
-        ("LEFT_WINGBACK_DEFENDER", 9.0, 74.0, "left"),
-        ("CENTRAL_DEFENDER", 32.0, 76.0, "left"),
-        ("CENTRAL_DEFENDER", 68.0, 76.0, "right"),
-        ("RIGHT_WINGBACK_DEFENDER", 91.0, 74.0, "right"),
-        ("DEFENSE_MIDFIELD", 50.0, 54.0, "center"),
-        ("CENTRAL_MIDFIELD", 32.0, 44.0, "left"),
-        ("CENTRAL_MIDFIELD", 68.0, 44.0, "right"),
-        ("LEFT_WINGER", 12.0, 18.0, "left"),
-        ("CENTER_FORWARD", 50.0, 11.0, "center"),
-        ("RIGHT_WINGER", 88.0, 18.0, "right"),
+        ("GOALKEEPER", 50.0, 91.0, "any"),
+        ("LEFT_WINGBACK_DEFENDER", 16.0, 76.0, "left"),
+        ("CENTRAL_DEFENDER", 38.7, 76.0, "left"),
+        ("CENTRAL_DEFENDER", 61.3, 76.0, "right"),
+        ("RIGHT_WINGBACK_DEFENDER", 84.0, 76.0, "right"),
+        ("DEFENSE_MIDFIELD", 50.0, 56.0, "center"),
+        ("CENTRAL_MIDFIELD", 36.0, 44.0, "left"),
+        ("CENTRAL_MIDFIELD", 64.0, 44.0, "right"),
+        ("LEFT_WINGER", 18.0, 30.0, "left"),
+        ("CENTER_FORWARD", 50.0, 20.0, "center"),
+        ("RIGHT_WINGER", 82.0, 30.0, "right"),
+    ],
+    "5-4-1": [
+        ("GOALKEEPER", 50.0, 91.0, "any"),
+        ("LEFT_WINGBACK_DEFENDER", 14.0, 68.0, "left"),
+        ("CENTRAL_DEFENDER", 32.0, 78.0, "left"),
+        ("CENTRAL_DEFENDER", 50.0, 78.0, "center"),
+        ("CENTRAL_DEFENDER", 68.0, 78.0, "right"),
+        ("RIGHT_WINGBACK_DEFENDER", 86.0, 68.0, "right"),
+        ("LEFT_WINGER", 16.0, 46.0, "left"),
+        ("CENTRAL_MIDFIELD", 38.7, 46.0, "left"),
+        ("CENTRAL_MIDFIELD", 61.3, 46.0, "right"),
+        ("RIGHT_WINGER", 84.0, 46.0, "right"),
+        ("CENTER_FORWARD", 50.0, 20.0, "center"),
     ],
     "5-3-2": [
-        ("GOALKEEPER", 50.0, 94.0, "any"),
-        ("LEFT_WINGBACK_DEFENDER", 8.0, 62.0, "left"),
-        ("CENTRAL_DEFENDER", 27.0, 76.0, "left"),
+        ("GOALKEEPER", 50.0, 91.0, "any"),
+        ("LEFT_WINGBACK_DEFENDER", 14.0, 62.0, "left"),
+        ("CENTRAL_DEFENDER", 28.0, 78.0, "left"),
         ("CENTRAL_DEFENDER", 50.0, 78.0, "center"),
-        ("CENTRAL_DEFENDER", 73.0, 76.0, "right"),
-        ("RIGHT_WINGBACK_DEFENDER", 92.0, 62.0, "right"),
-        ("DEFENSE_MIDFIELD", 50.0, 52.0, "center"),
-        ("CENTRAL_MIDFIELD", 32.0, 44.0, "left"),
-        ("CENTRAL_MIDFIELD", 68.0, 44.0, "right"),
-        ("CENTER_FORWARD", 34.0, 14.0, "left"),
-        ("CENTER_FORWARD", 66.0, 14.0, "right"),
-    ],
-    "3-5-2": [
-        ("GOALKEEPER", 50.0, 94.0, "any"),
-        ("LEFT_WINGBACK_DEFENDER", 8.0, 58.0, "left"),
-        ("CENTRAL_DEFENDER", 27.0, 76.0, "left"),
-        ("CENTRAL_DEFENDER", 50.0, 78.0, "center"),
-        ("CENTRAL_DEFENDER", 73.0, 76.0, "right"),
-        ("RIGHT_WINGBACK_DEFENDER", 92.0, 58.0, "right"),
-        ("DEFENSE_MIDFIELD", 50.0, 52.0, "center"),
+        ("CENTRAL_DEFENDER", 72.0, 78.0, "right"),
+        ("RIGHT_WINGBACK_DEFENDER", 86.0, 62.0, "right"),
+        ("DEFENSE_MIDFIELD", 50.0, 54.0, "center"),
         ("CENTRAL_MIDFIELD", 32.0, 42.0, "left"),
         ("CENTRAL_MIDFIELD", 68.0, 42.0, "right"),
-        ("CENTER_FORWARD", 34.0, 14.0, "left"),
-        ("CENTER_FORWARD", 66.0, 14.0, "right"),
+        ("CENTER_FORWARD", 36.0, 20.0, "left"),
+        ("CENTER_FORWARD", 64.0, 20.0, "right"),
+    ],
+    "3-5-2": [
+        ("GOALKEEPER", 50.0, 91.0, "any"),
+        ("LEFT_WINGBACK_DEFENDER", 14.0, 58.0, "left"),
+        ("CENTRAL_DEFENDER", 28.0, 78.0, "left"),
+        ("CENTRAL_DEFENDER", 50.0, 78.0, "center"),
+        ("CENTRAL_DEFENDER", 72.0, 78.0, "right"),
+        ("RIGHT_WINGBACK_DEFENDER", 86.0, 58.0, "right"),
+        ("CENTRAL_MIDFIELD", 22.0, 42.0, "left"),
+        ("DEFENSE_MIDFIELD", 50.0, 48.0, "center"),
+        ("CENTRAL_MIDFIELD", 78.0, 42.0, "right"),
+        ("CENTER_FORWARD", 36.0, 20.0, "left"),
+        ("CENTER_FORWARD", 64.0, 20.0, "right"),
     ],
     "5-2-2-1": [
-        ("GOALKEEPER", 50.0, 94.0, "any"),
-        ("LEFT_WINGBACK_DEFENDER", 7.0, 56.0, "left"),
+        ("GOALKEEPER", 50.0, 91.0, "any"),
+        ("LEFT_WINGBACK_DEFENDER", 14.0, 58.0, "left"),
         ("CENTRAL_DEFENDER", 28.0, 78.0, "left"),
-        ("CENTRAL_DEFENDER", 50.0, 80.0, "center"),
+        ("CENTRAL_DEFENDER", 50.0, 78.0, "center"),
         ("CENTRAL_DEFENDER", 72.0, 78.0, "right"),
-        ("RIGHT_WINGBACK_DEFENDER", 93.0, 56.0, "right"),
-        ("DEFENSE_MIDFIELD", 36.0, 52.0, "left"),
-        ("DEFENSE_MIDFIELD", 64.0, 52.0, "right"),
-        ("CENTRAL_MIDFIELD", 34.0, 34.0, "left"),
-        ("CENTRAL_MIDFIELD", 66.0, 34.0, "right"),
-        ("CENTER_FORWARD", 50.0, 11.0, "center"),
+        ("RIGHT_WINGBACK_DEFENDER", 86.0, 58.0, "right"),
+        ("DEFENSE_MIDFIELD", 38.0, 52.0, "left"),
+        ("DEFENSE_MIDFIELD", 62.0, 52.0, "right"),
+        ("CENTRAL_MIDFIELD", 36.0, 34.0, "left"),
+        ("CENTRAL_MIDFIELD", 64.0, 34.0, "right"),
+        ("CENTER_FORWARD", 50.0, 20.0, "center"),
     ],
 }
 
@@ -513,6 +541,15 @@ class TwoPagerBoardRequest(BaseModel):
     notes: dict[str, Any] | None = None
     xi_shape: dict[str, Any] | None = None
     avg_shape: dict[str, Any] | None = None
+
+
+class SquadBoardRequest(BaseModel):
+    iteration_id: int
+    squad_id: int
+    availability: dict[str, Any] | None = None
+    pitch_xi: dict[str, Any] | None = None
+    pitch_shape: dict[str, Any] | None = None
+    reset: bool = False
 
 
 class PreMatchPngExportPage(BaseModel):
@@ -1166,19 +1203,21 @@ def _side_from_column(column: str) -> str:
 
 
 def _normalize_formation_key(formation: str | None) -> str:
-    text = str(formation or "").lower()
+    text = str(formation or "").lower().replace(" ", "")
+    if "5-4-1" in text or "541" in text:
+        return "5-4-1"
+    if "5-2-2-1" in text or "5221" in text or "5-2-1-2" in text:
+        return "5-2-2-1"
     if "4-2-3-1" in text or "4231" in text:
         return "4-2-3-1"
     if "4-4-2" in text or "442" in text:
         return "4-4-2"
     if "4-3-3" in text or "433" in text:
         return "4-3-3"
+    if "3-5-2" in text or "352" in text or "3-4-2" in text:
+        return "3-5-2"
     if "5-3-2" in text or "532" in text:
         return "5-3-2"
-    if "3-5-2" in text or "352" in text or "3-4-2" in text:
-        return "5-3-2"
-    if "5-2-2-1" in text or "5221" in text or "5-2-1-2" in text:
-        return "5-2-2-1"
     return "4-2-3-1"
 
 
@@ -1732,20 +1771,20 @@ def _beautify_pitch_layout(players: list[dict[str, Any]]) -> list[dict[str, Any]
         band = str(player.get("band") or _position_band(slot))
         if band == "gk" or slot == "GOALKEEPER":
             player["x_pct"] = 50.0
-            player["y_pct"] = 94.0
+            player["y_pct"] = 91.0
             player["band"] = "gk"
         elif slot == "ATTACKING_MIDFIELD":
             # Keep the 10 in the hole — not on the double-pivot line.
-            y_val = float(player.get("y_pct") or 30.0)
-            player["y_pct"] = round(max(26.0, min(38.0, y_val)), 1)
+            y_val = float(player.get("y_pct") or 38.0)
+            player["y_pct"] = round(max(28.0, min(44.0, y_val)), 1)
             player["band"] = "mid"
         else:
             y_val = float(player.get("y_pct") or 50.0)
-            # Keep attackers high and defenders clear of the keeper.
+            # Attackers stay just outside the box. Defenders stay clear of the keeper.
             if band == "attack":
-                player["y_pct"] = round(max(9.0, min(28.0, y_val)), 1)
+                player["y_pct"] = round(max(18.0, min(42.0, y_val)), 1)
             elif band == "mid":
-                player["y_pct"] = round(max(34.0, min(58.0, y_val)), 1)
+                player["y_pct"] = round(max(34.0, min(60.0, y_val)), 1)
             elif band == "def":
                 player["y_pct"] = round(max(62.0, min(80.0, y_val)), 1)
 
@@ -1758,7 +1797,7 @@ def _beautify_pitch_layout(players: list[dict[str, Any]]) -> list[dict[str, Any]
 
     for line_players in by_line.values():
         line_players.sort(key=lambda item: float(item.get("x_pct") or 50))
-        _spread_players_horizontally(line_players, min_gap=16.0, margin=7.0)
+        _spread_players_horizontally(line_players, min_gap=16.0, margin=14.0)
 
     return _sort_assigned_players(players)
 
@@ -3049,6 +3088,8 @@ def _lineup_players_from_match_detail(
     detail: dict[str, Any],
     squad_id: int,
     player_names: dict[int, str],
+    *,
+    club_name: str | None = None,
 ) -> list[dict[str, Any]]:
     squad = _match_squad_block(detail, squad_id)
     if not squad:
@@ -3080,7 +3121,11 @@ def _lineup_players_from_match_detail(
                 "player_id": player_id,
                 "name": name,
                 "short_name": _player_surname(name),
-                "shirt_number": shirts.get(player_id),
+                "shirt_number": corrected_shirt_number(
+                    club_name or "",
+                    name,
+                    shirts.get(player_id),
+                ),
                 "position": position,
                 "band": _position_band(position),
                 "column": _position_column(position),
@@ -3744,7 +3789,9 @@ def _build_two_match_brief(
         squad = _match_squad_block(detail, squad_id)
         if not squad:
             continue
-        players = _lineup_players_from_match_detail(detail, squad_id, player_names)
+        players = _lineup_players_from_match_detail(
+            detail, squad_id, player_names, club_name=club_name
+        )
         if not players:
             continue
         home_id = int(match.get("homeSquadId") or -1)
@@ -3897,7 +3944,9 @@ def _build_previous_xi_slides(
         squad = _match_squad_block(detail, squad_id)
         if not squad:
             continue
-        players = _lineup_players_from_match_detail(detail, squad_id, player_names)
+        players = _lineup_players_from_match_detail(
+            detail, squad_id, player_names, club_name=club_name
+        )
         if not players:
             continue
         home_id = int(match.get("homeSquadId") or -1)
@@ -4107,34 +4156,660 @@ def _place_red_card_ghosts(
     return [*live_players, *placed]
 
 
+def _even_line_xs(count: int, *, margin: float = 16.0) -> list[float]:
+    if count <= 0:
+        return []
+    if count == 1:
+        return [50.0]
+    span = 100.0 - (2.0 * margin)
+    return [round(margin + span * index / (count - 1), 1) for index in range(count)]
+
+
+def _tag_pitch_lines(players: list[dict[str, Any]]) -> None:
+    """Group a placed XI into horizontal lines from the y already on the slot."""
+    for player in players:
+        try:
+            y_pct = float(player.get("y_pct") or 50)
+        except (TypeError, ValueError):
+            y_pct = 50.0
+        slot = str(player.get("formation_slot") or player.get("position") or "").upper()
+        wingback = slot in {"LEFT_WINGBACK_DEFENDER", "RIGHT_WINGBACK_DEFENDER"}
+        if slot == "GOALKEEPER" or y_pct >= 86:
+            player["line"] = "gk"
+        elif wingback and 54 <= y_pct < 74:
+            player["line"] = "wb"
+        elif y_pct >= 64:
+            player["line"] = "def"
+        elif slot == "DEFENSE_MIDFIELD":
+            player["line"] = "dm"
+        elif y_pct >= 42:
+            player["line"] = "mid"
+        elif y_pct >= 26:
+            player["line"] = "am"
+        else:
+            player["line"] = "fwd"
+
+
+def _line_xs(line: str, count: int) -> list[float]:
+    """Even x positions for a line. Pairs stay central; wide lines stay inset."""
+    if count <= 1 or line == "gk":
+        return [50.0]
+    if line == "wb" and count == 2:
+        return [14.0, 86.0]
+    if line in {"dm", "fwd"} and count == 2:
+        return [36.0, 64.0]
+    if line == "am" and count == 2:
+        return [28.0, 72.0]
+    if line == "am" and count == 3:
+        return [18.0, 50.0, 82.0]
+    if line == "def" and count == 3:
+        return [28.0, 50.0, 72.0]
+    if count == 4:
+        return [16.0, 38.7, 61.3, 84.0]
+    if count == 5:
+        return [14.0, 32.0, 50.0, 68.0, 86.0]
+    margin = 14.0 if count >= 5 else 18.0
+    return _even_line_xs(count, margin=margin)
+
+
+def _apply_line_xs(group: list[dict[str, Any]]) -> None:
+    group.sort(
+        key=lambda item: (
+            float(item.get("x_pct") or 50),
+            str(item.get("name") or "").casefold(),
+        )
+    )
+    line = str(group[0].get("line") or "mid")
+    xs = _line_xs(line, len(group))
+    ys = [float(item.get("y_pct") or 48) for item in group]
+    y_pct = sum(ys) / len(ys)
+    if line == "gk":
+        y_pct = 91.0
+    else:
+        y_pct = max(18.0, min(80.0, y_pct))
+    for player, x_pct in zip(group, xs, strict=False):
+        player["x_pct"] = x_pct
+        player["y_pct"] = round(y_pct, 1)
+
+
+def _line_counts(players: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for player in players:
+        line = str(player.get("line") or "mid")
+        counts[line] = counts.get(line, 0) + 1
+    return counts
+
+
+def _respace_reduced_lines(
+    players: list[dict[str, Any]],
+    previous_counts: dict[str, int],
+) -> list[dict[str, Any]]:
+    """Re-space only lines that lost a player. Untouched lines keep their slots."""
+    if not players:
+        return []
+    _tag_pitch_lines(players)
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for player in players:
+        grouped.setdefault(str(player.get("line") or "mid"), []).append(player)
+    for line, group in grouped.items():
+        if len(group) >= previous_counts.get(line, len(group)):
+            continue
+        _apply_line_xs(group)
+    return players
+
+
+def _respace_short_handed(players: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Even spacing on every line. Outfield players stay outside both boxes."""
+    if not players:
+        return []
+    _tag_pitch_lines(players)
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for player in players:
+        grouped.setdefault(str(player.get("line") or "mid"), []).append(player)
+    for group in grouped.values():
+        _apply_line_xs(group)
+    return players
+
+
+def _formation_slot_point(
+    formation: str | None,
+    position: str,
+    side: Any,
+) -> tuple[float, float, str]:
+    slots = FORMATION_TEMPLATES.get(
+        _normalize_formation_key(formation),
+        FORMATION_TEMPLATES["4-2-3-1"],
+    )
+    side_text = str(side or "").lower()
+    if "left" in side_text:
+        column = "left"
+    elif "right" in side_text:
+        column = "right"
+    else:
+        column = "center"
+    probe = {"position": position, "column": column, "starts": 0}
+    best: tuple[str, float, float, str] | None = None
+    best_score = -10_000
+    for slot_position, x_pct, y_pct, slot_side in slots:
+        score = _slot_match_score(probe, slot_position, slot_side)
+        if score > best_score:
+            best_score = score
+            best = (slot_position, x_pct, y_pct, slot_side)
+    if best is None:
+        return 50.0, 48.0, "CENTRAL_MIDFIELD"
+    return best[1], best[2], best[0]
+
+
+def _inherit_replaced_slot(incoming: dict[str, Any], replaced: dict[str, Any]) -> None:
+    incoming["x_pct"] = replaced.get("x_pct")
+    incoming["y_pct"] = replaced.get("y_pct")
+    incoming["line"] = replaced.get("line")
+    incoming["formation_slot"] = replaced.get("formation_slot") or replaced.get("position")
+    incoming["position_locked"] = True
+
+
+def _phase_actor_label(name: str, shirt: Any) -> str:
+    """Surname plus shirt, so Jay Williams (26) is not the same chip as Jaden (17)."""
+    surname = _player_surname(str(name or ""))
+    if shirt in (None, ""):
+        return surname
+    try:
+        number = int(shirt)
+    except (TypeError, ValueError):
+        return surname
+    return f"{surname} {number}"
+
+
+def _sent_off_marker(player: dict[str, Any], minute_label: str) -> dict[str, Any]:
+    return {
+        "player_id": player.get("player_id"),
+        "name": player.get("name"),
+        "short_name": player.get("short_name") or _player_surname(str(player.get("name") or "")),
+        "shirt_number": player.get("shirt_number"),
+        "minute": minute_label,
+    }
+
+
 def _snapshot_pitch_players(
     on_pitch: dict[int, dict[str, Any]],
     *,
     formation: str | None,
-    ghosts: list[dict[str, Any]] | None = None,
+    respace: bool = False,
 ) -> list[dict[str, Any]]:
-    players = [dict(player) for player in on_pitch.values()]
-    if not players and not ghosts:
+    """Live players only. A red card is a strip under the pitch, not a marker."""
+    del formation  # slots are already assigned; short-handed phases re-space in place
+    players = []
+    for player in on_pitch.values():
+        if player.get("ghost"):
+            continue
+        row = dict(player)
+        if str(row.get("highlight") or "") == "red":
+            row.pop("highlight", None)
+        row.pop("ghost", None)
+        players.append(row)
+    if not players:
         return []
-    # Full XI → slot to formation. Short-handed / red-card phases keep real
-    # positions so midfield numbers don't collapse into a mess.
-    if len(players) >= PITCH_STARTER_LIMIT:
-        players = assign_lineup_formation_slots(players, formation)
-        players = _beautify_pitch_layout(players)
-    elif players:
-        for player in players:
-            x_pct, y_pct = _coords_from_starting_position(
-                str(player.get("position") or ""),
-                player.get("position_side"),
+    if respace or len(players) < PITCH_STARTER_LIMIT:
+        players = _respace_short_handed(players)
+    return _sort_assigned_players(players)
+
+
+def _trim_last_game_phases(
+    phases: list[dict[str, Any]],
+    *,
+    limit: int = LAST_GAME_PHASE_LIMIT,
+) -> list[dict[str, Any]]:
+    """Keep kick-off plus the substitutions and dismissals that explain the pitch."""
+    if len(phases) <= limit:
+        return phases
+    required = [phases[0]]
+    for phase in phases[1:]:
+        if phase.get("on_names") or phase.get("off_names") or phase.get("sent_off"):
+            required.append(phase)
+    chosen: list[dict[str, Any]] = []
+    for phase in required:
+        if phase not in chosen:
+            chosen.append(phase)
+    if len(chosen) > limit:
+        chosen = [chosen[0], *chosen[-(limit - 1) :]]
+    for phase in reversed(phases):
+        if len(chosen) >= limit:
+            break
+        if phase not in chosen:
+            chosen.append(phase)
+    chosen.sort(key=lambda phase: phases.index(phase))
+    return chosen
+
+
+def _pool_row(rows: list[dict[str, Any]], key: str, club_name: str) -> dict[str, Any]:
+    found = None
+    for row in rows:
+        if normalize_person_name(str(row.get("name") or "")) == key:
+            found = row
+            break
+    if found is None:
+        for row in rows:
+            text = normalize_person_name(str(row.get("name") or ""))
+            parts = text.split()
+            key_parts = key.split()
+            if parts and key_parts and parts[-1] == key_parts[-1] and parts[0] == key_parts[0]:
+                found = row
+                break
+    if found is not None:
+        return found
+    display = " ".join(part.capitalize() for part in key.split())
+    return {
+        "id": synthetic_player_id(club_name, display),
+        "name": display,
+        "shirt_number": corrected_shirt_number(club_name, display, None),
+        "position_code": "CENTRAL_MIDFIELD",
+        "position": "Central Midfield",
+    }
+
+
+def _player_from_squad_row(
+    row: dict[str, Any],
+    *,
+    club_name: str,
+    slot: tuple[str, float, float, str] | None = None,
+    captain_key: str = "",
+) -> dict[str, Any]:
+    name = str(row.get("name") or "")
+    position = str((slot[0] if slot else None) or row.get("position_code") or row.get("position") or "")
+    x_pct = float(slot[1]) if slot else 50.0
+    y_pct = float(slot[2]) if slot else 50.0
+    shirt = corrected_shirt_number(club_name, name, row.get("shirt_number"))
+    player_id = row.get("id") if row.get("id") is not None else row.get("player_id")
+    return {
+        "player_id": int(player_id),
+        "name": name,
+        "short_name": _player_surname(name),
+        "shirt_number": shirt,
+        "position": position,
+        "formation_slot": position,
+        "band": _position_band(position),
+        "column": _position_column(position),
+        "x_pct": x_pct,
+        "y_pct": y_pct,
+        "starts": 1,
+        "minutes": int(row.get("minutes") or 0),
+        "captain": normalize_person_name(name) == captain_key or bool(row.get("captain")),
+        "position_locked": True,
+    }
+
+
+def _place_named_xi(
+    squad_rows: list[dict[str, Any]],
+    spec: dict[str, Any],
+    *,
+    club_name: str,
+) -> list[dict[str, Any]]:
+    formation = _normalize_formation_key(str(spec.get("formation") or "4-2-3-1"))
+    slots = FORMATION_TEMPLATES.get(formation, FORMATION_TEMPLATES["4-2-3-1"])
+    names = list(spec.get("names") or [])
+    captain_key = normalize_person_name(str(spec.get("captain") or ""))
+    placed: list[dict[str, Any]] = []
+    for slot, key in zip(slots, names, strict=False):
+        row = _pool_row(squad_rows, str(key), club_name)
+        placed.append(
+            _player_from_squad_row(
+                row,
+                club_name=club_name,
+                slot=slot,
+                captain_key=captain_key,
             )
-            player["x_pct"] = x_pct
-            player["y_pct"] = y_pct
-            player["formation_slot"] = player.get("position")
-        players = _beautify_pitch_layout(players)
-    if ghosts:
-        players = _place_red_card_ghosts(players, ghosts)
-    limit = PITCH_STARTER_LIMIT + len(ghosts or [])
-    return players[:limit]
+        )
+    _tag_pitch_lines(placed)
+    return _beautify_pitch_layout(placed)
+
+
+def _phases_from_pitch_events(
+    on_pitch: dict[int, dict[str, Any]],
+    events: list[dict[str, Any]],
+    *,
+    player_names: dict[int, str],
+    shirts: dict[int, int],
+    formation: str | None,
+    club_name: str,
+) -> list[dict[str, Any]]:
+    """Walk substitutions, dismissals, and position changes into pitch snapshots."""
+    starting = _snapshot_pitch_players(on_pitch, formation=formation, respace=False)
+    phases: list[dict[str, Any]] = [
+        {
+            "kind": "start",
+            "label": "Starting XI",
+            "minute_labels": [],
+            "on_names": [],
+            "off_names": [],
+            "off_kinds": [],
+            "sent_off": [],
+            "formation": formation,
+            "formation_changed": False,
+            "pitch_players": starting,
+        }
+    ]
+    sent_off_running: list[dict[str, Any]] = []
+    wave: list[dict[str, Any]] = []
+    wave_start = -10_000
+
+    def flush_wave() -> None:
+        nonlocal wave, wave_start
+        if not wave:
+            return
+        for entry in on_pitch.values():
+            entry.pop("highlight", None)
+            entry.pop("ghost", None)
+
+        on_names: list[str] = []
+        off_names: list[str] = []
+        off_kinds: list[str] = []
+        minute_labels: list[str] = []
+        wave_sent: list[dict[str, Any]] = []
+        respace = False
+        line_counts_before = _line_counts(list(on_pitch.values()))
+        for event in wave:
+            player_id = int(event.get("player_id") or 0)
+            if not player_id:
+                continue
+            name = player_names.get(player_id, f"Player {player_id}")
+            label = str(event.get("label") or "")
+            if label and label not in minute_labels:
+                minute_labels.append(label)
+
+            if event["type"] == "SUB_ON":
+                exchanged_id = event.get("exchanged_player_id")
+                replaced = on_pitch.get(int(exchanged_id)) if exchanged_id else None
+                if replaced is not None:
+                    off_names.append(
+                        _phase_actor_label(
+                            str(replaced.get("name") or ""),
+                            replaced.get("shirt_number"),
+                        )
+                    )
+                    off_kinds.append("sub")
+                    del on_pitch[int(exchanged_id)]
+                incoming = _on_pitch_entry(
+                    player_id=player_id,
+                    name=name,
+                    position=str(event.get("to_position") or (replaced or {}).get("position") or "CENTRAL_MIDFIELD"),
+                    position_side=event.get("to_side") or (replaced or {}).get("position_side"),
+                    shirt_number=corrected_shirt_number(
+                        club_name,
+                        name,
+                        shirts.get(player_id),
+                    ),
+                )
+                if replaced is not None:
+                    _inherit_replaced_slot(incoming, replaced)
+                incoming["highlight"] = "sub"
+                on_pitch[player_id] = incoming
+                on_names.append(_phase_actor_label(name, incoming.get("shirt_number")))
+            elif event["type"] == "RED_CARD":
+                if player_id not in on_pitch:
+                    continue
+                victim = on_pitch.pop(player_id)
+                off_names.append(
+                    _phase_actor_label(str(victim.get("name") or name), victim.get("shirt_number"))
+                )
+                off_kinds.append("red")
+                marker = _sent_off_marker(victim, label or f"{event.get('minute')}'")
+                wave_sent.append(marker)
+                sent_off_running.append(marker)
+                respace = True
+            elif event["type"] == "POSITION_CHANGE":
+                if player_id not in on_pitch:
+                    continue
+                current = on_pitch[player_id]
+                prev_highlight = current.get("highlight")
+                old_x = current.get("x_pct")
+                old_y = current.get("y_pct")
+                x_pct, y_pct, slot_position = _formation_slot_point(
+                    event.get("formation") or formation,
+                    str(event.get("to_position") or current.get("position") or ""),
+                    event.get("to_side") or current.get("position_side"),
+                )
+                moved = _on_pitch_entry(
+                    player_id=player_id,
+                    name=str(current.get("name") or name),
+                    position=str(event.get("to_position") or current.get("position") or ""),
+                    position_side=event.get("to_side") or current.get("position_side"),
+                    shirt_number=corrected_shirt_number(
+                        club_name,
+                        str(current.get("name") or name),
+                        current.get("shirt_number"),
+                    ),
+                )
+                moved["x_pct"] = x_pct
+                moved["y_pct"] = y_pct
+                moved["formation_slot"] = slot_position
+                moved["position_locked"] = True
+                _tag_pitch_lines([moved])
+                for other_id, other in list(on_pitch.items()):
+                    if other_id == player_id:
+                        continue
+                    if abs(float(other.get("x_pct") or 0) - x_pct) < 8 and abs(
+                        float(other.get("y_pct") or 0) - y_pct
+                    ) < 6:
+                        other["x_pct"] = old_x
+                        other["y_pct"] = old_y
+                        _tag_pitch_lines([other])
+                        break
+                moved["highlight"] = "sub" if prev_highlight == "sub" else "moved"
+                on_pitch[player_id] = moved
+
+        previous_formation = str(phases[-1].get("formation") or "") if phases else ""
+        wave_formation = previous_formation or formation
+        for event in wave:
+            if event.get("formation"):
+                wave_formation = str(event["formation"])
+        wave_formation = _coach_formation_from_lineup(wave_formation, list(on_pitch.values())) or wave_formation
+        header_bits = []
+        if minute_labels:
+            header_bits.append(", ".join(minute_labels))
+        if on_names:
+            header_bits.append(f"On {', '.join(on_names)}")
+        if off_names:
+            header_bits.append(f"Off {', '.join(off_names)}")
+        if wave_formation and previous_formation and wave_formation != previous_formation:
+            header_bits.append(f"→ {wave_formation}")
+        if respace:
+            _respace_reduced_lines(list(on_pitch.values()), line_counts_before)
+        phases.append(
+            {
+                "kind": "change",
+                "label": " · ".join(header_bits) if header_bits else "In-game change",
+                "minute_labels": minute_labels,
+                "on_names": on_names,
+                "off_names": off_names,
+                "off_kinds": off_kinds,
+                "sent_off": [dict(item) for item in sent_off_running],
+                "formation": wave_formation or formation,
+                "formation_changed": bool(
+                    wave_formation and previous_formation and wave_formation != previous_formation
+                ),
+                "pitch_players": _snapshot_pitch_players(
+                    on_pitch,
+                    formation=wave_formation or formation,
+                    respace=False,
+                ),
+            }
+        )
+        if wave_sent and phases[-1]["pitch_players"]:
+            # Re-spacing writes the new coordinates back so the next sub
+            # inherits the slot the replaced player actually occupies.
+            for player in phases[-1]["pitch_players"]:
+                player_id = int(player.get("player_id") or 0)
+                if player_id in on_pitch:
+                    on_pitch[player_id]["x_pct"] = player.get("x_pct")
+                    on_pitch[player_id]["y_pct"] = player.get("y_pct")
+                    on_pitch[player_id]["line"] = player.get("line")
+        wave = []
+
+    ordered = sorted(events, key=lambda item: (int(item.get("sort_seconds") or 0), item.get("type") != "SUB_ON"))
+    for event in ordered:
+        if not wave:
+            wave = [event]
+            wave_start = int(event.get("sort_seconds") or 0)
+            continue
+        if int(event.get("sort_seconds") or 0) - wave_start <= 45:
+            wave.append(event)
+            continue
+        flush_wave()
+        wave = [event]
+        wave_start = int(event.get("sort_seconds") or 0)
+    flush_wave()
+    return _trim_last_game_phases(phases)
+
+
+def _materialise_verified_events(
+    script: dict[str, Any],
+    pool: list[dict[str, Any]],
+    *,
+    club_name: str,
+) -> tuple[dict[int, str], dict[int, int], list[dict[str, Any]]]:
+    names: dict[int, str] = {}
+    shirts: dict[int, int] = {}
+    events: list[dict[str, Any]] = []
+    for spec in script.get("events") or ():
+        player = _pool_row(pool, str(spec.get("player") or ""), club_name)
+        player_id = int(player.get("id") or player.get("player_id"))
+        names[player_id] = str(player.get("name") or "")
+        shirt = corrected_shirt_number(club_name, names[player_id], player.get("shirt_number"))
+        if shirt is not None:
+            shirts[player_id] = int(shirt)
+        exchanged_id = None
+        if spec.get("replaces"):
+            replaced = _pool_row(pool, str(spec["replaces"]), club_name)
+            exchanged_id = int(replaced.get("id") or replaced.get("player_id"))
+            names[exchanged_id] = str(replaced.get("name") or "")
+        minute = int(spec.get("minute") or 0)
+        events.append(
+            {
+                "type": str(spec.get("type") or ""),
+                "minute": minute,
+                "sort_seconds": minute * 60,
+                "label": f"{minute}'",
+                "player_id": player_id,
+                "exchanged_player_id": exchanged_id,
+                "to_position": str(spec.get("to_position") or ""),
+                "to_side": spec.get("to_side"),
+            }
+        )
+    return names, shirts, events
+
+
+def build_verified_last_game_phases(
+    club_name: str,
+    opponent_name: str,
+    match_date: Any,
+    squad_rows: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]] | None:
+    """Replace a known bad event feed with the verified substitutions."""
+    script = verified_match_script(club_name, opponent_name, match_date)
+    if script is None:
+        return None
+    pool = apply_club_squad_overrides(club_name, squad_rows or [])
+    spec = {
+        "formation": script.get("formation") or "4-2-3-1",
+        "names": list(script.get("starters") or []),
+        "captain": "jack tucker",
+    }
+    placed = _place_named_xi(pool, spec, club_name=club_name)
+    on_pitch = {int(player["player_id"]): dict(player) for player in placed}
+    names, shirts, events = _materialise_verified_events(script, pool, club_name=club_name)
+    for player in on_pitch.values():
+        player_id = int(player["player_id"])
+        names.setdefault(player_id, str(player.get("name") or ""))
+        if player.get("shirt_number") is not None:
+            shirts.setdefault(player_id, int(player["shirt_number"]))
+    formation = _normalize_formation_key(str(script.get("formation") or "4-2-3-1"))
+    return _phases_from_pitch_events(
+        on_pitch,
+        events,
+        player_names=names,
+        shirts=shirts,
+        formation=formation,
+        club_name=club_name,
+    )
+
+
+def _outfield_crowded_or_in_box(players: list[dict[str, Any]]) -> bool:
+    """True when a non-keeper is inside a penalty area or on the touchline."""
+    for player in players:
+        slot = str(player.get("formation_slot") or player.get("position") or "").upper()
+        band = str(player.get("band") or "")
+        if band == "gk" or "GOAL" in slot:
+            continue
+        y_pct = float(player.get("y_pct") or 50)
+        x_pct = float(player.get("x_pct") or 50)
+        if y_pct < 18 or y_pct > 80 or x_pct < 12 or x_pct > 88:
+            return True
+    return False
+
+
+def _relayout_existing_phase(phase: dict[str, Any], club_name: str) -> dict[str, Any]:
+    """Drop sent-off ghosts onto a strip and pull a messy pitch onto the template."""
+    row = dict(phase)
+    sent = [dict(item) for item in (row.get("sent_off") or []) if isinstance(item, dict)]
+    live: list[dict[str, Any]] = []
+    for player in row.get("pitch_players") or []:
+        if not isinstance(player, dict):
+            continue
+        item = dict(player)
+        item["shirt_number"] = corrected_shirt_number(
+            club_name,
+            str(item.get("name") or ""),
+            item.get("shirt_number"),
+        )
+        if item.get("ghost") or str(item.get("highlight") or "") == "red":
+            minute = ""
+            labels = row.get("minute_labels") or []
+            if labels:
+                minute = str(labels[0])
+            sent.append(_sent_off_marker(item, minute))
+            continue
+        live.append(item)
+    if live and len(live) >= PITCH_STARTER_LIMIT and _outfield_crowded_or_in_box(live):
+        live = _beautify_pitch_layout(
+            assign_lineup_formation_slots(live, row.get("formation"))
+        )
+        _tag_pitch_lines(live)
+    elif live and len(live) < PITCH_STARTER_LIMIT:
+        live = _respace_short_handed(live)
+    elif live:
+        _tag_pitch_lines(live)
+    row["pitch_players"] = _sort_assigned_players(live) if live else []
+    row["sent_off"] = sent
+    return row
+
+
+def repair_last_game_detail(
+    detail: dict[str, Any] | None,
+    club_name: str,
+    squad_rows: list[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
+    if not isinstance(detail, dict):
+        return detail
+    phases = build_verified_last_game_phases(
+        club_name,
+        str(detail.get("opponent") or ""),
+        detail.get("date"),
+        squad_rows,
+    )
+    repaired = dict(detail)
+    if phases:
+        formation = str(phases[0].get("formation") or repaired.get("starting_formation") or "")
+        repaired["phases"] = phases
+        repaired["starting_formation"] = formation
+        repaired["formations_used"] = [formation] if formation else []
+        repaired["formation_changed"] = False
+        return repaired
+    repaired["phases"] = [
+        _relayout_existing_phase(phase, club_name)
+        for phase in (detail.get("phases") or [])
+        if isinstance(phase, dict)
+    ]
+    return repaired
 
 
 def _build_last_game_detail(
@@ -4199,23 +4874,21 @@ def _build_last_game_detail(
             shirt_number=shirts.get(player_id),
         )
 
+    for entry in on_pitch.values():
+        entry["shirt_number"] = corrected_shirt_number(
+            club_name,
+            str(entry.get("name") or ""),
+            entry.get("shirt_number"),
+        )
+
     starting_formation = _coach_formation_from_lineup(
         starting_formation,
         list(on_pitch.values()),
     )
-
-    phases: list[dict[str, Any]] = [
-        {
-            "kind": "start",
-            "label": "Starting XI",
-            "minute_labels": [],
-            "on_names": [],
-            "off_names": [],
-            "formation": starting_formation,
-            "formation_changed": False,
-            "pitch_players": _snapshot_pitch_players(on_pitch, formation=starting_formation),
-        }
-    ]
+    placed = assign_lineup_formation_slots(list(on_pitch.values()), starting_formation)
+    placed = _beautify_pitch_layout(placed)
+    _tag_pitch_lines(placed)
+    on_pitch = {int(player["player_id"]): player for player in placed}
 
     events: list[dict[str, Any]] = []
     for row in squad.get("substitutions") or []:
@@ -4237,147 +4910,32 @@ def _build_last_game_detail(
                 "to_side": row.get("positionSide"),
                 "from_position": str(row.get("fromPosition") or ""),
                 "from_side": row.get("fromPositionSide"),
-            }
-        )
-    events.sort(key=lambda item: (item["sort_seconds"], item["type"] != "SUB_ON"))
-
-    wave: list[dict[str, Any]] = []
-    wave_start = -10_000
-
-    def flush_wave() -> None:
-        nonlocal wave, wave_start
-        if not wave:
-            return
-
-        # Only this wave's changes are highlighted on the pitch.
-        for entry in on_pitch.values():
-            entry.pop("highlight", None)
-            entry.pop("ghost", None)
-
-        on_names: list[str] = []
-        off_names: list[str] = []
-        off_kinds: list[str] = []
-        minute_labels: list[str] = []
-        ghosts: list[dict[str, Any]] = []
-        for event in wave:
-            player_id = int(event["player_id"] or 0)
-            if not player_id:
-                continue
-            name = player_names.get(player_id, f"Player {player_id}")
-            surname = _player_surname(name)
-            label = str(event["label"])
-            if label not in minute_labels:
-                minute_labels.append(label)
-
-            if event["type"] == "SUB_ON":
-                exchanged_id = event.get("exchanged_player_id")
-                if exchanged_id and exchanged_id in on_pitch:
-                    off_names.append(_player_surname(on_pitch[exchanged_id]["name"]))
-                    off_kinds.append("sub")
-                    del on_pitch[exchanged_id]
-                on_pitch[player_id] = _on_pitch_entry(
-                    player_id=player_id,
-                    name=name,
-                    position=str(event.get("to_position") or "CENTRAL_MIDFIELD"),
-                    position_side=event.get("to_side"),
-                    shirt_number=shirts.get(player_id),
-                )
-                on_pitch[player_id]["highlight"] = "sub"
-                on_names.append(surname)
-            elif event["type"] == "RED_CARD":
-                if player_id in on_pitch:
-                    victim = on_pitch[player_id]
-                    off_names.append(_player_surname(victim["name"]))
-                    off_kinds.append("red")
-                    ghosts.append(
-                        {
-                            **victim,
-                            "highlight": "red",
-                            "ghost": True,
-                        }
-                    )
-                    del on_pitch[player_id]
-            elif event["type"] == "POSITION_CHANGE":
-                if player_id not in on_pitch:
-                    continue
-                current = on_pitch[player_id]
-                prev_highlight = current.get("highlight")
-                on_pitch[player_id] = _on_pitch_entry(
-                    player_id=player_id,
-                    name=current["name"],
-                    position=str(event.get("to_position") or current.get("position") or ""),
-                    position_side=event.get("to_side") or current.get("position_side"),
-                    shirt_number=current.get("shirt_number"),
-                )
-                # Keep sub colour if they came on in the same wave.
-                on_pitch[player_id]["highlight"] = (
-                    "sub" if prev_highlight == "sub" else "moved"
-                )
-
-        sort_seconds = max(int(event["sort_seconds"]) for event in wave)
-        previous_formation = str(phases[-1].get("formation") or "") if phases else ""
-        formation = _formation_at_time(
-            formation_timeline,
-            sort_seconds,
-            fallback=previous_formation or starting_formation,
-        )
-        header_bits = []
-        if minute_labels:
-            header_bits.append(", ".join(minute_labels))
-        if on_names:
-            header_bits.append(f"On {', '.join(on_names)}")
-        if off_names:
-            header_bits.append(f"Off {', '.join(off_names)}")
-        if formation and formation != previous_formation:
-            header_bits.append(f"→ {formation}")
-        phases.append(
-            {
-                "kind": "change",
-                "label": " · ".join(header_bits) if header_bits else "In-game change",
-                "minute_labels": minute_labels,
-                "on_names": on_names,
-                "off_names": off_names,
-                "off_kinds": off_kinds,
-                "formation": formation,
-                "formation_changed": bool(
-                    formation and previous_formation and formation != previous_formation
-                ),
-                "pitch_players": _snapshot_pitch_players(
-                    on_pitch,
-                    formation=formation,
-                    ghosts=ghosts,
+                "formation": _formation_at_time(
+                    formation_timeline,
+                    sort_seconds,
+                    fallback=starting_formation,
                 ),
             }
         )
-        wave = []
 
-    for event in events:
-        if not wave:
-            wave = [event]
-            wave_start = int(event["sort_seconds"])
-            continue
-        if int(event["sort_seconds"]) - wave_start <= 45:
-            wave.append(event)
-            continue
-        flush_wave()
-        wave = [event]
-        wave_start = int(event["sort_seconds"])
-    flush_wave()
-
-    # Prefer kick-off + latest states so late reds / shape changes still show.
-    if len(phases) > LAST_GAME_PHASE_LIMIT:
-        keep_tail = LAST_GAME_PHASE_LIMIT - 1
-        phases = [phases[0], *phases[-keep_tail:]]
-
+    phases = _phases_from_pitch_events(
+        on_pitch,
+        events,
+        player_names=dict(player_names),
+        shirts=shirts,
+        formation=starting_formation,
+        club_name=club_name,
+    )
     formations_used = []
     for phase in phases:
         formation = phase.get("formation")
         if formation and formation not in formations_used:
             formations_used.append(formation)
 
-    return {
+    match_date = match.get("scheduledDate") or detail.get("dateTime")
+    built = {
         "match_id": match_id,
-        "date": match.get("scheduledDate") or detail.get("dateTime"),
+        "date": match_date,
         "opponent": opponent_name,
         "venue": venue,
         "result": result,
@@ -4387,6 +4945,15 @@ def _build_last_game_detail(
         "formation_changed": len(formations_used) > 1,
         "phases": phases,
     }
+    pool = [
+        {
+            "id": player_id,
+            "name": name,
+            "shirt_number": corrected_shirt_number(club_name, name, shirts.get(player_id)),
+        }
+        for player_id, name in player_names.items()
+    ]
+    return repair_last_game_detail(built, club_name, pool)
 
 
 def _build_squad_list_slide(
@@ -4432,11 +4999,16 @@ def _build_squad_list_slide(
         vale_squad_id=vale_squad_id,
         vale_formation=vale_formation,
     )
-    pitch_players = assign_lineup_formation_slots(pitch_players, formation)
-    pitch_players = _beautify_pitch_layout(pitch_players)
-    pitch_players = _backfill_pitch_players(pitch_players, roster_source)
-    pitch_players = pitch_players[:PITCH_STARTER_LIMIT]
-    pitch_players = _attach_shirt_numbers(pitch_players, roster_source)
+    predicted = predicted_xi_spec(club_name)
+    if predicted:
+        pitch_players = _place_named_xi(roster_source, predicted, club_name=club_name)
+        formation = str(predicted.get("formation") or formation)
+    else:
+        pitch_players = assign_lineup_formation_slots(pitch_players, formation)
+        pitch_players = _beautify_pitch_layout(pitch_players)
+        pitch_players = _backfill_pitch_players(pitch_players, roster_source)
+        pitch_players = pitch_players[:PITCH_STARTER_LIMIT]
+        pitch_players = _attach_shirt_numbers(pitch_players, roster_source)
     pitch_players = attach_pitch_player_photos(
         pitch_players,
         club_name=club_name,
@@ -4449,6 +5021,8 @@ def _build_squad_list_slide(
         "reference_match_id": reference_match_id,
         "reference_date": reference_date,
         "formation": formation,
+        "predicted_formation": formation if predicted else None,
+        "predicted_xi": bool(predicted),
         "formation_analysis": formation_analysis,
         "league_position": league_position,
         "manager": manager,
@@ -4456,6 +5030,8 @@ def _build_squad_list_slide(
         "pitch_names": sorted(pitch_names),
         "squad_names": [row["name"] for row in roster_source],
         "squad_groups": squad_groups,
+        "availability_defaults": availability_defaults_for_rows(club_name, roster_source),
+        "xi_suggestions": xi_suggestions_for_rows(club_name, roster_source),
         "key_stats": key_stats or {"in_possession": [], "out_of_possession": []},
     }
 
@@ -4523,8 +5099,17 @@ def _hydrate_pitch_photos(
     club_name: str,
     season: str | None,
 ) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for player in players or []:
+        item = dict(player)
+        item["shirt_number"] = corrected_shirt_number(
+            club_name,
+            str(item.get("name") or ""),
+            item.get("shirt_number"),
+        )
+        rows.append(item)
     return attach_pitch_player_photos(
-        [dict(player) for player in players or []],
+        rows,
         club_name=club_name,
         season=season,
         warm=False,
@@ -4628,7 +5213,22 @@ def _hydrate_cached_pre_match_report(report: dict[str, Any]) -> dict[str, Any]:
     if two:
         hydrated["two_match"] = two
 
+    corrected_squad = apply_club_squad_overrides(club_name, list(hydrated.get("squad") or []))
+    if corrected_squad:
+        hydrated["squad"] = corrected_squad
     squad_list = dict(hydrated.get("squad_list") or {})
+    predicted = predicted_xi_spec(club_name)
+    if predicted and corrected_squad:
+        pitch_players = _place_named_xi(corrected_squad, predicted, club_name=club_name)
+        formation = str(predicted.get("formation") or squad_list.get("formation") or "")
+        squad_list["pitch_players"] = pitch_players
+        squad_list["formation"] = formation
+        squad_list["predicted_formation"] = formation
+        squad_list["predicted_xi"] = True
+        squad_list["squad_groups"] = _build_squad_groups(corrected_squad, pitch_players)
+        squad_list["pitch_names"] = sorted({player["name"] for player in pitch_players})
+    squad_list["availability_defaults"] = availability_defaults_for_rows(club_name, corrected_squad)
+    squad_list["xi_suggestions"] = xi_suggestions_for_rows(club_name, corrected_squad)
     if squad_list.get("pitch_players"):
         squad_list["pitch_players"] = _hydrate_pitch_photos(
             squad_list.get("pitch_players"),
@@ -4637,11 +5237,27 @@ def _hydrate_cached_pre_match_report(report: dict[str, Any]) -> dict[str, Any]:
         )
         hydrated["squad_list"] = squad_list
 
+    if isinstance(hydrated.get("last_game"), dict):
+        repaired_last = repair_last_game_detail(
+            hydrated.get("last_game"),
+            club_name,
+            corrected_squad,
+        )
+        if repaired_last:
+            for phase in repaired_last.get("phases") or []:
+                if isinstance(phase, dict) and phase.get("pitch_players"):
+                    phase["pitch_players"] = _hydrate_pitch_photos(
+                        phase.get("pitch_players"),
+                        club_name=club_name,
+                        season=season,
+                    )
+            hydrated["last_game"] = repaired_last
+
     previous = []
     for slide in hydrated.get("previous_xis") or []:
         row = dict(slide)
         row["pitch_players"] = _hydrate_pitch_photos(
-            row.get("pitch_players"),
+            _slot_pitch_to_formation(row.get("pitch_players"), row.get("formation")),
             club_name=club_name,
             season=season,
         )
@@ -5380,7 +5996,7 @@ def _build_fixture_squad_rows(
             str(row["name"] or "").casefold(),
         )
     )
-    return squad_rows
+    return apply_club_squad_overrides(club_name, squad_rows)
 
 
 def _league_table(
@@ -6445,6 +7061,30 @@ def register_pre_match_routes(app: FastAPI) -> None:
                 notes=body.notes,
                 xi_shape=body.xi_shape,
                 avg_shape=body.avg_shape,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/pre-match/squad-board")
+    def pre_match_squad_board_load(
+        iteration_id: int = Query(..., ge=1),
+        squad_id: int = Query(..., ge=1),
+    ) -> dict[str, Any]:
+        try:
+            return load_squad_board(iteration_id, squad_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/pre-match/squad-board")
+    def pre_match_squad_board_save(body: SquadBoardRequest) -> dict[str, Any]:
+        try:
+            return save_squad_board(
+                body.iteration_id,
+                body.squad_id,
+                availability=body.availability,
+                pitch_xi=body.pitch_xi,
+                pitch_shape=body.pitch_shape,
+                reset=body.reset,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

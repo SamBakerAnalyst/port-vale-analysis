@@ -1870,7 +1870,7 @@ body.is-present .hub-feedback-fab {
   left: .7rem;
   right: .7rem;
   bottom: .32rem;
-  z-index: 3;
+  z-index: 8;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1883,7 +1883,16 @@ body.is-present .hub-feedback-fab {
   pointer-events: none;
 }
 
-.squad-pitch__reset {
+.squad-pitch__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: .28rem;
+  pointer-events: auto;
+  flex-shrink: 0;
+}
+
+.squad-pitch__reset,
+.squad-pitch__save {
   pointer-events: auto;
   border: 1px solid rgba(255, 255, 255, .45);
   background: rgba(17, 17, 17, .45);
@@ -1897,13 +1906,18 @@ body.is-present .hub-feedback-fab {
   cursor: pointer;
 }
 
+.squad-pitch__save:disabled {
+  opacity: .45;
+  cursor: default;
+}
+
 .squad-pitch__reset:hover {
   background: rgba(17, 17, 17, .7);
 }
 
 .squad-marker__dot {
-  width: 56px;
-  height: 56px;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
   background: #111;
   border: 2.5px solid #fff;
@@ -1919,8 +1933,8 @@ body.is-present .hub-feedback-fab {
 }
 
 .squad-marker__photo {
-  width: 56px;
-  height: 56px;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
   object-fit: cover;
   object-position: center 16%;
@@ -2107,6 +2121,21 @@ body.is-present .hub-feedback-fab {
   background: #1d4ed8;
 }
 
+.squad-roster__player--doubt {
+  color: #78350f;
+  background: #fef3c7;
+  border-color: #fcd34d;
+}
+
+.squad-roster__player--doubt:hover {
+  background: #fde68a;
+  border-color: #fbbf24;
+}
+
+.squad-roster__player--doubt .squad-roster__number {
+  background: #b45309;
+}
+
 .squad-roster__number {
   display: inline-flex;
   align-items: center;
@@ -2130,10 +2159,24 @@ body.is-present .hub-feedback-fab {
 .squad-roster__name {
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
   font-size: .52rem;
   font-weight: 700;
+  line-height: 1.05;
+}
+
+.squad-roster__note {
+  display: block;
+  margin-top: .05rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: .42rem;
+  font-weight: 650;
+  opacity: .9;
 }
 
 .squad-roster__icon {
@@ -2155,6 +2198,13 @@ body.is-present .hub-feedback-fab {
 
 .squad-roster__icon--international {
   color: #1d4ed8;
+}
+
+.squad-roster__icon--doubt {
+  color: #b45309;
+  font-size: .62rem;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .squad-roster__redcard {
@@ -2215,6 +2265,26 @@ body.is-present .hub-feedback-fab {
 .squad-marker--international .squad-marker__photo,
 .squad-marker--international .squad-marker__dot {
   box-shadow: 0 0 0 2px #1d4ed8;
+}
+
+.squad-marker--doubt .squad-marker__photo,
+.squad-marker--doubt .squad-marker__dot {
+  box-shadow: 0 0 0 2px #d97706;
+}
+
+.squad-marker--suggested .squad-marker__photo,
+.squad-marker--suggested .squad-marker__dot {
+  box-shadow: 0 0 0 2px #f5c518;
+}
+
+.squad-marker__suggest {
+  display: block;
+  margin-top: .08rem;
+  font-size: .48rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: .95;
 }
 
 .squad-aside {
@@ -4228,6 +4298,72 @@ body.is-present .hub-feedback-fab {
 .last-game-pitch__players {
   position: absolute;
   inset: 8px 10px 16px;
+}
+
+.last-game-sentoff {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .18rem .28rem;
+  min-height: 1.05rem;
+  padding: .08rem .04rem 0;
+}
+
+.last-game-sentoff__label {
+  font-family: var(--display);
+  font-size: .58rem;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: #b91c1c;
+}
+
+.last-game-sentoff__player {
+  display: inline-flex;
+  align-items: center;
+  gap: .18rem;
+  background: #b91c1c;
+  color: #fff;
+  border-radius: 3px;
+  padding: .06rem .28rem;
+  font-family: var(--display);
+  font-size: .58rem;
+  font-weight: 800;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  line-height: 1.1;
+}
+
+.last-game-sentoff__player em {
+  font-style: normal;
+  opacity: .9;
+}
+
+.last-game-row[style*="--last-game-cols:4"] .last-game-panel__label {
+  font-size: .62rem;
+  line-height: 1.15;
+}
+
+.last-game-row[style*="--last-game-cols:4"] .last-game-pitch .xi-circle {
+  max-width: 46px;
+  gap: 1px;
+}
+
+.last-game-row[style*="--last-game-cols:4"] .last-game-pitch .xi-circle__name {
+  max-width: 46px;
+  font-size: 8px;
+  letter-spacing: 0;
+  line-height: 1;
+  padding: 1px 2px;
+}
+
+.last-game-row[style*="--last-game-cols:4"] .last-game-pitch .xi-circle__dot {
+  flex-basis: 20px;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  font-size: .62rem;
 }
 
 .last-game-pitch .xi-circle {
