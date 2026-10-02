@@ -9,6 +9,8 @@
   --pv-muted: #8b94a3;
   --pv-in: #1fa855;
   --pv-in-2: #26b862;
+  --pv-in-late: #0b6b34;
+  --pv-in-late-2: #128a45;
   --pv-regen: #d93a57;
   --pv-regen-2: #ea546f;
   --pv-preseason: #0b7fc0;
@@ -261,6 +263,7 @@ a:hover { text-decoration: underline; }
 }
 
 .pv-sch__sw--in { background: var(--pv-in); }
+.pv-sch__sw--in-late { background: var(--pv-in-late-2); }
 .pv-sch__sw--regen { background: var(--pv-regen); }
 .pv-sch__sw--pre { background: var(--pv-preseason); }
 .pv-sch__sw--home { background: var(--pv-home-2); }
@@ -399,12 +402,14 @@ a:hover { text-decoration: underline; }
 }
 
 .pv-sch__cell--in { background: linear-gradient(160deg, var(--pv-in-2), var(--pv-in)); border-color: transparent; }
+.pv-sch__cell--in-late { background: linear-gradient(160deg, var(--pv-in-late-2), var(--pv-in-late)); border-color: transparent; }
 .pv-sch__cell--regen { background: linear-gradient(160deg, var(--pv-regen-2), var(--pv-regen)); border-color: transparent; }
 .pv-sch__cell--preseason { background: linear-gradient(160deg, var(--pv-preseason-2), var(--pv-preseason)); border-color: transparent; }
 .pv-sch__cell--home { background: linear-gradient(160deg, var(--pv-home-2), var(--pv-home)); border-color: transparent; color: #1d1600; }
 .pv-sch__cell--away { background: linear-gradient(160deg, var(--pv-away-2), var(--pv-away)); border-color: transparent; color: #fff; }
 
 .pv-sch__cell--in .pv-sch__num,
+.pv-sch__cell--in-late .pv-sch__num,
 .pv-sch__cell--regen .pv-sch__num,
 .pv-sch__cell--preseason .pv-sch__num,
 .pv-sch__cell--away .pv-sch__num { color: rgba(255, 255, 255, 0.85); }
@@ -605,6 +610,7 @@ a:hover { text-decoration: underline; }
 .pv-sch__type-btn:hover { background: rgba(255, 255, 255, 0.09); }
 
 .pv-sch__type-btn--in.is-active { background: var(--pv-in); border-color: var(--pv-in); color: #fff; }
+.pv-sch__type-btn--in-late.is-active { background: var(--pv-in-late-2); border-color: var(--pv-in-late-2); color: #fff; }
 .pv-sch__type-btn--regen.is-active { background: var(--pv-regen); border-color: var(--pv-regen); color: #fff; }
 .pv-sch__type-btn--preseason.is-active { background: var(--pv-preseason); border-color: var(--pv-preseason-2); color: #fff; }
 .pv-sch__type-btn--clear.is-active { background: rgba(255, 255, 255, 0.14); }

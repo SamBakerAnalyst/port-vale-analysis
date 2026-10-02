@@ -22,6 +22,7 @@ DATA_PATH = DATA_DIR / "schedule.json"
 _store_lock = threading.Lock()
 
 DEFAULT_REPORT_TIME = "09:00"
+LATE_REPORT_TIME = "10:00"
 DAY_TYPES = frozenset({"training", "regen", "preseason"})
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 TIME_RE = re.compile(r"^\d{2}:\d{2}$")
@@ -377,11 +378,17 @@ def set_day(date_key: str, body: DayUpdate, *, owner: str = DEFAULT_OWNER) -> di
     if body.recruitment_in is not None:
         recruitment_in = bool(body.recruitment_in)
 
+    cycle_report_time: str | None = None
     if body.cycle:
-        # Click: blank → IN → Regen → Pre-season (blue) → blank
+        # Click: blank → IN 9am → IN 10am → Regen → Pre-season (blue) → blank
         current_type = str((current or {}).get("type") or "").strip() or None
+        current_report = str((current or {}).get("report_time") or DEFAULT_REPORT_TIME)
         if current_type is None:
             next_type = "training"
+            cycle_report_time = DEFAULT_REPORT_TIME
+        elif current_type == "training" and current_report == DEFAULT_REPORT_TIME:
+            next_type = "training"
+            cycle_report_time = LATE_REPORT_TIME
         elif current_type == "training":
             next_type = "regen"
         elif current_type == "regen":
@@ -412,7 +419,9 @@ def set_day(date_key: str, body: DayUpdate, *, owner: str = DEFAULT_OWNER) -> di
         "recruitment_in": recruitment_in,
     }
     if next_type == "training":
-        if body.report_time is not None:
+        if cycle_report_time is not None:
+            entry["report_time"] = cycle_report_time
+        elif body.report_time is not None:
             entry["report_time"] = (
                 _validate_time(body.report_time, required=True) or DEFAULT_REPORT_TIME
             )

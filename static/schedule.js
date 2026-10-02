@@ -145,6 +145,10 @@ function reportTimeFor(dateKey) {
   return state.payload?.default_report_time || DEFAULT_REPORT_TIME;
 }
 
+function isLateReport(dateKey) {
+  return dayType(dateKey) === "training" && reportTimeFor(dateKey) !== DEFAULT_REPORT_TIME;
+}
+
 function badgeImg(src, alt) {
   if (!src) return "";
   return `<span class="pv-sch__badge-wrap"><img class="pv-sch__badge" src="${escapeHtml(src)}" alt="${escapeHtml(alt || "")}" loading="lazy" width="28" height="28" onerror="this.parentElement.style.display='none'" /></span>`;
@@ -283,7 +287,7 @@ function renderCalendar() {
     if (match) {
       classes.push(match.isHome ? "pv-sch__cell--home" : "pv-sch__cell--away");
     } else if (type === "training") {
-      classes.push("pv-sch__cell--in");
+      classes.push(isLateReport(dateKey) ? "pv-sch__cell--in-late" : "pv-sch__cell--in");
     } else if (type === "regen") {
       classes.push("pv-sch__cell--regen");
     } else if (type === "preseason") {
@@ -416,7 +420,8 @@ function renderPanel() {
     <section class="pv-sch__section">
       <h3>Day type</h3>
       <div class="pv-sch__type-row">
-        <button type="button" class="pv-sch__type-btn pv-sch__type-btn--in${type === "training" ? " is-active" : ""}" data-set-type="training">IN</button>
+        <button type="button" class="pv-sch__type-btn pv-sch__type-btn--in${type === "training" && reportTime === DEFAULT_REPORT_TIME ? " is-active" : ""}" data-set-type="training" data-report="09:00">IN 9am</button>
+        <button type="button" class="pv-sch__type-btn pv-sch__type-btn--in-late${type === "training" && reportTime !== DEFAULT_REPORT_TIME ? " is-active" : ""}" data-set-type="training" data-report="10:00">IN 10am</button>
         <button type="button" class="pv-sch__type-btn pv-sch__type-btn--regen${type === "regen" ? " is-active" : ""}" data-set-type="regen">Regen</button>
         <button type="button" class="pv-sch__type-btn pv-sch__type-btn--preseason${type === "preseason" ? " is-active" : ""}" data-set-type="preseason">Pre-season</button>
         <button type="button" class="pv-sch__type-btn pv-sch__type-btn--clear${!type ? " is-active" : ""}" data-set-type="none">Clear</button>
@@ -463,7 +468,7 @@ function renderPanel() {
   `;
 
   els.panelBody.querySelectorAll("[data-set-type]").forEach((btn) => {
-    btn.addEventListener("click", async () => setDayType(dateKey, btn.dataset.setType));
+    btn.addEventListener("click", async () => setDayType(dateKey, btn.dataset.setType, btn.dataset.report || null));
   });
   document.getElementById("toggleRBtn")?.addEventListener("click", async () => {
     await toggleRecruitment(dateKey);
@@ -534,7 +539,7 @@ async function cycleDay(dateKey) {
     const type = result.day?.type;
     const label =
       type === "training"
-        ? "IN"
+        ? `IN · ${formatReportLabel(result.day?.report_time)}`
         : type === "regen"
           ? "REGEN"
           : type === "preseason"

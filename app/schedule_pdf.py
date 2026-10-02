@@ -115,7 +115,8 @@ def _cell_html(day: date, payload: dict[str, Any]) -> str:
             {f'<div class="comp">{escape(comp)}</div>' if comp else ""}
           </div>"""
     elif day_type == "training":
-        classes.append("cell--in")
+        late = str(entry.get("report_time") or "09:00") != "09:00"
+        classes.append("cell--in-late" if late else "cell--in")
         body = f"""
           <div class="session">
             <div class="label">IN</div>
@@ -200,7 +201,8 @@ def _page_html(
         </div>
       </header>
       <div class="legend">
-        <span><i class="sw sw--in"></i>IN</span>
+        <span><i class="sw sw--in"></i>IN 9am</span>
+        <span><i class="sw sw--in-late"></i>IN 10am</span>
         <span><i class="sw sw--regen"></i>Regen</span>
         <span><i class="sw sw--pre"></i>Pre-season</span>
         <span><i class="sw sw--home"></i>Home match</span>
@@ -251,7 +253,7 @@ h1 {
 .legend { display: flex; flex-wrap: wrap; gap: 5mm; padding: 3mm 0 2.4mm; font-size: 7.5pt; font-weight: 700; color: #374151; }
 .legend span { display: inline-flex; align-items: center; gap: 1.6mm; }
 .sw { display: inline-block; width: 3.6mm; height: 3.6mm; border-radius: 0.8mm; font-style: normal; }
-.sw--in { background: #1fa855; } .sw--regen { background: #e2405d; } .sw--pre { background: #0b7fc0; }
+.sw--in { background: #1fa855; } .sw--in-late { background: #128a45; } .sw--regen { background: #e2405d; } .sw--pre { background: #0b7fc0; }
 .sw--home { background: #d4a82a; } .sw--away { background: #1e40af; } .sw--note { background: #f9a8c9; }
 .sw--r { background: #f5c518; color: #111; font-size: 6.5pt; font-weight: 800; text-align: center; line-height: 3.6mm; }
 .weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1.4mm; margin-bottom: 1.4mm; }
@@ -269,11 +271,12 @@ h1 {
 .num { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; font-size: 11pt; font-weight: 800; color: #4b5563; }
 .r { width: 4mm; height: 4mm; border-radius: 0.8mm; background: #f5c518; color: #111; font-size: 6.5pt; font-weight: 800; text-align: center; line-height: 4mm; }
 .cell--in { background: linear-gradient(160deg, #26b862, #179448); border-color: #179448; }
+.cell--in-late { background: linear-gradient(160deg, #128a45, #0b6b34); border-color: #0b6b34; }
 .cell--regen { background: linear-gradient(160deg, #ea546f, #cc2f4c); border-color: #cc2f4c; }
 .cell--preseason { background: linear-gradient(160deg, #1592d6, #0868a3); border-color: #0868a3; }
 .cell--home { background: linear-gradient(160deg, #e2b93d, #c4961b); border-color: #c4961b; }
 .cell--away { background: linear-gradient(160deg, #2a4fc4, #1b3592); border-color: #1b3592; }
-.cell--in .num, .cell--regen .num, .cell--preseason .num, .cell--away .num { color: rgba(255,255,255,0.85); }
+.cell--in .num, .cell--in-late .num, .cell--regen .num, .cell--preseason .num, .cell--away .num { color: rgba(255,255,255,0.85); }
 .cell--home .num { color: rgba(30,22,0,0.7); }
 .notes { display: flex; flex-direction: column; gap: 0.6mm; margin-top: 0.4mm; }
 .note {
