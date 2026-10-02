@@ -35,6 +35,7 @@ from typing import Any
 
 from app.efl_transfer_report import REPORT_CANDIDATES
 from app.paths import DATA_ROOT, HUB_ROOT
+from app.player_identity import identity_keys, name_key, name_keys, same_person
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,7 @@ _WINDOWS: tuple[tuple[str, tuple[int, int], tuple[int, int]], ...] = (
 
 _lock = threading.Lock()
 _index: dict[str, list[dict[str, Any]]] | None = None
+_by_surname: dict[str, list[dict[str, Any]]] | None = None
 _index_mtime: float | None = None
 _meta: dict[str, Any] = {}
 _loan_snapshot: dict[str, Any] | None = None
@@ -106,24 +108,6 @@ _loan_snapshot_mtime: float | None = None
 def _strip_accents(value: str) -> str:
     decomposed = unicodedata.normalize("NFKD", value)
     return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
-
-
-def name_key(value: str | None) -> str:
-    """A name reduced to something two sources can agree on."""
-    text = _strip_accents(str(value or "")).lower()
-    text = re.sub(r"[^a-z\s-]", " ", text)
-    return re.sub(r"\s+", " ", text).strip()
-
-
-def name_keys(value: str | None) -> list[str]:
-    """Ar'Jany and Arjany have to hit the same index row."""
-    key = name_key(value)
-    if not key:
-        return []
-    compact = key.replace(" ", "").replace("-", "")
-    if compact == key:
-        return [key]
-    return [key, compact]
 
 
 def club_key(value: str | None) -> str:
@@ -149,18 +133,39 @@ def _clubs_match(seller: str | None, pool_club: str | None) -> bool:
     return left == right or left in right or right in left
 
 
-def _index_record(index: dict[str, list[dict[str, Any]]], name: str, record: dict[str, Any]) -> None:
-    keys = name_keys(name)
+def _surname(value: str | None) -> str:
+    parts = name_key(value).split()
+    return parts[-1] if len(parts) >= 2 else ""
+
+
+def _index_record(
+    index: dict[str, list[dict[str, Any]]],
+    by_surname: dict[str, list[dict[str, Any]]],
+    name: str,
+    record: dict[str, Any],
+) -> None:
+    stored = {**record, "player": str(name or "").strip()}
+    keys = identity_keys(name)
     if not keys:
         return
     bucket = index.setdefault(keys[0], [])
-    bucket.append(record)
+    bucket.append(stored)
     for key in keys[1:]:
-        index[key] = bucket
+        current = index.get(key)
+        if current is None:
+            index[key] = bucket
+        elif current is not bucket and stored not in current:
+            current.append(stored)
+    last = _surname(name)
+    if last:
+        by_surname.setdefault(last, []).append(stored)
 
 
-def _build_index(report: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+def _build_index(
+    report: dict[str, Any],
+) -> tuple[dict[str, list[dict[str, Any]]], dict[str, list[dict[str, Any]]]]:
     index: dict[str, list[dict[str, Any]]] = {}
+    by_surname: dict[str, list[dict[str, Any]]] = {}
     for league in report.get("leagues") or []:
         league_name = str(league.get("name") or "").strip()
         for team in league.get("teams") or []:
@@ -168,6 +173,7 @@ def _build_index(report: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
             for signing in team.get("signed") or []:
                 _index_record(
                     index,
+                    by_surname,
                     signing.get("player"),
                     {
                         "club": team_name,
@@ -185,6 +191,7 @@ def _build_index(report: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
                 # appear as a signing. The selling club still knows they left.
                 _index_record(
                     index,
+                    by_surname,
                     departure.get("player"),
                     {
                         "club": str(departure.get("other") or "").strip(),
@@ -194,7 +201,7 @@ def _build_index(report: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
                         "loan": str(departure.get("kind") or "").strip().lower() == "loan",
                     },
                 )
-    return index
+    return index, by_surname
 
 
 def _report_path() -> Path | None:
@@ -210,7 +217,7 @@ def _load_index() -> dict[str, list[dict[str, Any]]]:
     Deliberately not tied to the standouts cache: that one takes four minutes to
     rebuild, and a transfer correction should not have to wait for it.
     """
-    global _index, _index_mtime, _meta
+    global _index, _by_surname, _index_mtime, _meta
 
     path = _report_path()
     if path is None:
@@ -234,18 +241,35 @@ def _load_index() -> dict[str, list[dict[str, Any]]]:
             report = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             logger.exception("Could not read the transfer report — no move flags")
-            _index, _index_mtime = {}, mtime
+            _index, _by_surname, _index_mtime = {}, {}, mtime
             return _index
-        _index = _build_index(report)
+        _index, _by_surname = _build_index(report)
         _index_mtime = mtime
+        seen_records: set[int] = set()
+        for bucket in _index.values():
+            for record in bucket:
+                seen_records.add(id(record))
         _meta = {
             "updated": str(report.get("updated") or "").strip(),
             "window": str(report.get("window") or "").strip(),
             "season": str(report.get("season") or "").strip(),
-            "signings": len(_index),
+            "signings": len(seen_records),
         }
-        logger.info("Transfer move index: %d players from %s", len(_index), path)
+        logger.info("Transfer move index: %d players from %s", len(seen_records), path)
         return _index
+
+
+def _parent_unknown(value: str | None) -> bool:
+    text = str(value or "").strip().casefold()
+    return not text or text in _NOT_A_CLUB or text == "loan"
+
+
+def parent_label(value: str | None) -> str:
+    """Parent club for a loan line. Unknown stays unknown — never a guessed club."""
+    text = str(value or "").strip()
+    if _parent_unknown(text):
+        return "unknown"
+    return text
 
 
 def lookup(name: str | None, club: str | None) -> dict[str, Any] | None:
@@ -254,27 +278,54 @@ def lookup(name: str | None, club: str | None) -> dict[str, Any] | None:
     `club` is the club shown on the row, i.e. the one the player is being
     scouted at. It decides confidence, not whether there is a hit at all.
     """
-    return _resolve(name, club)[0]
+    status, _matched = _resolve(name, club)
+    return _with_display(club, status)
 
 
-def _resolve(name: str | None, club: str | None) -> tuple[dict[str, Any] | None, bool]:
-    """A row's status, plus whether a club actually matched.
+def _records_for_name(name: str | None) -> list[dict[str, Any]]:
+    """Transfer rows for this spelling, including Nick / Nicholas.
 
-    That second value is what lets a caller settle namesakes. If some other
-    player of the same name matched the record's club, this row is demonstrably
-    not the man who moved.
+    Exact and canonical keys win. A surname scan is only the fallback, and it
+    still requires the first names to be the same person — a shared surname
+    alone is not a join.
     """
-    matches = None
-    for key in name_keys(name):
-        matches = _load_index().get(key)
-        if matches:
-            break
-    if not matches:
+    index = _load_index()
+    found: list[dict[str, Any]] = []
+    seen: set[int] = set()
+
+    def take(records: list[dict[str, Any]] | None) -> None:
+        for record in records or []:
+            marker = id(record)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            found.append(record)
+
+    for key in identity_keys(name):
+        take(index.get(key))
+    if found:
+        return found
+
+    last = _surname(name)
+    if not last or _by_surname is None:
+        return []
+    for record in _by_surname.get(last) or []:
+        if same_person(name, record.get("player")):
+            take([record])
+    return found
+
+
+def _status_from_records(
+    records: list[dict[str, Any]],
+    club: str | None,
+) -> tuple[dict[str, Any] | None, bool]:
+    """A row's status, plus whether a club actually matched."""
+    if not records:
         return None, False
 
     # Order matters. Selling club first, so a player who moved twice is still
     # caught at his middle club.
-    for record in matches:
+    for record in records:
         if _clubs_match(record.get("from"), club):
             # Left on loan is not sold. He is still their player and the loan
             # ends, so a scout needs to know he is away — not that he is gone.
@@ -285,7 +336,7 @@ def _resolve(name: str | None, club: str | None) -> tuple[dict[str, Any] | None,
 
     # Then the destination. If the row already names the club he signed for,
     # he has arrived rather than left.
-    for record in matches:
+    for record in records:
         if _clubs_match(record.get("club"), club):
             if record.get("loan"):
                 # Max Merrick: Hartlepool on the row, Chelsea's player. Saying
@@ -296,12 +347,144 @@ def _resolve(name: str | None, club: str | None) -> tuple[dict[str, Any] | None,
             # identification, which is what clears his namesakes.
             return None, True
 
-    record = matches[0]
+    record = records[0]
+    if record.get("loan") and _parent_unknown(record.get("from")):
+        # A loan whose parent club never arrived. Say so. Do not invent a
+        # permanent move to the destination.
+        return {**record, "from": "", "status": LOAN_IN}, False
     if str(record.get("from") or "").strip().lower() in _NOT_A_CLUB:
         # Signed as a free agent, so there is no selling club to match the row
         # against. The move is still on record, so say so.
         return {**record, "status": GONE}, False
     return {**record, "status": CHECK}, False
+
+
+def _resolve(
+    name: str | None,
+    club: str | None,
+    extra_records: list[dict[str, Any]] | None = None,
+) -> tuple[dict[str, Any] | None, bool]:
+    """A row's status, plus whether a club actually matched.
+
+    That second value is what lets a caller settle namesakes. If some other
+    player of the same name matched the record's club, this row is demonstrably
+    not the man who moved.
+
+    `extra_records` are moves already tied to this Impect id by another
+    spelling. The row's own club still decides the colour.
+    """
+    records = _merge_records(extra_records or [], _records_for_name(name))
+    return _status_from_records(records, club)
+
+
+def _merge_records(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for group in groups:
+        for record in group:
+            marker = id(record)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            merged.append(record)
+    return merged
+
+
+def _as_player_id(row: dict[str, Any]) -> int | None:
+    for key in ("player_id", "playerId"):
+        raw = row.get(key)
+        try:
+            number = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if number > 0:
+            return number
+    return None
+
+
+def present_scout_club(
+    row: dict[str, Any],
+    *,
+    club_key_: str = "club",
+) -> dict[str, Any] | None:
+    """How a scout table should paint this row.
+
+    Loans always read as the playing club plus `on loan from {parent}`. A row
+    keyed by the parent or U21 side is the same sentence — the destination is
+    the held club, not `on loan at {destination}`.
+
+    Red is only a permanent move whose data club is not the club he is
+    registered at now. The same player in another section, already at that
+    club, stays uncoloured.
+    """
+    move = row.get("transfer") or {}
+    if not isinstance(move, dict):
+        return None
+    status = str(move.get("status") or "")
+    data_club = str(row.get(club_key_) or "").strip()
+    destination = str(move.get("club") or "").strip()
+    parent = parent_label(move.get("from"))
+    league = str(move.get("league") or "").strip()
+    where = f"{destination}{f' ({league})' if league else ''}"
+
+    if status in LOAN_STATUSES:
+        held = destination if status == LOAN_OUT and destination else (data_club or destination)
+        parent_text = parent or "unknown"
+        return {
+            "css": "is-loan",
+            "held_club": held or "—",
+            "line": f"on loan from {parent_text}",
+            "line_class": "club-loan",
+            "struck": False,
+            "parent": parent_text,
+            "title": (
+                f"On loan from {parent_text}, playing for {held or 'the current club'}. "
+                f"Any deal is with {parent_text}."
+            ),
+        }
+
+    if status == GONE and destination:
+        fee = str(move.get("fee") or "").strip()
+        bits = [f"Signed for {where}"]
+        origin = str(move.get("from") or "").strip()
+        if origin:
+            bits.append(f"from {origin}")
+        if fee:
+            bits.append(fee)
+        return {
+            "css": "is-moved",
+            "held_club": data_club or "—",
+            "line": destination,
+            "line_class": "club-now",
+            "struck": True,
+            "title": " · ".join(bits),
+        }
+
+    if status == CHECK and destination:
+        origin = str(move.get("from") or "").strip()
+        from_bit = f" from {origin}" if origin else ""
+        return {
+            "css": "is-move-check",
+            "held_club": data_club or "—",
+            "line": f"{destination}?",
+            "line_class": "club-now club-now--check",
+            "struck": False,
+            "title": (
+                f"A player of this name signed for {where}{from_bit}"
+                " — check it is the same player before ruling him out"
+            ),
+        }
+    return None
+
+
+def _with_display(club: str | None, status: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not status:
+        return None
+    probe = {"club": club, "transfer": dict(status)}
+    display = present_scout_club(probe)
+    if display:
+        probe["transfer"]["display"] = display
+    return probe["transfer"]
 
 
 def annotate(row: dict[str, Any], *, name_key_: str = "name", club_key_: str = "club") -> dict[str, Any]:
@@ -338,8 +521,27 @@ def annotate_all(
     Only "check" is cleared this way. A confirmed move stays put, because the
     evidence for it never rested on the name alone.
     """
+    pool = roster if roster is not None else rows
+    by_id: dict[int, list[dict[str, Any]]] = {}
+
+    def absorb(row: dict[str, Any]) -> None:
+        player_id = _as_player_id(row)
+        if player_id is None:
+            return
+        found = _records_for_name(row.get(name_key_))
+        if not found:
+            return
+        bucket = by_id.setdefault(player_id, [])
+        by_id[player_id] = _merge_records(bucket, found)
+
+    for row in pool:
+        absorb(row)
+    if roster is not None:
+        for row in rows:
+            absorb(row)
+
     identified: set[str] = set()
-    for row in roster if roster is not None else rows:
+    for row in pool:
         key = name_key(row.get(name_key_))
         if not key or key in identified:
             continue
@@ -347,16 +549,24 @@ def annotate_all(
             identified.add(key)
 
     for row in rows:
-        status, matched = _resolve(row.get(name_key_), row.get(club_key_))
+        player_id = _as_player_id(row)
+        extra = by_id.get(player_id) if player_id is not None else None
+        status, matched = _resolve(row.get(name_key_), row.get(club_key_), extra)
         if status is None:
+            row.pop("transfer", None)
             continue
         if (
             status["status"] == CHECK
             and not matched
             and name_key(row.get(name_key_)) in identified
         ):
+            row.pop("transfer", None)
             continue
-        row["transfer"] = status
+        attached = _with_display(row.get(club_key_), status)
+        if attached:
+            row["transfer"] = attached
+        else:
+            row.pop("transfer", None)
     return rows
 
 
@@ -380,12 +590,12 @@ def _loan_entries(payload: Any) -> list[dict[str, str]]:
 
 
 def _match_loan_name(player: str, maps: list[list[dict[str, str]]]) -> dict[str, str] | None:
-    keys = set(name_keys(player))
+    keys = set(identity_keys(player))
     last = name_key(player).split()[-1] if name_key(player) else ""
     last_hits: list[dict[str, str]] = []
     for entries in maps:
         for entry in entries:
-            if set(name_keys(entry.get("name"))) & keys:
+            if set(identity_keys(entry.get("name"))) & keys or same_person(player, entry.get("name")):
                 return entry
             entry_last = name_key(entry.get("name")).split()[-1] if name_key(entry.get("name")) else ""
             if last and entry_last == last:
@@ -577,6 +787,6 @@ def report_meta(today: date | None = None) -> dict[str, Any]:
 
 def reset_cache() -> None:
     """Drop the cached index. For tests, and after rebuilding the report."""
-    global _index, _index_mtime, _meta
+    global _index, _by_surname, _index_mtime, _meta
     with _lock:
-        _index, _index_mtime, _meta = None, None, {}
+        _index, _by_surname, _index_mtime, _meta = None, None, None, {}

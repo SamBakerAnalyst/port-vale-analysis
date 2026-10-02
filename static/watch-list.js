@@ -353,7 +353,7 @@
             group: "situation",
             extraClass: "wl-filter__btn--loan",
             count: counts.loan || null,
-            title: "Players on loan at their current club, or out on loan",
+            title: "Players currently on loan — the deal is with the parent club",
           }),
           filterBtn("gone", "Signed elsewhere", {
             group: "situation",
@@ -381,61 +381,27 @@
       }
     }
 
-    // A tracked player who has moved is the costliest stale row on the hub —
-    // someone may be planning a trip. A tracked player who is on loan is the
-    // second costliest: he is signable, but not from the club on the row.
     function clubCell(t) {
-      const move = t?.transfer;
-      const club = esc(t.club || "—");
-      if (!move?.club) return `<td>${club}</td>`;
-      const where = `${move.club}${move.league ? ` (${move.league})` : ""}`;
-      let line;
-      let tone;
-      let title;
-      let struck = false;
-
-      if (move.status === "loan_in") {
-        line = `on loan from ${move.from || "another club"}`;
-        tone = "club-loan";
-        title = `On loan at ${t.club || "this club"} from ${
-          move.from || "another club"
-        } — any deal is with ${move.from || "the parent club"}, not ${t.club || "this club"}`;
-      } else if (move.status === "loan_out") {
-        line = `on loan at ${move.club}`;
-        tone = "club-loan";
-        title = `Out on loan at ${where} — still ${t.club || "his club"}'s player`;
-      } else if (move.status === "gone") {
-        line = move.club;
-        tone = "club-now";
-        struck = true;
-        title = `Signed for ${where}${move.from ? ` from ${move.from}` : ""}${
-          move.fee ? ` · ${move.fee}` : ""
-        }`;
-      } else {
-        line = `${move.club}?`;
-        tone = "club-now club-now--check";
-        title = `A player of this name signed for ${where}${
-          move.from ? ` from ${move.from}` : ""
-        } — check it is the same player before ruling him out`;
+      if (window.ScoutClubDisplay) {
+        return window.ScoutClubDisplay.clubCell(t, { esc, cellClass: "" });
       }
-
-      return `<td title="${esc(title)}">
-        <span class="${struck ? "club-was" : "club-held"}">${club}</span>
-        <span class="${tone}">${esc(line)}</span>
-      </td>`;
+      return `<td>${esc(t.club || "—")}</td>`;
     }
 
     function rowHtml(t) {
       const pid = Number(t.player_id || 0);
       const href = pid ? `/player/${encodeURIComponent(pid)}` : "#";
       const move = t?.transfer;
-      const moveClass = !move?.club
-        ? ""
-        : isLoanMove(move)
-          ? " is-loan"
-          : move.status === "gone"
-            ? " is-moved"
-            : " is-move-check";
+      const painted = window.ScoutClubDisplay?.rowCss(t) || "";
+      const moveClass = painted
+        ? painted
+        : !move?.club
+          ? ""
+          : isLoanMove(move)
+            ? "is-loan"
+            : move.status === "gone"
+              ? "is-moved"
+              : "is-move-check";
       return `<tr data-id="${esc(t.id)}" class="${moveClass.trim()}">
         <td class="col-player"><a href="${esc(href)}">${esc(t.name || "—")}</a></td>
         ${clubCell(t)}
