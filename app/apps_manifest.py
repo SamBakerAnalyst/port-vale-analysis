@@ -983,6 +983,7 @@ LIVE_ESSENTIAL_IDS = frozenset(
         "blocks-analysis",
         # Recruitment
         "who-to-scout",
+        "pv-archetypes",
         "watch-list",
         # Live once scouts have personal logins, so the shared board and its
         # notes carry real names rather than one team account.

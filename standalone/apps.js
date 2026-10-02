@@ -316,9 +316,7 @@ window.IMPECT_APPS = [
       "3-5-2",
       "3-4-3",
       "Profiles"
-    ],
-    "comingSoon": true,
-    "note": "Coming soon"
+    ]
   },
   {
     "id": "squad-balance",
