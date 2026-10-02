@@ -562,6 +562,19 @@ a { color: var(--accent); }
   font-weight: 550;
 }
 
+.wl-stale {
+  color: var(--danger);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.wl-mins__updated {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
 @media (max-width: 900px) {
   .wl { padding: 1rem; }
   .wl-table th,
