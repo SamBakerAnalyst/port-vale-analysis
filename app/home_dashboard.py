@@ -8,7 +8,7 @@ import statistics
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -1527,7 +1527,8 @@ def _normalize_pv_fixture(row: dict[str, Any], *, competition: str | None = None
         "home_score": home_score_i,
         "away_score": away_score_i,
         "outcome": outcome,
-        "status": "completed" if finished else "scheduled",
+        "status": "completed" if finished else ("postponed" if row.get("status") == "postponed" else "scheduled"),
+        "postponed": row.get("status") == "postponed",
         "fotmob_id": fotmob_id,
         "fotmob_url": page_url,
         "source": "fotmob",
@@ -1537,7 +1538,7 @@ def _normalize_pv_fixture(row: dict[str, Any], *, competition: str | None = None
 
 def _fetch_team_fixtures_fotmob(team_id: str = PORT_VALE_FOTMOB_ID) -> list[dict[str, Any]]:
     """Rolling team fixture list from FotMob (includes cups + cross-season window)."""
-    from app.fixture_planner import _http
+    from app.fixture_planner import _fotmob_fixture_status, _http
 
     response = _http.get(
         "https://www.fotmob.com/api/data/teams",
@@ -1579,7 +1580,7 @@ def _fetch_team_fixtures_fotmob(team_id: str = PORT_VALE_FOTMOB_ID) -> list[dict
                     "fotmob_id": str(away.get("id") or "").strip() or None,
                     "score": away.get("score"),
                 },
-                "status": "completed" if status.get("finished") else "scheduled",
+                "status": _fotmob_fixture_status(status),
                 "score": str(status.get("scoreStr") or "").strip() or None,
                 "home_score": home.get("score"),
                 "away_score": away.get("score"),
@@ -1632,6 +1633,19 @@ def _demo_recruitment_payload() -> dict[str, Any]:
     return payload
 
 
+NEXT_MATCH_GRACE = timedelta(hours=4)
+FIXTURES_FRESH_SECONDS = 3 * 3600
+
+
+def _is_live_upcoming(row: dict[str, Any], now_dt: datetime) -> bool:
+    if row.get("postponed") or row.get("status") == "postponed":
+        return False
+    kickoff_dt = _parse_kickoff(row.get("kickoff_utc") or row.get("scheduledDate"))
+    if kickoff_dt is None:
+        return str(row.get("date") or "") >= now_dt.date().isoformat()
+    return kickoff_dt + NEXT_MATCH_GRACE >= now_dt
+
+
 def build_port_vale_fixtures(*, force_refresh: bool = False) -> dict[str, Any]:
     """Port Vale played + upcoming fixtures from FotMob (league seasons + team cups)."""
     if is_demo():
@@ -1642,14 +1656,15 @@ def build_port_vale_fixtures(*, force_refresh: bool = False) -> dict[str, Any]:
     cached = _fixtures_cache.get(cache_key)
     now = time.time()
     if not force_refresh:
-        if cached:
+        if cached and now - cached[0] < FIXTURES_FRESH_SECONDS:
             return cached[1]
-        disk = read_json(
-            "countdown-fixtures", "port-vale", ttl=REPORT_TTL_SECONDS, allow_stale=True
-        )
+        disk = read_json("countdown-fixtures", "port-vale", ttl=FIXTURES_FRESH_SECONDS)
         if disk:
             _fixtures_cache[cache_key] = (now, disk)
             return disk
+    stale = (cached[1] if cached else None) or read_json(
+        "countdown-fixtures", "port-vale", ttl=REPORT_TTL_SECONDS, allow_stale=True
+    )
 
     from app.fixture_planner import FIXTURE_LEAGUE_BY_UI, _fetch_fotmob_fixtures
 
@@ -1707,6 +1722,8 @@ def build_port_vale_fixtures(*, force_refresh: bool = False) -> dict[str, Any]:
                     normalized["season"] = season
                 by_id[str(normalized["id"])] = normalized
 
+    if not by_id and stale:
+        return stale
     all_rows = sorted(by_id.values(), key=lambda row: str(row.get("_sort") or ""))
     now_dt = datetime.now(UTC)
     played: list[dict[str, Any]] = []
@@ -1741,7 +1758,7 @@ def build_port_vale_fixtures(*, force_refresh: bool = False) -> dict[str, Any]:
         else:
             upcoming.append(clean)
 
-    next_match = upcoming[0] if upcoming else None
+    next_match = next((row for row in upcoming if _is_live_upcoming(row, now_dt)), None)
     last_match = played[-1] if played else None
     form = played[-6:] if played else []
 
@@ -1778,6 +1795,7 @@ def build_port_vale_fixtures(*, force_refresh: bool = False) -> dict[str, Any]:
             "scoreLabel": row.get("scoreLabel") or row.get("score"),
             "competition": row.get("competition"),
             "status": row.get("status"),
+            "postponed": bool(row.get("postponed")),
         }
         for row in (played[-12:] + upcoming[:16])
     ]

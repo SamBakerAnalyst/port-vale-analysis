@@ -195,6 +195,18 @@
     return Math.round((then - now) / 86400000);
   }
 
+  function isPostponed(match) {
+    return Boolean(match?.postponed) || String(match?.status || "").toLowerCase() === "postponed";
+  }
+
+  function isNextFixture(match) {
+    if (!match || match.outcome || match.status === "completed" || isPostponed(match)) return false;
+    const kickoff = Date.parse(match.scheduledDate || match.kickoff_utc || "");
+    if (Number.isFinite(kickoff)) return kickoff + 4 * 3600 * 1000 >= Date.now();
+    const days = daysUntil(matchDateKey(match));
+    return days == null || days >= 0;
+  }
+
   function pvMatchesByDate(matches) {
     const map = {};
     (matches || []).forEach((match) => {
@@ -602,7 +614,7 @@
 
   function renderPvUpcoming(fixtures) {
     const upcoming = fixtures?.upcoming || (cachedMatches || []).filter((m) => !m.outcome);
-    const rows = (upcoming || []).slice(0, 6);
+    const rows = (upcoming || []).filter(isNextFixture).slice(0, 6);
     if (!rows.length) {
       setHtml("homePvUpcoming", `<p class="home-empty">No upcoming ${focusClubLabel()} fixtures yet.</p>`);
       return;

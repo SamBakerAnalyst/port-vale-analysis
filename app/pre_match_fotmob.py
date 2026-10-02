@@ -413,7 +413,7 @@ def parse_next_match(payload: dict[str, Any]) -> dict[str, Any] | None:
     is_home = _side_is_ours(home, team_id)
     opponent = away if is_home else home
     status = raw.get("status") if isinstance(raw.get("status"), dict) else {}
-    if status.get("finished"):
+    if status.get("finished") or status.get("cancelled"):
         return None
     opponent_name = str(opponent.get("name") or "").strip()
     if not opponent_name:

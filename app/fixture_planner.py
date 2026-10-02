@@ -1662,6 +1662,15 @@ def _fetch_impect_fixtures(
     return fixtures
 
 
+def _fotmob_fixture_status(status: dict[str, Any] | None) -> str:
+    status = status or {}
+    if status.get("finished"):
+        return "completed"
+    if status.get("cancelled"):
+        return "postponed"
+    return "scheduled"
+
+
 def _fetch_fotmob_fixtures(
     fotmob_id: int,
     *,
@@ -1706,7 +1715,8 @@ def _fetch_fotmob_fixtures(
                     "name": away_name,
                     "fotmob_id": str(away.get("id") or "").strip() or None,
                 },
-                "status": "completed" if status.get("finished") else "scheduled",
+                "status": _fotmob_fixture_status(status),
+                "postponed": _fotmob_fixture_status(status) == "postponed",
                 "score": str(status.get("scoreStr") or "").strip() or None,
                 "home_score": _fotmob_side_score(home, status.get("scoreStr"), which="home"),
                 "away_score": _fotmob_side_score(away, status.get("scoreStr"), which="away"),
