@@ -361,6 +361,68 @@ def _report_key(player_id: int, fixture_id: str) -> str:
     return f"{int(player_id)}:{str(fixture_id or '').strip()}"
 
 
+REPORT_META_FIELDS: tuple[str, ...] = (
+    "name",
+    "club",
+    "league",
+    "position",
+    "position_label",
+    "fixture_label",
+    "home_name",
+    "away_name",
+    "sheet_side",
+)
+
+
+def _clean_meta(meta: dict[str, Any] | None) -> dict[str, Any]:
+    source = meta if isinstance(meta, dict) else {}
+    out: dict[str, Any] = {key: _clean_text(source.get(key), limit=160) for key in REPORT_META_FIELDS}
+    try:
+        age = int(source.get("age")) if source.get("age") not in (None, "") else None
+    except (TypeError, ValueError):
+        age = None
+    out["age"] = age if age is None or 10 <= age <= 50 else None
+    return out
+
+
+def _stamp_report(
+    cleaned: dict[str, Any],
+    existing: Any,
+    meta: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Keep player / fixture details and first-filed stamp on the stored row."""
+    prior = existing if isinstance(existing, dict) else {}
+    fresh = _clean_meta(meta)
+    for key in (*REPORT_META_FIELDS, "age"):
+        value = fresh.get(key)
+        cleaned[key] = value if value not in ("", None) else prior.get(key, value)
+    cleaned["created_at"] = prior.get("created_at") or cleaned.get("updated_at") or _now()
+    cleaned["created_by"] = prior.get("created_by") or cleaned.get("updated_by") or "Staff"
+    return cleaned
+
+
+def all_report_rows() -> dict[str, Any]:
+    """Raw stored general / detailed reports plus match conditions, for the Reports Library."""
+    store = _load_store()
+    return {
+        "general_reports": dict(store.get("general_reports") or {}),
+        "detailed_reports": dict(store.get("detailed_reports") or {}),
+        "match_conditions": dict(store.get("match_conditions") or {}),
+    }
+
+
+def general_from_stored(player_id: int, fixture_id: str, row: dict[str, Any] | None) -> dict[str, Any]:
+    return _general_from_row(player_id, fixture_id, row)
+
+
+def detailed_from_stored(player_id: int, fixture_id: str, row: dict[str, Any] | None) -> dict[str, Any]:
+    return _detailed_from_row(player_id, fixture_id, row)
+
+
+def decorate_conditions(row: dict[str, Any] | None, *, fixture_id: str = "", fixture_label: str = "") -> dict[str, Any]:
+    return _decorate_conditions(row, fixture_id=fixture_id, fixture_label=fixture_label)
+
+
 def empty_general_report(player_id: int = 0, fixture_id: str = "") -> dict[str, Any]:
     return {
         "player_id": int(player_id or 0),
@@ -472,6 +534,7 @@ def save_general_report(
     pipeline_stage: str = "video_scouted",
     next_action: str = "",
     staff: str = "Staff",
+    meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not player_id:
         raise HTTPException(status_code=400, detail="player_id is required")
@@ -497,7 +560,8 @@ def save_general_report(
         },
     )
     store = _load_store()
-    store["general_reports"][_report_key(player_id, token)] = cleaned
+    key = _report_key(player_id, token)
+    store["general_reports"][key] = _stamp_report(cleaned, store["general_reports"].get(key), meta)
     _save_store(store)
     return cleaned
 
@@ -593,6 +657,7 @@ def save_detailed_report(
     pipeline_stage: str = "video_scouted",
     next_action: str = "",
     staff: str = "Staff",
+    meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not player_id:
         raise HTTPException(status_code=400, detail="player_id is required")
@@ -619,7 +684,8 @@ def save_detailed_report(
         },
     )
     store = _load_store()
-    store["detailed_reports"][_report_key(player_id, token)] = cleaned
+    key = _report_key(player_id, token)
+    store["detailed_reports"][key] = _stamp_report(cleaned, store["detailed_reports"].get(key), meta)
     _save_store(store)
     return cleaned
 

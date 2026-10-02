@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reports Library</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/reports-library.css?v=1" />
+</head>
+<body>
+  <div class="rl" id="rlApp">
+    <header class="rl-top">
+      <div>
+        <p class="rl-eyebrow">Recruitment · <a href="/">← All apps</a> · <a href="/match-scouting">Match Scouting</a> · <a href="/player-pipelines">Player Pipelines</a></p>
+        <h1>Reports Library</h1>
+        <p class="rl-sub" id="rlCounts">Loading reports…</p>
+      </div>
+      <div class="rl-kinds" id="rlKinds" role="tablist" aria-label="Report type">
+        <button type="button" class="rl-chip is-on" data-kind="">All reports</button>
+        <button type="button" class="rl-chip" data-kind="general">General</button>
+        <button type="button" class="rl-chip" data-kind="detailed">Detailed</button>
+      </div>
+    </header>
+
+    <div class="rl-filters">
+      <input type="search" class="rl-search" id="rlSearch" placeholder="Search player, club, match or scout" autocomplete="off" />
+      <select id="rlPosition" class="rl-select" aria-label="Position"><option value="">All positions</option></select>
+      <select id="rlLevel" class="rl-select" aria-label="Port Vale level"><option value="">All levels</option></select>
+      <select id="rlAction" class="rl-select" aria-label="Next action"><option value="">All next actions</option></select>
+      <select id="rlScout" class="rl-select" aria-label="Scout"><option value="">All scouts</option></select>
+      <select id="rlSort" class="rl-select" aria-label="Sort">
+        <option value="recent">Most recent</option>
+        <option value="rating">Highest rating</option>
+        <option value="player">Player A–Z</option>
+      </select>
+    </div>
+
+    <p id="rlStatus" class="rl-status hidden" role="status"></p>
+
+    <main class="rl-body">
+      <section class="rl-list" id="rlList" aria-label="Reports"></section>
+      <section class="rl-detail" id="rlDetail" aria-label="Report">
+        <div class="rl-empty">
+          <p>Pick a report</p>
+          <span>Every general and detailed report filed in Match Scouting lands here. Edit a report back in Match Scouting.</span>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script defer src="/static/reports-library.js?v=1"></script>
+  <script defer src="/static/hub-feedback.js"></script>
+</body>
+</html>

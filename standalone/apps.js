@@ -421,6 +421,16 @@ window.IMPECT_APPS = [
     "tags": ["Reports", "Notes", "Scouting", "Team sheet"]
   },
   {
+    "id": "reports-library",
+    "group": "recruitment",
+    "title": "Reports Library",
+    "description": "Every player report we have filed from Match Scouting — general and detailed — in one place. Search by player, club or scout, filter by position, level and next action, and open the full report.",
+    "href": "/reports-library",
+    "icon": "📚",
+    "accent": "#38bdf8",
+    "tags": ["Reports", "Scouting", "Library"]
+  },
+  {
     "id": "squad-planner",
     "group": "recruitment",
     "title": "Squad Planner",

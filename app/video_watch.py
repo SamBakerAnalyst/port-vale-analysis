@@ -70,6 +70,24 @@ class VideoWatchNoteBody(BaseModel):
     scout_scores: dict[str, int | None] = Field(default_factory=dict)
 
 
+def _report_meta(body: BaseModel) -> dict[str, Any]:
+    return {
+        key: getattr(body, key, "")
+        for key in (
+            "name",
+            "club",
+            "league",
+            "position",
+            "position_label",
+            "age",
+            "fixture_label",
+            "home_name",
+            "away_name",
+            "sheet_side",
+        )
+    }
+
+
 def _staff_name(request: Request) -> str:
     payload = current_user_payload(request)
     return str(payload.get("display_name") or payload.get("username") or "Staff").strip() or "Staff"
@@ -642,6 +660,7 @@ def register_video_watch_routes(app: FastAPI) -> None:
             pipeline_stage=body.pipeline_stage,
             next_action=body.next_action,
             staff=staff,
+            meta=_report_meta(body),
         )
         pipeline, pipeline_error = _push_pipeline(
             request, general, body, reason_keys=("next_steps", "notes")
@@ -687,6 +706,7 @@ def register_video_watch_routes(app: FastAPI) -> None:
             pipeline_stage=body.pipeline_stage,
             next_action=body.next_action,
             staff=staff,
+            meta=_report_meta(body),
         )
         pipeline, pipeline_error = _push_pipeline(
             request, detailed, body, reason_keys=("write_up", "next_steps")
