@@ -30,6 +30,17 @@ def test_archetype_weights_only_use_profiles_their_sources_share():
             assert all(name in pva.PROFILE_LABELS for name in arch["weights"])
 
 
+def test_every_role_has_a_plot_with_axes_its_population_can_score():
+    for role in pva.current_roles():
+        plot = role["plot"]
+        names = {p["apiName"] for p in plot["profiles"]}
+        assert plot["x"] in names and plot["y"] in names, role["id"]
+        assert plot["x"] != plot["y"]
+        for pos in plot["population"]:
+            assert {plot["x"], plot["y"]} <= set(pva.POSITION_PROFILES[pos])
+        assert plot["archetypes"], role["id"]
+
+
 def test_fit_is_weighted_average_and_needs_every_weighted_profile():
     weights = {"A": 3, "B": 1, "C": 0}
     assert pva.archetype_fit({"A": 80, "B": 40}, weights) == 70.0

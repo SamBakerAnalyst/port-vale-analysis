@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/pv-archetypes.css?v=2" />
+  <link rel="stylesheet" href="/static/pv-archetypes.css?v=9" />
 </head>
 <body>
   <div class="app">
@@ -26,6 +26,7 @@
           <div class="seg" id="viewSeg" role="group" aria-label="View">
             <button type="button" class="seg__btn is-active" data-view="pitch">Pitch</button>
             <button type="button" class="seg__btn" data-view="board">Archetype board</button>
+            <button type="button" class="seg__btn seg__btn--pv" data-view="squad">Our squad</button>
           </div>
           <a class="btn btn--ghost" href="/watch-list">Watch list</a>
           <button type="button" class="btn btn--ghost" id="editBtn" hidden>Edit position book</button>
@@ -85,11 +86,13 @@
     </main>
 
     <main id="boardView" class="board-view" hidden></main>
+
+    <main id="squadView" class="squad-view" hidden></main>
   </div>
 
   <div id="toast" class="toast" hidden></div>
 
-  <script defer src="/static/pv-archetypes.js?v=2"></script>
+  <script defer src="/static/pv-archetypes.js?v=9"></script>
   <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>

@@ -1001,6 +1001,21 @@ FORMATIONS: list[dict[str, Any]] = [
     },
 ]
 
+# Squad plots: who each role is compared against, and the two axes it opens on.
+ROLE_PLOTS: dict[str, dict[str, Any]] = {
+    "gk": {"population": ["GOALKEEPER"], "x": GK_SHOT, "y": GK_BALL},
+    "rcb": {"population": ["CENTRAL_DEFENDER"], "x": CB_RIGHT, "y": CB_PROG},
+    "ccb": {"population": ["CENTRAL_DEFENDER"], "x": CB_AERIAL, "y": CB_PROG},
+    "lcb": {"population": ["CENTRAL_DEFENDER"], "x": CB_LEFT, "y": CB_PROG},
+    "rwb": {"population": ["RIGHT_WINGBACK_DEFENDER"], "x": RB_DEF, "y": RB_OFF},
+    "lwb": {"population": ["LEFT_WINGBACK_DEFENDER"], "x": LB_DEF, "y": LB_OFF},
+    "six": {"population": list(MIDFIELD), "x": MID_WIN, "y": MID_PROG},
+    "eight": {"population": list(MIDFIELD), "x": MID_RUN, "y": MID_CREATE},
+    "rif": {"population": ["RIGHT_WINGER"], "x": RW_GOAL, "y": RW_CREATE},
+    "lif": {"population": ["LEFT_WINGER"], "x": LW_GOAL, "y": LW_CREATE},
+    "nine": {"population": ["CENTER_FORWARD"], "x": ST_BEHIND, "y": ST_HOLD},
+}
+
 EDITABLE_ROLE_FIELDS = (
     "name",
     "nickname",
@@ -1102,6 +1117,20 @@ def apply_overrides(roles: list[dict[str, Any]], overrides: dict[str, Any]) -> l
 def current_roles() -> list[dict[str, Any]]:
     roles = apply_overrides(DEFAULT_ROLES, _load_overrides())
     for role in roles:
+        plot = ROLE_PLOTS.get(role["id"])
+        if plot:
+            population = plot["population"]
+            role["plot"] = {
+                **plot,
+                "profiles": [
+                    {"apiName": name, "label": PROFILE_LABELS.get(name, name)}
+                    for name in POSITION_PROFILES.get(population[0], ())
+                ],
+                # Only archetypes rated from the same positions can be an axis.
+                "archetypes": [
+                    a["id"] for a in role["archetypes"] if set(a["sources"]) <= set(population)
+                ],
+            }
         for arch in role["archetypes"]:
             arch["profiles"] = [
                 {"apiName": name, "label": PROFILE_LABELS.get(name, name)}

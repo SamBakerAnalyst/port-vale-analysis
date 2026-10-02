@@ -28,6 +28,8 @@
     watchBusy: new Set(),
     editing: false,
     rankCache: new Map(),
+    plotAxes: {},
+    plotCompare: "l2",
   };
 
   // ---------------------------------------------------------------- helpers
@@ -79,6 +81,8 @@
       localStorage.setItem(STORE_KEY, JSON.stringify({
         formation: state.formation,
         slotArch: state.slotArch,
+        plotAxes: state.plotAxes,
+        plotCompare: state.plotCompare,
         filters: { ...state.filters, leagues: [...state.filters.leagues] },
       }));
     } catch { /* private mode */ }
@@ -89,6 +93,8 @@
       const raw = JSON.parse(localStorage.getItem(STORE_KEY) || "{}");
       if (raw.formation) state.formation = raw.formation;
       if (raw.slotArch && typeof raw.slotArch === "object") state.slotArch = raw.slotArch;
+      if (raw.plotAxes && typeof raw.plotAxes === "object") state.plotAxes = raw.plotAxes;
+      if (raw.plotCompare === "pool") state.plotCompare = "pool";
       if (raw.filters) {
         const f = raw.filters;
         state.filters.minMinutes = Number.isFinite(f.minMinutes) ? f.minMinutes : 270;
@@ -163,18 +169,24 @@
     const weights = weightsFor(arch);
     const best = new Map();
     const vale = new Map();
+    // League Two benchmark: every other League Two player over the minutes floor,
+    // whatever the league / age filters say — it's the division we play in.
+    const l2 = new Map();
     for (const p of state.pool) {
       if (!sources.has(p.position)) continue;
       const pv = isPortVale(p);
+      const fit = fitFor(p.scores, weights);
+      if (fit == null) continue;
+      const id = p.playerId || p.name;
+      if (!pv && p.league === "League Two" && (p.minutes || 0) >= state.filters.minMinutes) {
+        l2.set(id, Math.max(l2.get(id) ?? 0, fit));
+      }
       if (pv) {
         if ((p.minutes || 0) < 45) continue;
       } else if (!passesFilters(p, arch)) {
         continue;
       }
-      const fit = fitFor(p.scores, weights);
-      if (fit == null) continue;
       const bucket = pv ? vale : best;
-      const id = p.playerId || p.name;
       const prev = bucket.get(id);
       if (prev && prev.fit >= fit) continue;
       bucket.set(id, { ...p, fit });
@@ -182,6 +194,7 @@
     const out = {
       list: [...best.values()].sort((a, b) => b.fit - a.fit),
       vale: [...vale.values()].sort((a, b) => b.fit - a.fit),
+      l2: [...l2.values()].sort((a, b) => a - b),
     };
     state.rankCache.set(key, out);
     return out;
@@ -562,25 +575,500 @@
     $("boardView").innerHTML = html.join("");
   }
 
+  // ---------------------------------------------------------------- our squad
+  const SMALL_SAMPLE = 270;
+  const PITCH_LINES = `
+    <svg class="pitch__lines" viewBox="0 0 68 105" preserveAspectRatio="none" aria-hidden="true">
+      <rect x="1" y="1" width="66" height="103" /><line x1="1" y1="52.5" x2="67" y2="52.5" />
+      <circle cx="34" cy="52.5" r="9.15" />
+      <rect x="13.84" y="1" width="40.32" height="16.5" /><rect x="24.84" y="1" width="18.32" height="5.5" />
+      <rect x="13.84" y="87.5" width="40.32" height="16.5" /><rect x="24.84" y="98.5" width="18.32" height="5.5" />
+    </svg>`;
+
+  function statusFor(pct) {
+    if (pct == null) return { id: "critical", label: "No cover" };
+    if (pct >= 75) return { id: "strength", label: "Strength" };
+    if (pct >= 50) return { id: "solid", label: "Solid" };
+    if (pct >= 25) return { id: "gap", label: "Gap" };
+    return { id: "critical", label: "Priority" };
+  }
+
+  /** Where a fit sits among League Two players for this archetype (0–100). */
+  function l2Pct(arch, fit) {
+    const arr = rank(arch).l2;
+    if (!arr.length || fit == null) return null;
+    let below = 0;
+    let equal = 0;
+    for (const v of arr) {
+      if (v < fit) below += 1;
+      else if (v === fit) equal += 1;
+    }
+    return Math.round(((below + equal / 2) / arr.length) * 100);
+  }
+
+  function l2Median(arch) {
+    const arr = rank(arch).l2;
+    return arr.length ? arr[Math.floor(arr.length / 2)] : null;
+  }
+
+  function l2Rank(arch, fit) {
+    const arr = rank(arch).l2;
+    return { rank: arr.filter((v) => v > fit).length + 1, of: arr.length + 1 };
+  }
+
+  function ordinal(n) {
+    const s = ["th", "st", "nd", "rd"];
+    const v = n % 100;
+    return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+  }
+
+  function valeMinutes() {
+    const totals = new Map();
+    for (const p of state.pool) {
+      if (!isPortVale(p)) continue;
+      totals.set(p.playerId, (totals.get(p.playerId) || 0) + (p.minutes || 0));
+    }
+    return totals;
+  }
+
+  /** Our best XI for the formation: strongest League Two percentiles placed first, nobody twice. */
+  function ourXi() {
+    const slots = formation()?.slots || [];
+    const pairs = [];
+    for (const slot of slots) {
+      const arch = archForSlot(slot.slot);
+      for (const p of rank(arch).vale) pairs.push({ slot: slot.slot, arch, player: p, pct: l2Pct(arch, p.fit) ?? 0 });
+    }
+    pairs.sort((a, b) => b.pct - a.pct || b.player.fit - a.player.fit);
+    const xi = {};
+    const used = new Set();
+    for (const pair of pairs) {
+      if (xi[pair.slot] || used.has(pair.player.playerId)) continue;
+      xi[pair.slot] = pair;
+      used.add(pair.player.playerId);
+    }
+    for (const slot of slots) {
+      if (!xi[slot.slot]) xi[slot.slot] = { slot: slot.slot, arch: archForSlot(slot.slot), player: null, pct: null };
+    }
+    return xi;
+  }
+
+  /** Our players at League Two average or better in any archetype of the role. */
+  function roleDepth(role) {
+    const ids = new Map();
+    for (const a of role.archetypes) {
+      for (const p of rank(a).vale) {
+        const pct = l2Pct(a, p.fit);
+        if (pct == null || pct < 50) continue;
+        const prev = ids.get(p.playerId);
+        if (!prev || prev.pct < pct) ids.set(p.playerId, { player: p, pct, arch: a });
+      }
+    }
+    return [...ids.values()].sort((a, b) => b.pct - a.pct);
+  }
+
+  function playerBestFits() {
+    const byId = new Map();
+    for (const role of roles()) {
+      for (const a of role.archetypes) {
+        for (const p of rank(a).vale) {
+          const pct = l2Pct(a, p.fit);
+          if (pct == null) continue;
+          const entry = byId.get(p.playerId) || { player: p, fits: [] };
+          if (!entry.fits.some((f) => f.arch.id === a.id)) entry.fits.push({ role, arch: a, fit: p.fit, pct });
+          byId.set(p.playerId, entry);
+        }
+      }
+    }
+    for (const e of byId.values()) e.fits.sort((x, y) => y.pct - x.pct || y.fit - x.fit);
+    return [...byId.values()].sort((a, b) => (b.fits[0]?.pct ?? 0) - (a.fits[0]?.pct ?? 0));
+  }
+
+  function pctPill(pct) {
+    if (pct == null) return '<span class="pct pct--critical">—</span>';
+    return `<span class="pct pct--${statusFor(pct).id}">${ordinal(pct)}</span>`;
+  }
+
+  // ---------------------------------------------------------------- position plots
+  const PLOT = { w: 560, h: 420, l: 46, r: 14, t: 14, b: 42 };
+  function plotAxes(role) {
+    const saved = state.plotAxes[role.id] || {};
+    const valid = new Set([...role.plot.profiles.map((p) => p.apiName), ...role.plot.archetypes.map((id) => `fit:${id}`)]);
+    return {
+      x: valid.has(saved.x) ? saved.x : role.plot.x,
+      y: valid.has(saved.y) ? saved.y : role.plot.y,
+    };
+  }
+
+  function axisValue(p, key) {
+    if (key.startsWith("fit:")) {
+      const a = archById(key.slice(4));
+      return a ? fitFor(p.scores, weightsFor(a)) : null;
+    }
+    return p.scores?.[key] ?? null;
+  }
+
+  function axisLabel(key) {
+    if (key.startsWith("fit:")) return `${archById(key.slice(4))?.name || ""} fit`;
+    return state.config.profile_labels[key] || key;
+  }
+
+  function axisSelect(role, which, current) {
+    return `
+      <label class="plot-axis">${which === "x" ? "Across" : "Up"}
+        <select data-plot-role="${esc(role.id)}" data-plot-axis="${which}">
+          <optgroup label="Profiles">
+            ${role.plot.profiles.map((p) => `<option value="${esc(p.apiName)}"${p.apiName === current ? " selected" : ""}>${esc(p.label)}</option>`).join("")}
+          </optgroup>
+          <optgroup label="Archetype fit">
+            ${role.plot.archetypes.map((id) => `<option value="fit:${esc(id)}"${`fit:${id}` === current ? " selected" : ""}>${esc(archById(id)?.name || id)}</option>`).join("")}
+          </optgroup>
+        </select>
+      </label>`;
+  }
+
+  function median(values) {
+    if (!values.length) return null;
+    const s = [...values].sort((a, b) => a - b);
+    const m = Math.floor(s.length / 2);
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  }
+
+  /** One row per player in the role's positions (the position he played most). */
+  function plotPopulation(role) {
+    const positions = new Set(role.plot.population);
+    const byId = new Map();
+    for (const p of state.pool) {
+      if (!positions.has(p.position)) continue;
+      const prev = byId.get(p.playerId);
+      if (!prev || (p.minutes || 0) > (prev.minutes || 0)) byId.set(p.playerId, p);
+    }
+    return [...byId.values()];
+  }
+
+  function placeLabels(points) {
+    const placed = [];
+    const offsets = [[8, 4, "start"], [8, -7, "start"], [8, 15, "start"], [-8, 4, "end"], [-8, -7, "end"], [-8, 15, "end"]];
+    return points.map((pt) => {
+      const width = pt.label.length * 6.2;
+      for (const [dx, dy, anchor] of offsets) {
+        const x0 = anchor === "start" ? pt.cx + dx : pt.cx + dx - width;
+        const box = { x0, x1: x0 + width, y0: pt.cy + dy - 9, y1: pt.cy + dy + 2 };
+        const clash = placed.some((b) => box.x0 < b.x1 && box.x1 > b.x0 && box.y0 < b.y1 && box.y1 > b.y0);
+        const inside = box.x0 > PLOT.l && box.x1 < PLOT.w - PLOT.r && box.y0 > PLOT.t;
+        if (!clash && inside) {
+          placed.push(box);
+          return { ...pt, lx: pt.cx + dx, ly: pt.cy + dy, anchor };
+        }
+      }
+      return { ...pt, lx: pt.cx + 8, ly: pt.cy + 4, anchor: "start" };
+    });
+  }
+
+  function plotHtml(role, slotIds) {
+    const axes = plotAxes(role);
+    const rows = plotPopulation(role);
+    const compareL2 = state.plotCompare === "l2";
+    const pick = (p) => {
+      const x = axisValue(p, axes.x);
+      const y = axisValue(p, axes.y);
+      return x == null || y == null ? null : { p, x, y };
+    };
+    const l2 = rows.filter((p) => !isPortVale(p) && p.league === "League Two" && (p.minutes || 0) >= state.filters.minMinutes).map(pick).filter(Boolean);
+    const pool = compareL2
+      ? l2
+      : rows.filter((p) => !isPortVale(p) && passesFilters(p, { foot: null })).map(pick).filter(Boolean);
+    const vale = rows.filter((p) => isPortVale(p) && (p.minutes || 0) >= 45).map(pick).filter(Boolean);
+    const targetIds = new Set();
+    for (const id of slotIds) {
+      for (const t of rank(archForSlot(id)).list.slice(0, 4)) targetIds.add(t.playerId);
+    }
+    const targets = rows.filter((p) => targetIds.has(p.playerId)).map(pick).filter(Boolean);
+    const mx = median(l2.map((d) => d.x));
+    const my = median(l2.map((d) => d.y));
+
+    const all = [...pool, ...vale, ...targets];
+    if (!all.length) return '<p class="sq-empty">No players to plot with these filters.</p>';
+    const ext = (vals) => {
+      const lo = Math.max(0, Math.floor((Math.min(...vals) - 3) / 10) * 10);
+      const hi = Math.min(100, Math.ceil((Math.max(...vals) + 3) / 10) * 10);
+      return hi - lo < 20 ? [Math.max(0, lo - 10), Math.min(100, hi + 10)] : [lo, hi];
+    };
+    const [x0, x1] = ext(all.map((d) => d.x));
+    const [y0, y1] = ext(all.map((d) => d.y));
+    const sx = (v) => PLOT.l + ((v - x0) / (x1 - x0)) * (PLOT.w - PLOT.l - PLOT.r);
+    const sy = (v) => PLOT.h - PLOT.b - ((v - y0) / (y1 - y0)) * (PLOT.h - PLOT.t - PLOT.b);
+    const xLabel = axisLabel(axes.x);
+    const yLabel = axisLabel(axes.y);
+    const tip = (d, tag) => `${d.p.name}${tag ? ` (${tag})` : ""} — ${d.p.club}, ${d.p.league} · ${d.p.age ?? "?"} yrs · ${Math.round(d.p.minutes || 0)} mins\n${xLabel}: ${d.x.toFixed(1)} · ${yLabel}: ${d.y.toFixed(1)}`;
+
+    const ticks = (lo, hi) => Array.from({ length: Math.floor((hi - lo) / 10) + 1 }, (_, i) => lo + i * 10);
+    const grid = `
+      ${ticks(x0, x1).map((v) => `<line class="sp-grid" x1="${sx(v)}" x2="${sx(v)}" y1="${PLOT.t}" y2="${PLOT.h - PLOT.b}"/><text class="sp-tick" x="${sx(v)}" y="${PLOT.h - PLOT.b + 14}" text-anchor="middle">${v}</text>`).join("")}
+      ${ticks(y0, y1).map((v) => `<line class="sp-grid" x1="${PLOT.l}" x2="${PLOT.w - PLOT.r}" y1="${sy(v)}" y2="${sy(v)}"/><text class="sp-tick" x="${PLOT.l - 6}" y="${sy(v) + 3}" text-anchor="end">${v}</text>`).join("")}
+      <text class="sp-axis" x="${(PLOT.l + PLOT.w - PLOT.r) / 2}" y="${PLOT.h - 6}" text-anchor="middle">${esc(xLabel)} →</text>
+      <text class="sp-axis" transform="translate(12 ${(PLOT.t + PLOT.h - PLOT.b) / 2}) rotate(-90)" text-anchor="middle">${esc(yLabel)} →</text>`;
+
+    const quad = mx != null && my != null ? `
+      <rect class="sp-quad-top" x="${sx(mx)}" y="${PLOT.t}" width="${PLOT.w - PLOT.r - sx(mx)}" height="${sy(my) - PLOT.t}"/>
+      <line class="sp-median" x1="${sx(mx)}" x2="${sx(mx)}" y1="${PLOT.t}" y2="${PLOT.h - PLOT.b}"/>
+      <line class="sp-median" x1="${PLOT.l}" x2="${PLOT.w - PLOT.r}" y1="${sy(my)}" y2="${sy(my)}"/>
+      <text class="sp-quad sp-quad--good" x="${PLOT.w - PLOT.r - 6}" y="${PLOT.t + 13}" text-anchor="end">Above average at both</text>
+      <text class="sp-quad" x="${PLOT.l + 6}" y="${PLOT.t + 13}">${esc(yLabel)} only</text>
+      <text class="sp-quad" x="${PLOT.w - PLOT.r - 6}" y="${PLOT.h - PLOT.b - 6}" text-anchor="end">${esc(xLabel)} only</text>
+      <text class="sp-quad" x="${PLOT.l + 6}" y="${PLOT.h - PLOT.b - 6}">Below average at both</text>` : "";
+
+    const valeIds = new Set(vale.map((d) => d.p.playerId));
+    const dots = pool
+      .filter((d) => !targetIds.has(d.p.playerId))
+      .map((d) => `<a href="/player/${encodeURIComponent(d.p.playerId)}" target="_blank"><circle class="sp-dot" cx="${sx(d.x).toFixed(1)}" cy="${sy(d.y).toFixed(1)}" r="3.2"><title>${esc(tip(d))}</title></circle></a>`)
+      .join("");
+    const labelled = placeLabels([
+      ...vale.map((d) => ({ d, kind: "pv", cx: sx(d.x), cy: sy(d.y), label: surname(d.p.name) })),
+      ...targets.filter((d) => !valeIds.has(d.p.playerId)).map((d) => ({ d, kind: "target", cx: sx(d.x), cy: sy(d.y), label: surname(d.p.name) })),
+    ]);
+    const marks = labelled.map((pt) => {
+      const small = pt.kind === "pv" && (pt.d.p.minutes || 0) < SMALL_SAMPLE;
+      return `
+        <a href="/player/${encodeURIComponent(pt.d.p.playerId)}" target="_blank">
+          <circle class="sp-mark sp-mark--${pt.kind}${small ? " is-small" : ""}" cx="${pt.cx.toFixed(1)}" cy="${pt.cy.toFixed(1)}" r="${pt.kind === "pv" ? 6.5 : 5.5}">
+            <title>${esc(tip(pt.d, pt.kind === "pv" ? `Port Vale${small ? ", small sample" : ""}` : "target"))}</title>
+          </circle>
+          <text class="sp-label sp-label--${pt.kind}" x="${pt.lx.toFixed(1)}" y="${pt.ly.toFixed(1)}" text-anchor="${pt.anchor}">${esc(pt.label)}</text>
+        </a>`;
+    }).join("");
+
+    const where = (d) => {
+      if (mx == null || my == null) return "";
+      const hx = d.x >= mx;
+      const hy = d.y >= my;
+      if (hx && hy) return "both";
+      if (hx) return "x";
+      if (hy) return "y";
+      return "none";
+    };
+    const whereLabel = { both: "above average at both", x: `${xLabel} only`, y: `${yLabel} only`, none: "below average at both" };
+    const chips = vale
+      .sort((a, b) => (b.x + b.y) - (a.x + a.y))
+      .map((d) => `<span class="sp-chip sp-chip--${where(d)}"><b>${esc(surname(d.p.name))}</b> ${esc(whereLabel[where(d)] || "")}${(d.p.minutes || 0) < SMALL_SAMPLE ? " · small sample" : ""}</span>`)
+      .join("");
+
+    return `
+      <div class="plot">
+        <div class="plot__controls">
+          ${axisSelect(role, "x", axes.x)}
+          ${axisSelect(role, "y", axes.y)}
+          <span class="plot__legend">
+            <span><i class="sp-key sp-key--pool"></i>${compareL2 ? "League Two" : "Filtered pool"} (${pool.length})</span>
+            <span><i class="sp-key sp-key--pv"></i>Port Vale</span>
+            <span><i class="sp-key sp-key--target"></i>Top targets</span>
+            <span><i class="sp-key sp-key--median"></i>League Two median</span>
+          </span>
+        </div>
+        <svg class="plot__svg" viewBox="0 0 ${PLOT.w} ${PLOT.h}" role="img" aria-label="${esc(role.name)}: ${esc(xLabel)} against ${esc(yLabel)}">
+          ${grid}${quad}${dots}${marks}
+        </svg>
+        <div class="plot__chips">${chips || '<span class="sp-chip">No Port Vale player has 45+ minutes in this position yet.</span>'}</div>
+      </div>`;
+  }
+
+  function renderSquad() {
+    const view = $("squadView");
+    const slots = formation()?.slots || [];
+    const xi = ourXi();
+    const minutes = valeMinutes();
+    const slotRows = slots.map((s) => ({ ...xi[s.slot], slot: s, role: roleById(s.role) }));
+    const covered = slotRows.filter((r) => r.player);
+    const avgPct = covered.length ? Math.round(covered.reduce((s, r) => s + r.pct, 0) / slots.length) : 0;
+    const strengths = slotRows.filter((r) => statusFor(r.pct).id === "strength");
+    const gaps = slotRows.filter((r) => ["gap", "critical"].includes(statusFor(r.pct).id));
+    const worst = [...slotRows].sort((a, b) => (a.pct ?? -1) - (b.pct ?? -1))[0];
+
+    const seen = new Set();
+    const roleList = [];
+    for (const s of slots) {
+      if (seen.has(s.role)) continue;
+      seen.add(s.role);
+      const role = roleById(s.role);
+      const need = slots.filter((x) => x.role === s.role).length;
+      roleList.push({ role, need, depth: roleDepth(role), slotIds: slots.filter((x) => x.role === s.role).map((x) => x.slot) });
+    }
+    const thin = roleList.filter((r) => r.depth.length < r.need + 1);
+    const smallSample = [...minutes.values()].filter((m) => m < SMALL_SAMPLE).length;
+
+    // KPIs
+    const kpis = `
+      <section class="sq-kpis">
+        <div class="card sq-kpi sq-kpi--hero">
+          <span class="sq-kpi__label">Our best XI vs League Two</span>
+          <span class="sq-kpi__value">${ordinal(avgPct)}</span>
+          <span class="sq-kpi__sub">average League Two percentile across the ${slots.length} slots, in the archetypes picked for ${esc(formation().label)}</span>
+        </div>
+        <div class="card sq-kpi sq-kpi--strength">
+          <span class="sq-kpi__label">Strengths</span>
+          <span class="sq-kpi__value">${strengths.length}</span>
+          <span class="sq-kpi__sub">${strengths.length ? strengths.map((r) => esc(r.role.short)).join(" · ") : "No slot in League Two's top quarter"}</span>
+        </div>
+        <div class="card sq-kpi sq-kpi--gap">
+          <span class="sq-kpi__label">Gaps</span>
+          <span class="sq-kpi__value">${gaps.length}</span>
+          <span class="sq-kpi__sub">${gaps.length ? gaps.map((r) => esc(r.role.short)).join(" · ") : "Every slot at League Two average or better"}</span>
+        </div>
+        <div class="card sq-kpi sq-kpi--critical">
+          <span class="sq-kpi__label">Biggest gap</span>
+          <span class="sq-kpi__value sq-kpi__value--text">${esc(worst?.role?.name || "—")}</span>
+          <span class="sq-kpi__sub">${worst ? `${esc(worst.arch.name)} · ${worst.player ? `${esc(worst.player.name)}, ${ordinal(worst.pct)} pct` : "nobody in the squad"}` : ""}</span>
+        </div>
+        <div class="card sq-kpi sq-kpi--thin">
+          <span class="sq-kpi__label">Thin cover</span>
+          <span class="sq-kpi__value">${thin.length}</span>
+          <span class="sq-kpi__sub">${thin.length ? thin.map((r) => `${esc(r.role.short)} (${r.depth.length}/${r.need + 1})`).join(" · ") : "A League Two-average backup everywhere"}</span>
+        </div>
+      </section>
+      ${smallSample ? `<p class="sq-note">Early season: ${smallSample} of our players have under ${SMALL_SAMPLE} league minutes, so their scores will move. Players need 45+ minutes in a position to be rated there; League Two comparisons use players over ${state.filters.minMinutes} minutes.</p>` : ""}`;
+
+    // Our XI pitch
+    const pitch = `
+      <div class="card pitch sq-pitch">
+        <h3 class="sq-h3">Our best XI — ${esc(formation().label)}</h3>
+        <div class="pitch__field">
+          ${PITCH_LINES}
+          <div class="pitch__attack">Attack ↑</div>
+          <div class="slot-layer">
+            ${slotRows.map((r) => {
+              const st = statusFor(r.pct);
+              return `
+                <button type="button" class="slot slot--${st.id}" data-open-slot="${esc(r.slot.slot)}" style="left:${r.slot.x}%;top:${100 - r.slot.y}%"
+                  title="${esc(r.role.name)} — ${esc(r.arch.name)}${r.player ? `\n${esc(r.player.name)}: fit ${r.player.fit.toFixed(1)}, ${ordinal(r.pct)} percentile in League Two` : "\nNo Port Vale cover"}">
+                  <span class="slot__disc" data-short="${esc(r.role.short)}">${esc(r.role.number)}</span>
+                  <span class="slot__arch">${esc(r.arch.name)}</span>
+                  <span class="slot__player">${r.player ? `${esc(surname(r.player.name))}<span class="slot__fit">${ordinal(r.pct)}</span>` : "No cover"}</span>
+                </button>`;
+            }).join("")}
+          </div>
+        </div>
+        <div class="sq-legend">
+          <span><i class="dot dot--strength"></i>Strength · top 25%</span>
+          <span><i class="dot dot--solid"></i>Solid · above average</span>
+          <span><i class="dot dot--gap"></i>Gap · below average</span>
+          <span><i class="dot dot--critical"></i>Priority · bottom 25%</span>
+        </div>
+      </div>`;
+
+    // Priority list
+    const ordered = [...slotRows].sort((a, b) => (a.pct ?? -1) - (b.pct ?? -1));
+    const priority = `
+      <div class="card sq-priority">
+        <h3 class="sq-h3">Recruitment priorities <span class="sq-h3__sub">worst slot first · League Two percentile of our starter in that archetype</span></h3>
+        ${ordered.map((r, i) => {
+          const st = statusFor(r.pct);
+          const top = rank(r.arch).list;
+          const ups = top.filter((p) => !r.player || p.fit > r.player.fit).slice(0, 3);
+          const med = l2Median(r.arch);
+          const rk = r.player ? l2Rank(r.arch, r.player.fit) : null;
+          const gap = r.player && top[0] ? (top[0].fit - r.player.fit).toFixed(1) : null;
+          return `
+            <div class="pr-row pr-row--${st.id}">
+              <span class="pr-rank">${i + 1}</span>
+              <div class="pr-role">
+                <span class="status status--${st.id}">${esc(st.label)}</span>
+                <b>${esc(r.role.number)} · ${esc(r.role.name)}</b>
+                <span class="pr-arch">${esc(r.arch.name)}</span>
+              </div>
+              <div class="pr-us">
+                ${r.player
+                  ? `<a href="/player/${encodeURIComponent(r.player.playerId)}" target="_blank" rel="noopener">${esc(r.player.name)}</a>
+                     <span class="pr-meta">fit ${r.player.fit.toFixed(1)} · ${rk.rank} of ${rk.of} in League Two · L2 median ${med != null ? med.toFixed(1) : "—"}</span>`
+                  : '<span class="pr-meta">No Port Vale player rated here</span>'}
+              </div>
+              <div class="pr-pct">${pctPill(r.pct)}</div>
+              <div class="pr-ups">
+                <span class="pr-meta">${gap != null ? `Pool #1 is +${gap}` : "Best available"}</span>
+                <div>${ups.map((p) => `<a class="up-chip" href="/player/${encodeURIComponent(p.playerId)}" target="_blank" rel="noopener" title="${esc(p.club)} · ${esc(p.league)}">${esc(surname(p.name))} <b>${p.fit.toFixed(1)}</b></a>`).join("") || '<span class="pr-meta">No upgrade in the pool</span>'}</div>
+              </div>
+              <button type="button" class="btn btn--small" data-open-slot="${esc(r.slot.slot)}">Targets →</button>
+            </div>`;
+        }).join("")}
+      </div>`;
+
+    // Position plots
+    const plots = roleList.map(({ role, need, depth, slotIds }) => {
+      const bestStarter = Math.max(...slotIds.map((id) => xi[id]?.pct ?? -1));
+      const st = statusFor(bestStarter < 0 ? null : bestStarter);
+      const backupOk = depth.length >= need + 1;
+      const cbNote = role.plot?.population.includes("CENTRAL_DEFENDER")
+        ? '<p class="sq-foot">Impect logs all centre-backs as one position, so every centre-back plot uses the same players and minutes — only the axes change.</p>'
+        : "";
+      return `
+        <section class="card sq-role">
+          <div class="sq-role__head">
+            <span class="bv-role__num">${esc(role.number)}</span>
+            <h3 class="bv-role__name">${esc(role.name)}</h3>
+            <span class="status status--${st.id}">${esc(st.label)}</span>
+            <span class="sq-depth ${backupOk ? "" : "is-thin"}">${depth.length} at League Two average or better · need ${need + 1} (${need} starter${need > 1 ? "s" : ""} + cover)</span>
+            <button type="button" class="btn btn--small btn--ghost bv-role__open" data-open-slot="${esc(slotIds[0])}">Open role →</button>
+          </div>
+          ${role.plot ? plotHtml(role, slotIds) : ""}
+          ${cbNote}
+        </section>`;
+    }).join("");
+
+    // Player cards
+    const cards = playerBestFits().map(({ player, fits }) => {
+      const best = fits[0];
+      const st = statusFor(best?.pct);
+      const total = minutes.get(player.playerId) || 0;
+      return `
+        <div class="pl-card pl-card--${st.id}">
+          <div class="pl-card__head">
+            <span class="avatar">${esc(initials(player.name))}</span>
+            <div>
+              <a class="lb-name" href="/player/${encodeURIComponent(player.playerId)}" target="_blank" rel="noopener">${esc(player.name)}</a>
+              <div class="lb-sub">${player.age ?? "—"} yrs · ${Math.round(total)} mins${total < SMALL_SAMPLE ? " · small sample" : ""}</div>
+            </div>
+          </div>
+          ${best ? `
+            <p class="pl-card__best"><span>Best as</span> <b>${esc(best.arch.name)}</b> <em>${esc(best.role.short)}</em> ${pctPill(best.pct)}</p>
+            <div class="pl-card__alts">${fits.slice(1, 4).map((f) => `<span>${esc(f.arch.name)} <em>${esc(f.role.short)}</em> ${ordinal(f.pct)}</span>`).join("")}</div>` : ""}
+        </div>`;
+    }).join("");
+
+    view.innerHTML = `
+      ${kpis}
+      <div class="sq-top">${pitch}${priority}</div>
+      <div class="sq-plots-head">
+        <p class="section-title">Position by position — Port Vale in red, best targets in gold, dashed lines = League Two median</p>
+        <div class="seg" role="group" aria-label="Compare against">
+          <button type="button" class="seg__btn${state.plotCompare === "l2" ? " is-active" : ""}" data-plot-compare="l2">League Two</button>
+          <button type="button" class="seg__btn${state.plotCompare === "pool" ? " is-active" : ""}" data-plot-compare="pool">Filtered pool</button>
+        </div>
+      </div>
+      <section class="plot-grid">${plots}</section>
+      <p class="section-title">Where each of our players fits best</p>
+      <section class="pl-grid">${cards || '<div class="card empty-card">No Port Vale players in the pool yet.</div>'}</section>`;
+  }
+
   // ---------------------------------------------------------------- render
   function renderAll() {
     renderFormationSeg();
     renderLeagueChips();
-    const pitch = state.view === "pitch";
-    $("pitchView").hidden = !pitch;
-    $("boardView").hidden = pitch;
+    $("pitchView").hidden = state.view !== "pitch";
+    $("boardView").hidden = state.view !== "board";
+    $("squadView").hidden = state.view !== "squad";
     document.querySelectorAll("#viewSeg .seg__btn").forEach((b) => b.classList.toggle("is-active", b.dataset.view === state.view));
-    if (pitch) {
+    if (state.view === "pitch") {
       renderPitch();
       renderRolePanel();
-    } else {
+    } else if (state.view === "board") {
       renderBoard();
+    } else if (state.pool.length) {
+      renderSquad();
     }
     const qualifying = state.pool.filter((p) => !isPortVale(p) && (p.minutes || 0) >= state.filters.minMinutes).length;
     $("poolMeta").textContent = state.pool.length
       ? `${qualifying.toLocaleString()} player-positions over ${state.filters.minMinutes} mins · Fit = weighted blend of PV Impect profile scores`
       : "Player pool unavailable";
-    history.replaceState(null, "", `#${state.formation}/${state.slot}`);
+    history.replaceState(null, "", `#${state.formation}/${state.slot}${state.view !== "pitch" ? `/${state.view}` : ""}`);
   }
 
   function onFiltersChanged() {
@@ -637,13 +1125,34 @@
       if (window.innerWidth < 1100) $("rolePanel").scrollIntoView({ behavior: "smooth" });
     });
 
-    $("boardView").addEventListener("click", (e) => {
+    const openSlot = (e) => {
       const btn = e.target.closest("[data-open-slot]");
       if (!btn) return;
       state.slot = btn.dataset.openSlot;
       state.view = "pitch";
       renderAll();
       window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+    $("boardView").addEventListener("click", openSlot);
+    $("squadView").addEventListener("click", (e) => {
+      const compare = e.target.closest("[data-plot-compare]");
+      if (compare) {
+        state.plotCompare = compare.dataset.plotCompare;
+        persist();
+        renderSquad();
+        return;
+      }
+      openSlot(e);
+    });
+    $("squadView").addEventListener("change", (e) => {
+      const sel = e.target.closest("[data-plot-axis]");
+      if (!sel) return;
+      const role = sel.dataset.plotRole;
+      state.plotAxes[role] = { ...plotAxes(roleById(role)), [sel.dataset.plotAxis]: sel.value };
+      persist();
+      const y = window.scrollY;
+      renderSquad();
+      window.scrollTo(0, y);
     });
 
     const panel = $("rolePanel");
@@ -749,9 +1258,10 @@
   }
 
   function readHash() {
-    const [f, s] = location.hash.replace(/^#/, "").split("/");
+    const [f, s, v] = location.hash.replace(/^#/, "").split("/");
     if (f && (state.config.formations || []).some((x) => x.id === f)) state.formation = f;
     if (s) state.slot = s;
+    if (["board", "squad"].includes(v)) state.view = v;
     if (!slotDef(state.slot)) state.slot = "six";
   }
 
