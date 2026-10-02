@@ -306,7 +306,11 @@
           ...(state.generalDraft.physical || {}),
           ...collectKeyedFields("data-physical"),
         },
-        profiles: { ...state.generalDraft.profiles, ...collectKeyedFields("data-profile") },
+        profiles: keepProfilesForPosition(
+          { ...state.generalDraft.profiles, ...collectKeyedFields("data-profile") },
+          document.getElementById("vwGamePosition")?.value || state.generalDraft.position_in_game,
+          state.player
+        ),
       };
     }
     const detailedForm = document.getElementById("vwDetailedForm");
@@ -318,7 +322,11 @@
           ...(state.detailedDraft.physical || {}),
           ...collectKeyedFields("data-detailed-physical"),
         },
-        profiles: { ...state.detailedDraft.profiles, ...collectKeyedFields("data-detailed-profile") },
+        profiles: keepProfilesForPosition(
+          { ...state.detailedDraft.profiles, ...collectKeyedFields("data-detailed-profile") },
+          document.getElementById("vwDetailedPosition")?.value || state.detailedDraft.position_in_game,
+          state.player
+        ),
         psychology: {
           ...state.detailedDraft.psychology,
           notes: document.getElementById("vwPsychNotes")?.value ?? state.detailedDraft.psychology?.notes ?? "",
@@ -1314,14 +1322,33 @@
   }
 
   function profilesFor(position, player) {
-    const wanted = position || player?.position || "";
-    const byPos = player?.options?.profiles_by_position || {};
+    const wanted = position || "";
+    if (!wanted) return [];
+    // Always use the Port Vale PDF catalog for the selected role — never the
+    // live Impect profile list (that is where Ball Carrier was leaking onto CM).
+    const byPos =
+      player?.options?.profiles_by_position ||
+      state.player?.options?.profiles_by_position ||
+      {};
+    const catalog = byPos[wanted] || [];
+    if (!catalog.length) return [];
     const live = player?.report_profiles || [];
-    const playerPos = player?.position || "";
-    if (wanted && wanted === playerPos && live.length) return live;
-    if (wanted && byPos[wanted]?.length) return byPos[wanted];
-    if (live.length) return live;
-    return byPos[wanted] || [];
+    if (!live.length) return catalog;
+    const scoreById = Object.fromEntries(
+      live.filter((row) => row && row.id).map((row) => [row.id, row.score])
+    );
+    return catalog.map((row) =>
+      scoreById[row.id] != null ? { ...row, score: scoreById[row.id] } : row
+    );
+  }
+
+  function keepProfilesForPosition(profiles, position, player) {
+    const allowed = new Set(profilesFor(position, player).map((row) => row.id));
+    const source = profiles || {};
+    if (!allowed.size) return {};
+    return Object.fromEntries(
+      Object.entries(source).filter(([key]) => allowed.has(key))
+    );
   }
 
   function chipRow(kind, value, rows) {

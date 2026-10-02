@@ -90,6 +90,9 @@ def test_page_has_both_sheets_and_a_central_profile():
     assert "General fitness" in js
     assert "Strong foot" in js
     assert "physicalFieldsFor" in js
+    assert "keepProfilesForPosition" in js
+    assert "profiles_by_position" in js
+    assert "Ball Carrier was leaking onto CM" in js or "never the" in js
     assert "Profiles" in js
     assert "Psychology" in js
     assert "PVFC player level" in js
@@ -172,6 +175,51 @@ def test_scouting_schema_matches_port_vale_pdf():
         "presser",
         "link-creator",
     ]
+    # PDF midfield sets — Ball Carrier is wingers only, never CM/DM/AM.
+    assert [row["id"] for row in profile_entries_for_position("DEFENSE_MIDFIELD")] == [
+        "ball-winner",
+        "ball-progressor",
+        "creator",
+    ]
+    assert [row["id"] for row in profile_entries_for_position("CENTRAL_MIDFIELD")] == [
+        "ball-winner",
+        "ball-progressor",
+        "creator",
+        "running-threat",
+        "goal-threat",
+    ]
+    assert [row["id"] for row in profile_entries_for_position("ATTACKING_MIDFIELD")] == [
+        "ball-winner",
+        "creator",
+        "running-threat",
+        "goal-threat",
+    ]
+    for pos in ("DEFENSE_MIDFIELD", "CENTRAL_MIDFIELD", "ATTACKING_MIDFIELD"):
+        ids = {row["id"] for row in profile_entries_for_position(pos)}
+        assert "ball-carrier" not in ids
+    assert [row["id"] for row in profile_entries_for_position("LEFT_WINGER")] == [
+        "ball-carrier",
+        "creator",
+        "goal-threat",
+        "presser",
+    ]
+    # Live Impect extras must not inject Ball Carrier onto a CM report.
+    cm_locked = profile_entries_for_position(
+        "CENTRAL_MIDFIELD",
+        player_profiles=[
+            {"key": "PV BALL CARRIER", "label": "Ball Carrier", "score": 55},
+            {"key": "PV CREATOR", "label": "Creator", "score": 61},
+        ],
+        player_position="CENTRAL_MIDFIELD",
+    )
+    assert [row["id"] for row in cm_locked] == [
+        "ball-winner",
+        "ball-progressor",
+        "creator",
+        "running-threat",
+        "goal-threat",
+    ]
+    assert next(row for row in cm_locked if row["id"] == "creator")["score"] == 61
     assert fields["weak_foot_options"][-1]["id"] == "very_strong"
     assert "GOALKEEPER" in fields["profiles_by_position"]
     assert "GOALKEEPER" in fields["physical_by_position"]
