@@ -1,4 +1,4 @@
-"""Player Reports — watch a fixture with both team sheets and a shared player file.
+"""Scouting — watch a fixture with both team sheets and a shared player file.
 
 Notes written here land on Scoutable Teams, Who to Scout, and the player page.
 """
@@ -450,7 +450,7 @@ def register_video_watch_routes(app: FastAPI) -> None:
     @app.get("/player-reports", response_class=HTMLResponse)
     def player_reports_page() -> HTMLResponse:
         if not page_path.is_file():
-            raise HTTPException(status_code=404, detail="Player Reports UI not found.")
+            raise HTTPException(status_code=404, detail="Scouting UI not found.")
         return HTMLResponse(page_path.read_text(encoding="utf-8"))
 
     @app.get("/video-watch")

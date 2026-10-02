@@ -1,8 +1,9 @@
-"""Player Reports — shared match conditions, general file, and player CMS.
+"""Scouting — shared match conditions, general file, and player CMS.
 
 Match weather / pitch are stored once per fixture so every player report on
 that game loads the same conditions. Home/Away is inferred from the match
-title (and the team sheet when we have it).
+title (and the team sheet when we have it). Position-specific physical ratings
+and role profiles follow the Port Vale scouting PDF.
 """
 
 from __future__ import annotations

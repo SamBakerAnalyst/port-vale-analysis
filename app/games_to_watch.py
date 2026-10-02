@@ -848,7 +848,7 @@ def _refresh_games_payload(season: str) -> None:
 
 
 def cached_games_to_watch_payload(*, season: str = DEFAULT_SEASON) -> dict[str, Any]:
-    """Serve a warm list immediately so Player Reports does not die on first open."""
+    """Serve a warm list immediately so Scouting does not die on first open."""
     now = time.time()
     cached = _games_payload_mem.get(season)
     if cached and now - cached[0] < GAMES_CACHE_TTL_SECONDS:

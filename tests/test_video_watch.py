@@ -1,4 +1,4 @@
-"""Player Reports — team sheets plus notes shared with Scoutable Teams and the player page."""
+"""Scouting — team sheets plus notes shared with Scoutable Teams and the player page."""
 
 from __future__ import annotations
 
@@ -12,6 +12,11 @@ from app import video_watch as vw
 from app import player_reports as reports
 from app import who_to_scout as wts
 from app.player_dossier import PlayerNoteCreate
+from app.player_report_schema import (
+    option_fields,
+    physical_field_defs_for_position,
+    profile_entries_for_position,
+)
 
 
 def test_sheet_player_gets_a_position_short_code():
@@ -30,9 +35,9 @@ def test_sheet_player_gets_a_position_short_code():
 
 def test_video_watch_is_a_recruitment_rail_tool():
     titles = required_sidebar_titles()
-    assert "Player Reports" in titles
+    assert "Scouting" in titles
     row = next(app for app in APPS if app["id"] == "video-watch")
-    assert row["title"] == "Player Reports"
+    assert row["title"] == "Scouting"
     assert row["href"] == "/player-reports"
     assert row["group"] == "recruitment"
     assert row.get("sidebar") is not False
@@ -48,7 +53,7 @@ def test_page_has_both_sheets_and_a_central_profile():
     html = (STANDALONE_DIR / "video-watch.html").read_text(encoding="utf-8")
     css = (STANDALONE_DIR.parent / "static" / "video-watch.css").read_text(encoding="utf-8")
     js = (STANDALONE_DIR.parent / "static" / "video-watch.js").read_text(encoding="utf-8")
-    assert "Player Reports" in html
+    assert "Scouting" in html
     assert "Which league are you watching?" in html
     assert 'id="vwLeagues"' in html
     assert 'id="vwFixtures"' in html
@@ -81,13 +86,15 @@ def test_page_has_both_sheets_and_a_central_profile():
     assert "Position in game" in js
     assert "Physical" in js
     assert "Weak foot" in js
-    assert "Data profiles" in js
+    assert "Work rate" in js
+    assert "General fitness" in js
+    assert "Strong foot" in js
+    assert "physicalFieldsFor" in js
+    assert "Profiles" in js
     assert "Psychology" in js
     assert "PVFC player level" in js
     assert "Next action" in js
     assert "Add to pipeline" in js
-    assert "How do they progress the ball" in js
-    assert "What sort of headers do they win" in js
     assert "Scoutable Teams" in js
     assert "Who to Scout" in js
     assert "player page" in js
@@ -96,6 +103,7 @@ def test_page_has_both_sheets_and_a_central_profile():
     assert "vw-photo-wrap" in css
     assert "vw-pitch" in css
     assert "vw-tip" in css
+    assert "vw-physical" in css
     assert "flagcdn.com" in js
     assert "leaguelogo" in js
     assert "--bg: #0a0c10" in css
@@ -124,6 +132,49 @@ def test_page_has_both_sheets_and_a_central_profile():
     assert "vw-field" in css
     assert "vw-dot" in css
     assert "grid-template-columns: minmax(270px, 1fr) minmax(340px, 1.45fr) minmax(270px, 1fr)" in css
+
+
+def test_scouting_schema_matches_port_vale_pdf():
+    fields = option_fields()
+    gk_physical = {row["id"] for row in physical_field_defs_for_position("GOALKEEPER")}
+    assert gk_physical == {"size", "mobility", "strong_foot", "weak_foot"}
+    st_physical = {row["id"] for row in physical_field_defs_for_position("CENTER_FORWARD")}
+    assert st_physical == {
+        "work_rate",
+        "size",
+        "mobility",
+        "strong_foot",
+        "weak_foot",
+        "general_fitness",
+    }
+    gk = profile_entries_for_position("GOALKEEPER")
+    assert [row["id"] for row in gk] == [
+        "shot-stopper",
+        "long-kicking",
+        "short-kicking",
+        "box-goalkeeper",
+        "sweeper-keeper",
+    ]
+    assert "Best saves?" in gk[0]["detailed_prompt"]
+    cb = profile_entries_for_position("CENTRAL_DEFENDER")
+    assert [row["id"] for row in cb] == [
+        "central-dueler",
+        "aerial",
+        "ball-progressor",
+        "right-side-dueler",
+        "left-side-dueler",
+    ]
+    st = profile_entries_for_position("CENTER_FORWARD")
+    assert [row["id"] for row in st] == [
+        "goal-threat",
+        "target-man",
+        "threat-in-behind",
+        "presser",
+        "link-creator",
+    ]
+    assert fields["weak_foot_options"][-1]["id"] == "very_strong"
+    assert "GOALKEEPER" in fields["profiles_by_position"]
+    assert "GOALKEEPER" in fields["physical_by_position"]
 
 
 def test_who_to_scout_shows_the_shared_scout_comment():
@@ -449,7 +500,7 @@ def test_general_report_keeps_physical_and_profile_notes(tmp_path, monkeypatch):
     assert loaded["profiles"]["deep-creator"].startswith("Switches")
 
 
-def test_report_profile_titles_follow_the_player_data(tmp_path, monkeypatch):
+def test_report_profile_titles_follow_port_vale_pdf(tmp_path, monkeypatch):
     from app.player_report_schema import profile_entries_for_position, profile_id
 
     assert profile_id("PV DEEP CREATOR") == "deep-creator"
@@ -461,10 +512,15 @@ def test_report_profile_titles_follow_the_player_data(tmp_path, monkeypatch):
         ],
         player_position="RIGHT_WINGBACK_DEFENDER",
     )
+    assert [row["id"] for row in rows] == ["deep-creator", "defensive", "offensive"]
     labels = [row["label"] for row in rows]
-    assert "Defender" in labels
-    assert "Deep Creator" in labels
-    assert rows[1]["detailed_prompt"].startswith("How do they progress the ball")
+    assert "Deep creator" in labels
+    assert "Defensive" in labels
+    assert "Offensive" in labels
+    # Live Impect score attaches when the key matches a PDF profile.
+    assert rows[0]["score"] == 40
+    assert rows[0]["detailed_prompt"].startswith("Does he create")
+    assert rows[1]["detailed_prompt"].startswith("Back post?")
 
 
 def test_detailed_report_stores_level_rating_and_next_action(tmp_path, monkeypatch):
