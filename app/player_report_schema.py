@@ -1,4 +1,8 @@
-"""Scout prompts and field catalogs for Player Reports."""
+"""Scout prompts and field catalogs for Scouting (Port Vale report format).
+
+Physical attributes and position profiles follow the club scouting PDF:
+general first look + detailed prompts per role.
+"""
 
 from __future__ import annotations
 
@@ -7,52 +11,89 @@ from typing import Any
 
 from app.label_utils import humanize_profile_name, strip_pv_prefix
 
+
 REPORT_POSITIONS: tuple[tuple[str, str, str], ...] = (
     ("GOALKEEPER", "GK", "Goalkeeper"),
-    ("LEFT_WINGBACK_DEFENDER", "LB", "Left back / wing-back"),
+    ("LEFT_WINGBACK_DEFENDER", "LB", "Left back"),
     ("CENTRAL_DEFENDER", "CB", "Centre-back"),
-    ("RIGHT_WINGBACK_DEFENDER", "RB", "Right back / wing-back"),
+    ("RIGHT_WINGBACK_DEFENDER", "RB", "Right back"),
     ("DEFENSE_MIDFIELD", "DM", "Defensive midfield"),
     ("CENTRAL_MIDFIELD", "CM", "Central midfield"),
     ("ATTACKING_MIDFIELD", "AM", "Attacking midfield"),
     ("LEFT_WINGER", "LW", "Left winger"),
     ("RIGHT_WINGER", "RW", "Right winger"),
-    ("CENTER_FORWARD", "ST", "Centre-forward"),
+    ("CENTER_FORWARD", "ST", "Striker"),
 )
 
 POSITION_IDS = {code for code, _short, _label in REPORT_POSITIONS}
 
-PHYSICAL_FIELDS: tuple[tuple[str, str, str, str], ...] = (
-    (
-        "size",
-        "Size",
-        "Frame, height, strength in duels and hold-up.",
-        "How big vs the opponent? Who wins aerials and hold-up, and how — first contact, second ball, pin?",
-    ),
-    (
-        "mobility",
-        "Mobility",
-        "Pace over 10 yards, recovery runs, agility, change of direction.",
-        "Pace over 10 yards, recovery, agility. Did they last, or drop off late? Turn and recover vs a runner?",
-    ),
-    (
-        "foot",
-        "Foot",
-        "Preferred foot — range of pass, cross, shot.",
-        "Preferred foot in this game — range of pass, cross, shot. What actions did they actually play with it?",
-    ),
-    (
-        "weak_foot",
-        "Weak foot",
-        "Can they use it under pressure, or is it a liability?",
-        "Can they use the weak foot under pressure? Did they hide it, or was it a real option to progress or finish?",
-    ),
-    (
-        "physical_ability",
-        "Physical ability",
-        "Stamina, repeated sprints, how they lasted the game.",
-        "Stamina, repeated sprints, duels won and lost. How they lasted — and what dropped off after 70?",
-    ),
+# Field kinds drive the scout UI: text, rating (0-10), foot (L/R), weak_foot enum.
+PHYSICAL_FIELD_DEFS: tuple[dict[str, Any], ...] = (
+    {
+        "id": "work_rate",
+        "label": "Work rate",
+        "kind": "rating",
+        "prompt": "0–10 work rate in this game.",
+        "detailed_prompt": "0–10 work rate — pressing, recovery, and how hard they worked for the team.",
+        "positions": "outfield",
+    },
+    {
+        "id": "size",
+        "label": "Size",
+        "kind": "text",
+        "prompt": "Frame, height, strength.",
+        "detailed_prompt": "How big vs the opponent? Who wins aerials and hold-up?",
+        "positions": "all",
+    },
+    {
+        "id": "mobility",
+        "label": "Mobility",
+        "kind": "rating",
+        "prompt": "0–10 mobility — pace, agility, recovery.",
+        "detailed_prompt": "0–10 mobility — pace over 10 yards, recovery runs, change of direction.",
+        "positions": "all",
+    },
+    {
+        "id": "strong_foot",
+        "label": "Strong foot",
+        "kind": "foot",
+        "prompt": "Preferred / strong foot.",
+        "detailed_prompt": "Strong foot — left or right. What actions did they play with it?",
+        "positions": "all",
+    },
+    {
+        "id": "weak_foot",
+        "label": "Weak foot",
+        "kind": "weak_foot",
+        "prompt": "Poor · Mid · Strong · Very strong",
+        "detailed_prompt": "Weak foot — poor, mid, strong, or very strong. Could they use it under pressure?",
+        "positions": "all",
+    },
+    {
+        "id": "general_fitness",
+        "label": "General fitness",
+        "kind": "rating",
+        "prompt": "0–10 general fitness — lasted the game?",
+        "detailed_prompt": "0–10 general fitness — stamina, repeated sprints, drop-off after 70.",
+        "positions": "outfield",
+    },
+)
+
+PHYSICAL_FIELDS: tuple[tuple[str, str, str, str], ...] = tuple(
+    (row["id"], row["label"], row["prompt"], row["detailed_prompt"])
+    for row in PHYSICAL_FIELD_DEFS
+)
+
+WEAK_FOOT_OPTIONS: tuple[tuple[str, str], ...] = (
+    ("poor", "Poor"),
+    ("mid", "Mid"),
+    ("strong", "Strong"),
+    ("very_strong", "Very strong"),
+)
+
+STRONG_FOOT_OPTIONS: tuple[tuple[str, str], ...] = (
+    ("left", "Left"),
+    ("right", "Right"),
 )
 
 PVFC_LEVELS: tuple[tuple[str, str, str], ...] = (
@@ -91,139 +132,197 @@ PIPELINE_STAGES: tuple[tuple[str, str], ...] = (
     ("not_the_right_fit", "Not the right fit"),
 )
 
+# PDF position profiles — names match the club scouting template.
 POSITION_PROFILES: dict[str, tuple[str, ...]] = {
-    "GOALKEEPER": ("SHOT STOPPING", "BOX GOALKEEPER", "SWEEPER", "BALL PLAYING"),
-    "CENTRAL_DEFENDER": ("DEFENSIVE", "DEFENDER", "PROGRESSOR", "BALL PLAYING"),
+    "GOALKEEPER": (
+        "SHOT STOPPER",
+        "LONG KICKING",
+        "SHORT KICKING",
+        "BOX GOALKEEPER",
+        "SWEEPER KEEPER",
+    ),
     "LEFT_WINGBACK_DEFENDER": (
-        "DEFENDER",
-        "OFFENSIVE",
         "DEEP CREATOR",
-        "WIDE PRESSER",
-        "WIDE BALL CARRIER",
-        "WIDE CREATOR",
+        "DEFENSIVE",
+        "OFFENSIVE",
     ),
     "RIGHT_WINGBACK_DEFENDER": (
-        "DEFENDER",
-        "OFFENSIVE",
         "DEEP CREATOR",
-        "WIDE PRESSER",
-        "WIDE BALL CARRIER",
-        "WIDE CREATOR",
-    ),
-    "DEFENSE_MIDFIELD": ("DEFENSIVE", "PROGRESSOR", "DEEP CREATOR", "PRESSER", "BALL CARRIER"),
-    "CENTRAL_MIDFIELD": (
         "DEFENSIVE",
-        "PROGRESSOR",
-        "DEEP CREATOR",
-        "PRESSER",
-        "BALL CARRIER",
+        "OFFENSIVE",
+    ),
+    "CENTRAL_DEFENDER": (
+        "CENTRAL DUELER",
+        "AERIAL",
+        "BALL PROGRESSOR",
+        "RIGHT SIDE DUELER",
+        "LEFT SIDE DUELER",
+    ),
+    "DEFENSE_MIDFIELD": (
+        "BALL WINNER",
+        "BALL PROGRESSOR",
         "CREATOR",
     ),
-    "ATTACKING_MIDFIELD": ("CREATOR", "GOAL THREAT", "PRESSER", "BALL CARRIER", "THREAT IN BEHIND"),
+    "CENTRAL_MIDFIELD": (
+        "BALL WINNER",
+        "BALL PROGRESSOR",
+        "CREATOR",
+        "RUNNING THREAT",
+        "GOAL THREAT",
+    ),
+    "ATTACKING_MIDFIELD": (
+        "BALL WINNER",
+        "CREATOR",
+        "RUNNING THREAT",
+        "GOAL THREAT",
+    ),
     "LEFT_WINGER": (
-        "WIDE CREATOR",
-        "WIDE GOAL THREAT",
-        "WIDE PRESSER",
-        "WIDE BALL CARRIER",
-        "THREAT IN BEHIND",
+        "BALL CARRIER",
+        "CREATOR",
+        "GOAL THREAT",
+        "PRESSER",
     ),
     "RIGHT_WINGER": (
-        "WIDE CREATOR",
-        "WIDE GOAL THREAT",
-        "WIDE PRESSER",
-        "WIDE BALL CARRIER",
-        "THREAT IN BEHIND",
+        "BALL CARRIER",
+        "CREATOR",
+        "GOAL THREAT",
+        "PRESSER",
     ),
-    "CENTER_FORWARD": ("GOAL THREAT", "HOLD UP", "PRESSER", "THREAT IN BEHIND", "BALL CARRIER"),
+    "CENTER_FORWARD": (
+        "GOAL THREAT",
+        "TARGET MAN",
+        "THREAT IN BEHIND",
+        "PRESSER",
+        "LINK / CREATOR",
+    ),
 }
 
+PROFILE_LABELS: dict[str, str] = {
+    "shot-stopper": "Shot stopper",
+    "long-kicking": "Long kicking",
+    "short-kicking": "Short kicking",
+    "box-goalkeeper": "Box goalkeeper",
+    "sweeper-keeper": "Sweeper keeper",
+    "deep-creator": "Deep creator",
+    "defensive": "Defensive",
+    "offensive": "Offensive",
+    "central-dueler": "Central dueler",
+    "aerial": "Aerial",
+    "ball-progressor": "Ball progressor",
+    "right-side-dueler": "Right side dueler (if back 3)",
+    "left-side-dueler": "Left side dueler (if back 3)",
+    "ball-winner": "Ball winner",
+    "creator": "Creator",
+    "running-threat": "Running threat",
+    "goal-threat": "Goal threat",
+    "ball-carrier": "Ball carrier",
+    "presser": "Presser",
+    "target-man": "Target man",
+    "threat-in-behind": "Threat in behind",
+    "link-creator": "Link / creator",
+}
+
+# Detailed prompts from the PDF; general prompts are short first-look versions.
 PROFILE_PROMPTS: dict[str, dict[str, str]] = {
-    "defender": {
-        "general": "1v1s, positioning, and how they dealt with their man.",
-        "detailed": "How do they defend 1v1 and in the box? What sort of headers do they win — attacking, defensive, flick-ons? Timing of tackles and recovery runs?",
+    "shot-stopper": {
+        "general": "Shot stopping — first look.",
+        "detailed": "Best saves? Weakness?",
     },
-    "defensive": {
-        "general": "How they protected the box and won the ball.",
-        "detailed": "When do they step in vs sit off? What sort of headers do they win? Are they aggressive or calculated in duels?",
+    "long-kicking": {
+        "general": "Long kicking — first look.",
+        "detailed": "Accurate? Distance?",
     },
-    "offensive": {
-        "general": "Overlaps, underlaps, end product from wide areas.",
-        "detailed": "How do they progress the ball from that side — carry, combination, or cross? What type of crosses / cut-backs? End product vs just occupancy?",
-    },
-    "deep-creator": {
-        "general": "Progressive passing and how they found teammates.",
-        "detailed": "How do they progress the ball — line-break, switch, or set? What type of chances did they create, and from where? What happens when they are pressed?",
-    },
-    "creator": {
-        "general": "Chance created, final ball, combinations.",
-        "detailed": "How do they progress the ball into the box? Slip, cross, carry? Who did they find, and was it repeatable?",
-    },
-    "wide-creator": {
-        "general": "Crossing, cut-backs, and chance created from the touchline.",
-        "detailed": "How do they progress the ball from wide — early cross, drive inside, or combination? Quality of the delivery and who they aimed for.",
-    },
-    "progressor": {
-        "general": "Carries and forward passing through the lines.",
-        "detailed": "How do they progress the ball — carry through contact, or pass? Which line did they break, and what was the next action after?",
-    },
-    "ball-carrier": {
-        "general": "Carries into space and through contact.",
-        "detailed": "Do they carry into space or through contact? What is the end product after the carry? Where do they lose it?",
-    },
-    "wide-ball-carrier": {
-        "general": "Drives from wide, 1v1s, and carrying inside.",
-        "detailed": "How do they beat their full-back? Carry inside or stay wide? What happens after the take-on?",
-    },
-    "ball-playing": {
-        "general": "Distribution under pressure, range, and composure.",
-        "detailed": "How do they progress the ball from the back? Long vs short, weak-side switches, mistakes when pressed?",
-    },
-    "presser": {
-        "general": "Pressing triggers, work rate, and ball wins.",
-        "detailed": "When do they jump? Do they recover if they miss? Is the press coordinated or a solo hunt?",
-    },
-    "wide-presser": {
-        "general": "Pressing from wide, tracking, and ball wins.",
-        "detailed": "Do they lock the full-back in? Recovery if they dive in? How do they defend the counter after a high press?",
-    },
-    "goal-threat": {
-        "general": "Movement for shots, finishing, box presence.",
-        "detailed": "What type of chances — poacher, strike from range, header? Movement in the box and finishing technique. Missed looks?",
-    },
-    "wide-goal-threat": {
-        "general": "Arrivals in the box and finishing from wide.",
-        "detailed": "How do they get shots away from wide or the back post? Timing of arrivals vs staying outside.",
-    },
-    "threat-in-behind": {
-        "general": "Runs in behind, timing, and finishing those looks.",
-        "detailed": "When do they go? Do they hold the line or go early? Quality of the finish after the run.",
-    },
-    "hold-up": {
-        "general": "Back to goal, pinning, and link play.",
-        "detailed": "Who do they link with? Can they pin a centre-half and play around the corner? What sort of headers do they win?",
-    },
-    "shot-stopping": {
-        "general": "Shot stopping, positioning, and handling.",
-        "detailed": "What type of saves — reflex, 1v1, or claims? Handling under pressure and decision to come?",
+    "short-kicking": {
+        "general": "Short kicking — first look.",
+        "detailed": "Join the backline?",
     },
     "box-goalkeeper": {
-        "general": "Command of the box, claims, and punching.",
-        "detailed": "Do they claim or punch? Starting position on crosses. Communication with the back line?",
+        "general": "Box goalkeeper — first look.",
+        "detailed": "Catch or punch?",
     },
-    "sweeper": {
-        "general": "Sweeps behind the line and starting position.",
-        "detailed": "When do they leave the line? Speed off the line vs staying. Distribution after the sweep?",
+    "sweeper-keeper": {
+        "general": "Sweeper keeper — first look.",
+        "detailed": "How aggressive?",
     },
-    "link-deep-play-maker": {
-        "general": "Tempo, receiving on the half-turn, progressive passing.",
-        "detailed": "How do they progress the ball from deep? Who do they find, and do they slow or speed the game?",
+    "deep-creator": {
+        "general": "Deep creator — first look.",
+        "detailed": "Does he create and how?",
+    },
+    "defensive": {
+        "general": "Defensive — first look.",
+        "detailed": "Back post? Aerial? Dueler? High or low?",
+    },
+    "offensive": {
+        "general": "Offensive — first look.",
+        "detailed": "What types of chances? Ball carrier?",
+    },
+    "central-dueler": {
+        "general": "Central dueler — first look.",
+        "detailed": "Front foot or sweeper?",
+    },
+    "aerial": {
+        "general": "Aerial — first look.",
+        "detailed": "How aggressive? Types of headers?",
+    },
+    "ball-progressor": {
+        "general": "Ball progressor — first look.",
+        "detailed": "Short or long? Create? Sideways or forwards? Where from?",
+    },
+    "right-side-dueler": {
+        "general": "Right side dueler (if back 3) — first look.",
+        "detailed": "How does he duel on the right side of a back three?",
+    },
+    "left-side-dueler": {
+        "general": "Left side dueler (if back 3) — first look.",
+        "detailed": "How does he duel on the left side of a back three?",
+    },
+    "ball-winner": {
+        "general": "Ball winner — first look.",
+        "detailed": "High or low? Aggressive? Offensive interventions?",
+    },
+    "creator": {
+        "general": "Creator — first look.",
+        "detailed": "Does he break lines? Types of chances? Crosses?",
+    },
+    "running-threat": {
+        "general": "Running threat — first look.",
+        "detailed": "Into channels? Does he break lines?",
+    },
+    "goal-threat": {
+        "general": "Goal threat — first look.",
+        "detailed": "Types of shots / chances? How can we get him to score?",
+    },
+    "ball-carrier": {
+        "general": "Ball carrier — first look.",
+        "detailed": "Does he beat them?",
+    },
+    "presser": {
+        "general": "Presser — first look.",
+        "detailed": "Types of pressing? Does he work back? Regains? 2nd balls?",
+    },
+    "target-man": {
+        "general": "Target man — first look.",
+        "detailed": "Big? Feet or head? Aggressive?",
+    },
+    "threat-in-behind": {
+        "general": "Threat in behind — first look.",
+        "detailed": "Types of runs? Channels or in behind?",
+    },
+    "link-creator": {
+        "general": "Link / creator — first look.",
+        "detailed": "What sort of chances does he create?",
     },
 }
 
 GENERIC_PROMPTS = {
     "general": "What did you see in this part of his game?",
-    "detailed": "Break this profile down. Why did it look good or poor? Specific actions — how they progress the ball, what headers they win, 1v1s — not just a score.",
+    "detailed": "Break this profile down. Be specific — actions, not just a score.",
 }
+
+_WEAK_FOOT_IDS = {key for key, _label in WEAK_FOOT_OPTIONS}
+_STRONG_FOOT_IDS = {key for key, _label in STRONG_FOOT_OPTIONS}
+_RATING_IDS = {row["id"] for row in PHYSICAL_FIELD_DEFS if row["kind"] == "rating"}
+_ALL_PHYSICAL_IDS = {row["id"] for row in PHYSICAL_FIELD_DEFS}
 
 
 def profile_id(name: str) -> str:
@@ -232,12 +331,40 @@ def profile_id(name: str) -> str:
     return token or "profile"
 
 
+def profile_label(name: str) -> str:
+    pid = profile_id(name)
+    if pid in PROFILE_LABELS:
+        return PROFILE_LABELS[pid]
+    return humanize_profile_name(name)
+
+
 def prompts_for(name: str) -> dict[str, str]:
     return dict(PROFILE_PROMPTS.get(profile_id(name)) or GENERIC_PROMPTS)
 
 
+def _is_goalkeeper(position: str) -> bool:
+    return clean_position(position) == "GOALKEEPER"
+
+
+def physical_field_defs_for_position(position: str = "") -> list[dict[str, Any]]:
+    gk = _is_goalkeeper(position)
+    out: list[dict[str, Any]] = []
+    for row in PHYSICAL_FIELD_DEFS:
+        scope = row["positions"]
+        if scope == "all":
+            out.append(dict(row))
+        elif scope == "outfield" and not gk:
+            out.append(dict(row))
+        elif scope == "gk" and gk:
+            out.append(dict(row))
+    # When no position picked yet, show the full outfield set so scouts see every prompt.
+    if not clean_position(position):
+        return [dict(row) for row in PHYSICAL_FIELD_DEFS]
+    return out
+
+
 def empty_physical() -> dict[str, str]:
-    return {key: "" for key, *_rest in PHYSICAL_FIELDS}
+    return {key: "" for key in _ALL_PHYSICAL_IDS}
 
 
 def empty_psychology() -> dict[str, str]:
@@ -246,11 +373,67 @@ def empty_psychology() -> dict[str, str]:
     return out
 
 
+def _clean_rating(value: Any) -> str:
+    if value in (None, ""):
+        return ""
+    try:
+        rating = float(value)
+    except (TypeError, ValueError):
+        text = str(value or "").strip()
+        return text[:2000] if text else ""
+    if rating < 0 or rating > 10:
+        return ""
+    if rating == int(rating):
+        return str(int(rating))
+    return str(round(rating, 1))
+
+
+def _clean_weak_foot(value: Any) -> str:
+    token = str(value or "").strip().casefold().replace(" ", "_").replace("-", "_")
+    aliases = {
+        "verystrong": "very_strong",
+        "v_strong": "very_strong",
+        "medium": "mid",
+        "avg": "mid",
+        "average": "mid",
+    }
+    token = aliases.get(token, token)
+    return token if token in _WEAK_FOOT_IDS else (str(value or "").strip()[:2000] if value else "")
+
+
+def _clean_strong_foot(value: Any) -> str:
+    token = str(value or "").strip().casefold()
+    if token in _STRONG_FOOT_IDS:
+        return token
+    if token in {"l", "lf", "left foot", "left-footed"}:
+        return "left"
+    if token in {"r", "rf", "right foot", "right-footed"}:
+        return "right"
+    # Legacy free-text "foot" answers — keep as note text if not L/R.
+    text = str(value or "").strip()
+    return text[:2000] if text else ""
+
+
 def clean_physical(row: Any) -> dict[str, str]:
     source = row if isinstance(row, dict) else {}
     out = empty_physical()
-    for key, *_rest in PHYSICAL_FIELDS:
-        out[key] = str(source.get(key) or "").strip()[:2000]
+
+    # Migrate older keys from the previous form.
+    if "strong_foot" not in source and source.get("foot"):
+        source = {**source, "strong_foot": source.get("foot")}
+    if "general_fitness" not in source and source.get("physical_ability"):
+        source = {**source, "general_fitness": source.get("physical_ability")}
+
+    for key in _ALL_PHYSICAL_IDS:
+        raw = source.get(key)
+        if key in _RATING_IDS:
+            out[key] = _clean_rating(raw)
+        elif key == "weak_foot":
+            out[key] = _clean_weak_foot(raw)
+        elif key == "strong_foot":
+            out[key] = _clean_strong_foot(raw)
+        else:
+            out[key] = str(raw or "").strip()[:2000]
     return out
 
 
@@ -315,56 +498,66 @@ def profile_entries_for_position(
     player_position: str = "",
 ) -> list[dict[str, Any]]:
     wanted = clean_position(position) or clean_position(player_position)
-    live: list[dict[str, Any]] = []
-    same_role = bool(wanted) and clean_position(player_position) == wanted
-    if same_role:
-        for row in player_profiles or []:
-            if not isinstance(row, dict):
-                continue
-            raw = str(row.get("key") or row.get("label") or "").strip()
-            if not raw:
-                continue
-            live.append(
-                {
-                    "id": profile_id(raw),
-                    "key": raw,
-                    "label": humanize_profile_name(str(row.get("label") or raw)),
-                    "score": row.get("score"),
-                    "general_prompt": prompts_for(raw)["general"],
-                    "detailed_prompt": prompts_for(raw)["detailed"],
-                }
-            )
-    if live:
-        return live
+    # Always use the PDF template for the selected role — scout notes attach to
+    # those headings. Live Impect profile scores are optional extras only when
+    # the player's listed position matches the role being reported.
     fallback: list[dict[str, Any]] = []
     for name in POSITION_PROFILES.get(wanted or "", ()):
         fallback.append(
             {
                 "id": profile_id(name),
                 "key": name,
-                "label": humanize_profile_name(name),
+                "label": profile_label(name),
                 "score": None,
                 "general_prompt": prompts_for(name)["general"],
                 "detailed_prompt": prompts_for(name)["detailed"],
             }
         )
+    if not fallback:
+        return fallback
+
+    same_role = bool(wanted) and clean_position(player_position) == wanted
+    if same_role and player_profiles:
+        by_id = {row["id"]: row for row in fallback}
+        for row in player_profiles:
+            if not isinstance(row, dict):
+                continue
+            raw = str(row.get("key") or row.get("label") or "").strip()
+            if not raw:
+                continue
+            pid = profile_id(raw)
+            if pid in by_id and row.get("score") is not None:
+                by_id[pid]["score"] = row.get("score")
     return fallback
 
 
 def option_fields() -> dict[str, Any]:
+    physical_rows = [
+        {
+            "id": row["id"],
+            "label": row["label"],
+            "kind": row["kind"],
+            "prompt": row["prompt"],
+            "detailed_prompt": row["detailed_prompt"],
+            "positions": row["positions"],
+        }
+        for row in PHYSICAL_FIELD_DEFS
+    ]
     return {
         "positions": [
             {"id": code, "short": short, "label": label}
             for code, short, label in REPORT_POSITIONS
         ],
-        "physical": [
-            {
-                "id": key,
-                "label": label,
-                "prompt": prompt,
-                "detailed_prompt": detailed,
-            }
-            for key, label, prompt, detailed in PHYSICAL_FIELDS
+        "physical": physical_rows,
+        "physical_by_position": {
+            code: physical_field_defs_for_position(code)
+            for code, _short, _label in REPORT_POSITIONS
+        },
+        "weak_foot_options": [
+            {"id": key, "label": label} for key, label in WEAK_FOOT_OPTIONS
+        ],
+        "strong_foot_options": [
+            {"id": key, "label": label} for key, label in STRONG_FOOT_OPTIONS
         ],
         "psychology": [
             {"id": key, "label": label, "prompt": prompt}

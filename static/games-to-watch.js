@@ -459,7 +459,7 @@
             `).join("")}
           </div>
           <button type="submit" class="gw-assign__go" id="gwAssignBtn">Assign to Fixture Planner</button>
-          <a href="/player-reports?fixture=${encodeURIComponent(sheet.fixture_id || "")}">Player Reports →</a>
+          <a href="/player-reports?fixture=${encodeURIComponent(sheet.fixture_id || "")}">Scouting →</a>
           <a href="/fixture-planner">Open planner</a>
         </div>
       </form>

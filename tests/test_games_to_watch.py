@@ -81,7 +81,7 @@ def test_page_is_a_ranked_list_with_team_sheet_and_planner_assign():
     assert "/api/games-to-watch/assign" in js
     assert "/api/games-to-watch/fixture" in js
     assert "/player-reports?fixture=" in js
-    assert "Player Reports →" in js
+    assert "Scouting →" in js
     assert "VIDEO" in js
     assert "watch_pct" in js
     assert "is-loan" in js

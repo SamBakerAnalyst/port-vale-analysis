@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 
 
 def _attach_recruitment_notes(players: list[dict[str, Any]]) -> None:
-    """Show the same scout comments that live on Scoutable Teams / Player Reports."""
+    """Show the same scout comments that live on Scoutable Teams / Scouting."""
     from app.scoutable_teams import attach_scout_notes_to_players
 
     attach_scout_notes_to_players(players)

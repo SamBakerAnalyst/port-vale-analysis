@@ -542,11 +542,11 @@ APPS: list[dict[str, Any]] = [
     {
         "id": "video-watch",
         "group": "recruitment",
-        "title": "Player Reports",
+        "title": "Scouting",
         "description": (
-            "Watch a game with both team sheets. Open a player for the general report, "
-            "detailed report, Scoutable Teams notes, and player CMS. Match weather and "
-            "pitch are shared across every report on that game."
+            "Watch a game with both team sheets. Set each player's position and file a "
+            "Port Vale scouting report — physical ratings, role profiles, PVFC level, "
+            "and next action. Match weather and pitch are shared across that game."
         ),
         "href": "/player-reports",
         "icon": "📝",
@@ -559,6 +559,25 @@ APPS: list[dict[str, Any]] = [
             "/api/video-watch",
         ),
         "router": "video_watch",
+    },
+    {
+        "id": "reports-library",
+        "group": "recruitment",
+        "title": "Reports Library",
+        "description": (
+            "Every saved Scouting report. Filter by match rating, PVFC level, "
+            "position, next action, and scout."
+        ),
+        "href": "/reports-library",
+        "icon": "📚",
+        "accent": "#c4b5fd",
+        "tags": ["Reports", "Library", "Scouting", "Scores"],
+        "roles": ("scouts", "admin"),
+        "api_prefixes": (
+            "/reports-library",
+            "/api/reports-library",
+        ),
+        "router": "reports_library",
     },
     {
         "id": "squad-planner",
@@ -991,6 +1010,7 @@ LIVE_ESSENTIAL_IDS = frozenset(
         "scoutable-teams",
         "games-to-watch",
         "video-watch",
+        "reports-library",
         "loans-watch",
         # Scouts
         "fixture-planner",

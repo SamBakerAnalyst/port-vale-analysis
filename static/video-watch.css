@@ -1182,6 +1182,14 @@ a:hover { text-decoration: underline; }
   border-color: var(--text);
 }
 .vw-rating button { min-width: 2.1rem; justify-content: center; }
+.vw-physical {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.55rem 0;
+  border-top: 1px solid var(--line);
+}
+.vw-physical p { margin: 0; color: var(--muted); font-size: 0.88rem; line-height: 1.35; }
+.vw-physical strong { color: var(--text); margin-right: 0.35rem; }
 .vw-profile-head {
   display: flex;
   justify-content: space-between;

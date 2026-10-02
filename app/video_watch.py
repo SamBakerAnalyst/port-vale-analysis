@@ -1,4 +1,4 @@
-"""Player Reports — watch a fixture with both team sheets and a shared player file.
+"""Scouting — watch a fixture with both team sheets and a shared player file.
 
 Notes written here land on Scoutable Teams, Who to Scout, and the player page.
 """
@@ -450,7 +450,7 @@ def register_video_watch_routes(app: FastAPI) -> None:
     @app.get("/player-reports", response_class=HTMLResponse)
     def player_reports_page() -> HTMLResponse:
         if not page_path.is_file():
-            raise HTTPException(status_code=404, detail="Player Reports UI not found.")
+            raise HTTPException(status_code=404, detail="Scouting UI not found.")
         return HTMLResponse(page_path.read_text(encoding="utf-8"))
 
     @app.get("/video-watch")
@@ -598,6 +598,13 @@ def register_video_watch_routes(app: FastAPI) -> None:
             position_in_game=body.position_in_game,
             physical=body.physical,
             profiles=body.profiles,
+            name=body.name,
+            club=body.club,
+            league=getattr(body, "league", "") or "",
+            fixture_label=body.fixture_label,
+            position=getattr(body, "position", "") or body.position_in_game,
+            position_label=getattr(body, "position_label", "") or "",
+            age=getattr(body, "age", None),
             staff=staff,
         )
         player = _player_after_report_save(
@@ -636,6 +643,13 @@ def register_video_watch_routes(app: FastAPI) -> None:
             add_to_pipeline=body.add_to_pipeline,
             pipeline_stage=body.pipeline_stage,
             next_action=body.next_action,
+            name=body.name,
+            club=body.club,
+            league=body.league,
+            fixture_label=body.fixture_label,
+            position=body.position_in_game or body.position,
+            position_label=body.position_label,
+            age=body.age,
             staff=staff,
         )
         pipeline = None

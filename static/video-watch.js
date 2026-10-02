@@ -302,8 +302,15 @@
         pitch_note: document.getElementById("vwPitchNote")?.value ?? state.generalDraft.pitch_note,
         notes: document.getElementById("vwGeneralNotes")?.value ?? state.generalDraft.notes,
         position_in_game: document.getElementById("vwGamePosition")?.value ?? state.generalDraft.position_in_game,
-        physical: collectKeyedFields("data-physical"),
-        profiles: { ...state.generalDraft.profiles, ...collectKeyedFields("data-profile") },
+        physical: {
+          ...(state.generalDraft.physical || {}),
+          ...collectKeyedFields("data-physical"),
+        },
+        profiles: keepProfilesForPosition(
+          { ...state.generalDraft.profiles, ...collectKeyedFields("data-profile") },
+          document.getElementById("vwGamePosition")?.value || state.generalDraft.position_in_game,
+          state.player
+        ),
       };
     }
     const detailedForm = document.getElementById("vwDetailedForm");
@@ -311,8 +318,15 @@
       state.detailedDraft = {
         ...state.detailedDraft,
         position_in_game: document.getElementById("vwDetailedPosition")?.value ?? state.detailedDraft.position_in_game,
-        physical: collectKeyedFields("data-detailed-physical"),
-        profiles: { ...state.detailedDraft.profiles, ...collectKeyedFields("data-detailed-profile") },
+        physical: {
+          ...(state.detailedDraft.physical || {}),
+          ...collectKeyedFields("data-detailed-physical"),
+        },
+        profiles: keepProfilesForPosition(
+          { ...state.detailedDraft.profiles, ...collectKeyedFields("data-detailed-profile") },
+          document.getElementById("vwDetailedPosition")?.value || state.detailedDraft.position_in_game,
+          state.player
+        ),
         psychology: {
           ...state.detailedDraft.psychology,
           notes: document.getElementById("vwPsychNotes")?.value ?? state.detailedDraft.psychology?.notes ?? "",
@@ -511,7 +525,7 @@
     els.desk.classList.toggle("hidden", view !== "desk");
     if (view === "leagues") els.title.textContent = "Which league are you watching?";
     if (view === "fixtures") els.title.textContent = "Which match interests you?";
-    if (view === "desk") els.title.textContent = fixtureLabel(state.sheet) || "Player Reports";
+    if (view === "desk") els.title.textContent = fixtureLabel(state.sheet) || "Scouting";
     renderTools();
   }
 
@@ -1308,14 +1322,33 @@
   }
 
   function profilesFor(position, player) {
-    const wanted = position || player?.position || "";
-    const byPos = player?.options?.profiles_by_position || {};
+    const wanted = position || "";
+    if (!wanted) return [];
+    // Always use the Port Vale PDF catalog for the selected role — never the
+    // live Impect profile list (that is where Ball Carrier was leaking onto CM).
+    const byPos =
+      player?.options?.profiles_by_position ||
+      state.player?.options?.profiles_by_position ||
+      {};
+    const catalog = byPos[wanted] || [];
+    if (!catalog.length) return [];
     const live = player?.report_profiles || [];
-    const playerPos = player?.position || "";
-    if (wanted && wanted === playerPos && live.length) return live;
-    if (wanted && byPos[wanted]?.length) return byPos[wanted];
-    if (live.length) return live;
-    return byPos[wanted] || [];
+    if (!live.length) return catalog;
+    const scoreById = Object.fromEntries(
+      live.filter((row) => row && row.id).map((row) => [row.id, row.score])
+    );
+    return catalog.map((row) =>
+      scoreById[row.id] != null ? { ...row, score: scoreById[row.id] } : row
+    );
+  }
+
+  function keepProfilesForPosition(profiles, position, player) {
+    const allowed = new Set(profilesFor(position, player).map((row) => row.id));
+    const source = profiles || {};
+    if (!allowed.size) return {};
+    return Object.fromEntries(
+      Object.entries(source).filter(([key]) => allowed.has(key))
+    );
   }
 
   function chipRow(kind, value, rows) {
@@ -1328,19 +1361,71 @@
       .join("")}</div>`;
   }
 
-  function physicalFields(fields, values, attr, promptKey) {
-    const rows = fields.length ? fields : [
-      { id: "size", label: "Size", prompt: "Frame, height, strength in duels and hold-up.", detailed_prompt: "How big vs the opponent? Who wins aerials and hold-up, and how?" },
-      { id: "mobility", label: "Mobility", prompt: "Pace, recovery runs, agility.", detailed_prompt: "Pace over 10 yards, recovery, agility. Did they last, or drop off late?" },
-      { id: "foot", label: "Foot", prompt: "Preferred foot — range of pass, cross, shot.", detailed_prompt: "Preferred foot in this game — what actions did they actually play with it?" },
-      { id: "weak_foot", label: "Weak foot", prompt: "Can they use it under pressure?", detailed_prompt: "Can they use the weak foot under pressure, or did they hide it?" },
-      { id: "physical_ability", label: "Physical ability", prompt: "Stamina, repeated sprints, how they lasted.", detailed_prompt: "Stamina, repeated sprints, duels. How they lasted — and what dropped off after 70?" },
-    ];
+  function physicalFieldsFor(position) {
+    const byPos = state.player?.options?.physical_by_position || {};
+    if (position && byPos[position]?.length) return byPos[position];
+    const all = optionList("physical");
+    if (!position) return all;
+    if (position === "GOALKEEPER") {
+      return all.filter((row) => row.positions === "all" || row.positions === "gk");
+    }
+    return all.filter((row) => row.positions === "all" || row.positions === "outfield");
+  }
+
+  function physicalFields(fields, values, attr, promptKey, chipPrefix) {
+    const rows = fields.length
+      ? fields
+      : [
+          { id: "work_rate", label: "Work rate", kind: "rating", prompt: "0–10 work rate.", detailed_prompt: "0–10 work rate." },
+          { id: "size", label: "Size", kind: "text", prompt: "Frame, height, strength.", detailed_prompt: "How big vs the opponent?" },
+          { id: "mobility", label: "Mobility", kind: "rating", prompt: "0–10 mobility.", detailed_prompt: "0–10 mobility." },
+          { id: "strong_foot", label: "Strong foot", kind: "foot", prompt: "Left or right.", detailed_prompt: "Strong foot." },
+          { id: "weak_foot", label: "Weak foot", kind: "weak_foot", prompt: "Poor · Mid · Strong · Very strong", detailed_prompt: "Weak foot." },
+          { id: "general_fitness", label: "General fitness", kind: "rating", prompt: "0–10 fitness.", detailed_prompt: "0–10 fitness." },
+        ];
+    const footOpts = optionList("strong_foot_options").length
+      ? optionList("strong_foot_options")
+      : [
+          { id: "left", label: "Left" },
+          { id: "right", label: "Right" },
+        ];
+    const weakOpts = optionList("weak_foot_options").length
+      ? optionList("weak_foot_options")
+      : [
+          { id: "poor", label: "Poor" },
+          { id: "mid", label: "Mid" },
+          { id: "strong", label: "Strong" },
+          { id: "very_strong", label: "Very strong" },
+        ];
     return rows
       .map((row) => {
         const prompt = row[promptKey] || row.prompt || "";
+        const value = values[row.id] || "";
+        const kind = row.kind || "text";
+        if (kind === "rating") {
+          const buttons = Array.from({ length: 11 }, (_, idx) => {
+            const on = String(value) === String(idx);
+            return `<button type="button" class="${on ? "is-on" : ""}" data-chip="${escapeHtml(chipPrefix)}:${escapeHtml(row.id)}" data-value="${idx}">${idx}</button>`;
+          }).join("");
+          return `<div class="vw-physical">
+            <p><strong>${escapeHtml(row.label)}</strong> ${escapeHtml(prompt)}</p>
+            <div class="vw-chips vw-rating" role="group">${buttons}</div>
+          </div>`;
+        }
+        if (kind === "foot") {
+          return `<div class="vw-physical">
+            <p><strong>${escapeHtml(row.label)}</strong> ${escapeHtml(prompt)}</p>
+            ${chipRow(`${chipPrefix}:${row.id}`, value, footOpts)}
+          </div>`;
+        }
+        if (kind === "weak_foot") {
+          return `<div class="vw-physical">
+            <p><strong>${escapeHtml(row.label)}</strong> ${escapeHtml(prompt)}</p>
+            ${chipRow(`${chipPrefix}:${row.id}`, value, weakOpts)}
+          </div>`;
+        }
         return `<label>${escapeHtml(row.label)}
-        <textarea ${attr}="${escapeHtml(row.id)}" class="vw-notes-box ${promptKey === "detailed_prompt" ? "vw-notes-box--long" : ""}" maxlength="2000" placeholder="${escapeHtml(prompt)}">${escapeHtml(values[row.id] || "")}</textarea>
+        <textarea ${attr}="${escapeHtml(row.id)}" class="vw-notes-box ${promptKey === "detailed_prompt" ? "vw-notes-box--long" : ""}" maxlength="2000" placeholder="${escapeHtml(prompt)}">${escapeHtml(value)}</textarea>
       </label>`;
       })
       .join("");
@@ -1348,12 +1433,12 @@
 
   function profileFields(profiles, values, attr, promptKey) {
     if (!profiles.length) {
-      return `<p>Pick a position in the game to load the data profiles for that role.</p>`;
+      return `<p>Pick a position in the game to load the profiles for that role.</p>`;
     }
     return profiles
       .map((row) => {
         const prompt = row[promptKey] || row.general_prompt || (promptKey === "detailed_prompt"
-          ? "How do they progress the ball? What sort of headers do they win? Why did this look good or poor?"
+          ? "Break this profile down. Be specific."
           : "What did you see in this part of his game?");
         const score = row.score != null ? `<em>${escapeHtml(String(row.score))}</em>` : "";
         return `<label>
@@ -1407,11 +1492,12 @@
     const draft = state.generalDraft;
     const position = draft.position_in_game || player?.position || "";
     const profiles = profilesFor(position, player);
+    const physical = physicalFieldsFor(position);
     return `<form class="vw-report" id="vwGeneralForm">
       <section class="vw-report-block">
         <div>
           <h3>General</h3>
-          <p>Asked on every position. Match conditions are shared across every player report on this game.</p>
+          <p>First look. Set the position in game — physical questions and role profiles follow that role.</p>
         </div>
         ${matchConditionsBlock(player, draft)}
         <label>Position in game
@@ -1421,14 +1507,16 @@
       <section class="vw-report-block">
         <div>
           <h3>Physical</h3>
-          <p>Size, mobility, foot, weak foot, physical ability — same questions for every role.</p>
+          <p>${position === "GOALKEEPER"
+            ? "Size, mobility (0–10), strong foot, weak foot."
+            : "Work rate, size, mobility, strong foot, weak foot, general fitness — ratings where the template asks 0–10."}</p>
         </div>
-        ${physicalFields(optionList("physical"), draft.physical || {}, "data-physical", "prompt")}
+        ${physicalFields(physical, draft.physical || {}, "data-physical", "prompt", "physical")}
       </section>
       <section class="vw-report-block">
         <div>
-          <h3>Data profiles</h3>
-          <p>Titles match the data profiles for this position. First look only — Detailed asks for more.</p>
+          <h3>Profiles</h3>
+          <p>Role profiles for this position. First look only — Detailed asks the specific follow-ups.</p>
         </div>
         ${profileFields(profiles, draft.profiles || {}, "data-profile", "general_prompt")}
       </section>
@@ -1507,14 +1595,16 @@
       <section class="vw-report-block">
         <div>
           <h3>Physical</h3>
-          <p>Size, mobility, foot, weak foot, physical ability — more detail than the first look.</p>
+          <p>${position === "GOALKEEPER"
+            ? "Size, mobility, strong foot, weak foot — more detail than the first look."
+            : "Work rate, size, mobility, strong foot, weak foot, general fitness — more detail than the first look."}</p>
         </div>
-        ${physicalFields(optionList("physical"), draft.physical || {}, "data-detailed-physical", "detailed_prompt")}
+        ${physicalFields(physicalFieldsFor(position), draft.physical || {}, "data-detailed-physical", "detailed_prompt", "detailed-physical")}
       </section>
       <section class="vw-report-block">
         <div>
           <h3>Break down the profiles</h3>
-          <p>Why did he progress the ball well? Weaknesses? Be specific, not just the data score.</p>
+          <p>Answer the follow-up for each profile — best saves, types of chances, how he progresses the ball.</p>
         </div>
         ${profileFields(profiles, draft.profiles || {}, "data-detailed-profile", "detailed_prompt")}
       </section>
@@ -1751,6 +1841,18 @@
             ...(state.detailedDraft.psychology || {}),
             [key]: value,
           };
+        } else if (kind.startsWith("physical:")) {
+          const key = kind.slice("physical:".length);
+          state.generalDraft.physical = {
+            ...(state.generalDraft.physical || {}),
+            [key]: value,
+          };
+        } else if (kind.startsWith("detailed-physical:")) {
+          const key = kind.slice("detailed-physical:".length);
+          state.detailedDraft.physical = {
+            ...(state.detailedDraft.physical || {}),
+            [key]: value,
+          };
         }
         renderProfile();
       });
@@ -1849,9 +1951,13 @@
           profiles: state.generalDraft.profiles,
           name: player.name || "",
           club: player.club || player.team_name || "",
+          league: player.league || state.sheet?.league || "",
           home_name: ctx.home_name,
           away_name: ctx.away_name,
           sheet_side: ctx.sheet_side,
+          position: player.position || "",
+          position_label: player.position_label || "",
+          age: player.age ?? null,
         }),
       });
       applyMatchConditions(data.match_conditions);

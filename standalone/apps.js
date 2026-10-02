@@ -413,12 +413,22 @@ window.IMPECT_APPS = [
   {
     "id": "video-watch",
     "group": "recruitment",
-    "title": "Player Reports",
-    "description": "Watch a game with both team sheets. Open a player for the general report, detailed report, Scoutable Teams notes, and player CMS. Match weather and pitch are shared across every report on that game.",
+    "title": "Scouting",
+    "description": "Watch a game with both team sheets. Set each player's position and file a Port Vale scouting report — physical ratings, role profiles, PVFC level, and next action. Match weather and pitch are shared across that game.",
     "href": "/player-reports",
     "icon": "📝",
     "accent": "#a78bfa",
     "tags": ["Reports", "Notes", "Scouting", "Team sheet"]
+  },
+  {
+    "id": "reports-library",
+    "group": "recruitment",
+    "title": "Reports Library",
+    "description": "Every saved Scouting report. Filter by match rating, PVFC level, position, next action, and scout.",
+    "href": "/reports-library",
+    "icon": "📚",
+    "accent": "#c4b5fd",
+    "tags": ["Reports", "Library", "Scouting", "Scores"]
   },
   {
     "id": "squad-planner",
