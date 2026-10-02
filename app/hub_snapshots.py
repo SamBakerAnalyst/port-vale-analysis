@@ -48,6 +48,8 @@ PLAYER_STAT_KEYS = (
     "position_label",
     "stats_updated_at",
     "stats_score_version",
+    "total_minutes",
+    "stats_club_missing",
 )
 
 
@@ -280,6 +282,7 @@ def refresh_standings() -> dict[str, Any]:
 
 
 def refresh_players() -> dict[str, Any]:
+    from app.player_minutes import apply_scoped_minutes, target_is_loanee
     from app.player_pipelines import (
         _enrich_target_stats,
         _load,
@@ -292,6 +295,16 @@ def refresh_players() -> dict[str, Any]:
     skipped = 0
     failed = 0
     dirty = False
+    feed: list[dict[str, Any]] | None = None
+
+    def _stat_rows() -> list[dict[str, Any]]:
+        nonlocal feed
+        if feed is None:
+            from app.loans_watch import _impect_players
+
+            feed = _impect_players()
+        return feed
+
     for row in store.get("targets") or []:
         if not isinstance(row, dict):
             continue
@@ -302,7 +315,12 @@ def refresh_players() -> dict[str, Any]:
             skipped += 1
             continue
         try:
-            if _stats_need_refresh(row):
+            if target_is_loanee(row):
+                stat_rows = _stat_rows()
+                if stat_rows and apply_scoped_minutes(row, stat_rows, feed_loaded=True):
+                    refreshed += 1
+                    dirty = True
+            elif _stats_need_refresh(row):
                 _enrich_target_stats(row)
                 refreshed += 1
                 dirty = True

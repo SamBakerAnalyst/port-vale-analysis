@@ -33,6 +33,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from app.club_identity import canonical_club_id, same_club
 from app.efl_transfer_report import REPORT_CANDIDATES
 from app.paths import DATA_ROOT, HUB_ROOT
 
@@ -66,22 +67,6 @@ CHECK = "check"
 # and the pools have shown loans in blue for far longer than this code has
 # existed. Painting one red would be a straight regression.
 LOAN_STATUSES = frozenset({LOAN_OUT, LOAN_IN})
-
-# Words that carry no identity, so "Dundalk" and "Dundalk FC" are one club.
-# "United", "City", "Town" and the rest stay: Galway and Galway United are
-# different clubs, and dropping them would merge them.
-_GENERIC_CLUB_WORDS = frozenset({"fc", "afc", "football", "club", "the"})
-
-# Two sources, two house styles. Substring matching absorbs most of it —
-# "Dundalk" against "Dundalk FC", "Bohemian" against "Bohemians" — but an
-# abbreviation that shares no word with the full name has to be spelled out.
-# Impect says "Milton Keynes Dons" where the transfer feed says "MK Dons", and
-# that alone accounted for seven of eighteen amber rows on Staging: players
-# already at the club they had signed for.
-_CLUB_ALIASES = {
-    "mk dons": "milton keynes dons",
-    "mk": "milton keynes dons",
-}
 
 # A seller that is not a club, so there is nothing to match a pool row against.
 _NOT_A_CLUB = frozenset(
@@ -127,26 +112,18 @@ def name_keys(value: str | None) -> list[str]:
 
 
 def club_key(value: str | None) -> str:
-    """A club reduced to its identifying words."""
-    text = _strip_accents(str(value or "")).lower()
-    text = re.sub(r"[^a-z\s]", " ", text)
-    words = [w for w in text.split() if w and w not in _GENERIC_CLUB_WORDS]
-    key = " ".join(words)
-    return _CLUB_ALIASES.get(key, key)
+    """Canonical club id. Spellings match by this id, never by substring."""
+    return canonical_club_id(value)
 
 
 def _clubs_match(seller: str | None, pool_club: str | None) -> bool:
     """Do these two spellings mean the same club?
 
-    Substring either way, because the two sources abbreviate differently:
-    "Dundalk" against "Dundalk FC", "Bohemian" against "Bohemians". It stays
-    tight enough to keep Derry City and Cork City apart, since neither reduces
-    to a bare "city".
+    Equality of the canonical id only. "Dundalk" and "Dundalk FC" share an id.
+    "Dundee" and "Dundee United" do not, and neither name is allowed to match
+    just because one string starts with the other.
     """
-    left, right = club_key(seller), club_key(pool_club)
-    if not left or not right:
-        return False
-    return left == right or left in right or right in left
+    return same_club(seller, pool_club)
 
 
 def _index_record(index: dict[str, list[dict[str, Any]]], name: str, record: dict[str, Any]) -> None:
@@ -178,6 +155,7 @@ def _build_index(report: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
                         # this field is what put Max Merrick — at Hartlepool on
                         # loan from Chelsea — through the permanent-move path.
                         "loan": str(signing.get("kind") or "").strip().lower() == "loan",
+                        "origin": "signed",
                     },
                 )
             for departure in team.get("left") or []:
@@ -192,6 +170,7 @@ def _build_index(report: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
                         "from": team_name,
                         "fee": str(departure.get("fee") or "").strip(),
                         "loan": str(departure.get("kind") or "").strip().lower() == "loan",
+                        "origin": "left",
                     },
                 )
     return index
@@ -248,6 +227,36 @@ def _load_index() -> dict[str, list[dict[str, Any]]]:
         return _index
 
 
+def _without_mirrored_loan_departures(
+    records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Drop a loan 'left' row that is the same move written backwards.
+
+    A signing at the destination and a departure that swaps the two clubs are
+    one loan, not two. The arrival is the direction a scout can act on. A
+    departure with no opposite signing stays.
+    """
+    arrivals = [
+        record
+        for record in records
+        if record.get("loan") and record.get("origin") != "left"
+    ]
+    if not arrivals:
+        return records
+    kept: list[dict[str, Any]] = []
+    for record in records:
+        if record.get("loan") and record.get("origin") == "left":
+            mirrored = any(
+                same_club(record.get("club"), other.get("from"))
+                and same_club(record.get("from"), other.get("club"))
+                for other in arrivals
+            )
+            if mirrored:
+                continue
+        kept.append(record)
+    return kept
+
+
 def lookup(name: str | None, club: str | None) -> dict[str, Any] | None:
     """Where a player has moved to, or None if no move is on record.
 
@@ -271,6 +280,8 @@ def _resolve(name: str | None, club: str | None) -> tuple[dict[str, Any] | None,
             break
     if not matches:
         return None, False
+
+    matches = _without_mirrored_loan_departures(matches)
 
     # Order matters. Selling club first, so a player who moved twice is still
     # caught at his middle club.

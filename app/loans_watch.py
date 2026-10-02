@@ -14,8 +14,10 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
+from app.club_identity import canonical_club_id, same_club
 from app.efl_transfer_report import badge_url, load_report
 from app.paths import STANDALONE_DIR
+from app.player_minutes import aggregate_player_minutes, same_player_name
 from app import transfer_status
 
 logger = logging.getLogger(__name__)
@@ -149,31 +151,15 @@ _POSITION_LABEL_HINTS: tuple[tuple[str, str], ...] = (
 )
 
 SCORING_NOTE = (
-    "Current squad loans from Transfermarkt. Minutes are total played. "
-    "Score is the Impect profile (same overall as Who To Scout), with that "
-    "profile's minutes in brackets. Starts and matches come from Impect when "
-    "the feed has them; otherwise they are estimated from total minutes."
+    "Current squad loans from Transfermarkt. Minutes are total played at the "
+    "loan club this season, not at the parent club or a previous club. "
+    "Score is the Impect profile (same overall as Who To Scout), with minutes "
+    "in that position in brackets. Starts and matches come from the feed when "
+    "it has them; otherwise they are estimated from total minutes and marked est."
 )
 
 _payload_mem: tuple[float, dict[str, Any]] | None = None
 _payload_lock = threading.Lock()
-
-MATCH_KEYS = (
-    "matchCount",
-    "matches",
-    "numberOfMatches",
-    "games",
-    "appearances",
-    "matchAppearances",
-)
-START_KEYS = (
-    "starts",
-    "gamesStarted",
-    "numberOfStarts",
-    "startingAppearances",
-    "matchesStarted",
-)
-
 
 def _as_int(value: Any) -> int | None:
     if value in (None, ""):
@@ -200,16 +186,6 @@ def _clean_text(value: Any) -> str:
 
 def _team_id(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", str(name or "").casefold()).strip("-") or "club"
-
-
-def _row_count(row: dict[str, Any] | None, keys: tuple[str, ...]) -> int | None:
-    if not isinstance(row, dict):
-        return None
-    for key in keys:
-        number = _as_int(row.get(key))
-        if number is not None and number >= 0:
-            return number
-    return None
 
 
 def infer_matches(minutes: int | None, match_count: int | None) -> tuple[int | None, bool]:
@@ -343,42 +319,66 @@ def _match_impect_player(
     name: str,
     club: str,
     players: list[dict[str, Any]],
+    *,
+    parent: str = "",
+    age: int | None = None,
 ) -> dict[str, Any] | None:
-    keys = set(transfer_status.name_keys(name))
-    if not keys:
+    """Join a loan to stats rows at this loan club.
+
+    Provider id is not on the loan list, so the join is the player's name at
+    the canonical loan club. A nickname still has to match the parent club and
+    age when both sides know them. A shared surname is not a join, and a hit
+    at a different club is not used — that would show the parent club's minutes.
+    """
+    if not transfer_status.name_key(name):
         return None
-    last = transfer_status.name_key(name).split()[-1] if transfer_status.name_key(name) else ""
-    club_hits: list[dict[str, Any]] = []
-    last_hits: list[dict[str, Any]] = []
+    exact = set(transfer_status.name_keys(name))
+    hits: list[dict[str, Any]] = []
     for row in players:
+        if not same_player_name(name, str(row.get("name") or "")):
+            continue
+        if not same_club(club, str(row.get("club") or "")):
+            continue
         row_keys = row.get("_name_keys") or set(transfer_status.name_keys(row.get("name")))
-        same_club = transfer_status._clubs_match(club, row.get("club"))
-        if not (row_keys & keys):
-            if same_club and last:
-                entry_last = (
-                    transfer_status.name_key(row.get("name")).split()[-1]
-                    if transfer_status.name_key(row.get("name"))
-                    else ""
-                )
-                if entry_last == last:
-                    last_hits.append(row)
+        nickname = not (exact & set(row_keys))
+        if nickname:
+            if not _parent_and_age_agree(row, parent=parent, age=age):
+                continue
+        elif not _parent_and_age_agree(row, parent=parent, age=age, required=False):
             continue
-        if same_club:
-            return row
-        club_hits.append(row)
-    unique_last: list[dict[str, Any]] = []
-    seen: set[int] = set()
-    for hit in last_hits:
-        stamp = id(hit)
-        if stamp in seen:
-            continue
-        seen.add(stamp)
-        unique_last.append(hit)
-    if len(unique_last) == 1:
-        return unique_last[0]
-    if len(club_hits) == 1:
-        return club_hits[0]
-    return None
+        hits.append(row)
+    ids = {_player_id(row) for row in hits if _player_id(row) is not None}
+    if len(ids) > 1:
+        return None
+    return hits[0] if hits else None
+
+
+def _parent_and_age_agree(
+    row: dict[str, Any],
+    *,
+    parent: str,
+    age: int | None,
+    required: bool = True,
+) -> bool:
+    """Club is already matched. Parent and age reject a different person.
+
+    A nickname has to agree with the parent club. Age agrees when both sides
+    know it. An exact name may match when the feed does not carry those facts.
+    """
+    transfer = row.get("transfer") if isinstance(row.get("transfer"), dict) else {}
+    row_parent = str(transfer.get("from") or "").strip()
+    row_age = _as_int(row.get("age"))
+    if parent and row_parent and not same_club(parent, row_parent):
+        return False
+    if age is not None and row_age is not None and age != row_age:
+        return False
+    if not required:
+        return True
+    if not parent or not row_parent or not same_club(parent, row_parent):
+        return False
+    if age is not None and row_age is None:
+        return False
+    return True
 
 
 def _player_id(row: dict[str, Any] | None) -> int | None:
@@ -390,23 +390,29 @@ def _player_id(row: dict[str, Any] | None) -> int | None:
 def _related_impect_rows(
     primary: dict[str, Any] | None,
     players: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], bool]:
+    """Every row for this person. A shared id with a different person is rejected.
+
+    Returns the rows and whether the provider id collided with someone else.
+    Colliding rows are limited to this person's name so the other player's
+    minutes are never attached, and the caller must not publish the shared id.
+    """
     if not isinstance(primary, dict):
-        return []
+        return [], False
     player_id = _player_id(primary)
-    if player_id is not None:
-        hits = [row for row in players if _player_id(row) == player_id]
-        if hits:
-            return hits
-    keys = primary.get("_name_keys") or set(transfer_status.name_keys(primary.get("name")))
-    if not keys:
-        return [primary]
-    hits = [
-        row
-        for row in players
-        if (row.get("_name_keys") or set(transfer_status.name_keys(row.get("name")))) & keys
-    ]
-    return hits or [primary]
+    if player_id is None:
+        return [primary], False
+    same_id = [row for row in players if _player_id(row) == player_id]
+    if not same_id:
+        return [primary], False
+    if any(not same_player_name(str(primary.get("name") or ""), str(row.get("name") or "")) for row in same_id):
+        own = [
+            row
+            for row in same_id
+            if same_player_name(str(primary.get("name") or ""), str(row.get("name") or ""))
+        ]
+        return (own or [primary]), True
+    return same_id, False
 
 
 def _primary_profile_row(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -417,17 +423,6 @@ def _primary_profile_row(rows: list[dict[str, Any]]) -> dict[str, Any]:
             float(row.get("minutes") or 0),
         ),
     )
-
-
-def _best_count(rows: list[dict[str, Any]], keys: tuple[str, ...]) -> int | None:
-    best: int | None = None
-    for row in rows:
-        number = _row_count(row, keys)
-        if number is None:
-            continue
-        if best is None or number > best:
-            best = number
-    return best
 
 
 def loan_playing_minutes(
@@ -542,26 +537,36 @@ def _enrich_loan(
     badge: str,
     players: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    matched = _match_impect_player(name, club, players)
-    related = _related_impect_rows(matched, players)
-    primary = _primary_profile_row(related) if related else matched
-    total_minutes, profile_minutes = loan_playing_minutes(related, primary or {})
+    matched = _match_impect_player(name, club, players, parent=from_club)
+    related, id_collision = _related_impect_rows(matched, players)
+    summary = aggregate_player_minutes(related, club)
+    filtered = summary["rows"]
+    primary = _primary_profile_row(filtered) if filtered else None
+    if primary is None or str(primary.get("position") or "") != str(summary.get("position") or ""):
+        same_position = [
+            row
+            for row in filtered
+            if str(row.get("position") or row.get("positionLabel") or "").strip()
+            == str(summary.get("position") or "")
+        ]
+        if same_position:
+            primary = _primary_profile_row(same_position)
+    total_minutes = summary["total"]
+    profile_minutes = summary["profile_minutes"]
     age = _as_int((primary or {}).get("age"))
-    overall = _as_float((primary or {}).get("overall"))
+    overall = _as_float((primary or {}).get("overall")) if filtered else None
     if overall is not None:
         overall = round(overall, 1)
-    time_row = playing_time(
-        minutes=total_minutes,
-        match_count=_best_count(related, MATCH_KEYS),
-        starts=_best_count(related, START_KEYS),
-    )
-    player_id = _player_id(primary)
-    position_code = str((primary or {}).get("position") or "").strip()
-    position = str(
-        (primary or {}).get("positionLabel")
-        or position_code
-        or ""
-    ).strip()
+    time_row = {
+        "minutes": total_minutes,
+        "matches": summary["appearances"],
+        "starts": summary["starts"],
+        "matches_estimated": bool(summary["appearances_estimated"]) if total_minutes else False,
+        "starts_estimated": bool(summary["starts_estimated"]) if total_minutes else False,
+    }
+    player_id = None if id_collision else _player_id(primary)
+    position_code = str(summary.get("position") or "").strip()
+    position = str(summary.get("position_label") or position_code).strip()
     position_group = loan_position_group(position_code, position)
     watch = loan_watch_score(
         overall=overall,
@@ -573,7 +578,8 @@ def _enrich_loan(
     minutes_n = time_row["minutes"] or 0
     matches_n = time_row["matches"] or 0
     starts_n = time_row["starts"] or 0
-    if minutes_n >= 450 or (matches_n and starts_n / matches_n >= 0.6 and minutes_n >= 180):
+    counted = not time_row["matches_estimated"] and not time_row["starts_estimated"]
+    if minutes_n >= 450 or (counted and matches_n and starts_n / matches_n >= 0.6 and minutes_n >= 180):
         usage = "regular"
     elif minutes_n >= 90 or starts_n >= 1:
         usage = "rotation"
@@ -593,6 +599,7 @@ def _enrich_loan(
         "position_group": position_group,
         "minutes": time_row["minutes"],
         "profile_minutes": profile_minutes,
+        "parent_minutes": summary["parent_minutes"],
         "matches": time_row["matches"],
         "starts": time_row["starts"],
         "matches_estimated": time_row["matches_estimated"],
@@ -638,6 +645,88 @@ def _sort_loans(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return rows
 
 
+def _same_loan_person(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    if not same_player_name(str(left.get("player") or ""), str(right.get("player") or "")):
+        return False
+    left_age = _as_int(left.get("age"))
+    right_age = _as_int(right.get("age"))
+    if left_age is not None and right_age is not None and left_age != right_age:
+        return False
+    left_id = _as_int(left.get("player_id"))
+    right_id = _as_int(right.get("player_id"))
+    if left_id and right_id:
+        return left_id == right_id
+    left_parent = canonical_club_id(str(left.get("from_club") or ""))
+    right_parent = canonical_club_id(str(right.get("from_club") or ""))
+    if left_parent and right_parent:
+        return left_parent == right_parent
+    return bool(
+        set(transfer_status.name_keys(left.get("player")))
+        & set(transfer_status.name_keys(right.get("player")))
+    )
+
+
+def _dedupe_loan_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One row per person at the club they are actually on loan at.
+
+    Name variants that resolved to one provider id collapse. The same person
+    listed at two clubs (a stale spelling, or a loan that has moved) keeps the
+    club that has minutes. Two different people who were given one id are not
+    merged — their ids are already cleared — so both rows stay, without the
+    other person's minutes.
+    """
+    parent = list(range(len(rows)))
+
+    def find(index: int) -> int:
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    def union(left: int, right: int) -> None:
+        parent[find(left)] = find(right)
+
+    for index, row in enumerate(rows):
+        for earlier in range(index):
+            if _same_loan_person(row, rows[earlier]):
+                union(index, earlier)
+
+    groups: dict[int, list[dict[str, Any]]] = {}
+    for index, row in enumerate(rows):
+        groups.setdefault(find(index), []).append(row)
+
+    drop: set[int] = set()
+    for group in groups.values():
+        by_club: dict[str, list[dict[str, Any]]] = {}
+        for row in group:
+            by_club.setdefault(canonical_club_id(str(row.get("club") or "")), []).append(row)
+        winners: list[dict[str, Any]] = []
+        for items in by_club.values():
+            items.sort(
+                key=lambda item: (
+                    -(item.get("minutes") or 0),
+                    -(float(item["overall"]) if item.get("overall") is not None else -1),
+                    str(item.get("player") or ""),
+                )
+            )
+            winners.append(items[0])
+            for extra in items[1:]:
+                drop.add(id(extra))
+        if len(winners) <= 1:
+            continue
+        ranked = sorted(
+            winners,
+            key=lambda item: (
+                0 if item.get("minutes") else 1,
+                -(item.get("minutes") or 0),
+                -len(str(item.get("club") or "")),
+            ),
+        )
+        for extra in ranked[1:]:
+            drop.add(id(extra))
+    return [row for row in rows if id(row) not in drop]
+
+
 def build_loans_watch(
     *,
     report: dict[str, Any] | None = None,
@@ -647,6 +736,8 @@ def build_loans_watch(
     payload = report if isinstance(report, dict) else load_report()
     loans_by_club = snapshot if isinstance(snapshot, dict) else transfer_status.load_loan_snapshot()
     pool = _player_index(players if players is not None else _impect_players())
+    if pool:
+        transfer_status.annotate_all(pool)
 
     used_clubs: set[str] = set()
     used_names: list[str] = []
@@ -721,7 +812,11 @@ def build_loans_watch(
         if not entries:
             continue
         team_id = _team_id(club)
-        sample = _match_impect_player(entries[0]["name"], club, pool) if entries else None
+        sample = (
+            _match_impect_player(entries[0]["name"], club, pool, parent=str(entries[0].get("from") or ""))
+            if entries
+            else None
+        )
         league_label = str((sample or {}).get("league") or "Other").strip() or "Other"
         league_id = _league_id_for_label(league_label)
         if league_id in REPORT_LEAGUE_IDS:
@@ -773,6 +868,14 @@ def build_loans_watch(
                 "teams": teams,
             }
         )
+
+    all_loans = _dedupe_loan_rows(all_loans)
+    kept = {id(row) for row in all_loans}
+    for league in leagues_out:
+        for team in league.get("teams") or []:
+            team["loans"] = [row for row in team.get("loans") or [] if id(row) in kept]
+            team["loan_count"] = len(team["loans"])
+        league["loan_count"] = sum(team["loan_count"] for team in league.get("teams") or [])
 
     order = {key: index for index, key in enumerate(LEAGUE_ORDER)}
     leagues_out.sort(key=lambda row: (order.get(row["id"], 99), str(row.get("name") or "")))

@@ -514,6 +514,9 @@ def build_who_to_scout_data(
     # the cached payload, because the standouts rebuild takes four minutes and a
     # transfer correction should land on the next page load instead.
     transfer_status.annotate_all(players)
+    from app.player_minutes import attach_scoped_totals
+
+    attach_scoped_totals(players)
     _attach_scout_coverage(players)
     _attach_recruitment_notes(players)
     profiles_by_position = _profiles_from_players(players) or _profiles_meta_from_disk()

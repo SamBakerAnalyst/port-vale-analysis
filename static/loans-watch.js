@@ -82,7 +82,7 @@
   function formatNum(value, estimated) {
     if (value == null || value === "") return "—";
     const text = Number(value).toLocaleString("en-GB");
-    return estimated ? `~${text}` : text;
+    return estimated ? `${text} est.` : text;
   }
 
   function formatMinutes(value) {

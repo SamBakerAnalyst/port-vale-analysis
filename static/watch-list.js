@@ -79,6 +79,18 @@
     return `${Number(value).toLocaleString()}′`;
   }
 
+  function formatStatsUpdated(value) {
+    if (!value) return "";
+    const when = new Date(value);
+    if (Number.isNaN(when.getTime())) return "";
+    return when.toLocaleString(undefined, {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
   function formatMinutesBreakdown(row) {
     const byPos = Array.isArray(row.minutes_by_position) ? row.minutes_by_position : [];
     if (!byPos.length) {
@@ -166,6 +178,7 @@
         <th>Club</th>
         <th>Age</th>
         <th>League</th>
+        <th class="col-num">Total</th>
         <th class="col-num">Pos mins</th>
         <th class="col-num">Overall</th>
         <th>Best profile</th>
@@ -441,7 +454,16 @@
         ${clubCell(t)}
       <td>${t.age ?? "—"}</td>
       <td>${esc(t.league || "—")}</td>
-      <td class="col-num">${formatMinutesBreakdown(t)}</td>
+      <td class="col-num">${t.stats_club_missing ? "—" : formatMinutes(t.total_minutes)}</td>
+      <td class="col-num">${
+        t.stats_club_missing
+          ? `<span class="wl-stale" title="This club has no current stats rows">No current stats</span>`
+          : formatMinutesBreakdown(t)
+      }${
+        formatStatsUpdated(t.stats_updated_at)
+          ? `<span class="wl-mins__updated">Updated ${esc(formatStatsUpdated(t.stats_updated_at))}</span>`
+          : ""
+      }</td>
       <td class="col-num">${formatOverall(t.overall_score)}</td>
       <td>${formatBestProfile(t)}</td>
       <td>${esc(t.added_by || "—")}</td>
