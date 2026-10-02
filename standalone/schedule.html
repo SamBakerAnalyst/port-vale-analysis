@@ -6,38 +6,52 @@
   <title>Port Vale Schedule</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/schedule.css?v=7" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/schedule.css?v=8" />
 </head>
 <body>
   <div class="pv-sch">
     <header class="pv-sch__banner">
-      <img class="pv-sch__crest" src="/standalone/port-vale-badge.png?v=2" alt="Port Vale" width="56" height="70" />
+      <img class="pv-sch__crest" src="/standalone/port-vale-badge.png?v=2" alt="Port Vale" width="52" height="64" />
       <div class="pv-sch__banner-title">
-        <p class="pv-sch__eyebrow"><a href="/">← Home</a> · Admin</p>
-        <h1>Port Vale Schedule</h1>
+        <p class="pv-sch__eyebrow"><a href="/">← Home</a> <span>·</span> Admin</p>
+        <h1>Schedule</h1>
         <p class="pv-sch__season" id="seasonLabel">26/27 season</p>
       </div>
+      <div class="pv-sch__stats" id="monthStats" aria-label="Month summary"></div>
       <div class="pv-sch__banner-actions">
-        <button type="button" class="pv-sch__btn" id="refreshBtn">Refresh fixtures</button>
+        <div class="pv-sch__export">
+          <select id="exportRange" class="pv-sch__select" aria-label="PDF range">
+            <option value="1">This month</option>
+            <option value="3">Next 3 months</option>
+            <option value="season">Whole season</option>
+          </select>
+          <button type="button" class="pv-sch__btn pv-sch__btn--primary" id="exportPdfBtn">Export PDF</button>
+        </div>
+        <button type="button" class="pv-sch__btn pv-sch__btn--ghost" id="refreshBtn">Refresh fixtures</button>
       </div>
     </header>
 
     <section class="pv-sch__toolbar">
       <div class="pv-sch__owners" id="ownerToggle" role="tablist" aria-label="Calendar owner"></div>
       <div class="pv-sch__nav">
-        <button type="button" class="pv-sch__btn" id="prevMonthBtn" aria-label="Previous month">←</button>
+        <button type="button" class="pv-sch__btn pv-sch__btn--icon" id="prevMonthBtn" aria-label="Previous month">‹</button>
         <span class="pv-sch__month" id="monthLabel">—</span>
-        <button type="button" class="pv-sch__btn" id="nextMonthBtn" aria-label="Next month">→</button>
+        <button type="button" class="pv-sch__btn pv-sch__btn--icon" id="nextMonthBtn" aria-label="Next month">›</button>
         <button type="button" class="pv-sch__btn" id="todayBtn">Today</button>
       </div>
     </section>
 
-    <p class="pv-sch__hint">
-      Click a day: <strong>IN</strong> → <strong>Regen</strong> → <strong>Pre-season</strong> (blue) → blank.
-      Shift-click / right-click for <strong>R</strong> (recruitment in).
-      Match days pull from FotMob. Add travel / notes in the side panel.
-    </p>
+    <div class="pv-sch__legend">
+      <span><i class="pv-sch__sw pv-sch__sw--in"></i>IN</span>
+      <span><i class="pv-sch__sw pv-sch__sw--regen"></i>Regen</span>
+      <span><i class="pv-sch__sw pv-sch__sw--pre"></i>Pre-season</span>
+      <span><i class="pv-sch__sw pv-sch__sw--home"></i>Home</span>
+      <span><i class="pv-sch__sw pv-sch__sw--away"></i>Away</span>
+      <span><i class="pv-sch__sw pv-sch__sw--note"></i>Travel / notes</span>
+      <span><i class="pv-sch__sw pv-sch__sw--r">R</i>Recruitment in</span>
+      <span class="pv-sch__hint">Click: IN → Regen → Pre-season → blank · Shift / right-click: R</span>
+    </div>
 
     <div class="pv-sch__layout">
       <main id="calendarRoot" class="pv-sch__board" aria-live="polite"></main>
@@ -53,7 +67,7 @@
     <footer class="pv-sch__footer" id="statusBar">Loading schedule…</footer>
   </div>
 
-  <script defer src="/static/schedule.js?v=8"></script>
+  <script defer src="/static/schedule.js?v=9"></script>
   <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>

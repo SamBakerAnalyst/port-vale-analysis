@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 
 from app.paths import SCHEDULE_DATA_DIR
@@ -61,8 +61,15 @@ class EventUpdate(BaseModel):
     date: str | None = Field(default=None, min_length=8, max_length=10)
 
 
+class FixtureVisibility(BaseModel):
+    fixture_id: str = Field(min_length=1, max_length=200)
+    hidden: bool = True
+    date: str | None = Field(default=None, max_length=10)
+    label: str | None = Field(default=None, max_length=160)
+
+
 def _empty_calendar() -> dict[str, Any]:
-    return {"days": {}, "events": {}}
+    return {"days": {}, "events": {}, "hidden_fixtures": {}}
 
 
 def _empty_store() -> dict[str, Any]:
@@ -86,6 +93,8 @@ def _migrate_store(payload: dict[str, Any]) -> dict[str, Any]:
                 bucket["days"] = {}
             if not isinstance(bucket.get("events"), dict):
                 bucket["events"] = {}
+            if not isinstance(bucket.get("hidden_fixtures"), dict):
+                bucket["hidden_fixtures"] = {}
         return payload
 
     migrated = _empty_store()
@@ -154,6 +163,8 @@ def _calendar_bucket(store: dict[str, Any], owner: str) -> dict[str, Any]:
         bucket["days"] = {}
     if not isinstance(bucket.get("events"), dict):
         bucket["events"] = {}
+    if not isinstance(bucket.get("hidden_fixtures"), dict):
+        bucket["hidden_fixtures"] = {}
     return bucket
 
 
@@ -230,6 +241,42 @@ def _normalize_day_entry(entry: dict[str, Any] | None) -> dict[str, Any] | None:
     return cleaned
 
 
+def _hidden_fixture_rows(hidden: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = []
+    for fixture_id, meta in hidden.items():
+        meta = meta if isinstance(meta, dict) else {}
+        rows.append(
+            {
+                "id": fixture_id,
+                "date": str(meta.get("date") or ""),
+                "label": str(meta.get("label") or "Fixture"),
+                "hidden_at": meta.get("hidden_at"),
+            }
+        )
+    rows.sort(key=lambda row: row["date"])
+    return rows
+
+
+def set_fixture_hidden(body: FixtureVisibility, *, owner: str = DEFAULT_OWNER) -> dict[str, Any]:
+    owner_id = _validate_owner(owner)
+    fixture_id = str(body.fixture_id or "").strip()
+    if not fixture_id:
+        raise HTTPException(status_code=400, detail="Fixture id is required.")
+    store = _load_store()
+    bucket = _calendar_bucket(store, owner_id)
+    hidden = bucket["hidden_fixtures"]
+    if body.hidden:
+        hidden[fixture_id] = {
+            "date": _validate_date(body.date) if body.date else "",
+            "label": str(body.label or "Fixture").strip()[:160],
+            "hidden_at": datetime.now(UTC).isoformat(),
+        }
+    else:
+        hidden.pop(fixture_id, None)
+    _save_store(store)
+    return {"ok": True, "owner": owner_id, "fixture_id": fixture_id, "hidden": body.hidden}
+
+
 def build_schedule_payload(
     *,
     owner: str = DEFAULT_OWNER,
@@ -241,7 +288,9 @@ def build_schedule_payload(
     store = _load_store()
     bucket = _calendar_bucket(store, owner_id)
     fixtures_payload = build_port_vale_fixtures(force_refresh=refresh_fixtures)
-    fixtures = list(fixtures_payload.get("fixtures") or [])
+    hidden = bucket.get("hidden_fixtures") or {}
+    all_fixtures = list(fixtures_payload.get("fixtures") or [])
+    fixtures = [row for row in all_fixtures if str(row.get("id") or "") not in hidden]
     events = bucket.get("events") or {}
     days = {
         date_key: normalized
@@ -259,6 +308,8 @@ def build_schedule_payload(
         "fotmob_team_id": fixtures_payload.get("fotmob_team_id"),
         "fixtures": fixtures,
         "fixtures_by_date": _fixtures_by_date(fixtures),
+        "hidden_fixtures": _hidden_fixture_rows(hidden),
+        "hidden_fixtures_by_date": _fixtures_by_date(_hidden_fixture_rows(hidden)),
         "days": days,
         "events": list(events.values()),
         "events_by_date": _events_by_date(events),
@@ -479,3 +530,34 @@ def register_schedule_routes(app: FastAPI) -> None:
         owner: str = Query(DEFAULT_OWNER),
     ) -> dict[str, Any]:
         return delete_event(event_id, owner=owner)
+
+    @app.post("/api/schedule/fixtures/visibility")
+    def schedule_fixture_visibility_route(
+        body: FixtureVisibility,
+        owner: str = Query(DEFAULT_OWNER),
+    ) -> dict[str, Any]:
+        return set_fixture_hidden(body, owner=owner)
+
+    @app.get("/api/schedule/export.pdf")
+    def schedule_export_pdf_route(
+        owner: str = Query(DEFAULT_OWNER),
+        start: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
+        months: int = Query(1, ge=1, le=12),
+    ) -> Response:
+        from app.schedule_pdf import ScheduleExportError, build_schedule_pdf
+
+        payload = build_schedule_payload(owner=owner)
+        try:
+            pdf_bytes = build_schedule_pdf(payload, start_month=start, months=months)
+        except ScheduleExportError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        owner_label = next(
+            (row["label"] for row in SCHEDULE_OWNERS if row["id"] == payload["owner"]), "Team"
+        )
+        suffix = start if months == 1 else f"{start}-{months}m"
+        filename = f"port-vale-schedule-{owner_label.lower()}-{suffix}.pdf"
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
