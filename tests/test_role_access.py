@@ -214,6 +214,8 @@ def test_scouts_reach_their_own_tool_pages_and_apis():
         "/player-reports",
         "/video-watch",
         "/api/video-watch",
+        "/reports-library",
+        "/api/reports-library",
         "/efl-transfer-report",
         "/fixture-planner",
     ):

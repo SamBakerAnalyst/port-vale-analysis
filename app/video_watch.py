@@ -598,6 +598,13 @@ def register_video_watch_routes(app: FastAPI) -> None:
             position_in_game=body.position_in_game,
             physical=body.physical,
             profiles=body.profiles,
+            name=body.name,
+            club=body.club,
+            league=getattr(body, "league", "") or "",
+            fixture_label=body.fixture_label,
+            position=getattr(body, "position", "") or body.position_in_game,
+            position_label=getattr(body, "position_label", "") or "",
+            age=getattr(body, "age", None),
             staff=staff,
         )
         player = _player_after_report_save(
@@ -636,6 +643,13 @@ def register_video_watch_routes(app: FastAPI) -> None:
             add_to_pipeline=body.add_to_pipeline,
             pipeline_stage=body.pipeline_stage,
             next_action=body.next_action,
+            name=body.name,
+            club=body.club,
+            league=body.league,
+            fixture_label=body.fixture_label,
+            position=body.position_in_game or body.position,
+            position_label=body.position_label,
+            age=body.age,
             staff=staff,
         )
         pipeline = None

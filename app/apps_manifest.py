@@ -541,6 +541,25 @@ APPS: list[dict[str, Any]] = [
         "router": "video_watch",
     },
     {
+        "id": "reports-library",
+        "group": "recruitment",
+        "title": "Reports Library",
+        "description": (
+            "Every saved Scouting report. Filter by match rating, PVFC level, "
+            "position, next action, and scout."
+        ),
+        "href": "/reports-library",
+        "icon": "📚",
+        "accent": "#c4b5fd",
+        "tags": ["Reports", "Library", "Scouting", "Scores"],
+        "roles": ("scouts", "admin"),
+        "api_prefixes": (
+            "/reports-library",
+            "/api/reports-library",
+        ),
+        "router": "reports_library",
+    },
+    {
         "id": "squad-planner",
         "group": "recruitment",
         "title": "Squad Planner",
@@ -970,6 +989,7 @@ LIVE_ESSENTIAL_IDS = frozenset(
         "scoutable-teams",
         "games-to-watch",
         "video-watch",
+        "reports-library",
         "loans-watch",
         # Scouts
         "fixture-planner",

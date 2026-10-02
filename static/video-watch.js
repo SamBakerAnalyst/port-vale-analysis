@@ -1924,9 +1924,13 @@
           profiles: state.generalDraft.profiles,
           name: player.name || "",
           club: player.club || player.team_name || "",
+          league: player.league || state.sheet?.league || "",
           home_name: ctx.home_name,
           away_name: ctx.away_name,
           sheet_side: ctx.sheet_side,
+          position: player.position || "",
+          position_label: player.position_label || "",
+          age: player.age ?? null,
         }),
       });
       applyMatchConditions(data.match_conditions);
