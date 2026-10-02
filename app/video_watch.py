@@ -1,4 +1,4 @@
-"""Player Reports — watch a fixture with both team sheets and a shared player file.
+"""Match Scouting — watch a fixture with both team sheets and a shared player file.
 
 Notes written here land on Scoutable Teams, Who to Scout, and the player page.
 """
@@ -447,18 +447,25 @@ def save_video_watch_entry(
 def register_video_watch_routes(app: FastAPI) -> None:
     page_path = STANDALONE_DIR / "video-watch.html"
 
-    @app.get("/player-reports", response_class=HTMLResponse)
-    def player_reports_page() -> HTMLResponse:
+    @app.get("/match-scouting", response_class=HTMLResponse)
+    def match_scouting_page() -> HTMLResponse:
         if not page_path.is_file():
-            raise HTTPException(status_code=404, detail="Player Reports UI not found.")
+            raise HTTPException(status_code=404, detail="Match Scouting UI not found.")
         return HTMLResponse(page_path.read_text(encoding="utf-8"))
 
-    @app.get("/video-watch")
-    def video_watch_legacy(request: Request) -> RedirectResponse:
-        dest = "/player-reports"
+    def _legacy_redirect(request: Request) -> RedirectResponse:
+        dest = "/match-scouting"
         if request.url.query:
             dest = f"{dest}?{request.url.query}"
         return RedirectResponse(url=dest, status_code=307)
+
+    @app.get("/player-reports")
+    def player_reports_legacy(request: Request) -> RedirectResponse:
+        return _legacy_redirect(request)
+
+    @app.get("/video-watch")
+    def video_watch_legacy(request: Request) -> RedirectResponse:
+        return _legacy_redirect(request)
 
     @app.get("/api/video-watch/games")
     def video_watch_games(season: str = Query(DEFAULT_SEASON)) -> dict[str, Any]:
@@ -562,6 +569,36 @@ def register_video_watch_routes(app: FastAPI) -> None:
             sheet_side=sheet_side,
         )
 
+    def _push_pipeline(
+        request: Request,
+        report: dict[str, Any],
+        body: GeneralReportBody | DetailedReportBody,
+        *,
+        reason_keys: tuple[str, ...],
+    ) -> tuple[dict[str, Any] | None, str]:
+        if not report.get("add_to_pipeline"):
+            return None, ""
+        reason = next(
+            (str(report.get(key) or "").strip() for key in reason_keys if str(report.get(key) or "").strip()),
+            "Not to standard off this look.",
+        )
+        try:
+            pipeline = upsert_pipeline_from_scout(
+                request,
+                player_id=body.player_id,
+                name=body.name,
+                club=body.club,
+                league=body.league,
+                position=body.position_in_game or body.position,
+                position_label=body.position_label,
+                age=body.age,
+                stage=report.get("pipeline_stage") or "video_scouted",
+                reason=reason,
+            )
+        except HTTPException as exc:
+            return None, str(exc.detail or "Could not add to pipeline.")
+        return pipeline, ""
+
     @app.post("/api/video-watch/match-conditions")
     def video_watch_save_match_conditions(
         request: Request, body: MatchConditionsBody
@@ -598,7 +635,16 @@ def register_video_watch_routes(app: FastAPI) -> None:
             position_in_game=body.position_in_game,
             physical=body.physical,
             profiles=body.profiles,
+            next_steps=body.next_steps,
+            match_rating=body.match_rating,
+            pvfc_level=body.pvfc_level,
+            add_to_pipeline=body.add_to_pipeline,
+            pipeline_stage=body.pipeline_stage,
+            next_action=body.next_action,
             staff=staff,
+        )
+        pipeline, pipeline_error = _push_pipeline(
+            request, general, body, reason_keys=("next_steps", "notes")
         )
         player = _player_after_report_save(
             player_id=body.player_id,
@@ -609,11 +655,15 @@ def register_video_watch_routes(app: FastAPI) -> None:
             home_name=body.home_name,
             away_name=body.away_name,
             sheet_side=body.sheet_side,
+            position=body.position_in_game or body.position,
+            position_label=body.position_label,
         )
         return {
             "ok": True,
             "match_conditions": conditions,
             "general_report": general,
+            "pipeline": pipeline,
+            "pipeline_error": pipeline_error,
             "player": player,
         }
 
@@ -638,30 +688,9 @@ def register_video_watch_routes(app: FastAPI) -> None:
             next_action=body.next_action,
             staff=staff,
         )
-        pipeline = None
-        pipeline_error = ""
-        if body.add_to_pipeline:
-            stage = detailed.get("pipeline_stage") or "video_scouted"
-            reason = (
-                detailed.get("write_up")
-                or detailed.get("next_steps")
-                or "Not to standard off this look."
-            )
-            try:
-                pipeline = upsert_pipeline_from_scout(
-                    request,
-                    player_id=body.player_id,
-                    name=body.name,
-                    club=body.club,
-                    league=body.league,
-                    position=body.position_in_game or body.position,
-                    position_label=body.position_label,
-                    age=body.age,
-                    stage=stage,
-                    reason=reason,
-                )
-            except HTTPException as exc:
-                pipeline_error = str(exc.detail or "Could not add to pipeline.")
+        pipeline, pipeline_error = _push_pipeline(
+            request, detailed, body, reason_keys=("write_up", "next_steps")
+        )
         player = _player_after_report_save(
             player_id=body.player_id,
             name=body.name,

@@ -78,6 +78,12 @@
       position_in_game: "",
       physical: {},
       profiles: {},
+      next_steps: "",
+      match_rating: "",
+      pvfc_level: "",
+      add_to_pipeline: false,
+      pipeline_stage: "video_scouted",
+      next_action: "",
     },
     detailedDraft: {
       position_in_game: "",
@@ -291,6 +297,11 @@
         title: title?.value ?? state.draft.title,
       };
     }
+    const reportPos = document.getElementById("vwReportPosition");
+    if (reportPos) {
+      state.generalDraft.position_in_game = reportPos.value;
+      state.detailedDraft.position_in_game = reportPos.value;
+    }
     const weather = document.getElementById("vwWeather");
     const generalForm = document.getElementById("vwGeneralForm");
     if (weather || generalForm) {
@@ -301,26 +312,27 @@
         pitch: document.getElementById("vwPitch")?.value ?? state.generalDraft.pitch,
         pitch_note: document.getElementById("vwPitchNote")?.value ?? state.generalDraft.pitch_note,
         notes: document.getElementById("vwGeneralNotes")?.value ?? state.generalDraft.notes,
-        position_in_game: document.getElementById("vwGamePosition")?.value ?? state.generalDraft.position_in_game,
-        physical: collectKeyedFields("data-physical"),
+        physical: { ...state.generalDraft.physical, ...collectKeyedFields("data-physical") },
         profiles: { ...state.generalDraft.profiles, ...collectKeyedFields("data-profile") },
+        next_steps: document.getElementById("vwGNextSteps")?.value ?? state.generalDraft.next_steps,
+        add_to_pipeline: Boolean(document.getElementById("vwGAddPipeline")?.checked),
+        pipeline_stage: document.getElementById("vwGPipelineStage")?.value ?? state.generalDraft.pipeline_stage,
       };
     }
     const detailedForm = document.getElementById("vwDetailedForm");
     if (detailedForm) {
       state.detailedDraft = {
         ...state.detailedDraft,
-        position_in_game: document.getElementById("vwDetailedPosition")?.value ?? state.detailedDraft.position_in_game,
-        physical: collectKeyedFields("data-detailed-physical"),
+        physical: { ...state.detailedDraft.physical, ...collectKeyedFields("data-detailed-physical") },
         profiles: { ...state.detailedDraft.profiles, ...collectKeyedFields("data-detailed-profile") },
         psychology: {
           ...state.detailedDraft.psychology,
           notes: document.getElementById("vwPsychNotes")?.value ?? state.detailedDraft.psychology?.notes ?? "",
         },
         write_up: document.getElementById("vwWriteUp")?.value ?? state.detailedDraft.write_up,
-        next_steps: document.getElementById("vwNextSteps")?.value ?? state.detailedDraft.next_steps,
-        add_to_pipeline: Boolean(document.getElementById("vwAddPipeline")?.checked),
-        pipeline_stage: document.getElementById("vwPipelineStage")?.value ?? state.detailedDraft.pipeline_stage,
+        next_steps: document.getElementById("vwDNextSteps")?.value ?? state.detailedDraft.next_steps,
+        add_to_pipeline: Boolean(document.getElementById("vwDAddPipeline")?.checked),
+        pipeline_stage: document.getElementById("vwDPipelineStage")?.value ?? state.detailedDraft.pipeline_stage,
       };
     }
     const agentName = document.getElementById("vwAgentName");
@@ -428,6 +440,12 @@
       position_in_game: general.position_in_game || player?.position || "",
       physical: { ...(general.physical || {}) },
       profiles: { ...(general.profiles || {}) },
+      next_steps: general.next_steps || "",
+      match_rating: general.match_rating == null ? "" : String(Math.round(Number(general.match_rating))),
+      pvfc_level: general.pvfc_level || "",
+      add_to_pipeline: Boolean(general.add_to_pipeline),
+      pipeline_stage: general.pipeline_stage || "video_scouted",
+      next_action: general.next_action || "",
     };
   }
 
@@ -453,7 +471,7 @@
       psychology: { ...(detailed.psychology || {}) },
       write_up: detailed.write_up || "",
       next_steps: detailed.next_steps || "",
-      match_rating: detailed.match_rating == null ? "" : String(detailed.match_rating),
+      match_rating: detailed.match_rating == null ? "" : String(Math.round(Number(detailed.match_rating))),
       pvfc_level: detailed.pvfc_level || "",
       add_to_pipeline: Boolean(detailed.add_to_pipeline),
       pipeline_stage: detailed.pipeline_stage || "video_scouted",
@@ -511,7 +529,7 @@
     els.desk.classList.toggle("hidden", view !== "desk");
     if (view === "leagues") els.title.textContent = "Which league are you watching?";
     if (view === "fixtures") els.title.textContent = "Which match interests you?";
-    if (view === "desk") els.title.textContent = fixtureLabel(state.sheet) || "Player Reports";
+    if (view === "desk") els.title.textContent = fixtureLabel(state.sheet) || "Match Scouting";
     renderTools();
   }
 
@@ -1304,18 +1322,34 @@
     const options = positionChoices()
       .map((row) => `<option value="${escapeHtml(row.id)}" ${row.id === value ? "selected" : ""}>${escapeHtml(row.short)} · ${escapeHtml(row.label)}</option>`)
       .join("");
-    return `<select id="${id}"><option value="">Select position in game</option>${options}</select>`;
+    return `<select id="${id}"><option value="">Set the player's position…</option>${options}</select>`;
+  }
+
+  function reportPosition(player) {
+    return state.generalDraft.position_in_game || state.detailedDraft.position_in_game || player?.position || "";
+  }
+
+  function reportGroup(position, player) {
+    return (player?.options?.report_groups || {})[position] || null;
   }
 
   function profilesFor(position, player) {
-    const wanted = position || player?.position || "";
-    const byPos = player?.options?.profiles_by_position || {};
-    const live = player?.report_profiles || [];
-    const playerPos = player?.position || "";
-    if (wanted && wanted === playerPos && live.length) return live;
-    if (wanted && byPos[wanted]?.length) return byPos[wanted];
-    if (live.length) return live;
-    return byPos[wanted] || [];
+    const group = reportGroup(position, player);
+    if (group?.profiles?.length) return group.profiles;
+    return (player?.options?.profiles_by_position || {})[position] || [];
+  }
+
+  function reportPositionBar(player) {
+    const position = reportPosition(player);
+    const group = reportGroup(position, player);
+    return `<div class="vw-report-position">
+      <label>Report position
+        ${positionSelect("vwReportPosition", position)}
+      </label>
+      <p>${group
+        ? `Using the Port Vale <strong>${escapeHtml(group.title)}</strong> report — physical, ${group.profiles.length} profiles, and the verdict.`
+        : "Set the position he played to load the Port Vale report for that role."}</p>
+    </div>`;
   }
 
   function chipRow(kind, value, rows) {
@@ -1328,40 +1362,111 @@
       .join("")}</div>`;
   }
 
-  function physicalFields(fields, values, attr, promptKey) {
-    const rows = fields.length ? fields : [
-      { id: "size", label: "Size", prompt: "Frame, height, strength in duels and hold-up.", detailed_prompt: "How big vs the opponent? Who wins aerials and hold-up, and how?" },
-      { id: "mobility", label: "Mobility", prompt: "Pace, recovery runs, agility.", detailed_prompt: "Pace over 10 yards, recovery, agility. Did they last, or drop off late?" },
-      { id: "foot", label: "Foot", prompt: "Preferred foot — range of pass, cross, shot.", detailed_prompt: "Preferred foot in this game — what actions did they actually play with it?" },
-      { id: "weak_foot", label: "Weak foot", prompt: "Can they use it under pressure?", detailed_prompt: "Can they use the weak foot under pressure, or did they hide it?" },
-      { id: "physical_ability", label: "Physical ability", prompt: "Stamina, repeated sprints, how they lasted.", detailed_prompt: "Stamina, repeated sprints, duels. How they lasted — and what dropped off after 70?" },
-    ];
-    return rows
-      .map((row) => {
-        const prompt = row[promptKey] || row.prompt || "";
-        return `<label>${escapeHtml(row.label)}
-        <textarea ${attr}="${escapeHtml(row.id)}" class="vw-notes-box ${promptKey === "detailed_prompt" ? "vw-notes-box--long" : ""}" maxlength="2000" placeholder="${escapeHtml(prompt)}">${escapeHtml(values[row.id] || "")}</textarea>
-      </label>`;
-      })
-      .join("");
+  const SCALE_0_10 = Array.from({ length: 11 }, (_, idx) => ({ id: String(idx), label: String(idx) }));
+
+  function earlierNote(text) {
+    return text ? `<small class="vw-earlier">Earlier note: ${escapeHtml(text)}</small>` : "";
   }
 
-  function profileFields(profiles, values, attr, promptKey) {
+  function physicalFields(position, player, values, scope) {
+    const group = reportGroup(position, player);
+    if (!group) return `<p>Set the report position above to load the physical questions for that role.</p>`;
+    const defs = Object.fromEntries(optionList("physical").map((row) => [row.id, row]));
+    const attr = scope === "general" ? "data-physical" : "data-detailed-physical";
+    const rows = group.physical
+      .map((id) => {
+        const def = defs[id] || { id, label: id, kind: "text", prompt: "", choices: [] };
+        const value = String(values[id] || "");
+        const prompt = def.prompt ? `<span class="vw-field-hint">${escapeHtml(def.prompt)}</span>` : "";
+        if (def.kind === "text") {
+          return `<label>${escapeHtml(def.label)}${prompt}
+            <input type="text" ${attr}="${escapeHtml(id)}" maxlength="200" placeholder="${escapeHtml(def.prompt || "")}" value="${escapeHtml(value)}" />
+          </label>`;
+        }
+        const choices = def.kind === "scale" ? SCALE_0_10 : def.choices || [];
+        const known = choices.some((row) => row.id === value);
+        return `<div class="vw-field">
+          <p><strong>${escapeHtml(def.label)}</strong>${prompt}</p>
+          <div class="${def.kind === "scale" ? "vw-rating" : ""}">${chipRow(`${scope}:phys:${id}`, known ? value : "", choices)}</div>
+          ${known ? "" : earlierNote(value)}
+        </div>`;
+      })
+      .join("");
+    return rows + earlierNote(values.physical_ability || "");
+  }
+
+  function profileFields(profiles, values, scope) {
     if (!profiles.length) {
-      return `<p>Pick a position in the game to load the data profiles for that role.</p>`;
+      return `<p>Set the report position above to load the Port Vale profiles for that role.</p>`;
     }
-    return profiles
+    const detailed = scope === "detailed";
+    const attr = detailed ? "data-detailed-profile" : "data-profile";
+    const fields = profiles
       .map((row) => {
-        const prompt = row[promptKey] || row.general_prompt || (promptKey === "detailed_prompt"
-          ? "How do they progress the ball? What sort of headers do they win? Why did this look good or poor?"
-          : "What did you see in this part of his game?");
-        const score = row.score != null ? `<em>${escapeHtml(String(row.score))}</em>` : "";
+        const question = detailed ? row.detailed_prompt || "" : "";
+        const placeholder = detailed ? row.detailed_prompt || "" : row.general_prompt || "What did you see?";
         return `<label>
-          <span class="vw-profile-head">${escapeHtml(row.label)}${score}</span>
-          <textarea ${attr}="${escapeHtml(row.id)}" class="vw-notes-box ${promptKey === "detailed_prompt" ? "vw-notes-box--long" : ""}" maxlength="4000" placeholder="${escapeHtml(prompt)}">${escapeHtml(values[row.id] || "")}</textarea>
+          <span class="vw-profile-head">${escapeHtml(row.label)}</span>
+          ${question ? `<span class="vw-profile-q">${escapeHtml(question)}</span>` : ""}
+          <textarea ${attr}="${escapeHtml(row.id)}" class="vw-notes-box ${detailed ? "vw-notes-box--long" : ""}" maxlength="4000" placeholder="${escapeHtml(placeholder)}">${escapeHtml(values[row.id] || "")}</textarea>
         </label>`;
       })
       .join("");
+    const current = new Set(profiles.map((row) => row.id));
+    const legacy = Object.entries(values || {})
+      .filter(([key, text]) => !current.has(key) && String(text || "").trim())
+      .map(([key, text]) => `<li><strong>${escapeHtml(key.replace(/-/g, " "))}</strong> ${escapeHtml(text)}</li>`)
+      .join("");
+    return fields + (legacy ? `<div class="vw-earlier"><p>Earlier profile notes</p><ul>${legacy}</ul></div>` : "");
+  }
+
+  function verdictBlock(player, draft, scope) {
+    const prefix = scope === "general" ? "vwG" : "vwD";
+    const levels = optionList("pvfc_levels").length
+      ? optionList("pvfc_levels")
+      : [
+          { id: "A", label: "Starter" },
+          { id: "B", label: "Challenger" },
+          { id: "C", label: "Emerging talent" },
+          { id: "D", label: "Not to standard" },
+        ];
+    const actions = optionList("next_actions").length
+      ? optionList("next_actions")
+      : [
+          { id: "not_to_standard", label: "Not to standard" },
+          { id: "low_priority", label: "Low priority" },
+          { id: "high_priority", label: "High priority" },
+          { id: "sign", label: "Sign" },
+        ];
+    const stages = optionList("pipeline_stages");
+    return `<section class="vw-report-block">
+        <div>
+          <h3>Verdict</h3>
+          <p>Next steps, match rating, PVFC level, pipeline and next action.</p>
+        </div>
+        <label>Next step recommendations
+          <textarea id="${prefix}NextSteps" class="vw-notes-box" maxlength="4000" placeholder="Watch again live, compare vs our options, leave, or push to the board.">${escapeHtml(draft.next_steps || "")}</textarea>
+        </label>
+        <label>Match rating · 0–10
+          <div class="vw-rating">${chipRow(`${scope}:match_rating`, draft.match_rating, SCALE_0_10)}</div>
+        </label>
+        <label>PVFC player level
+          ${chipRow(`${scope}:pvfc_level`, draft.pvfc_level, levels.map((row) => ({ id: row.id, label: `${row.id} · ${row.label}`, hint: row.hint })))}
+        </label>
+        <label class="vw-check">
+          <input id="${prefix}AddPipeline" type="checkbox" ${draft.add_to_pipeline ? "checked" : ""} />
+          Add to pipeline
+        </label>
+        <label>Pipeline stage
+          <select id="${prefix}PipelineStage">${(stages.length ? stages : [{ id: "video_scouted", label: "Video scouted" }])
+            .map((row) => `<option value="${escapeHtml(row.id)}" ${row.id === (draft.pipeline_stage || "video_scouted") ? "selected" : ""}>${escapeHtml(row.label)}</option>`)
+            .join("")}</select>
+        </label>
+        <label>Next action
+          ${chipRow(`${scope}:next_action`, draft.next_action, actions)}
+        </label>
+        ${player.pipeline ? `<p>Currently on ${escapeHtml(player.pipeline.stage_title)} · <a href="/player-pipelines">Open pipelines →</a></p>` : `<p><a href="/player-pipelines">Player Pipelines →</a></p>`}
+      </section>`;
   }
 
   function matchConditionsBlock(player, draft) {
@@ -1405,42 +1510,38 @@
 
   function generalReportBody(player) {
     const draft = state.generalDraft;
-    const position = draft.position_in_game || player?.position || "";
+    const position = reportPosition(player);
+    const group = reportGroup(position, player);
     const profiles = profilesFor(position, player);
     return `<form class="vw-report" id="vwGeneralForm">
       <section class="vw-report-block">
         <div>
-          <h3>General</h3>
-          <p>Asked on every position. Match conditions are shared across every player report on this game.</p>
+          <h3>${group ? `${escapeHtml(group.title)} · General report` : "General report"}</h3>
+          <p>First look. Match conditions are shared across every report on this game.</p>
         </div>
         ${matchConditionsBlock(player, draft)}
-        <label>Position in game
-          ${positionSelect("vwGamePosition", position)}
-        </label>
       </section>
       <section class="vw-report-block">
         <div>
           <h3>Physical</h3>
-          <p>Size, mobility, foot, weak foot, physical ability — same questions for every role.</p>
         </div>
-        ${physicalFields(optionList("physical"), draft.physical || {}, "data-physical", "prompt")}
+        ${physicalFields(position, player, draft.physical || {}, "general")}
       </section>
       <section class="vw-report-block">
         <div>
-          <h3>Data profiles</h3>
-          <p>Titles match the data profiles for this position. First look only — Detailed asks for more.</p>
+          <h3>${group ? `${escapeHtml(group.title)} profiles` : "Profiles"}</h3>
+          <p>Short first look on each profile. Detailed asks the specific questions.</p>
         </div>
-        ${profileFields(profiles, draft.profiles || {}, "data-profile", "general_prompt")}
-      </section>
-      <section class="vw-report-block">
+        ${profileFields(profiles, draft.profiles || {}, "general")}
         <label>Anything else for this match
-          <textarea id="vwGeneralNotes" class="vw-notes-box" maxlength="2000" placeholder="First look, role, anything that is not position-specific yet.">${escapeHtml(draft.notes || "")}</textarea>
+          <textarea id="vwGeneralNotes" class="vw-notes-box" maxlength="2000" placeholder="Role, context, anything that doesn't fit a profile.">${escapeHtml(draft.notes || "")}</textarea>
         </label>
-        <div class="vw-form__row vw-form__row--save">
-          <span></span>
-          <button type="submit" class="vw-save" id="vwSaveGeneral">Save general report</button>
-        </div>
       </section>
+      ${verdictBlock(player, draft, "general")}
+      <div class="vw-form__row vw-form__row--save">
+        <span></span>
+        <button type="submit" class="vw-save" id="vwSaveGeneral">Save general report</button>
+      </div>
     </form>`;
   }
 
@@ -1449,34 +1550,14 @@
     const chips = conditionsChips(conditions);
     const homeAway = homeAwayCopy(player);
     const draft = state.detailedDraft;
-    const position = draft.position_in_game || state.generalDraft.position_in_game || player?.position || "";
+    const position = reportPosition(player);
+    const group = reportGroup(position, player);
     const profiles = profilesFor(position, player);
     const psych = optionList("psychology");
     const psychValues = draft.psychology || {};
     const yesNo = optionList("yes_mixed_no").length
       ? optionList("yes_mixed_no")
       : [{ id: "yes", label: "Yes" }, { id: "mixed", label: "Mixed" }, { id: "no", label: "No" }];
-    const levels = optionList("pvfc_levels").length
-      ? optionList("pvfc_levels")
-      : [
-          { id: "A", label: "A · Starter" },
-          { id: "B", label: "B · Challenger" },
-          { id: "C", label: "C · Emerging talent" },
-          { id: "D", label: "D · Not to standard" },
-        ];
-    const actions = optionList("next_actions").length
-      ? optionList("next_actions")
-      : [
-          { id: "not_to_standard", label: "Not to standard" },
-          { id: "low_priority", label: "Low priority" },
-          { id: "high_priority", label: "High priority" },
-          { id: "sign", label: "Sign" },
-        ];
-    const stages = optionList("pipeline_stages");
-    const ratingButtons = Array.from({ length: 11 }, (_, idx) => {
-      const on = String(draft.match_rating) === String(idx);
-      return `<button type="button" class="${on ? "is-on" : ""}" data-chip="match_rating" data-value="${idx}">${idx}</button>`;
-    }).join("");
     const psychBlock = (psych.length ? psych : [
       { id: "work_hard", label: "Worked hard", prompt: "Did he work for the team off the ball?" },
       { id: "leader", label: "Leader", prompt: "Did he organise, demand, or take responsibility?" },
@@ -1492,31 +1573,27 @@
     return `<form class="vw-report" id="vwDetailedForm">
       <section class="vw-report-block">
         <div>
-          <h3>Detailed report</h3>
-          <p>Same headings as General, with prompts that push for actions — how they progress the ball, what headers they win, why a profile looked good or poor.</p>
+          <h3>${group ? `${escapeHtml(group.title)} · Detailed report` : "Detailed report"}</h3>
+          <p>Same headings as General, with the specific questions for this role on every profile.</p>
         </div>
         <div class="vw-chip-row">
           ${homeAway.label !== "—" ? `<span class="vw-meta-chip">${escapeHtml(homeAway.label)}</span>` : ""}
           ${chips.map((chip) => `<span class="vw-meta-chip">${escapeHtml(chip)}</span>`).join("")}
           ${!chips.length ? `<span class="vw-meta-chip">Set weather / pitch on General</span>` : ""}
         </div>
-        <label>Position in game
-          ${positionSelect("vwDetailedPosition", position)}
-        </label>
       </section>
       <section class="vw-report-block">
         <div>
           <h3>Physical</h3>
-          <p>Size, mobility, foot, weak foot, physical ability — more detail than the first look.</p>
         </div>
-        ${physicalFields(optionList("physical"), draft.physical || {}, "data-detailed-physical", "detailed_prompt")}
+        ${physicalFields(position, player, draft.physical || {}, "detailed")}
       </section>
       <section class="vw-report-block">
         <div>
-          <h3>Break down the profiles</h3>
-          <p>Why did he progress the ball well? Weaknesses? Be specific, not just the data score.</p>
+          <h3>${group ? `${escapeHtml(group.title)} profiles` : "Profiles"}</h3>
+          <p>Answer the question on each profile — specific actions, not just a score.</p>
         </div>
-        ${profileFields(profiles, draft.profiles || {}, "data-detailed-profile", "detailed_prompt")}
+        ${profileFields(profiles, draft.profiles || {}, "detailed")}
       </section>
       <section class="vw-report-block">
         <div>
@@ -1527,38 +1604,15 @@
         <label>Psychology notes
           <textarea id="vwPsychNotes" class="vw-notes-box" maxlength="4000" placeholder="How did he behave? Body language, reactions, communication with teammates and staff.">${escapeHtml(psychValues.notes || "")}</textarea>
         </label>
-      </section>
-      <section class="vw-report-block">
         <label>General write up
           <textarea id="vwWriteUp" class="vw-notes-box vw-notes-box--long" maxlength="4000" placeholder="The match in full — what he is, what he is not, and whether he fits us.">${escapeHtml(draft.write_up || "")}</textarea>
         </label>
-        <label>Next step recommendations
-          <textarea id="vwNextSteps" class="vw-notes-box" maxlength="4000" placeholder="Watch again live, compare vs our 8, leave, or push to the board.">${escapeHtml(draft.next_steps || "")}</textarea>
-        </label>
-        <label>Match rating · 0–10
-          <div class="vw-chips vw-rating">${ratingButtons}</div>
-        </label>
-        <label>PVFC player level
-          ${chipRow("pvfc_level", draft.pvfc_level, levels.map((row) => ({ id: row.id, label: `${row.id} · ${row.label}`, hint: row.hint })))}
-        </label>
-        <label>Next action
-          ${chipRow("next_action", draft.next_action, actions)}
-        </label>
-        <label class="vw-check">
-          <input id="vwAddPipeline" type="checkbox" ${draft.add_to_pipeline ? "checked" : ""} />
-          Add to pipeline
-        </label>
-        <label>Pipeline stage
-          <select id="vwPipelineStage">${(stages.length ? stages : [{ id: "video_scouted", label: "Video scouted" }])
-            .map((row) => `<option value="${escapeHtml(row.id)}" ${row.id === (draft.pipeline_stage || "video_scouted") ? "selected" : ""}>${escapeHtml(row.label)}</option>`)
-            .join("")}</select>
-        </label>
-        ${player.pipeline ? `<p>Currently on ${escapeHtml(player.pipeline.stage_title)} · <a href="/player-pipelines">Open pipelines →</a></p>` : `<p><a href="/player-pipelines">Player Pipelines →</a></p>`}
-        <div class="vw-form__row vw-form__row--save">
-          <span></span>
-          <button type="submit" class="vw-save" id="vwSaveDetailed">Save detailed report</button>
-        </div>
       </section>
+      ${verdictBlock(player, draft, "detailed")}
+      <div class="vw-form__row vw-form__row--save">
+        <span></span>
+        <button type="submit" class="vw-save" id="vwSaveDetailed">Save detailed report</button>
+      </div>
     </form>`;
   }
 
@@ -1674,6 +1728,7 @@
         </div>
       </div>
       ${profiles ? `<div class="vw-profiles">${profiles}</div>` : ""}
+      ${reportPositionBar(player)}
       <div class="vw-tabs" role="tablist">
         ${tabs
           .map(
@@ -1698,6 +1753,13 @@
             state.detailedDraft.position_in_game =
               state.detailedDraft.position_in_game || state.generalDraft.position_in_game;
           }
+          const verdictEmpty = !state.detailedDraft.next_steps && state.detailedDraft.match_rating === ""
+            && !state.detailedDraft.pvfc_level && !state.detailedDraft.next_action;
+          if (verdictEmpty) {
+            for (const key of ["next_steps", "match_rating", "pvfc_level", "add_to_pipeline", "pipeline_stage", "next_action"]) {
+              state.detailedDraft[key] = state.generalDraft[key];
+            }
+          }
         }
         renderProfile();
       });
@@ -1718,14 +1780,8 @@
       event.preventDefault();
       saveCms();
     });
-    document.getElementById("vwGamePosition")?.addEventListener("change", (event) => {
+    document.getElementById("vwReportPosition")?.addEventListener("change", () => {
       captureDraft();
-      state.generalDraft.position_in_game = event.target.value;
-      renderProfile();
-    });
-    document.getElementById("vwDetailedPosition")?.addEventListener("change", (event) => {
-      captureDraft();
-      state.detailedDraft.position_in_game = event.target.value;
       renderProfile();
     });
     els.profile.querySelectorAll("[data-chip]").forEach((btn) => {
@@ -1733,24 +1789,32 @@
         captureDraft();
         const kind = btn.dataset.chip || "";
         const value = btn.dataset.value || "";
-        if (kind === "match_rating") state.detailedDraft.match_rating = value;
-        else if (kind === "pvfc_level") state.detailedDraft.pvfc_level = value;
-        else if (kind === "next_action") {
-          state.detailedDraft.next_action = value;
-          if (value === "sign") {
-            state.detailedDraft.add_to_pipeline = true;
-            state.detailedDraft.pipeline_stage = "scout_identified";
-          }
-          if (value === "not_to_standard") {
-            state.detailedDraft.pvfc_level = state.detailedDraft.pvfc_level || "D";
-            state.detailedDraft.pipeline_stage = "not_the_right_fit";
-          }
-        } else if (kind.startsWith("psych:")) {
+        if (kind.startsWith("psych:")) {
           const key = kind.slice(6);
           state.detailedDraft.psychology = {
             ...(state.detailedDraft.psychology || {}),
             [key]: value,
           };
+        } else {
+          const [scope, field, sub] = kind.split(":");
+          const draft = scope === "general" ? state.generalDraft : state.detailedDraft;
+          if (field === "phys") {
+            draft.physical = { ...(draft.physical || {}), [sub]: draft.physical?.[sub] === value ? "" : value };
+          } else if (field === "match_rating") {
+            draft.match_rating = draft.match_rating === value ? "" : value;
+          } else if (field === "pvfc_level") {
+            draft.pvfc_level = value;
+          } else if (field === "next_action") {
+            draft.next_action = value;
+            if (value === "sign") {
+              draft.add_to_pipeline = true;
+              draft.pipeline_stage = "scout_identified";
+            }
+            if (value === "not_to_standard") {
+              draft.pvfc_level = draft.pvfc_level || "D";
+              draft.pipeline_stage = "not_the_right_fit";
+            }
+          }
         }
         renderProfile();
       });
@@ -1847,8 +1911,18 @@
           position_in_game: state.generalDraft.position_in_game,
           physical: state.generalDraft.physical,
           profiles: state.generalDraft.profiles,
+          next_steps: state.generalDraft.next_steps,
+          match_rating: state.generalDraft.match_rating === "" ? null : Number(state.generalDraft.match_rating),
+          pvfc_level: state.generalDraft.pvfc_level,
+          add_to_pipeline: state.generalDraft.add_to_pipeline,
+          pipeline_stage: state.generalDraft.pipeline_stage,
+          next_action: state.generalDraft.next_action,
           name: player.name || "",
           club: player.club || player.team_name || "",
+          league: player.league || state.sheet?.league || "",
+          position: player.position || "",
+          position_label: player.position_label || "",
+          age: player.age ?? null,
           home_name: ctx.home_name,
           away_name: ctx.away_name,
           sheet_side: ctx.sheet_side,
@@ -1864,7 +1938,12 @@
         sheet_side: player.sheet_side || data.player?.sheet_side || "",
       };
       fillGeneralDraft(state.player);
-      setStatus("General report saved. Weather and pitch will load on every other report for this game.", "is-ok");
+      const pipelineNote = data.pipeline_error
+        ? ` Pipeline: ${data.pipeline_error}`
+        : data.pipeline?.target
+          ? " On the pipeline."
+          : "";
+      setStatus(`General report saved. Weather and pitch load on every other report for this game.${pipelineNote}`, "is-ok");
       renderSheets();
       renderProfile();
     } catch (error) {

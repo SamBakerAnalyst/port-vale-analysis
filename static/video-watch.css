@@ -1201,6 +1201,65 @@ a:hover { text-decoration: underline; }
 }
 .vw-psych p { margin: 0; }
 .vw-psych strong { color: var(--text); margin-right: 0.35rem; }
+.vw-report-position {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.2rem 0 0.7rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.vw-report-position label {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.vw-report-position select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  padding: 0.6rem 0.75rem;
+  font: inherit;
+  font-size: 1.02rem;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.vw-report-position p { margin: 0; color: var(--muted); font-size: 0.86rem; }
+.vw-report-position strong { color: var(--text); }
+.vw-field {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.45rem 0;
+  border-top: 1px solid var(--line);
+}
+.vw-field p { margin: 0; }
+.vw-field strong { color: var(--text); margin-right: 0.45rem; }
+.vw-field-hint {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+.vw-profile-q {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 600;
+  font-style: italic;
+}
+.vw-earlier {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+.vw-earlier ul { margin: 0.2rem 0 0; padding-left: 1.1rem; }
+.vw-earlier li strong { color: var(--text); text-transform: capitalize; margin-right: 0.35rem; }
 .vw-check {
   display: flex !important;
   flex-direction: row !important;

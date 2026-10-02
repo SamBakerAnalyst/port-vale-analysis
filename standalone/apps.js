@@ -413,9 +413,9 @@ window.IMPECT_APPS = [
   {
     "id": "video-watch",
     "group": "recruitment",
-    "title": "Player Reports",
-    "description": "Watch a game with both team sheets. Open a player for the general report, detailed report, Scoutable Teams notes, and player CMS. Match weather and pitch are shared across every report on that game.",
-    "href": "/player-reports",
+    "title": "Match Scouting",
+    "description": "Watch a game with both team sheets. Set each player's position and file the Port Vale scouting report for that role — general and detailed — plus Scoutable Teams notes and player CMS. Match weather and pitch are shared across the game.",
+    "href": "/match-scouting",
     "icon": "📝",
     "accent": "#a78bfa",
     "tags": ["Reports", "Notes", "Scouting", "Team sheet"]

@@ -1,4 +1,4 @@
-"""Player Reports — team sheets plus notes shared with Scoutable Teams and the player page."""
+"""Match Scouting — team sheets plus notes shared with Scoutable Teams and the player page."""
 
 from __future__ import annotations
 
@@ -30,14 +30,16 @@ def test_sheet_player_gets_a_position_short_code():
 
 def test_video_watch_is_a_recruitment_rail_tool():
     titles = required_sidebar_titles()
-    assert "Player Reports" in titles
+    assert "Match Scouting" in titles
+    assert "Player Reports" not in titles
     row = next(app for app in APPS if app["id"] == "video-watch")
-    assert row["title"] == "Player Reports"
-    assert row["href"] == "/player-reports"
+    assert row["title"] == "Match Scouting"
+    assert row["href"] == "/match-scouting"
     assert row["group"] == "recruitment"
     assert row.get("sidebar") is not False
     assert "scouts" in tuple(row["roles"])
     assert row["router"] == "video_watch"
+    assert "/match-scouting" in tuple(row["api_prefixes"])
     assert "/player-reports" in tuple(row["api_prefixes"])
     assert "/video-watch" in tuple(row["api_prefixes"])
     assert "/api/video-watch" in tuple(row["api_prefixes"])
@@ -48,7 +50,7 @@ def test_page_has_both_sheets_and_a_central_profile():
     html = (STANDALONE_DIR / "video-watch.html").read_text(encoding="utf-8")
     css = (STANDALONE_DIR.parent / "static" / "video-watch.css").read_text(encoding="utf-8")
     js = (STANDALONE_DIR.parent / "static" / "video-watch.js").read_text(encoding="utf-8")
-    assert "Player Reports" in html
+    assert "Match Scouting" in html
     assert "Which league are you watching?" in html
     assert 'id="vwLeagues"' in html
     assert 'id="vwFixtures"' in html
@@ -78,16 +80,17 @@ def test_page_has_both_sheets_and_a_central_profile():
     assert "Match conditions" in js or "Weather conditions" in js
     assert "Home / Away" in js
     assert "auto from match title" in js
-    assert "Position in game" in js
+    assert "Report position" in js
+    assert 'id="vwReportPosition"' in js or "vwReportPosition" in js
     assert "Physical" in js
-    assert "Weak foot" in js
-    assert "Data profiles" in js
+    assert "Next step recommendations" in js
+    assert "Match rating · 0–10" in js
     assert "Psychology" in js
     assert "PVFC player level" in js
     assert "Next action" in js
     assert "Add to pipeline" in js
-    assert "How do they progress the ball" in js
-    assert "What sort of headers do they win" in js
+    assert "verdictBlock(player, draft, \"general\")" in js
+    assert "report_groups" in js
     assert "Scoutable Teams" in js
     assert "Who to Scout" in js
     assert "player page" in js
@@ -449,22 +452,77 @@ def test_general_report_keeps_physical_and_profile_notes(tmp_path, monkeypatch):
     assert loaded["profiles"]["deep-creator"].startswith("Switches")
 
 
-def test_report_profile_titles_follow_the_player_data(tmp_path, monkeypatch):
-    from app.player_report_schema import profile_entries_for_position, profile_id
+def test_report_profiles_follow_the_port_vale_format_per_position():
+    from app.player_report_schema import (
+        profile_entries_for_position,
+        profile_id,
+        report_group_for_position,
+    )
 
     assert profile_id("PV DEEP CREATOR") == "deep-creator"
     rows = profile_entries_for_position(
         "RIGHT_WINGBACK_DEFENDER",
-        player_profiles=[
-            {"key": "PV DEFENDER", "label": "Defender", "score": 44},
-            {"key": "PV DEEP CREATOR", "label": "Deep Creator", "score": 40},
-        ],
+        player_profiles=[{"key": "PV WIDE PRESSER", "label": "Wide Presser", "score": 44}],
         player_position="RIGHT_WINGBACK_DEFENDER",
     )
-    labels = [row["label"] for row in rows]
-    assert "Defender" in labels
-    assert "Deep Creator" in labels
-    assert rows[1]["detailed_prompt"].startswith("How do they progress the ball")
+    assert [row["label"] for row in rows] == ["Deep creator", "Defensive", "Offensive"]
+    assert rows[0]["detailed_prompt"] == "Does he create, and how?"
+
+    expected = {
+        "GOALKEEPER": ["Shot stopper", "Long kicking", "Short kicking", "Box goalkeeper", "Sweeper keeper"],
+        "CENTRAL_DEFENDER": [
+            "Central dueler",
+            "Aerial",
+            "Ball progressor",
+            "Right side dueler (if back 3)",
+            "Left side dueler (if back 3)",
+        ],
+        "DEFENSE_MIDFIELD": ["Ball winner", "Ball progressor", "Creator"],
+        "CENTRAL_MIDFIELD": ["Ball winner", "Ball progressor", "Creator", "Running threat", "Goal threat"],
+        "ATTACKING_MIDFIELD": ["Ball winner", "Creator", "Running threat", "Goal threat"],
+        "LEFT_WINGER": ["Ball carrier", "Creator", "Goal threat", "Presser"],
+        "RIGHT_WINGER": ["Ball carrier", "Creator", "Goal threat", "Presser"],
+        "CENTER_FORWARD": ["Goal threat", "Target man", "Threat in behind", "Presser", "Link / creator"],
+    }
+    for position, labels in expected.items():
+        assert [row["label"] for row in profile_entries_for_position(position)] == labels, position
+
+    gk = report_group_for_position("GOALKEEPER")
+    assert gk["physical"] == ["size", "mobility", "foot", "weak_foot"]
+    striker = report_group_for_position("CENTER_FORWARD")
+    assert striker["physical"] == ["work_rate", "size", "mobility", "foot", "weak_foot", "fitness"]
+
+
+def test_general_report_carries_the_verdict(tmp_path, monkeypatch):
+    monkeypatch.setattr(reports, "PLAYER_REPORTS_PATH", tmp_path / "player-reports.json")
+    saved = reports.save_general_report(
+        player_id=922,
+        fixture_id="barnet-accrington-1",
+        position_in_game="CENTER_FORWARD",
+        physical={"work_rate": "8", "foot": "left", "weak_foot": "mid"},
+        next_steps="Go live next week.",
+        match_rating=7,
+        pvfc_level="B",
+        next_action="sign",
+        staff="Dan",
+    )
+    assert saved["filled"] is True
+    assert saved["physical"]["work_rate"] == "8"
+    assert saved["match_rating"] == 7
+    assert saved["pvfc_level"] == "B"
+    assert saved["add_to_pipeline"] is True
+    assert saved["pipeline_stage"] == "scout_identified"
+    detailed = reports.detailed_report_for_player(922, "barnet-accrington-1")
+    assert detailed["match_rating"] == 7
+    assert detailed["next_steps"] == "Go live next week."
+
+
+def test_legacy_physical_notes_are_kept():
+    from app.player_report_schema import clean_physical
+
+    cleaned = clean_physical({"physical_ability": "Lasted 90.", "mobility": "Quick over 10 yards."})
+    assert cleaned["physical_ability"] == "Lasted 90."
+    assert cleaned["mobility"] == "Quick over 10 yards."
 
 
 def test_detailed_report_stores_level_rating_and_next_action(tmp_path, monkeypatch):

@@ -542,18 +542,19 @@ APPS: list[dict[str, Any]] = [
     {
         "id": "video-watch",
         "group": "recruitment",
-        "title": "Player Reports",
+        "title": "Match Scouting",
         "description": (
-            "Watch a game with both team sheets. Open a player for the general report, "
-            "detailed report, Scoutable Teams notes, and player CMS. Match weather and "
-            "pitch are shared across every report on that game."
+            "Watch a game with both team sheets. Set each player's position and file the "
+            "Port Vale scouting report for that role — general and detailed — plus Scoutable "
+            "Teams notes and player CMS. Match weather and pitch are shared across the game."
         ),
-        "href": "/player-reports",
+        "href": "/match-scouting",
         "icon": "📝",
         "accent": "#a78bfa",
         "tags": ["Reports", "Notes", "Scouting", "Team sheet"],
         "roles": ("scouts", "admin"),
         "api_prefixes": (
+            "/match-scouting",
             "/player-reports",
             "/video-watch",
             "/api/video-watch",

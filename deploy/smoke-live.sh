@@ -142,7 +142,7 @@ want_open = {
     "Player Pipelines",
     "Scoutable Teams",
     "Games to Watch",
-    "Player Reports",
+    "Match Scouting",
     "Club Strategy",
     "What Wins Games",
 }

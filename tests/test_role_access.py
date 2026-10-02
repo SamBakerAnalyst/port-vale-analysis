@@ -211,6 +211,7 @@ def test_scouts_reach_their_own_tool_pages_and_apis():
         "/api/loans-watch",
         "/games-to-watch",
         "/api/games-to-watch",
+        "/match-scouting",
         "/player-reports",
         "/video-watch",
         "/api/video-watch",

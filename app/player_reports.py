@@ -1,4 +1,4 @@
-"""Player Reports — shared match conditions, general file, and player CMS.
+"""Match Scouting — shared match conditions, general file, and player CMS.
 
 Match weather / pitch are stored once per fixture so every player report on
 that game loads the same conditions. Home/Away is inferred from the match
@@ -86,9 +86,19 @@ class GeneralReportBody(BaseModel):
     home_name: str = ""
     away_name: str = ""
     sheet_side: str = ""
+    league: str = ""
+    position: str = ""
+    position_label: str = ""
+    age: int | None = None
     position_in_game: str = ""
     physical: dict[str, str] = Field(default_factory=dict)
     profiles: dict[str, str] = Field(default_factory=dict)
+    next_steps: str = ""
+    match_rating: float | None = None
+    pvfc_level: str = ""
+    add_to_pipeline: bool = False
+    pipeline_stage: str = "video_scouted"
+    next_action: str = ""
 
 
 class DetailedReportBody(BaseModel):
@@ -359,10 +369,54 @@ def empty_general_report(player_id: int = 0, fixture_id: str = "") -> dict[str, 
         "physical": empty_physical(),
         "profiles": {},
         "notes": "",
+        **_empty_verdict(),
         "updated_by": "",
         "updated_at": "",
         "filled": False,
     }
+
+
+def _empty_verdict() -> dict[str, Any]:
+    return {
+        "next_steps": "",
+        "match_rating": None,
+        "pvfc_level": "",
+        "add_to_pipeline": False,
+        "pipeline_stage": "video_scouted",
+        "next_action": "",
+    }
+
+
+def _clean_verdict(row: dict[str, Any]) -> dict[str, Any]:
+    level = clean_pvfc_level(row.get("pvfc_level"))
+    action = clean_next_action(row.get("next_action"))
+    stage = clean_pipeline_stage(row.get("pipeline_stage")) or "video_scouted"
+    add = bool(row.get("add_to_pipeline"))
+    if action == "sign":
+        add = True
+        if stage in ("", "video_scouted"):
+            stage = "scout_identified"
+    elif action == "not_to_standard":
+        level = level or "D"
+        if stage in ("", "video_scouted"):
+            stage = "not_the_right_fit"
+    return {
+        "next_steps": str(row.get("next_steps") or "").strip()[:4000],
+        "match_rating": clean_match_rating(row.get("match_rating")),
+        "pvfc_level": level,
+        "add_to_pipeline": add,
+        "pipeline_stage": stage,
+        "next_action": action,
+    }
+
+
+def _verdict_filled(verdict: dict[str, Any]) -> bool:
+    return bool(
+        verdict["next_steps"]
+        or verdict["match_rating"] is not None
+        or verdict["pvfc_level"]
+        or verdict["next_action"]
+    )
 
 
 def _general_from_row(player_id: int, fixture_id: str, row: dict[str, Any] | None) -> dict[str, Any]:
@@ -373,17 +427,20 @@ def _general_from_row(player_id: int, fixture_id: str, row: dict[str, Any] | Non
     profiles = clean_profiles(row.get("profiles"))
     notes = str(row.get("notes") or "").strip()
     position = clean_position(row.get("position_in_game"))
+    verdict = _clean_verdict(row)
     base.update(
         {
             "position_in_game": position,
             "physical": physical,
             "profiles": profiles,
             "notes": notes,
+            **verdict,
             "updated_by": str(row.get("updated_by") or ""),
             "updated_at": str(row.get("updated_at") or ""),
             "filled": bool(
                 position
                 or notes
+                or _verdict_filled(verdict)
                 or any(physical.values())
                 or any(str(value or "").strip() for value in profiles.values())
             ),
@@ -408,6 +465,12 @@ def save_general_report(
     position_in_game: str = "",
     physical: dict[str, str] | None = None,
     profiles: dict[str, str] | None = None,
+    next_steps: str = "",
+    match_rating: float | None = None,
+    pvfc_level: str = "",
+    add_to_pipeline: bool = False,
+    pipeline_stage: str = "video_scouted",
+    next_action: str = "",
     staff: str = "Staff",
 ) -> dict[str, Any]:
     if not player_id:
@@ -423,6 +486,12 @@ def save_general_report(
             "physical": physical or {},
             "profiles": profiles or {},
             "notes": str(notes or "").strip()[:2000],
+            "next_steps": next_steps,
+            "match_rating": match_rating,
+            "pvfc_level": pvfc_level,
+            "add_to_pipeline": add_to_pipeline,
+            "pipeline_stage": pipeline_stage,
+            "next_action": next_action,
             "updated_by": str(staff or "").strip() or "Staff",
             "updated_at": _now(),
         },
@@ -462,21 +531,8 @@ def _detailed_from_row(player_id: int, fixture_id: str, row: dict[str, Any] | No
     profiles = clean_profiles(row.get("profiles"))
     psychology = clean_psychology(row.get("psychology"))
     write_up = str(row.get("write_up") or "").strip()
-    next_steps = str(row.get("next_steps") or "").strip()
-    rating = clean_match_rating(row.get("match_rating"))
-    level = clean_pvfc_level(row.get("pvfc_level"))
-    action = clean_next_action(row.get("next_action"))
-    stage = clean_pipeline_stage(row.get("pipeline_stage")) or "video_scouted"
     position = clean_position(row.get("position_in_game"))
-    add = bool(row.get("add_to_pipeline"))
-    if action == "sign":
-        add = True
-        if stage in ("", "video_scouted"):
-            stage = "scout_identified"
-    elif action == "not_to_standard":
-        level = level or "D"
-        if stage in ("", "video_scouted"):
-            stage = "not_the_right_fit"
+    verdict = _clean_verdict(row)
     base.update(
         {
             "position_in_game": position,
@@ -484,21 +540,13 @@ def _detailed_from_row(player_id: int, fixture_id: str, row: dict[str, Any] | No
             "profiles": profiles,
             "psychology": psychology,
             "write_up": write_up[:4000],
-            "next_steps": next_steps[:4000],
-            "match_rating": rating,
-            "pvfc_level": level,
-            "add_to_pipeline": add,
-            "pipeline_stage": stage,
-            "next_action": action,
+            **verdict,
             "updated_by": str(row.get("updated_by") or ""),
             "updated_at": str(row.get("updated_at") or ""),
             "filled": bool(
                 position
                 or write_up
-                or next_steps
-                or rating is not None
-                or level
-                or action
+                or _verdict_filled(verdict)
                 or any(physical.values())
                 or any(str(value or "").strip() for value in profiles.values())
                 or any(str(value or "").strip() for value in psychology.values())
@@ -524,6 +572,8 @@ def detailed_report_for_player(player_id: int, fixture_id: str) -> dict[str, Any
         detailed["physical"] = dict(general.get("physical") or empty_physical())
     if not any(str(value or "").strip() for value in detailed["profiles"].values()):
         detailed["profiles"] = dict(general.get("profiles") or {})
+    for key in _empty_verdict():
+        detailed[key] = general.get(key, detailed[key])
     return detailed
 
 
