@@ -15,4 +15,7 @@ def register_sd_briefing_routes(app: FastAPI) -> None:
         html_path = STANDALONE_DIR / "sd-briefing.html"
         if not html_path.is_file():
             raise HTTPException(status_code=404, detail="Sporting Director briefing deck missing.")
-        return HTMLResponse(html_path.read_text(encoding="utf-8"))
+        return HTMLResponse(
+            html_path.read_text(encoding="utf-8"),
+            headers={"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"},
+        )
