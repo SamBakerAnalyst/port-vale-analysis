@@ -901,6 +901,23 @@ APPS: list[dict[str, Any]] = [
         "router": "presentations",
     },
     {
+        "id": "sd-briefing",
+        "group": "presentations",
+        "title": "Sporting Director Briefing",
+        "description": (
+            "Onboarding deck for the new Sporting Director — 26/27 results, form, "
+            "Strategy Report benchmarks, what wins games, squad depth and staff. Present or PDF."
+        ),
+        "href": "/sporting-director-briefing",
+        "icon": "🤝",
+        "accent": "#a78bfa",
+        "tags": ["Strategy", "Squad", "Staff", "Presentation"],
+        "roles": ("admin",),
+        "api_prefixes": ("/sporting-director-briefing", "/api/wysiwyg-export-pdf"),
+        "router": "sd_briefing",
+        "sidebar": False,
+    },
+    {
         "id": "league-two-strategy",
         "group": "presentations",
         "title": "League Two Strategy Report",

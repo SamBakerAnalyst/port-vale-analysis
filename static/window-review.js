@@ -12,6 +12,8 @@
   const notesBtn = document.getElementById("notesBtn");
   const slides = Array.from(deck.querySelectorAll(".slide"));
   const total = slides.length;
+  const pdfFile = deck.dataset.pdfFile || "Port-Vale-Summer-Window-2627.pdf";
+  const pdfTitle = deck.dataset.pdfTitle || "Port Vale — Summer window review 26/27";
 
   let index = 0;
 
@@ -115,7 +117,7 @@
       if (!window.PortValeWysiwygExport) {
         throw new Error("WYSIWYG export helper failed to load — hard refresh and try again.");
       }
-      setExportStatus("Preparing window-review PDF from on-screen slides…", "loading");
+      setExportStatus("Preparing PDF from on-screen slides…", "loading");
       setExportOverlay("Building PDF…");
       slides.forEach((s) => s.classList.add("is-active"));
       const pack = await window.PortValeWysiwygExport.captureSlideHtmlPages({
@@ -134,8 +136,8 @@
       setExportOverlay("Rendering PDF…");
       const result = await window.PortValeWysiwygExport.downloadPdf({
         ...pack,
-        filename: "Port-Vale-Summer-Window-2627.pdf",
-        documentTitle: "Port Vale — Summer window review 26/27",
+        filename: pdfFile,
+        documentTitle: pdfTitle,
         endpoint: "/api/wysiwyg-export-pdf",
       });
       setExportStatus(
