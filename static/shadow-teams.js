@@ -493,7 +493,7 @@
 
     return `${sectionHead("How they score and concede", "Goals", `Every Impect-tagged goal in ${esc(cs.label)}, split by phase of play, type of finish, scorer's position and where on the pitch it was scored. Rank is among all ${teams} clubs for goals scored that way. Conceded is added up from each of their league matches.${vg ? ` Port Vale = ${esc(vale.label)}.` : ""}`)}
       <div class="st-kpis st-kpis--6">${tiles.map(([l, v, s]) => `<div class="st-kpi"><span class="st-kpi__label">${esc(l)}</span><span class="st-kpi__value">${esc(v)}</span><span class="st-kpi__sub">${esc(s)}</span></div>`).join("")}</div>
-      <div class="at-grid st-grid--goals">
+      <div class="at-grid">
         <article class="card"><p class="at-panel__kicker">By phase of play</p><h3 class="at-panel__title">How the goals came</h3>
           ${phaseBars}
           <div class="st-table-wrap st-mt"><table class="st-table">${head("Phase")}<tbody>${phaseRows}</tbody></table></div>
@@ -511,17 +511,18 @@
         </article>
         <article class="card"><p class="at-panel__kicker">Where on the pitch</p><h3 class="at-panel__title">Scoring lanes</h3>
           ${laneHtml}
-          <p class="at-panel__kicker st-mt">Scorers</p>
-          <div class="st-table-wrap"><table class="st-table"><thead><tr><th>Pos</th><th>Player</th><th>G</th><th>A</th><th>xG</th><th>Phase</th><th>Finish</th></tr></thead><tbody>${scorers}</tbody></table></div>
         </article>
-      </div>`;
+      </div>
+      <article class="card st-mt"><p class="at-panel__kicker">Scorers · how each player's goals came</p>
+        <div class="st-table-wrap"><table class="st-table"><thead><tr><th>Pos</th><th>Player</th><th>G</th><th>A</th><th>xG</th><th>Phase</th><th>Finish</th></tr></thead><tbody>${scorers}</tbody></table></div>
+      </article>`;
   }
 
   function templateGoalsHtml(t, vale) {
     const tg = t.goals || {};
     const vm = vale?.goal_mix || {};
     const block = (title, part, items) => {
-      const rows = items.filter(([k]) => tg[part]?.[k]).map(([k, label, color]) => {
+      const rows = items.filter(([k]) => tg[part]?.[k] && (tg[part][k].share >= 0.5 || (vm[part]?.[k] || 0) >= 0.5)).map(([k, label, color]) => {
         const cell = tg[part][k];
         const v = vm[part]?.[k];
         const dots = cell.by_season.map((s) => `<span class="st-gap__dot" style="left:${Math.min(100, s.share * (100 / 60))}%;background:${CLUB_COLORS[s.club]}" title="${esc(clubLabel(s.club))} ${esc(s.season)}: ${num(s.share, 0)}%"></span>`).join("");
