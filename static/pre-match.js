@@ -27,6 +27,15 @@ const state = {
   fixtures: [],
   report: null,
   twoPagerBoard: null,
+  squadBoard: {
+    availability: {},
+    pitchXi: {},
+    pitchShape: {},
+    defaults: {},
+    dirty: false,
+    saved: false,
+    ready: false,
+  },
   loading: false,
   reportLoadToken: 0,
   slideIndex: 0,
@@ -826,39 +835,79 @@ function footStorageKey(report = state.report) {
   return `pm-squad-foot:${iterationId}:${squadId}`;
 }
 
-const AVAILABILITY_CYCLE = ["available", "injured", "suspended", "international"];
+const AVAILABILITY_CYCLE = ["available", "injured", "suspended", "international", "doubt"];
+const UNAVAILABLE_FOR_XI = new Set(["injured", "suspended", "international"]);
 
 const AVAILABILITY_META = {
   available: { label: "Available", short: "" },
   injured: { label: "Injured", short: "INJ" },
   suspended: { label: "Suspended", short: "SUS" },
   international: { label: "International duty", short: "INT" },
+  doubt: { label: "Doubt", short: "DBT" },
 };
 
-function loadAvailability(report = state.report) {
-  try {
-    const raw = localStorage.getItem(availabilityStorageKey(report));
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
+function ensureSquadBoard() {
+  if (!state.squadBoard) {
+    state.squadBoard = {
+      availability: {},
+      pitchXi: {},
+      pitchShape: {},
+      defaults: {},
+      dirty: false,
+      saved: false,
+      ready: false,
+    };
   }
+  return state.squadBoard;
 }
 
-function saveAvailability(map, report = state.report) {
-  try {
-    localStorage.setItem(availabilityStorageKey(report), JSON.stringify(map));
-  } catch {
-    /* ignore */
-  }
+function cloneAvailabilityMap(source) {
+  const out = {};
+  Object.entries(source || {}).forEach(([key, value]) => {
+    if (!value || typeof value !== "object") return;
+    const status = String(value.status || "").toLowerCase();
+    if (!AVAILABILITY_CYCLE.includes(status)) return;
+    out[String(key)] = {
+      status,
+      reason: String(value.reason || ""),
+      expected_return: String(value.expected_return || ""),
+    };
+  });
+  return out;
 }
 
-function playerAvailability(playerId, report = state.report) {
+function squadBoardIds(report = state.report) {
+  const iterationId = report?.iteration_id ?? Number(els.iterationId?.value || 0);
+  const squadId = report?.opponent?.id ?? report?.squad_id ?? Number(els.opponentId?.value || 0);
+  return { iterationId: Number(iterationId) || 0, squadId: Number(squadId) || 0 };
+}
+
+function loadAvailability() {
+  return ensureSquadBoard().availability || {};
+}
+
+function saveAvailability(map) {
+  const board = ensureSquadBoard();
+  board.availability = map && typeof map === "object" ? map : {};
+  board.dirty = true;
+}
+
+function playerAvailabilityRecord(playerId) {
   const key = String(playerId ?? "");
-  if (!key) return "available";
-  const status = loadAvailability(report)[key];
-  return AVAILABILITY_CYCLE.includes(status) ? status : "available";
+  if (!key) return { status: "available", reason: "", expected_return: "" };
+  const row = loadAvailability()[key];
+  if (row && AVAILABILITY_CYCLE.includes(row.status)) return row;
+  return { status: "available", reason: "", expected_return: "" };
+}
+
+function playerAvailability(playerId) {
+  return playerAvailabilityRecord(playerId).status;
+}
+
+function availabilityNote(playerId) {
+  const record = playerAvailabilityRecord(playerId);
+  if (record.status === "available") return "";
+  return [record.reason, record.expected_return].filter(Boolean).join(" · ");
 }
 
 function nextAvailability(status) {
@@ -917,6 +966,9 @@ function availabilityIconHtml(status) {
       <svg viewBox="0 0 16 16" width="12" height="12"><path fill="currentColor" d="M1.2 8.4l5.1-.7L9.1 2l1.3.4-1.4 4.8 3.7.5 1.3-1.6.9.3-1 2.2 1 2.2-.9.3-1.3-1.6-3.7.5 1.4 4.8-1.3.4-2.8-5.7-5.1-.7.2-1.3z"/></svg>
     </span>`;
   }
+  if (status === "doubt") {
+    return `<span class="squad-roster__icon squad-roster__icon--doubt" aria-hidden="true" title="Doubt">?</span>`;
+  }
   return "";
 }
 
@@ -924,15 +976,8 @@ function slotShapeKey(index) {
   return `slot:${index}`;
 }
 
-function loadPitchShape(report = state.report) {
-  try {
-    const raw = localStorage.getItem(pitchShapeStorageKey(report));
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
+function loadPitchShape() {
+  return ensureSquadBoard().pitchShape || {};
 }
 
 function saveMarkerShape(marker, x, y, shape = loadPitchShape()) {
@@ -981,47 +1026,85 @@ function swapMarkerPositions(markerA, markerB, toolbar) {
   ensurePitchResetButton(toolbar);
 }
 
-function savePitchShape(shape, report = state.report) {
-  try {
-    localStorage.setItem(pitchShapeStorageKey(report), JSON.stringify(shape));
-  } catch {
-    /* ignore */
-  }
+function savePitchShape(shape) {
+  const board = ensureSquadBoard();
+  board.pitchShape = shape && typeof shape === "object" ? shape : {};
+  board.dirty = true;
 }
 
-function clearPitchShape(report = state.report) {
-  try {
-    localStorage.removeItem(pitchShapeStorageKey(report));
-  } catch {
-    /* ignore */
-  }
+function clearPitchShape() {
+  ensureSquadBoard().pitchShape = {};
 }
 
-function loadPitchXi(report = state.report) {
-  try {
-    const raw = localStorage.getItem(pitchXiStorageKey(report));
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
+function loadPitchXi() {
+  return ensureSquadBoard().pitchXi || {};
 }
 
-function savePitchXi(xi, report = state.report) {
-  try {
-    localStorage.setItem(pitchXiStorageKey(report), JSON.stringify(xi));
-  } catch {
-    /* ignore */
-  }
+function savePitchXi(xi) {
+  const board = ensureSquadBoard();
+  board.pitchXi = xi && typeof xi === "object" ? xi : {};
+  board.dirty = true;
 }
 
-function clearPitchXi(report = state.report) {
-  try {
-    localStorage.removeItem(pitchXiStorageKey(report));
-  } catch {
-    /* ignore */
+function clearPitchXi() {
+  ensureSquadBoard().pitchXi = {};
+}
+
+async function hydrateSquadBoard(report = state.report) {
+  const { iterationId, squadId } = squadBoardIds(report);
+  const defaults = cloneAvailabilityMap(report?.squad_list?.availability_defaults);
+  let server = { saved: false, availability: {}, pitch_xi: {}, pitch_shape: {} };
+  if (iterationId && squadId) {
+    try {
+      server = await fetchJson(
+        `/api/pre-match/squad-board?iteration_id=${iterationId}&squad_id=${squadId}`,
+      );
+    } catch {
+      server = { saved: false, availability: {}, pitch_xi: {}, pitch_shape: {} };
+    }
   }
+  const saved = Boolean(server?.saved);
+  state.squadBoard = {
+    iterationId,
+    squadId,
+    defaults,
+    availability: saved ? cloneAvailabilityMap(server.availability) : cloneAvailabilityMap(defaults),
+    pitchXi: saved && server.pitch_xi && typeof server.pitch_xi === "object" ? server.pitch_xi : {},
+    pitchShape: saved && server.pitch_shape && typeof server.pitch_shape === "object" ? server.pitch_shape : {},
+    dirty: false,
+    saved,
+    ready: true,
+  };
+}
+
+async function persistSquadBoard({ reset = false } = {}) {
+  const board = ensureSquadBoard();
+  const { iterationId, squadId } = squadBoardIds();
+  if (!iterationId || !squadId) return null;
+  const saved = await fetchJson("/api/pre-match/squad-board", {
+    method: "POST",
+    body: JSON.stringify({
+      iteration_id: iterationId,
+      squad_id: squadId,
+      availability: reset ? {} : board.availability,
+      pitch_xi: reset ? {} : board.pitchXi,
+      pitch_shape: reset ? {} : board.pitchShape,
+      reset,
+    }),
+  });
+  if (reset) {
+    board.availability = cloneAvailabilityMap(board.defaults);
+    board.pitchXi = {};
+    board.pitchShape = {};
+    board.saved = false;
+  } else {
+    board.availability = cloneAvailabilityMap(saved?.availability);
+    board.pitchXi = saved?.pitch_xi || {};
+    board.pitchShape = saved?.pitch_shape || {};
+    board.saved = true;
+  }
+  board.dirty = false;
+  return saved;
 }
 
 function opponentPhotoUrl(name, report = state.report, shirtNumber = null) {
@@ -1093,6 +1176,37 @@ function applyPitchShapeOverrides(players, report = state.report) {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return player;
     return { ...player, x_pct: x, y_pct: y, shape_override: true };
   });
+}
+
+function applyAvailabilitySuggestions(players, report = state.report) {
+  const hints = report?.squad_list?.xi_suggestions || [];
+  const next = (players || []).map((player) => ({ ...player }));
+  hints.forEach((hint) => {
+    const index = next.findIndex((player) => Number(player.player_id) === Number(hint.out_id));
+    if (index < 0 || next[index].xi_override) return;
+    const status = playerAvailability(hint.out_id);
+    if (!UNAVAILABLE_FOR_XI.has(status)) return;
+    if (playerAvailability(hint.in_id) !== "available") return;
+    if (next.some((player) => Number(player.player_id) === Number(hint.in_id))) return;
+    const incoming = findSquadPlayer(hint.in_id, report);
+    if (!incoming) return;
+    const displaced = next[index];
+    const reason = availabilityNote(hint.out_id) || AVAILABILITY_META[status]?.label || "unavailable";
+    next[index] = {
+      ...displaced,
+      player_id: Number(incoming.id),
+      name: incoming.name,
+      short_name: playerSurname(incoming.name),
+      shirt_number: incoming.shirt_number ?? displaced.shirt_number,
+      position: incoming.position_code || incoming.position || displaced.position,
+      band: incoming.band || displaced.band,
+      photo_url: opponentPhotoUrl(incoming.name, report, incoming.shirt_number),
+      suggested: true,
+      suggested_for: displaced.short_name || playerSurname(displaced.name),
+      suggested_reason: reason,
+    };
+  });
+  return next;
 }
 
 function applyPitchXiOverrides(players, report = state.report) {
@@ -1201,10 +1315,13 @@ function pitchMarkersHtml(players) {
     .map((player, index) => {
       const left = Number(player.x_pct ?? 50);
       const top = Number(player.y_pct ?? 50);
-      const label = pitchLabelText(player);
+      const label = player.captain ? `${pitchLabelText(player)} (C)` : pitchLabelText(player);
       const markerKey = player.player_id ?? player.name ?? index;
       const status = playerAvailability(player.player_id);
-      const statusClass = status !== "available" ? ` squad-marker--${status}` : "";
+      const statusClass = [
+        status !== "available" ? ` squad-marker--${status}` : "",
+        player.suggested ? " squad-marker--suggested" : "",
+      ].join("");
       const badge = availabilityIconHtml(status);
       const shirt =
         player.shirt_number != null && player.shirt_number !== ""
@@ -1216,12 +1333,15 @@ function pitchMarkersHtml(players) {
         ? `<img class="squad-marker__photo" src="${escapeHtml(photoUrl)}" alt="" loading="eager" decoding="async" draggable="false" onerror="this.style.display='none';var d=this.nextElementSibling;if(d){d.style.display='flex'}" />
            ${fallback}`
         : fallback;
-      return `<div class="squad-marker${statusClass}" data-slot-index="${index}" data-marker-key="${markerKey}" data-player-id="${player.player_id ?? ""}" style="left:${left}%;top:${top}%;z-index:${index + 1}" title="${player.name}${status !== "available" ? ` · ${AVAILABILITY_META[status].label}` : ""}">
+      const suggestionTitle = player.suggested
+        ? ` · suggested for ${player.suggested_for}${player.suggested_reason ? ` (${player.suggested_reason})` : ""}`
+        : "";
+      return `<div class="squad-marker${statusClass}" data-slot-index="${index}" data-marker-key="${markerKey}" data-player-id="${player.player_id ?? ""}" style="left:${left}%;top:${top}%;z-index:${index + 1}" title="${escapeHtml(player.name)}${status !== "available" ? ` · ${AVAILABILITY_META[status].label}` : ""}${escapeHtml(suggestionTitle)}">
         <span class="squad-marker__head">
           ${photo}
           ${badge ? `<span class="squad-marker__status">${badge}</span>` : ""}
         </span>
-        <span class="squad-marker__label">${label}</span>
+        <span class="squad-marker__label">${escapeHtml(label)}${player.suggested ? `<span class="squad-marker__suggest">for ${escapeHtml(player.suggested_for || "")}</span>` : ""}</span>
       </div>`;
     })
     .join("");
@@ -1404,7 +1524,7 @@ function bindPitchInteractions(root = document) {
               saveMarkerShape(marker, x, y);
               ensurePitchResetButton(toolbar);
             }
-            setStatus("Position saved — drag another headshot or Reset to undo.");
+            setStatus("XI updated — Save to share it, or Reset for the default.");
             return;
           }
           setSelected(selectedMarker === marker ? null : marker);
@@ -1482,11 +1602,17 @@ function bindPitchInteractions(root = document) {
             return;
           }
 
-          const map = loadAvailability();
+          const map = { ...loadAvailability() };
           const key = String(playerId);
-          const next = nextAvailability(playerAvailability(playerId));
-          if (next === "available") delete map[key];
-          else map[key] = next;
+          const nextStatus = nextAvailability(playerAvailability(playerId));
+          const fallback = ensureSquadBoard().defaults?.[key];
+          if (nextStatus === "available") {
+            delete map[key];
+          } else if (fallback && fallback.status === nextStatus) {
+            map[key] = { ...fallback };
+          } else {
+            map[key] = { status: nextStatus, reason: "", expected_return: "" };
+          }
           saveAvailability(map);
           if (state.report) {
             const keepIndex = state.slideIndex;
@@ -1494,8 +1620,8 @@ function bindPitchInteractions(root = document) {
             paintDeck();
             highlightSlide(keepIndex);
           }
-          const label = AVAILABILITY_META[next]?.label || "Available";
-          setStatus(`${squadPlayer.name}: ${label}. Click again to cycle availability.`, next === "available" ? "" : "loading");
+          const label = AVAILABILITY_META[nextStatus]?.label || "Available";
+          setStatus(`${squadPlayer.name}: ${label}. Click again to cycle availability.`, nextStatus === "available" ? "" : "loading");
         };
 
         activeDrag = { kind: "roster", marker: null, row, pointerId, onMove, onUp, dragging: () => dragging };
@@ -1511,13 +1637,30 @@ function bindPitchInteractions(root = document) {
       (event) => {
         if (event.target.closest("[data-pitch-reset]")) {
           event.preventDefault();
-          clearPitchShape();
-          clearPitchXi();
-          if (state.report) {
-            rebuildSlides();
-            paintDeck();
-            highlightSlide(state.slideIndex);
-          }
+          const keepIndex = state.slideIndex;
+          persistSquadBoard({ reset: true })
+            .then(() => {
+              if (!state.report) return;
+              rebuildSlides();
+              paintDeck();
+              highlightSlide(keepIndex);
+              setStatus("Reset to the default XI and availability.");
+            })
+            .catch((error) => setStatus(error.message || "Could not reset the squad board.", "error"));
+          return;
+        }
+        if (event.target.closest("[data-pitch-save]")) {
+          event.preventDefault();
+          const keepIndex = state.slideIndex;
+          persistSquadBoard()
+            .then(() => {
+              if (!state.report) return;
+              rebuildSlides();
+              paintDeck();
+              highlightSlide(keepIndex);
+              setStatus("Saved — every login sees this XI and availability.");
+            })
+            .catch((error) => setStatus(error.message || "Could not save the squad board.", "error"));
           return;
         }
         if (event.target.closest(".squad-marker") || event.target.closest(".squad-roster__player")) return;
@@ -1581,9 +1724,19 @@ function squadGroupsHtml(groups, pitchNames) {
               ? `<span class="squad-roster__number">${player.shirt_number}</span>`
               : `<span class="squad-roster__number squad-roster__number--empty">–</span>`;
           const statusLabel = AVAILABILITY_META[status]?.label || "Available";
-          return `<div role="button" tabindex="0" class="${classes}" data-player-id="${player.id ?? ""}" data-player-name="${escapeHtml(player.name)}" data-availability="${status}" title="${escapeHtml(player.name)} · drag onto pitch to swap · click XI name to select · bench click marks availability">
+          const note = availabilityNote(player.id);
+          const titleBits = [
+            player.name,
+            statusLabel,
+            note,
+            "drag onto pitch to swap · click XI name to select · bench click marks availability",
+          ].filter(Boolean);
+          const noteHtml = note
+            ? `<span class="squad-roster__note">${escapeHtml(note)}</span>`
+            : "";
+          return `<div role="button" tabindex="0" class="${classes}" data-player-id="${player.id ?? ""}" data-player-name="${escapeHtml(player.name)}" data-availability="${status}" title="${escapeHtml(titleBits.join(" · "))}">
             ${number}
-            <span class="squad-roster__name">${escapeHtml(player.name)}</span>
+            <span class="squad-roster__name">${escapeHtml(player.name)}${noteHtml}</span>
             ${availabilityIconHtml(status)}
           </div>`;
         })
@@ -2174,20 +2327,30 @@ function renderSquadListSlide(report) {
   const opponent = report.opponent?.name || "Opposition";
   let pitchPlayers = typicalPitchPlayers(squadList, report);
   pitchPlayers = applyPitchXiOverrides(pitchPlayers, report);
+  pitchPlayers = applyAvailabilitySuggestions(pitchPlayers, report);
   pitchPlayers = ensureElevenPitchPlayers(pitchPlayers, report);
   pitchPlayers = applyPitchShapeOverrides(pitchPlayers, report);
   const pitchNames = new Set(
     pitchPlayers.flatMap((player) => [player.name, String(player.player_id ?? "")].filter(Boolean)),
   );
   const squadGroups = squadList.squad_groups || [];
-  const hasCustom =
-    Object.keys(loadPitchShape(report)).length > 0 || Object.keys(loadPitchXi(report)).length > 0;
+  const board = ensureSquadBoard();
+  const hasCustom = board.dirty || board.saved;
+  const suggestions = pitchPlayers
+    .filter((player) => player.suggested)
+    .map((player) => `${player.short_name || playerSurname(player.name)} in for ${player.suggested_for}`);
 
   const formation =
-    (report.overview?.formations || []).filter(Boolean).join(" / ") || squadList.formation || "—";
-  const refNote = squadList.reference_date
-    ? `Typical XI · last 8 matches to ${formatMatchDate(squadList.reference_date)}`
-    : "Typical XI · last 8 matches";
+    squadList.predicted_formation ||
+    (report.overview?.formations || []).filter(Boolean).join(" / ") ||
+    squadList.formation ||
+    "—";
+  const refNote = squadList.predicted_xi
+    ? `Predicted XI · ${formation}`
+    : squadList.reference_date
+      ? `Typical XI · last 8 matches to ${formatMatchDate(squadList.reference_date)}`
+      : "Typical XI · last 8 matches";
+  const suggestionNote = suggestions.length ? ` · ${suggestions.join("; ")}` : "";
 
   return `<section class="pm-slide pm-slide--squad-list" data-slide-title="Squad List">
     <div class="pm-slide__header-bar">SQUAD LIST</div>
@@ -2201,8 +2364,11 @@ function renderSquadListSlide(report) {
         <div class="squad-pitch__markings"></div>
         <div class="squad-pitch__players">${pitchMarkersHtml(pitchPlayers)}</div>
         <div class="squad-pitch__toolbar" data-export-hide>
-          <span>Drag headshots on pitch · drop on player to swap · drag from list onto pitch · click XI name then bench to swap</span>
-          ${hasCustom ? `<button type="button" class="squad-pitch__reset" data-pitch-reset>Reset</button>` : ""}
+          <span>Drag headshots to swap · click a name to cycle availability${escapeHtml(suggestionNote)}</span>
+          <span class="squad-pitch__actions">
+            <button type="button" class="squad-pitch__save" data-pitch-save ${hasCustom && board.dirty ? "" : "disabled"}>Save</button>
+            <button type="button" class="squad-pitch__reset" data-pitch-reset>Reset</button>
+          </span>
         </div>
       </div>
       <div class="squad-roster" aria-label="Squad by position">${squadGroupsHtml(squadGroups, pitchNames)}</div>
@@ -2213,7 +2379,7 @@ function renderSquadListSlide(report) {
             leaguePosition: squadList.league_position || report.opponent?.league_position,
             manager: squadList.manager || report.overview?.manager,
           })}
-          <p class="squad-meta__note" data-export-hide>${refNote}. Click roster names to mark availability.</p>
+          <p class="squad-meta__note" data-export-hide>${escapeHtml(refNote)}${escapeHtml(suggestionNote)}. Save shares availability and the XI. Reset restores the default.</p>
         </div>
       </aside>
     </div>
@@ -3290,9 +3456,27 @@ function pitchMarkingsHtml(extraClass = "") {
   </div>`;
 }
 
+function sentOffStripHtml(sentOff) {
+  const rows = (sentOff || []).filter((player) => player && (player.name || player.short_name));
+  if (!rows.length) return "";
+  const chips = rows
+    .map((player) => {
+      const shirt =
+        player.shirt_number != null && player.shirt_number !== ""
+          ? `${player.shirt_number} `
+          : "";
+      const name = player.short_name || playerSurname(player.name);
+      const minute = player.minute ? ` ${player.minute}` : "";
+      return `<span class="last-game-sentoff__player"><b>${escapeHtml(shirt.trim())}</b> ${escapeHtml(name)}<em>${escapeHtml(minute)}</em></span>`;
+    })
+    .join("");
+  return `<div class="last-game-sentoff"><span class="last-game-sentoff__label">Sent off</span>${chips}</div>`;
+}
+
 function numberedXiMarkersHtml(players, { editable = false } = {}) {
   return (players || [])
     .map((player, index) => {
+      if (!player || player.ghost || String(player.highlight || "").toLowerCase() === "red") return "";
       const left = Number(player.x_pct ?? 50);
       const top = Number(player.y_pct ?? 50);
       const number = player.shirt_number ?? "";
@@ -3629,6 +3813,7 @@ function renderLastGameSlide(report) {
           ${pitchMarkingsHtml("last-game-pitch__markings")}
           <div class="last-game-pitch__players" data-phase-index="${phaseIndex}">${numberedXiMarkersHtml(players, { editable: true })}</div>
         </div>
+        ${sentOffStripHtml(phase.sent_off)}
       </article>`;
     })
     .join("");
@@ -5295,6 +5480,7 @@ async function loadReport({ refresh = false } = {}) {
     }
     renderMatchBar();
     await hydrateTwoPagerBoard(report);
+    await hydrateSquadBoard(report);
     if (token !== state.reportLoadToken) return;
     renderDeck(report);
     const cacheHit = report?.cache?.hit;
