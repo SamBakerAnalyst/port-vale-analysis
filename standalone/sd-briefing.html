@@ -6,9 +6,9 @@
   <title>Port Vale Analysis Hub · Sporting Director briefing</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/window-review.css?v=11" />
-  <link rel="stylesheet" href="/static/sd-briefing.css?v=1" />
+  <link rel="stylesheet" href="/static/sd-briefing.css?v=2" />
 </head>
 <body>
   <div class="app">
@@ -37,891 +37,551 @@
       data-pdf-title="Port Vale — Sporting Director briefing, October 2026"
     >
 
-      <!-- 01 Title -->
-      <section
-        class="slide slide--open is-active"
-        data-label="Title"
-        data-notes="Welcome. This is where the club is on day one: 23rd after 7 league games, 5 points, but two games in hand on most of the league after the Northampton and Colchester postponements. League data is to Sunday 4 October 2026."
-      >
-        <div class="slide__body">
-          <img class="open-badge" src="/standalone/port-vale-badge.png?v=2" width="72" height="82" alt="" />
-          <p class="open-kicker">Sporting Director briefing · 26/27</p>
-          <h2 class="open-title">Where Port Vale are today</h2>
-          <p class="open-sub">Results, form, the promotion maths from our Strategy Report, what wins games in League Two, the full squad with depth, and the staff around the first team.</p>
-          <div class="open-stats">
-            <span><b>23rd</b> League Two</span>
-            <span><b>5</b> points</span>
-            <span><b>7</b> played</span>
-            <span><b>2</b> games in hand</span>
-          </div>
-          <p class="open-date">Monday 5 October 2026 · Analysis department</p>
-        </div>
-      </section>
-
-      <!-- 02 Agenda -->
-      <section
-        class="slide"
-        data-label="Agenda"
-        data-notes="Eight parts. The first half is performance: where we came from, results, the table, the underlying numbers and what the Strategy Report says it takes. The second half is the people: squad, depth, staff, fixtures and the hub tools you can use from tomorrow."
-      >
-        <div class="slide__bar">
-          <div class="slide__bar-left">
-            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
-            <span class="slide__bar-kicker">Agenda</span>
-          </div>
-          <span class="slide__bar-num"></span>
-        </div>
-        <div class="slide__body">
-          <div class="head-row">
-            <h2 class="headline">What this covers</h2>
-            <p class="kicker">Performance first · then people</p>
-          </div>
-          <div class="agenda">
-            <article><em>01</em><div><strong>The club</strong><p>Five seasons: two promotions, two relegations.</p></div></article>
-            <article><em>02</em><div><strong>Results &amp; table</strong><p>Every game this season and where it leaves us.</p></div></article>
-            <article><em>03</em><div><strong>Form &amp; underlying numbers</strong><p>Home vs away, game state, xG vs goals.</p></div></article>
-            <article><em>04</em><div><strong>Promotion maths</strong><p>Strategy Report benchmarks and what we need from here.</p></div></article>
-            <article><em>05</em><div><strong>What wins games</strong><p>The stats that decide League Two, and where we rank.</p></div></article>
-            <article><em>06</em><div><strong>Squad &amp; depth</strong><p>26 players by position, minutes, key performers, gaps.</p></div></article>
-            <article><em>07</em><div><strong>Staff structure</strong><p>The first-team management, medical, performance and analysis staff.</p></div></article>
-            <article><em>08</em><div><strong>Fixtures &amp; tools</strong><p>The run of games ahead and where to find the data.</p></div></article>
-          </div>
-        </div>
-      </section>
-
-      <!-- 03 Club context -->
-      <section
-        class="slide"
-        data-label="The club"
-        data-notes="Five seasons of up and down. Promoted via the play-offs in 21/22, relegated from League One in 23/24, promoted automatically in 24/25 under Darren Moore with 80 points, then relegated again in 25/26. Jon Brady replaced Moore during 25/26 and improved the points rate (1.04 per game against 0.78) but not enough to stay up."
-      >
-        <div class="slide__bar">
-          <div class="slide__bar-left">
-            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
-            <span class="slide__bar-kicker">01 · The club</span>
-          </div>
-          <span class="slide__bar-num"></span>
-        </div>
-        <div class="slide__body">
-          <div class="head-row">
-            <h2 class="headline">Two promotions, two relegations in five seasons</h2>
-            <p class="kicker">League finishes 21/22 – 26/27</p>
-          </div>
-          <div class="seasons">
-            <article class="season is-up"><em>21/22 · League Two</em><b>5th</b><strong>78 pts</strong><div class="season__bar" style="--p:78"><i></i></div><span class="tag">Promoted · play-offs</span><span>22W 12D 12L</span></article>
-            <article class="season"><em>22/23 · League One</em><b>18th</b><strong>49 pts</strong><div class="season__bar" style="--p:49"><i></i></div><span class="tag">Stayed up</span><span>13W 10D 23L</span></article>
-            <article class="season is-down"><em>23/24 · League One</em><b>23rd</b><strong>41 pts</strong><div class="season__bar" style="--p:41"><i></i></div><span class="tag">Relegated</span><span>10W 11D 25L</span></article>
-            <article class="season is-up"><em>24/25 · League Two</em><b>2nd</b><strong>80 pts</strong><div class="season__bar" style="--p:80"><i></i></div><span class="tag">Promoted · automatic</span><span>22W 14D 10L</span></article>
-            <article class="season is-down"><em>25/26 · League One</em><b>22nd</b><strong>42 pts</strong><div class="season__bar" style="--p:42"><i></i></div><span class="tag">Relegated</span><span>10W 12D 24L</span></article>
-            <article class="season is-now"><em>26/27 · League Two</em><b>23rd</b><strong>5 pts · 7 played</strong><div class="season__bar" style="--p:5"><i></i></div><span class="tag">Now</span><span>1W 2D 4L</span></article>
-          </div>
-          <div class="mgr-strip">
-            <div><b>Darren Moore</b>Promoted in 24/25 with 80 points (22W 14D 10L). In 25/26: 4W 6D 13L in League One (0.78 points per game) before the change.</div>
-            <div><b>Jon Brady · Manager</b>Rest of 25/26: 6W 6D 11L (1.04 per game), relegated in 22nd. This season: 1W 2D 4L. Previously at Northampton Town, promoted from League Two in 22/23.</div>
-          </div>
-          <p class="source">Source: FotMob league history and manager records.</p>
-        </div>
-      </section>
-
-      <!-- 04 Table -->
-      <section
-        class="slide"
-        data-label="Table"
-        data-notes="Bottom two, one point behind Northampton and two behind Oldham. Most clubs have played nine; we have played seven, with Northampton at home and Colchester away still to be rearranged. Seventh place (Walsall) is on 14 points, nine clear of us, with a game more played. The league is tight: 9 points cover 1st to 21st."
-      >
-        <div class="slide__bar">
-          <div class="slide__bar-left">
-            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
-            <span class="slide__bar-kicker">02 · League Two table</span>
-          </div>
-          <span class="slide__bar-num"></span>
-        </div>
-        <div class="slide__body">
-          <div class="head-row">
-            <h2 class="headline">23rd, but two games in hand</h2>
-            <p class="kicker">As of 4 Oct 2026 · 9 pts off 7th · 1 pt off 22nd</p>
-          </div>
-          <div class="ltable">
-            <div class="ltable__col">
-              <div class="ltable__head"><span>#</span><span>Club</span><span>P</span><span>W</span><span>D</span><span>L</span><span>GD</span><span>Pts</span></div>
-              <div class="ltable__row is-auto"><span>1</span><span>Salford City</span><span>9</span><span>5</span><span>1</span><span>3</span><span>+3</span><span>16</span></div>
-              <div class="ltable__row is-auto"><span>2</span><span>Barnet</span><span>7</span><span>4</span><span>3</span><span>0</span><span>+7</span><span>15</span></div>
-              <div class="ltable__row is-auto"><span>3</span><span>Crewe Alexandra</span><span>9</span><span>3</span><span>6</span><span>0</span><span>+4</span><span>15</span></div>
-              <div class="ltable__row is-po"><span>4</span><span>Cheltenham Town</span><span>9</span><span>4</span><span>3</span><span>2</span><span>+2</span><span>15</span></div>
-              <div class="ltable__row is-po"><span>5</span><span>Bristol Rovers</span><span>9</span><span>5</span><span>0</span><span>4</span><span>0</span><span>15</span></div>
-              <div class="ltable__row is-po"><span>6</span><span>York City</span><span>8</span><span>4</span><span>2</span><span>2</span><span>+6</span><span>14</span></div>
-              <div class="ltable__row is-po"><span>7</span><span>Walsall</span><span>8</span><span>3</span><span>5</span><span>0</span><span>+6</span><span>14</span></div>
-              <div class="ltable__row "><span>8</span><span>Chesterfield</span><span>9</span><span>4</span><span>2</span><span>3</span><span>+3</span><span>14</span></div>
-              <div class="ltable__row "><span>9</span><span>Grimsby Town</span><span>9</span><span>3</span><span>4</span><span>2</span><span>+3</span><span>13</span></div>
-              <div class="ltable__row "><span>10</span><span>Gillingham</span><span>9</span><span>3</span><span>4</span><span>2</span><span>+2</span><span>13</span></div>
-              <div class="ltable__row "><span>11</span><span>Rochdale</span><span>9</span><span>4</span><span>1</span><span>4</span><span>-1</span><span>13</span></div>
-              <div class="ltable__row "><span>12</span><span>Tranmere Rovers</span><span>9</span><span>2</span><span>5</span><span>2</span><span>0</span><span>11</span></div>
+      <!-- Cover -->
+      <section class="slide is-active" data-label="Cover"
+        data-notes="Welcome. This is where the club is on day one: 23rd after 7 league games on 5 points, but two games in hand on most of the league after the Northampton and Colchester postponements. League data is to Sunday 4 October 2026.">
+        <img class="cover__img" src="/static/sd-briefing/victory.jpg" alt="" />
+        <div class="cover__fade"></div>
+        <div class="s">
+          <div class="cover">
+            <img class="cover__badge" src="/standalone/port-vale-badge.png?v=2" alt="Port Vale FC" />
+            <p class="cover__kicker">Sporting Director briefing · 26/27</p>
+            <h2 class="cover__title">Where we <span>are</span> today</h2>
+            <p class="cover__sub">Results, form, the promotion maths, what wins games in League Two, the squad and the staff.</p>
+            <div class="cover__stats">
+              <div><b>23rd</b><span>League Two</span></div>
+              <div><b>5</b><span>Points</span></div>
+              <div><b>7</b><span>Played</span></div>
+              <div><b>2</b><span>In hand</span></div>
             </div>
-            <div class="ltable__col">
-              <div class="ltable__head"><span>#</span><span>Club</span><span>P</span><span>W</span><span>D</span><span>L</span><span>GD</span><span>Pts</span></div>
-              <div class="ltable__row "><span>13</span><span>Swindon Town</span><span>9</span><span>3</span><span>2</span><span>4</span><span>-4</span><span>11</span></div>
-              <div class="ltable__row "><span>14</span><span>Shrewsbury Town</span><span>9</span><span>3</span><span>2</span><span>4</span><span>-5</span><span>11</span></div>
-              <div class="ltable__row "><span>15</span><span>Newport County</span><span>9</span><span>2</span><span>4</span><span>3</span><span>0</span><span>10</span></div>
-              <div class="ltable__row "><span>16</span><span>Accrington Stanley</span><span>9</span><span>2</span><span>4</span><span>3</span><span>-1</span><span>10</span></div>
-              <div class="ltable__row "><span>17</span><span>Rotherham United</span><span>9</span><span>2</span><span>4</span><span>3</span><span>-1</span><span>10</span></div>
-              <div class="ltable__row "><span>18</span><span>Fleetwood Town</span><span>9</span><span>2</span><span>4</span><span>3</span><span>-1</span><span>10</span></div>
-              <div class="ltable__row "><span>19</span><span>Colchester United</span><span>8</span><span>2</span><span>4</span><span>2</span><span>-2</span><span>10</span></div>
-              <div class="ltable__row "><span>20</span><span>Exeter City</span><span>9</span><span>2</span><span>3</span><span>4</span><span>-1</span><span>9</span></div>
-              <div class="ltable__row "><span>21</span><span>Oldham Athletic</span><span>8</span><span>2</span><span>1</span><span>5</span><span>-4</span><span>7</span></div>
-              <div class="ltable__row "><span>22</span><span>Northampton Town</span><span>7</span><span>1</span><span>3</span><span>3</span><span>-3</span><span>6</span></div>
-              <div class="ltable__row is-rel is-us"><span>23</span><span>Port Vale</span><span>7</span><span>1</span><span>2</span><span>4</span><span>-6</span><span>5</span></div>
-              <div class="ltable__row is-rel"><span>24</span><span>Crawley Town</span><span>7</span><span>1</span><span>1</span><span>5</span><span>-7</span><span>4</span></div>
+            <p class="cover__date">Monday 5 October 2026 · Analysis department</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Agenda -->
+      <section class="slide" data-label="Agenda"
+        data-notes="Four parts. The season so far, what it takes to go up and where we fall short, the squad and its depth, and the staff plus what's coming next.">
+        <div class="s">
+          <header class="hd"><i></i>Agenda<img src="/standalone/port-vale-badge.png?v=2" alt="" /></header>
+          <h2 class="ttl">Four parts</h2>
+          <div class="bd">
+            <div class="agenda">
+              <article><img src="/static/sd-briefing/huddle.png" alt="" /><div><em>01</em><strong>The season</strong><p>Five-year context, the table, every result, form and the underlying numbers.</p></div></article>
+              <article><img src="/static/sd-briefing/celebrate.png" alt="" /><div><em>02</em><strong>What it takes</strong><p>Strategy Report benchmarks and the stats that decide League Two.</p></div></article>
+              <article><img src="/static/sd-briefing/blocks.jpg" alt="" /><div><em>03</em><strong>The squad</strong><p>26 players, depth in the 3-5-2, key performers and the gaps.</p></div></article>
+              <article><img src="/static/sd-briefing/captain.jpg" alt="" /><div><em>04</em><strong>Staff &amp; next</strong><p>First-team staff, the fixtures ahead and where to find the data.</p></div></article>
             </div>
           </div>
-          <p class="source">Green = automatic (1–3) · gold = play-offs (4–7) · red = relegation (23–24). Source: FotMob.</p>
         </div>
       </section>
 
-      <!-- 05 Results -->
-      <section
-        class="slide"
-        data-label="Results"
-        data-notes="Nine competitive games: seven league, one Carabao Cup, one EFL Trophy. One win, against Exeter at home. Out of the Carabao Cup at Wolves in round one. Lost the Chesterfield EFL Trophy group game on penalties after 1-1. xG column is ours then theirs from Impect: we out-created Tranmere, Crewe was level, Exeter was a deserved win. Away from home we were second best in xG at Oldham, Swindon and Walsall."
-      >
-        <div class="slide__bar">
-          <div class="slide__bar-left">
-            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
-            <span class="slide__bar-kicker">02 · Results</span>
+      <!-- Chapter 01 -->
+      <section class="slide" data-label="01 The season"
+        data-notes="Part one: the season so far.">
+        <img class="chap__img" src="/static/sd-briefing/huddle.png" alt="" style="object-position:50% 35%" />
+        <div class="chap__fade"></div>
+        <div class="s">
+          <div class="chap">
+            <span class="chap__num">01</span>
+            <h2 class="chap__title">The season</h2>
+            <p class="chap__sub">Where we have come from, where we sit, and how the first seven league games really went.</p>
           </div>
-          <span class="slide__bar-num"></span>
-        </div>
-        <div class="slide__body">
-          <div class="head-row">
-            <h2 class="headline">Every game this season</h2>
-            <p class="kicker">League: W1 D2 L4 · GF 3 · GA 9</p>
-          </div>
-          <div class="results">
-            <div class="results__head"><span>Date</span><span>Comp</span><span></span><span>Opponent</span><span>Score</span><span></span><span>xG · xGA</span><span>Note</span></div>
-            <div class="results__row is-cup"><span class="results__date">Fri 7 Aug</span><span class="results__comp">Carabao Cup</span><span class="results__venue">A</span><span class="results__opp">Wolves</span><span class="results__score">0–3</span><span class="res res--L">L</span><span class="results__xg">—</span><span class="results__note">Out in round one</span></div>
-            <div class="results__row"><span class="results__date">Sat 15 Aug</span><span class="results__comp">League Two</span><span class="results__venue">A</span><span class="results__opp">Oldham Athletic</span><span class="results__score">0–2</span><span class="res res--L">L</span><span class="results__xg">0.48 · 1.43</span><span class="results__note">Opening day</span></div>
-            <div class="results__row"><span class="results__date">Sat 22 Aug</span><span class="results__comp">League Two</span><span class="results__venue">H</span><span class="results__opp">Tranmere Rovers</span><span class="results__score">1–1</span><span class="res res--D">D</span><span class="results__xg">2.06 · 1.08</span><span class="results__note">Best xG of the season</span></div>
-            <div class="results__row"><span class="results__date">Sat 29 Aug</span><span class="results__comp">League Two</span><span class="results__venue">H</span><span class="results__opp">Crewe Alexandra</span><span class="results__score">0–0</span><span class="res res--D">D</span><span class="results__xg">0.81 · 0.85</span><span class="results__note">Clean sheet</span></div>
-            <div class="results__row"><span class="results__date">Tue 1 Sep</span><span class="results__comp">League Two</span><span class="results__venue">A</span><span class="results__opp">Swindon Town</span><span class="results__score">1–3</span><span class="res res--L">L</span><span class="results__xg">0.87 · 2.50</span><span class="results__note">Scored first, lost</span></div>
-            <div class="results__row"><span class="results__date">Sat 5 Sep</span><span class="results__comp">League Two</span><span class="results__venue">A</span><span class="results__opp">Salford City</span><span class="results__score">0–1</span><span class="res res--L">L</span><span class="results__xg">0.65 · 0.46</span><span class="results__note">Won the xG, lost the game</span></div>
-            <div class="results__row"><span class="results__date">Sat 12 Sep</span><span class="results__comp">League Two</span><span class="results__venue">H</span><span class="results__opp">Exeter City</span><span class="results__score">1–0</span><span class="res res--W">W</span><span class="results__xg">1.61 · 0.46</span><span class="results__note">Only win · clean sheet</span></div>
-            <div class="results__row"><span class="results__date">Sat 19 Sep</span><span class="results__comp">League Two</span><span class="results__venue">A</span><span class="results__opp">Walsall</span><span class="results__score">0–2</span><span class="res res--L">L</span><span class="results__xg">0.42 · 1.41</span><span class="results__note">Lowest xG of the season</span></div>
-            <div class="results__row is-cup"><span class="results__date">Tue 22 Sep</span><span class="results__comp">EFL Trophy</span><span class="results__venue">A</span><span class="results__opp">Chesterfield</span><span class="results__score">1–1</span><span class="res res--L">L</span><span class="results__xg">—</span><span class="results__note">Lost 4–5 on penalties</span></div>
-            <div class="results__row is-off"><span class="results__date">26 Sep · 3 Oct</span><span class="results__comp">League Two</span><span class="results__venue">—</span><span class="results__opp">Northampton (H) · Colchester (A)</span><span class="results__score">P–P</span><span></span><span class="results__xg">—</span><span class="results__note">Both postponed, to be rearranged</span></div>
-          </div>
-          <p class="source">Scores: FotMob. xG: Impect (ours · theirs), league games only.</p>
         </div>
       </section>
 
-      <!-- 06 Form -->
-      <section
-        class="slide"
-        data-label="Form"
-        data-notes="The split that matters: unbeaten at home (5 points from 3, only 1 conceded), nothing away (0 from 4, 1 scored and 8 conceded). When we concede first we have not taken a point. We have scored first three times and only won one of them; at Swindon we led and lost 3-1. Seven of the nine league goals against came after half-time."
-      >
-        <div class="slide__bar">
-          <div class="slide__bar-left">
-            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
-            <span class="slide__bar-kicker">03 · Form</span>
-          </div>
-          <span class="slide__bar-num"></span>
-        </div>
-        <div class="slide__body">
-          <div class="head-row">
-            <h2 class="headline">Solid at Vale Park, nothing on the road</h2>
-            <div class="form-chips">
-              <span class="lbl">League form</span>
-              <span class="res res--L">L</span><span class="res res--D">D</span><span class="res res--D">D</span><span class="res res--L">L</span><span class="res res--L">L</span><span class="res res--W">W</span><span class="res res--L">L</span>
+      <!-- Five seasons -->
+      <section class="slide" data-label="Five seasons"
+        data-notes="Five seasons of up and down: promoted via the play-offs in 21/22, relegated from League One in 23/24, promoted automatically in 24/25 with 80 points, relegated again in 25/26. Jon Brady was appointed during 25/26; his League One record was 6W 6D 11L. He was previously at Northampton Town, promoted from League Two in 22/23.">
+        <div class="s">
+          <header class="hd"><i></i><b>01</b> The season<img src="/standalone/port-vale-badge.png?v=2" alt="" /></header>
+          <h2 class="ttl">Two promotions, <em>two relegations</em></h2>
+          <p class="sub">League points by season. Jon Brady was appointed during 25/26.</p>
+          <div class="bd">
+            <div class="seasons">
+              <div class="sn is-up"><div class="sn__chart" style="--p:78"><b>78<small>pts</small></b><i></i></div><div class="sn__pos">5th</div><div class="sn__lg">21/22 · League Two</div><span class="sn__tag">Promoted</span></div>
+              <div class="sn"><div class="sn__chart" style="--p:49"><b>49<small>pts</small></b><i></i></div><div class="sn__pos">18th</div><div class="sn__lg">22/23 · League One</div><span class="sn__tag">Stayed up</span></div>
+              <div class="sn is-down"><div class="sn__chart" style="--p:41"><b>41<small>pts</small></b><i></i></div><div class="sn__pos">23rd</div><div class="sn__lg">23/24 · League One</div><span class="sn__tag">Relegated</span></div>
+              <div class="sn is-up"><div class="sn__chart" style="--p:80"><b>80<small>pts</small></b><i></i></div><div class="sn__pos">2nd</div><div class="sn__lg">24/25 · League Two</div><span class="sn__tag">Promoted</span></div>
+              <div class="sn is-down"><div class="sn__chart" style="--p:42"><b>42<small>pts</small></b><i></i></div><div class="sn__pos">22nd</div><div class="sn__lg">25/26 · League One</div><span class="sn__tag">Relegated</span></div>
+              <div class="sn is-now"><div class="sn__chart" style="--p:5"><b>5<small>pts · 7 pl</small></b><i></i></div><div class="sn__pos">23rd</div><div class="sn__lg">26/27 · League Two</div><span class="sn__tag">Now</span></div>
             </div>
           </div>
-          <div class="split">
-            <article class="is-good">
-              <em>Home · 3 games</em>
-              <b>5 pts</b>
-              <strong>W1 D2 L0 · goals 2–1</strong>
-              <p>1.67 points per game at home is play-off pace. One goal conceded at Vale Park all season.</p>
-            </article>
-            <article class="is-bad">
-              <em>Away · 4 games</em>
-              <b>0 pts</b>
-              <strong>L4 · goals 1–8</strong>
-              <p>Eight of the nine league goals conceded have come away from home.</p>
-            </article>
-            <article class="is-bad">
-              <em>Game state</em>
-              <b>0 pts</b>
-              <strong>When conceding first (3 games)</strong>
-              <p>Scored first 3 times: W1 D1 L1 (led at Swindon, lost 3–1). League average when conceding first is 0.68 per game.</p>
-            </article>
-            <article class="is-bad">
-              <em>When we concede</em>
-              <b>7 of 9</b>
-              <strong>Goals against after half-time</strong>
-              <p>Two clean sheets (Crewe, Exeter): 29%, just above the league's 27%.</p>
-            </article>
-          </div>
-          <p class="source">Source: Season Progress Report (Impect league events).</p>
+          <p class="ft">Source: FotMob league history.</p>
         </div>
       </section>
 
-      <!-- 07 Underlying -->
-      <section
-        class="slide"
-        data-label="Underlying"
-        data-notes="The underlying numbers are better than the table but still not good enough. We have created 6.9 xG and scored 3, so finishing has cost us around four goals. Expected points say about 8.5, not 5. But even the expected-points pace (1.21 a game, roughly 56 over a season) is mid-table, not promotion. Defensively the chance quality we allow is the 5th lowest in the league; it is the volume and quality of what we create that ranks near the bottom."
-      >
-        <div class="slide__bar">
-          <div class="slide__bar-left">
-            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
-            <span class="slide__bar-kicker">03 · Underlying numbers</span>
+      <!-- Table -->
+      <section class="slide" data-label="Table"
+        data-notes="Bottom two, one point behind Northampton and two behind Oldham. Most clubs have played nine; we have played seven. Seventh place (Walsall) is on 14 points, nine clear, with a game more played. The league is tight: nine points cover 1st to 21st.">
+        <div class="s">
+          <header class="hd"><i></i><b>01</b> The season<img src="/standalone/port-vale-badge.png?v=2" alt="" /></header>
+          <div class="ttl-row">
+            <h2 class="ttl">23rd, but <em>two games in hand</em></h2>
+            <div class="legend" style="margin-left:auto"><span style="--c:var(--win)">Automatic</span><span style="--c:var(--gold)">Play-offs</span><span style="--c:var(--loss)">Relegation</span></div>
           </div>
-          <span class="slide__bar-num"></span>
-        </div>
-        <div class="slide__body">
-          <div class="head-row">
-            <h2 class="headline">Unlucky, but not a promotion side on the numbers either</h2>
-            <p class="kicker">7 league games · Impect</p>
-          </div>
-          <div class="xgcomp">
-            <div class="xgbars">
-              <div class="xgbar">
-                <h3>Scoring</h3>
-                <div class="xgbar__line"><span>xG created</span><div class="xgbar__track is-gold" style="--v:6.9;--max:10"><i></i></div><b>6.9</b></div>
-                <div class="xgbar__line"><span>Goals</span><div class="xgbar__track is-red" style="--v:3;--max:10"><i></i></div><b>3</b></div>
+          <div class="bd">
+            <div class="lt">
+              <div class="lt__col">
+              <div class="lt__row lt__row--head"><span>#</span><span>Team</span><span>P</span><span>W</span><span>D</span><span>L</span><span>GD</span><span>Pts</span></div>
+                <div class="lt__row is-auto"><span>1</span><span>Salford</span><span>9</span><span>5</span><span>1</span><span>3</span><span>+3</span><span>16</span></div>
+                <div class="lt__row is-auto"><span>2</span><span>Barnet</span><span>7</span><span>4</span><span>3</span><span>0</span><span>+7</span><span>15</span></div>
+                <div class="lt__row is-auto"><span>3</span><span>Crewe</span><span>9</span><span>3</span><span>6</span><span>0</span><span>+4</span><span>15</span></div>
+                <div class="lt__row is-po"><span>4</span><span>Cheltenham</span><span>9</span><span>4</span><span>3</span><span>2</span><span>+2</span><span>15</span></div>
+                <div class="lt__row is-po"><span>5</span><span>Bristol Rovers</span><span>9</span><span>5</span><span>0</span><span>4</span><span>0</span><span>15</span></div>
+                <div class="lt__row is-po"><span>6</span><span>York</span><span>8</span><span>4</span><span>2</span><span>2</span><span>+6</span><span>14</span></div>
+                <div class="lt__row is-po"><span>7</span><span>Walsall</span><span>8</span><span>3</span><span>5</span><span>0</span><span>+6</span><span>14</span></div>
+                <div class="lt__row"><span>8</span><span>Chesterfield</span><span>9</span><span>4</span><span>2</span><span>3</span><span>+3</span><span>14</span></div>
+                <div class="lt__row"><span>9</span><span>Grimsby</span><span>9</span><span>3</span><span>4</span><span>2</span><span>+3</span><span>13</span></div>
+                <div class="lt__row"><span>10</span><span>Gillingham</span><span>9</span><span>3</span><span>4</span><span>2</span><span>+2</span><span>13</span></div>
+                <div class="lt__row"><span>11</span><span>Rochdale</span><span>9</span><span>4</span><span>1</span><span>4</span><span>−1</span><span>13</span></div>
+                <div class="lt__row"><span>12</span><span>Tranmere</span><span>9</span><span>2</span><span>5</span><span>2</span><span>0</span><span>11</span></div>
               </div>
-              <div class="xgbar">
-                <h3>Conceding</h3>
-                <div class="xgbar__line"><span>xG against</span><div class="xgbar__track" style="--v:8.2;--max:10"><i></i></div><b>8.2</b></div>
-                <div class="xgbar__line"><span>Goals against</span><div class="xgbar__track is-red" style="--v:9;--max:10"><i></i></div><b>9</b></div>
+              <div class="lt__col">
+              <div class="lt__row lt__row--head"><span>#</span><span>Team</span><span>P</span><span>W</span><span>D</span><span>L</span><span>GD</span><span>Pts</span></div>
+                <div class="lt__row"><span>13</span><span>Swindon</span><span>9</span><span>3</span><span>2</span><span>4</span><span>−4</span><span>11</span></div>
+                <div class="lt__row"><span>14</span><span>Shrewsbury</span><span>9</span><span>3</span><span>2</span><span>4</span><span>−5</span><span>11</span></div>
+                <div class="lt__row"><span>15</span><span>Newport</span><span>9</span><span>2</span><span>4</span><span>3</span><span>0</span><span>10</span></div>
+                <div class="lt__row"><span>16</span><span>Accrington</span><span>9</span><span>2</span><span>4</span><span>3</span><span>−1</span><span>10</span></div>
+                <div class="lt__row"><span>17</span><span>Rotherham</span><span>9</span><span>2</span><span>4</span><span>3</span><span>−1</span><span>10</span></div>
+                <div class="lt__row"><span>18</span><span>Fleetwood</span><span>9</span><span>2</span><span>4</span><span>3</span><span>−1</span><span>10</span></div>
+                <div class="lt__row"><span>19</span><span>Colchester</span><span>8</span><span>2</span><span>4</span><span>2</span><span>−2</span><span>10</span></div>
+                <div class="lt__row"><span>20</span><span>Exeter</span><span>9</span><span>2</span><span>3</span><span>4</span><span>−1</span><span>9</span></div>
+                <div class="lt__row"><span>21</span><span>Oldham</span><span>8</span><span>2</span><span>1</span><span>5</span><span>−4</span><span>7</span></div>
+                <div class="lt__row"><span>22</span><span>Northampton</span><span>7</span><span>1</span><span>3</span><span>3</span><span>−3</span><span>6</span></div>
+                <div class="lt__row is-rel is-us"><span>23</span><span>Port Vale</span><span>7</span><span>1</span><span>2</span><span>4</span><span>−6</span><span>5</span></div>
+                <div class="lt__row is-rel"><span>24</span><span>Crawley</span><span>7</span><span>1</span><span>1</span><span>5</span><span>−7</span><span>4</span></div>
               </div>
-              <div class="xgbar">
+            </div>
+          </div>
+          <p class="ft">League Two as of 4 Oct 2026 · 9 pts off 7th · 1 pt off 22nd · Source: FotMob.</p>
+        </div>
+      </section>
+
+      <!-- Results -->
+      <section class="slide" data-label="Results"
+        data-notes="Nine competitive games: seven league, one Carabao Cup, one EFL Trophy. One win, Exeter at home. Out of the Carabao Cup at Wolves. Lost the Chesterfield EFL Trophy game on penalties. The bars are xG, ours in gold and theirs in grey. We out-created Tranmere and Exeter; away from home we were second best at Oldham, Swindon and Walsall. Northampton at home and Colchester away were postponed.">
+        <div class="s">
+          <header class="hd"><i></i><b>01</b> The season<img src="/standalone/port-vale-badge.png?v=2" alt="" /></header>
+          <div class="ttl-row">
+            <h2 class="ttl">Every game <em>this season</em></h2>
+            <p class="sub" style="margin-left:auto">League: <b class="good">W1</b> · D2 · <b class="bad">L4</b> · goals 3–9</p>
+          </div>
+          <div class="bd">
+            <div class="res-grid">
+              <article class="rc L is-cup"><div class="rc__meta"><span>Fri 7 Aug · Away</span><span>Carabao Cup</span></div><div class="rc__main"><div class="rc__opp">Wolves<small>Out in round one</small></div><div class="rc__score">0–3</div></div></article>
+              <article class="rc L"><div class="rc__meta"><span>Sat 15 Aug · Away</span><span>League Two</span></div><div class="rc__main"><div class="rc__opp">Oldham<small>Opening day</small></div><div class="rc__score">0–2</div></div><div class="rc__xg"><span>0.48</span><i style="--v:0.48"></i><i style="--v:1.43"></i><span>1.43</span></div></article>
+              <article class="rc D"><div class="rc__meta"><span>Sat 22 Aug · Home</span><span>League Two</span></div><div class="rc__main"><div class="rc__opp">Tranmere<small>Best xG of the season</small></div><div class="rc__score">1–1</div></div><div class="rc__xg"><span>2.06</span><i style="--v:2.06"></i><i style="--v:1.08"></i><span>1.08</span></div></article>
+              <article class="rc D"><div class="rc__meta"><span>Sat 29 Aug · Home</span><span>League Two</span></div><div class="rc__main"><div class="rc__opp">Crewe<small>Clean sheet</small></div><div class="rc__score">0–0</div></div><div class="rc__xg"><span>0.81</span><i style="--v:0.81"></i><i style="--v:0.85"></i><span>0.85</span></div></article>
+              <article class="rc L"><div class="rc__meta"><span>Tue 1 Sep · Away</span><span>League Two</span></div><div class="rc__main"><div class="rc__opp">Swindon<small>Scored first, lost</small></div><div class="rc__score">1–3</div></div><div class="rc__xg"><span>0.87</span><i style="--v:0.87"></i><i style="--v:2.5"></i><span>2.50</span></div></article>
+              <article class="rc L"><div class="rc__meta"><span>Sat 5 Sep · Away</span><span>League Two</span></div><div class="rc__main"><div class="rc__opp">Salford<small>Won the xG, lost the game</small></div><div class="rc__score">0–1</div></div><div class="rc__xg"><span>0.65</span><i style="--v:0.65"></i><i style="--v:0.46"></i><span>0.46</span></div></article>
+              <article class="rc W"><div class="rc__meta"><span>Sat 12 Sep · Home</span><span>League Two</span></div><div class="rc__main"><div class="rc__opp">Exeter<small>Only win · clean sheet</small></div><div class="rc__score">1–0</div></div><div class="rc__xg"><span>1.61</span><i style="--v:1.61"></i><i style="--v:0.46"></i><span>0.46</span></div></article>
+              <article class="rc L"><div class="rc__meta"><span>Sat 19 Sep · Away</span><span>League Two</span></div><div class="rc__main"><div class="rc__opp">Walsall<small>Lowest xG of the season</small></div><div class="rc__score">0–2</div></div><div class="rc__xg"><span>0.42</span><i style="--v:0.42"></i><i style="--v:1.41"></i><span>1.41</span></div></article>
+              <article class="rc L is-cup"><div class="rc__meta"><span>Tue 22 Sep · Away</span><span>EFL Trophy</span></div><div class="rc__main"><div class="rc__opp">Chesterfield<small>Lost 4–5 on penalties</small></div><div class="rc__score">1–1</div></div></article>
+            </div>
+          </div>
+          <p class="ft">Postponed: Northampton (H) 26 Sep, Colchester (A) 3 Oct. Scores: FotMob. xG bars: Impect, ours in gold, theirs in grey.</p>
+        </div>
+      </section>
+
+      <!-- Form -->
+      <section class="slide" data-label="Form"
+        data-notes="The split that matters: unbeaten at home (5 points from 3, only 1 conceded), nothing away (0 from 4, 1 scored and 8 conceded). When we concede first we have not taken a point. Seven of the nine league goals against came after half-time.">
+        <div class="s">
+          <header class="hd"><i></i><b>01</b> The season<img src="/standalone/port-vale-badge.png?v=2" alt="" /></header>
+          <div class="ttl-row">
+            <h2 class="ttl">Solid at home. <em>Nothing away.</em></h2>
+            <div class="form"><span class="L">L</span><span class="D">D</span><span class="D">D</span><span class="L">L</span><span class="L">L</span><span class="W">W</span><span class="L">L</span></div>
+          </div>
+          <div class="bd">
+            <div class="duo">
+              <article class="is-good"><em>Home · 3 games</em><b>5<small>pts</small></b><strong>W1 D2 L0 · goals 2–1</strong><p>1.67 points a game is play-off pace. One goal conceded at Vale Park all season.</p></article>
+              <article class="is-bad"><em>Away · 4 games</em><b>0<small>pts</small></b><strong>L4 · goals 1–8</strong><p>Eight of the nine league goals we have conceded came away from home.</p></article>
+            </div>
+            <div class="chips">
+              <div class="chip" style="--c:var(--loss)"><b>0 pts</b><span>after conceding first (3 games). Scored first 3 times: W1 D1 L1.</span></div>
+              <div class="chip" style="--c:var(--loss)"><b>7 of 9</b><span>goals against came after half-time.</span></div>
+              <div class="chip" style="--c:var(--win)"><b>2</b><span>clean sheets, Crewe and Exeter. 29%, league average 27%.</span></div>
+            </div>
+          </div>
+          <p class="ft">Source: Season Progress Report (Impect league events).</p>
+        </div>
+      </section>
+
+      <!-- Underlying -->
+      <section class="slide" data-label="Underlying"
+        data-notes="We have created 6.9 xG and scored 3, so finishing has cost us around four goals. Expected points say about 8.5, not 5. But even that pace (1.21 a game, about 56 over a season) is mid-table, not promotion. Defensively the chance quality we allow is the 5th lowest in the league; it is what we create that ranks near the bottom.">
+        <div class="s">
+          <header class="hd"><i></i><b>01</b> The season<img src="/standalone/port-vale-badge.png?v=2" alt="" /></header>
+          <h2 class="ttl">Unlucky, but <em>not good enough</em> either</h2>
+          <p class="sub">Expected against actual after seven league games.</p>
+          <div class="bd">
+            <div class="xg">
+              <div class="xg__row"><div class="xg__lbl">Scoring</div><div class="xg__val"><b class="gold">6.9</b><span>xG</span></div><div class="xg__val"><b class="bad">3</b><span>Goals</span></div><div class="xg__note">0.99 xG a game is <b class="bad">22nd of 24</b>. Top-7 average is 1.68.</div></div>
+              <div class="xg__row"><div class="xg__lbl">Conceding</div><div class="xg__val"><b>8.2</b><span>xGA</span></div><div class="xg__val"><b class="bad">9</b><span>Goals</span></div><div class="xg__note">1.17 xGA a game is <b class="good">5th lowest</b>. Open-play defending is not the problem.</div></div>
+              <div class="xg__row"><div class="xg__lbl">Points</div><div class="xg__val"><b class="gold">8.5</b><span>xPts</span></div><div class="xg__val"><b class="bad">5</b><span>Actual</span></div><div class="xg__note">Expected pace is 56 points over a season. Mid-table, not promotion.</div></div>
+            </div>
+          </div>
+          <p class="ft">Source: Impect.</p>
+        </div>
+      </section>
+
+      <!-- Chapter 02 -->
+      <section class="slide" data-label="02 What it takes"
+        data-notes="Part two: what it takes to go up, and what wins games in League Two.">
+        <img class="chap__img" src="/static/sd-briefing/celebrate.png" alt="" style="object-position:60% 30%" />
+        <div class="chap__fade"></div>
+        <div class="s">
+          <div class="chap">
+            <span class="chap__num">02</span>
+            <h2 class="chap__title">What it takes</h2>
+            <p class="chap__sub">The Strategy Report benchmarks for promotion, and the stats that actually decide League Two games.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Promotion maths -->
+      <section class="slide" data-label="Promotion maths"
+        data-notes="Strategy Report benchmarks: averages for League Two champions, automatic and play-off sides, 21/22 to 25/26. Our bar is the current rate over 46 games. From here, 39 games remain: the play-offs need about 71 more points (1.82 a game), automatic 78 more (2.00 a game).">
+        <div class="s">
+          <header class="hd"><i></i><b>02</b> What it takes<img src="/standalone/port-vale-badge.png?v=2" alt="" /></header>
+          <h2 class="ttl">The promotion line, <em>against our pace</em></h2>
+          <p class="sub">Season totals. Our bar is the current rate projected over 46 games.</p>
+          <div class="bd">
+            <div class="bench">
+              <article>
                 <h3>Points</h3>
-                <div class="xgbar__line"><span>Expected</span><div class="xgbar__track is-gold" style="--v:8.5;--max:10"><i></i></div><b>8.5</b></div>
-                <div class="xgbar__line"><span>Actual</span><div class="xgbar__track is-red" style="--v:5;--max:10"><i></i></div><b>5</b></div>
-              </div>
+                <div class="bmk is-us" style="--v:33;--max:90"><span>Vale pace</span><i></i><b>33</b></div>
+                <div class="bmk is-po" style="--v:76;--max:90"><span>Play-offs</span><i></i><b>76</b></div>
+                <div class="bmk is-auto" style="--v:83;--max:90"><span>Automatic</span><i></i><b>83</b></div>
+                <div class="bmk is-champ" style="--v:88;--max:90"><span>Champions</span><i></i><b>88</b></div>
+              </article>
+              <article>
+                <h3>Goals for</h3>
+                <div class="bmk is-us" style="--v:20;--max:80"><span>Vale pace</span><i></i><b>20</b></div>
+                <div class="bmk is-po" style="--v:69;--max:80"><span>Play-offs</span><i></i><b>69</b></div>
+                <div class="bmk is-auto" style="--v:72;--max:80"><span>Automatic</span><i></i><b>72</b></div>
+                <div class="bmk is-champ" style="--v:75;--max:80"><span>Champions</span><i></i><b>75</b></div>
+              </article>
+              <article>
+                <h3>Goals against <small>lower is better</small></h3>
+                <div class="bmk is-us" style="--v:59;--max:65"><span>Vale pace</span><i></i><b>59</b></div>
+                <div class="bmk is-po" style="--v:52;--max:65"><span>Play-offs</span><i></i><b>52</b></div>
+                <div class="bmk is-auto" style="--v:44;--max:65"><span>Automatic</span><i></i><b>44</b></div>
+                <div class="bmk is-champ" style="--v:44;--max:65"><span>Champions</span><i></i><b>44</b></div>
+              </article>
             </div>
-            <div class="xgside">
-              <article class="is-bad"><b>0.99 xG a game</b><span>22nd of 24. League average 1.41, top-7 average 1.68.</span></article>
-              <article class="is-good"><b>1.17 xGA a game</b><span>5th lowest in the league. The defending of open play is not the problem.</span></article>
-              <article><b>56 pts vs 33 pts</b><span>Season pace on expected points (1.21 a game) against actual (0.71). Even the expected pace is mid-table.</span></article>
+            <div class="need">
+              <div><b>39</b><span>league games left, including the two in hand</span></div>
+              <div><b>1.82</b><span>points a game for the play-offs (71 more)</span></div>
+              <div><b>2.00</b><span>points a game for automatic (78 more)</span></div>
             </div>
           </div>
+          <p class="ft">League Two Strategy Report · 5-season averages 21/22–25/26.</p>
         </div>
       </section>
 
-      <!-- 08 Promotion maths -->
-      <section
-        class="slide"
-        data-label="Promotion maths"
-        data-notes="These are the Strategy Report benchmarks: averages from League Two champions, automatic and play-off sides over 21/22 to 25/26. Our column is the current rate projected over 46 games. Every line is well short. From here, 39 games remain: the play-offs need around 71 more points (1.82 a game) and automatic needs 78 more (2.00 a game). That is promotion-winning form for the rest of the season."
-      >
-        <div class="slide__bar">
-          <div class="slide__bar-left">
-            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
-            <span class="slide__bar-kicker">04 · Strategy Report</span>
-          </div>
-          <span class="slide__bar-num"></span>
-        </div>
-        <div class="slide__body">
-          <div class="head-row">
-            <h2 class="headline">What it takes to go up, against where we are</h2>
-            <p class="kicker">League Two benchmarks · 5-season average (21/22–25/26)</p>
-          </div>
-          <div class="bench">
-            <div class="bench__head"><span>Season total</span><span>Us now (7)</span><span>Us × 46</span><span>Play-offs</span><span>Automatic</span><span>Champions</span></div>
-            <div class="bench__row"><span>Points</span><span>5</span><span>33</span><span>76</span><span>83</span><span>88</span></div>
-            <div class="bench__row"><span>Wins</span><span>1</span><span>7</span><span>21</span><span>23</span><span>25</span></div>
-            <div class="bench__row"><span>Goals for</span><span>3</span><span>20</span><span>69</span><span>72</span><span>75</span></div>
-            <div class="bench__row"><span>Goals against</span><span>9</span><span>59</span><span>52</span><span>44</span><span>44</span></div>
-            <div class="bench__row"><span>Clean sheets</span><span>2</span><span>13</span><span>15</span><span>17</span><span>18</span></div>
-          </div>
-          <div class="need">
-            <div><b>39</b>league games left, including the 2 in hand</div>
-            <div><b>1.82</b>points a game for the play-offs (71 more)</div>
-            <div><b>2.00</b>points a game for automatic (78 more)</div>
-          </div>
-        </div>
-      </section>
-
-      <!-- 09 Six-game blocks -->
-      <section
-        class="slide"
-        data-label="Six-game blocks"
-        data-notes="The Strategy Report breaks the season into blocks of six games so staff and players can check progress without waiting until May. Automatic pace is 11 points, 9 goals scored, 6 conceded and 2 clean sheets every six. Block one gave us 5 points and 3 goals. Clean sheets were on target. Block two started with the defeat at Walsall."
-      >
-        <div class="slide__bar">
-          <div class="slide__bar-left">
-            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
-            <span class="slide__bar-kicker">04 · Six-game blocks</span>
-          </div>
-          <span class="slide__bar-num"></span>
-        </div>
-        <div class="slide__body">
-          <div class="head-row">
-            <h2 class="headline">Block one: games 1–6 against automatic pace</h2>
-            <p class="kicker">How the players are measured every six games</p>
-          </div>
-          <div class="blocks">
-            <article class="block"><em>Points</em><b>5</b><strong>Target 11 (play-offs 10)</strong><p>Less than half the automatic pace. One win in six.</p><div class="block__games"><span><b>0</b>OLD</span><span><b>1</b>TRA</span><span><b>1</b>CRE</span><span><b>0</b>SWI</span><span><b>0</b>SAL</span><span><b>3</b>EXE</span></div></article>
-            <article class="block"><em>Goals scored</em><b>3</b><strong>Target 9</strong><p>Six short. No goals at all in three of the six.</p><div class="block__games"><span><b>0</b>OLD</span><span><b>1</b>TRA</span><span><b>0</b>CRE</span><span><b>1</b>SWI</span><span><b>0</b>SAL</span><span><b>1</b>EXE</span></div></article>
-            <article class="block"><em>Goals conceded</em><b>7</b><strong>Target 6 (play-offs 7)</strong><p>On play-off pace, one over automatic.</p><div class="block__games"><span><b>2</b>OLD</span><span><b>1</b>TRA</span><span><b>0</b>CRE</span><span><b>3</b>SWI</span><span><b>1</b>SAL</span><span><b>0</b>EXE</span></div></article>
-            <article class="block is-ok"><em>Clean sheets</em><b>2</b><strong>Target 2</strong><p>On target: Crewe and Exeter, both at home.</p><div class="block__games"><span><b>–</b>OLD</span><span><b>–</b>TRA</span><span><b>✓</b>CRE</span><span><b>–</b>SWI</span><span><b>–</b>SAL</span><span><b>✓</b>EXE</span></div></article>
-          </div>
-          <p class="source">Block two (games 7–12) began with a 0–2 defeat at Walsall: 0 points from 1. Benchmarks from the Players Strategy Report.</p>
-        </div>
-      </section>
-
-      <!-- 10 Goal types -->
-      <section
-        class="slide"
-        data-label="Goal types"
-        data-notes="How the goals are coming. White line is the play-off benchmark per game from the Strategy Report. Going forward we are under it in every phase, and have not scored from open-play possession at all. At the back, open play and transitions are better than the play-off line. Set plays are the outlier: 6 of our 9 goals conceded, nearly three times the play-off rate. That is the quickest fix available."
-      >
-        <div class="slide__bar">
-          <div class="slide__bar-left">
-            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
-            <span class="slide__bar-kicker">04 · Goal types</span>
-          </div>
-          <span class="slide__bar-num"></span>
-        </div>
-        <div class="slide__body">
-          <div class="head-row">
-            <h2 class="headline">Set plays: 6 of our 9 goals conceded</h2>
-            <p class="kicker">Per game · white line = play-off benchmark</p>
-          </div>
-          <div class="phases">
-            <div class="phase-col">
-              <h3>Goals scored · 3</h3>
-              <div class="phase-row">
-                <div class="phase-row__top"><span>Possession <small>benchmark 0.59</small></span><b class="bad">0 · 0.00</b></div>
-                <div class="phase-track is-bad" style="--v:0;--b:0.59;--max:1"><i></i><u></u></div>
-              </div>
-              <div class="phase-row">
-                <div class="phase-row__top"><span>Transition <small>benchmark 0.52</small></span><b class="bad">1 · 0.14</b></div>
-                <div class="phase-track is-bad" style="--v:0.14;--b:0.52;--max:1"><i></i><u></u></div>
-              </div>
-              <div class="phase-row">
-                <div class="phase-row__top"><span>Set play <small>benchmark 0.46</small></span><b class="bad">2 · 0.29</b></div>
-                <div class="phase-track is-bad" style="--v:0.29;--b:0.46;--max:1"><i></i><u></u></div>
-              </div>
+      <!-- Six-game blocks -->
+      <section class="slide" data-label="Six-game blocks"
+        data-notes="The Strategy Report breaks the season into blocks of six so staff and players can check progress without waiting until May. Automatic pace is 11 points, 9 scored, 6 conceded, 2 clean sheets every six. Block one gave us 5 points and 3 goals. Block two started with the defeat at Walsall.">
+        <div class="s">
+          <header class="hd"><i></i><b>02</b> What it takes<img src="/standalone/port-vale-badge.png?v=2" alt="" /></header>
+          <h2 class="ttl">Block one: <em>games 1–6</em> against automatic pace</h2>
+          <p class="sub">How the players are measured every six games. Big number is ours, grey is the target.</p>
+          <div class="bd">
+            <div class="blocks">
+              <article class="blk"><em>Points</em><div class="blk__nums"><b>5</b><span>/ 11</span></div><p>Less than half the automatic pace.</p><div class="blk__games"><span><b>0</b>OLD</span><span><b>1</b>TRA</span><span><b>1</b>CRE</span><span><b>0</b>SWI</span><span><b>0</b>SAL</span><span><b>3</b>EXE</span></div></article>
+              <article class="blk"><em>Goals scored</em><div class="blk__nums"><b>3</b><span>/ 9</span></div><p>Blank in three of the six.</p><div class="blk__games"><span><b>0</b>OLD</span><span><b>1</b>TRA</span><span><b>0</b>CRE</span><span><b>1</b>SWI</span><span><b>0</b>SAL</span><span><b>1</b>EXE</span></div></article>
+              <article class="blk"><em>Goals conceded</em><div class="blk__nums"><b>7</b><span>/ 6</span></div><p>Play-off pace, one over automatic.</p><div class="blk__games"><span><b>2</b>OLD</span><span><b>1</b>TRA</span><span><b>0</b>CRE</span><span><b>3</b>SWI</span><span><b>1</b>SAL</span><span><b>0</b>EXE</span></div></article>
+              <article class="blk is-ok"><em>Clean sheets</em><div class="blk__nums"><b>2</b><span>/ 2</span></div><p>On target, both at home.</p><div class="blk__games"><span><b>–</b>OLD</span><span><b>–</b>TRA</span><span><b>✓</b>CRE</span><span><b>–</b>SWI</span><span><b>–</b>SAL</span><span><b>✓</b>EXE</span></div></article>
             </div>
-            <div class="phase-col">
-              <h3>Goals conceded · 9</h3>
-              <div class="phase-row">
-                <div class="phase-row__top"><span>Possession <small>benchmark 0.44</small></span><b class="good">1 · 0.14</b></div>
-                <div class="phase-track is-good" style="--v:0.14;--b:0.44;--max:1"><i></i><u></u></div>
+          </div>
+          <p class="ft">Block two (games 7–12) began with a 0–2 defeat at Walsall. Benchmarks: Players Strategy Report.</p>
+        </div>
+      </section>
+
+      <!-- Goal types -->
+      <section class="slide" data-label="Goal types"
+        data-notes="White line is the play-off benchmark per game. Going forward we are under it in every phase and have not scored from open-play possession. At the back, open play and transitions are better than the play-off line. Set plays are the outlier: 6 of our 9 conceded, nearly three times the play-off rate. Automatic sides average 25 set-play goals a season, 6 more than play-off sides.">
+        <div class="s">
+          <header class="hd"><i></i><b>02</b> What it takes<img src="/standalone/port-vale-badge.png?v=2" alt="" /></header>
+          <h2 class="ttl">Set plays: <em>6 of our 9</em> goals conceded</h2>
+          <p class="sub">Goals per game by phase. White line = play-off benchmark from the Strategy Report.</p>
+          <div class="bd">
+            <div class="phases">
+              <div class="ph">
+                <h3>Scored <b>3</b></h3>
+                <div class="ph__row"><div class="ph__top"><span>Possession<small>bench 0.59</small></span><b class="bad">0.00</b></div><div class="ph__track" style="--v:0;--b:0.59;--c:var(--loss)"><i></i><u></u></div></div>
+                <div class="ph__row"><div class="ph__top"><span>Transition<small>bench 0.52</small></span><b class="bad">0.14</b></div><div class="ph__track" style="--v:0.14;--b:0.52;--c:var(--loss)"><i></i><u></u></div></div>
+                <div class="ph__row"><div class="ph__top"><span>Set play<small>bench 0.46</small></span><b class="bad">0.29</b></div><div class="ph__track" style="--v:0.29;--b:0.46;--c:var(--loss)"><i></i><u></u></div></div>
               </div>
-              <div class="phase-row">
-                <div class="phase-row__top"><span>Transition <small>benchmark 0.43</small></span><b class="good">2 · 0.29</b></div>
-                <div class="phase-track is-good" style="--v:0.29;--b:0.43;--max:1"><i></i><u></u></div>
-              </div>
-              <div class="phase-row">
-                <div class="phase-row__top"><span>Set play <small>benchmark 0.30</small></span><b class="bad">6 · 0.86</b></div>
-                <div class="phase-track is-bad" style="--v:0.86;--b:0.30;--max:1"><i></i><u></u></div>
+              <div class="ph">
+                <h3>Conceded <b>9</b></h3>
+                <div class="ph__row"><div class="ph__top"><span>Possession<small>bench 0.44</small></span><b class="good">0.14</b></div><div class="ph__track" style="--v:0.14;--b:0.44;--c:var(--win)"><i></i><u></u></div></div>
+                <div class="ph__row"><div class="ph__top"><span>Transition<small>bench 0.43</small></span><b class="good">0.29</b></div><div class="ph__track" style="--v:0.29;--b:0.43;--c:var(--win)"><i></i><u></u></div></div>
+                <div class="ph__row"><div class="ph__top"><span>Set play<small>bench 0.30</small></span><b class="bad">0.86</b></div><div class="ph__track" style="--v:0.86;--b:0.30;--c:var(--loss)"><i></i><u></u></div></div>
               </div>
             </div>
           </div>
-          <p class="source">Strategy Report: automatic sides average 25 set-play goals a season, 6 more than play-off sides. Phases from Impect.</p>
+          <p class="ft">Phases: Impect. Benchmark: Strategy Report play-off average per game.</p>
         </div>
       </section>
 
-      <!-- 11 What wins games -->
-      <section
-        class="slide"
-        data-label="What wins games"
-        data-notes="This comes from the What Wins Games tool: 96 League Two team-seasons from 22/23 to 25/26, ranking each per-game stat by how closely it tracks win percentage. xG difference is the strongest predictor of winning and of finishing top 3 or top 7. Then creating chances: attacking threat, xG, shots on target. Then stopping theirs. We rank well on the defensive lines (xG against 5th, line broken 2nd least) and near the bottom on every attacking one. Duels and aerials help but are not what separates the sides that go up."
-      >
-        <div class="slide__bar">
-          <div class="slide__bar-left">
-            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
-            <span class="slide__bar-kicker">05 · What wins games</span>
-          </div>
-          <span class="slide__bar-num"></span>
-        </div>
-        <div class="slide__body">
-          <div class="head-row">
-            <h2 class="headline">League Two is won by chance quality both ways</h2>
-            <p class="kicker">96 team-seasons · 22/23–25/26 · Port Vale rank this season</p>
-          </div>
-          <div class="drivers">
-            <div class="drivers__head"><span>#</span><span>Stat (per game)</span><span>Link to winning</span><span>Vale</span><span>Rank</span><span>League</span><span>Top 7</span></div>
-            <div class="drivers__row"><span>1</span><span>xG difference</span><span class="drivers__r" style="--r:0.77"><i></i>0.77</span><span>−0.18</span><span><span class="rank">15th</span></span><span>−0.01</span><span>+0.32</span></div>
-            <div class="drivers__row"><span>2</span><span>Attacking threat</span><span class="drivers__r" style="--r:0.69"><i></i>0.69</span><span>0.75</span><span><span class="rank rank--bad">23rd</span></span><span>1.21</span><span>1.47</span></div>
-            <div class="drivers__row"><span>3</span><span>xG for</span><span class="drivers__r" style="--r:0.66"><i></i>0.66</span><span>0.99</span><span><span class="rank rank--bad">22nd</span></span><span>1.41</span><span>1.68</span></div>
-            <div class="drivers__row"><span>4</span><span>Shots on target</span><span class="drivers__r" style="--r:0.61"><i></i>0.61</span><span>3.1</span><span><span class="rank rank--bad">20th</span></span><span>4.0</span><span>4.5</span></div>
-            <div class="drivers__row"><span>5</span><span>xG against</span><span class="drivers__r" style="--r:0.58"><i></i>0.58</span><span>1.17</span><span><span class="rank rank--good">5th</span></span><span>1.42</span><span>1.37</span></div>
-            <div class="drivers__row"><span>6</span><span>Shots</span><span class="drivers__r" style="--r:0.54"><i></i>0.54</span><span>9.6</span><span><span class="rank rank--bad">18th</span></span><span>11.8</span><span>13.6</span></div>
-            <div class="drivers__row"><span>7</span><span>Shot threat</span><span class="drivers__r" style="--r:0.52"><i></i>0.52</span><span>0.12</span><span><span class="rank rank--bad">22nd</span></span><span>0.43</span><span>0.50</span></div>
-            <div class="drivers__row"><span>8</span><span>Defenders bypassed against</span><span class="drivers__r" style="--r:0.46"><i></i>0.46</span><span>36.2</span><span><span class="rank rank--good">2nd</span></span><span>44.9</span><span>44.9</span></div>
-            <div class="drivers__row"><span>9</span><span>Altered threat</span><span class="drivers__r" style="--r:0.42"><i></i>0.42</span><span>0.11</span><span><span class="rank rank--bad">21st</span></span><span>0.32</span><span>0.48</span></div>
-            <div class="drivers__row"><span>10</span><span>Aerial win %</span><span class="drivers__r" style="--r:0.42"><i></i>0.42</span><span>45.3</span><span><span class="rank rank--bad">20th</span></span><span>49.7</span><span>51.7</span></div>
-            <div class="drivers__row"><span>11</span><span>Defenders bypassed</span><span class="drivers__r" style="--r:0.41"><i></i>0.41</span><span>37.2</span><span><span class="rank rank--bad">21st</span></span><span>44.9</span><span>47.6</span></div>
-            <div class="drivers__row"><span>12</span><span>Duel win %</span><span class="drivers__r" style="--r:0.41"><i></i>0.41</span><span>49.9</span><span><span class="rank">15th</span></span><span>49.9</span><span>50.6</span></div>
-          </div>
-          <p class="source">Spearman correlation with win % (Impect, Scout Absolute packing). Rank 1 = best in League Two 26/27. Goals left out: they are the result, not the driver.</p>
-        </div>
-      </section>
-
-      <!-- 12 Diagnosis -->
-      <section
-        class="slide"
-        data-label="What the data says"
-        data-notes="Bringing it together. One clear strength: we defend open play well. Three things the data says to prioritise: creating chances, defending set plays, and away form and second halves. None of these are opinions about individuals; they are where the numbers sit against the League Two promotion benchmarks."
-      >
-        <div class="slide__bar">
-          <div class="slide__bar-left">
-            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
-            <span class="slide__bar-kicker">05 · What the data says</span>
-          </div>
-          <span class="slide__bar-num"></span>
-        </div>
-        <div class="slide__body">
-          <div class="head-row">
-            <h2 class="headline">One strength, three priorities</h2>
-            <p class="kicker">Against League Two promotion benchmarks</p>
-          </div>
-          <div class="prio">
-            <article class="is-strength">
-              <em>Strength</em>
-              <strong>Defending open play</strong>
-              <ul>
-                <li>xG against 1.17 a game, 5th best.</li>
-                <li>Our line is broken less than any side bar one.</li>
-                <li>3 open-play goals conceded in 7 games.</li>
-              </ul>
-            </article>
-            <article>
-              <em>Priority 1</em>
-              <strong>Creating chances</strong>
-              <ul>
-                <li>Attacking threat 23rd, xG 22nd, shots on target 20th.</li>
-                <li>No goals from open-play possession yet.</li>
-                <li>Strikers: 1 league goal between six of them.</li>
-              </ul>
-            </article>
-            <article>
-              <em>Priority 2</em>
-              <strong>Defending set plays</strong>
-              <ul>
-                <li>6 of 9 conceded from set plays.</li>
-                <li>0.86 a game against a play-off benchmark of 0.30.</li>
-                <li>Aerial win rate 20th in the league.</li>
-              </ul>
-            </article>
-            <article>
-              <em>Priority 3</em>
-              <strong>Away days &amp; second halves</strong>
-              <ul>
-                <li>0 points from 4 away, goals 1–8.</li>
-                <li>7 of 9 goals against after half-time.</li>
-                <li>No points yet when conceding first.</li>
-              </ul>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <!-- 13 Squad glance -->
-      <section
-        class="slide"
-        data-label="Squad"
-        data-notes="26 senior players: 22 owned and 4 on loan (Faal from Wrexham, Lynch from Luton, Asamoah from Wigan, Figueroa from Liverpool). Average age 26.5 using today's ages. The summer was a big turnover: 12 in and 19 out, taking the senior group from 34 to 26. The most recent league line-up was a 3-5-2. Academy players training with the first team include goalkeepers Arron Davies and Keaton Moseley. Jack Shorrock is on loan at Sligo Rovers until 30 October."
-      >
-        <div class="slide__bar">
-          <div class="slide__bar-left">
-            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
-            <span class="slide__bar-kicker">06 · The squad</span>
-          </div>
-          <span class="slide__bar-num"></span>
-        </div>
-        <div class="slide__body">
-          <div class="head-row">
-            <h2 class="headline">26 senior players after a big summer</h2>
-            <p class="kicker">Count and average age by position</p>
-          </div>
-          <div class="glance">
-            <article><em>26</em><strong>Senior squad</strong><p>22 owned · 4 loans: Faal, Lynch, Asamoah, Figueroa</p></article>
-            <article><em>26.5</em><strong>Average age</strong><p>Strikers youngest (23.3) · centre-backs oldest (28.5)</p></article>
-            <article class="is-in"><em>12 in</em><strong>Summer arrivals</strong><p>8 permanent, 4 loans. 19 left. Squad went from 34 to 26.</p></article>
-            <article><em>3-5-2</em><strong>Current shape</strong><p>Most recent league XI. Wing-backs Gabriel and Headley.</p></article>
-          </div>
-          <div class="unit-strip unit-strip--fill">
-            <div><em>GK · 2</em><b>28.0</b><span>Smith, Maroši</span></div>
-            <div><em>RB · 3</em><b>27.7</b><span>Gabriel, John, McGowan</span></div>
-            <div><em>CB · 4</em><b>28.5</b><span>C. Hall, Humphreys, Montsma, Moon</span></div>
-            <div><em>LB · 2</em><b>26.0</b><span>Headley, Gordon</span></div>
-            <div><em>DM · 2</em><b>26.5</b><span>Byers, Craig</span></div>
-            <div><em>MF · 5</em><b>26.8</b><span>Dempsey, Garrity, Croasdale, G. Hall, Walters</span></div>
-            <div><em>W · 2</em><b>28.0</b><span>Hernández, Asamoah (L)</span></div>
-            <div><em>CF · 6</em><b>23.3</b><span>Waine, Watters, Simpson, Faal (L), Lynch (L), Figueroa (L)</span></div>
-          </div>
-          <p class="source">Ages today (FotMob). Squad and summer window from the Summer Window Review. Gold number = average age.</p>
-        </div>
-      </section>
-
-      <!-- 14 Depth chart -->
-      <section
-        class="slide"
-        data-label="Depth chart"
-        data-notes="Depth chart in the 3-5-2, with league minutes in brackets (seven games, so about 630 is every minute). Kyle John covers both right wing-back and the right of the back three. Midfield is the deepest area. Left wing-back and natural wide forwards are the thinnest. Six strikers, three of them on loan."
-      >
-        <div class="slide__bar">
-          <div class="slide__bar-left">
-            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
-            <span class="slide__bar-kicker">06 · Depth chart</span>
-          </div>
-          <span class="slide__bar-num"></span>
-        </div>
-        <div class="slide__body">
-          <div class="head-row">
-            <h2 class="headline">Depth in the 3-5-2</h2>
-            <p class="kicker">League minutes · 7 games · (L) = loan</p>
-          </div>
-          <div class="depth-pitch">
-            <div class="pitch">
-              <div class="pos" style="--x:9%;--y:50%"><em>GK</em>
-                <div><span>J. Smith</span><span>588</span></div>
-                <div><span>Maroši</span><span>100</span></div>
-                <div><span>Davies · Moseley</span><span>acad</span></div>
-              </div>
-              <div class="pos" style="--x:27%;--y:50%"><em>Back three</em>
-                <div><span>C. Hall</span><span>529</span></div>
-                <div><span>Montsma</span><span>494</span></div>
-                <div><span>Humphreys</span><span>406</span></div>
-                <div><span>K. John</span><span>244</span></div>
-                <div><span>Moon</span><span>22</span></div>
-                <div><span>McGowan</span><span>0</span></div>
-              </div>
-              <div class="pos" style="--x:46%;--y:13%"><em>LWB</em>
-                <div><span>Gordon</span><span>396</span></div>
-                <div><span>Headley</span><span>385</span></div>
-                <div><span>Shorrock</span><span>Sligo</span></div>
-              </div>
-              <div class="pos" style="--x:46%;--y:87%"><em>RWB</em>
-                <div><span>Gabriel</span><span>689</span></div>
-                <div><span>K. John</span><span>RCB/RWB</span></div>
-                <div><span>McGowan</span><span>0</span></div>
-              </div>
-              <div class="pos" style="--x:55%;--y:50%"><em>Midfield three</em>
-                <div><span>Dempsey</span><span>654</span></div>
-                <div><span>Garrity</span><span>429</span></div>
-                <div><span>Walters</span><span>376</span></div>
-                <div><span>Byers</span><span>249</span></div>
-                <div><span>Craig</span><span>54</span></div>
-                <div><span>Croasdale</span><span>31</span></div>
-              </div>
-              <div class="pos" style="--x:75%;--y:17%"><em>Wide / No.10</em>
-                <div><span>Hernández</span><span>362</span></div>
-                <div><span>G. Hall</span><span>351</span></div>
-                <div><span class="loan">Asamoah (L)</span><span>54</span></div>
-              </div>
-              <div class="pos" style="--x:84%;--y:62%"><em>Strikers</em>
-                <div><span class="loan">Lynch (L)</span><span>563</span></div>
-                <div><span>Waine</span><span>298</span></div>
-                <div><span>Simpson</span><span>115</span></div>
-                <div><span class="loan">Faal (L)</span><span>112</span></div>
-                <div><span>Watters</span><span>49</span></div>
-                <div><span class="loan">Figueroa (L)</span><span>27</span></div>
-              </div>
+      <!-- What wins games -->
+      <section class="slide" data-label="What wins games"
+        data-notes="From the What Wins Games tool: 96 League Two team-seasons, 22/23 to 25/26, ranking each per-game stat by how closely it tracks win percentage. xG difference is the strongest predictor of winning and of finishing top 3 or top 7. Then creating chances, then stopping theirs. We rank well on the defensive lines and near the bottom on every attacking one.">
+        <div class="s">
+          <header class="hd"><i></i><b>02</b> What it takes<img src="/standalone/port-vale-badge.png?v=2" alt="" /></header>
+          <h2 class="ttl">League Two is won by <em>chance quality</em></h2>
+          <p class="sub">The eight stats most linked to winning, across 96 League Two team-seasons, and where we rank this season.</p>
+          <div class="bd">
+            <div class="drv">
+              <div class="drv__row drv__row--head"><span>#</span><span>Stat per game</span><span>Link to winning</span><span style="text-align:right">Vale</span><span style="text-align:right">Rank</span></div>
+              <div class="drv__row"><span class="drv__n">1</span><span class="drv__lbl">xG difference<small>League −0.01 · top 7 +0.32</small></span><span class="drv__r" style="--r:0.77"><i></i>0.77</span><span class="drv__v">−0.18</span><span class="pill">15th</span></div>
+              <div class="drv__row"><span class="drv__n">2</span><span class="drv__lbl">Attacking threat<small>League 1.21 · top 7 1.47</small></span><span class="drv__r" style="--r:0.69"><i></i>0.69</span><span class="drv__v">0.75</span><span class="pill pill--bad">23rd</span></div>
+              <div class="drv__row"><span class="drv__n">3</span><span class="drv__lbl">xG for<small>League 1.41 · top 7 1.68</small></span><span class="drv__r" style="--r:0.66"><i></i>0.66</span><span class="drv__v">0.99</span><span class="pill pill--bad">22nd</span></div>
+              <div class="drv__row"><span class="drv__n">4</span><span class="drv__lbl">Shots on target<small>League 4.0 · top 7 4.5</small></span><span class="drv__r" style="--r:0.61"><i></i>0.61</span><span class="drv__v">3.1</span><span class="pill pill--bad">20th</span></div>
+              <div class="drv__row"><span class="drv__n">5</span><span class="drv__lbl">xG against<small>League 1.42 · top 7 1.37</small></span><span class="drv__r" style="--r:0.58"><i></i>0.58</span><span class="drv__v">1.17</span><span class="pill pill--good">5th</span></div>
+              <div class="drv__row"><span class="drv__n">6</span><span class="drv__lbl">Shots<small>League 11.8 · top 7 13.6</small></span><span class="drv__r" style="--r:0.54"><i></i>0.54</span><span class="drv__v">9.6</span><span class="pill pill--bad">18th</span></div>
+              <div class="drv__row"><span class="drv__n">7</span><span class="drv__lbl">Shot threat<small>League 0.43 · top 7 0.50</small></span><span class="drv__r" style="--r:0.52"><i></i>0.52</span><span class="drv__v">0.12</span><span class="pill pill--bad">22nd</span></div>
+              <div class="drv__row"><span class="drv__n">8</span><span class="drv__lbl">Line broken against<small>League 44.9 · top 7 44.9</small></span><span class="drv__r" style="--r:0.46"><i></i>0.46</span><span class="drv__v">36.2</span><span class="pill pill--good">2nd</span></div>
             </div>
-            <div class="depth-key">
-              <article class="is-good"><b>Deepest: midfield</b>Six senior options. Dempsey and Garrity have the minutes; Byers is top scorer from 249.</article>
-              <article><b>Back three settled</b>Hall, Montsma and Humphreys. John covers RCB and RWB. McGowan yet to play in the league.</article>
-              <article class="is-bad"><b>Thinnest: left wing-back</b>Gordon and Headley only, with Shorrock away until 30 Oct.</article>
-              <article class="is-bad"><b>Strikers: 1 league goal</b>Six options, three on loan. Lynch has most minutes and the only goal.</article>
+          </div>
+          <p class="ft">Spearman correlation with win % (Impect, Scout Absolute packing). Rank 1 = best in League Two 26/27.</p>
+        </div>
+      </section>
+
+      <!-- Priorities -->
+      <section class="slide" data-label="What the data says"
+        data-notes="One clear strength: we defend open play well. Three things the data says to prioritise: creating chances, defending set plays, and away form and second halves.">
+        <div class="s">
+          <header class="hd"><i></i><b>02</b> What it takes<img src="/standalone/port-vale-badge.png?v=2" alt="" /></header>
+          <h2 class="ttl">One strength, <em>three priorities</em></h2>
+          <div class="bd">
+            <div class="prio">
+              <article class="is-strength"><em>Strength</em><strong>Defending open play</strong><b>5th</b><span>for xG against</span><ul><li>Line broken less than any side bar one.</li><li>3 open-play goals conceded in 7.</li></ul></article>
+              <article><em>Priority 1</em><strong>Creating chances</strong><b>22nd</b><span>for xG created</span><ul><li>Attacking threat 23rd, shots on target 20th.</li><li>No goals from open-play possession.</li></ul></article>
+              <article><em>Priority 2</em><strong>Defending set plays</strong><b>6/9</b><span>goals conceded from set plays</span><ul><li>0.86 a game vs a 0.30 benchmark.</li><li>Aerial win rate 20th.</li></ul></article>
+              <article><em>Priority 3</em><strong>Away &amp; 2nd halves</strong><b>0</b><span>points from four away games</span><ul><li>Goals 1–8 away.</li><li>7 of 9 conceded after half-time.</li></ul></article>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- 15 Minutes -->
-      <section
-        class="slide"
-        data-label="Minutes"
-        data-notes="League minutes from Impect for every player used. Gabriel and Dempsey have played almost every minute. Byers has been limited to 249 minutes but has two of our three league goals. Loans are in blue: Lynch has been a regular, the other three loanees have about 190 minutes between them. Aaron McGowan is the only senior outfield player yet to appear in the league."
-      >
-        <div class="slide__bar">
-          <div class="slide__bar-left">
-            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
-            <span class="slide__bar-kicker">06 · Minutes</span>
-          </div>
-          <span class="slide__bar-num"></span>
-        </div>
-        <div class="slide__body">
-          <div class="head-row">
-            <h2 class="headline">Who has played</h2>
-            <p class="kicker">League minutes · 25 players used · blue = loan</p>
-          </div>
-          <div class="mins">
-            <div class="min-row" style="--m:689"><em>RWB</em><strong>Jordan Gabriel</strong><div class="track"><i></i></div><b>689</b></div>
-            <div class="min-row" style="--m:654"><em>CM</em><strong>Kyle Dempsey</strong><div class="track"><i></i></div><b>654</b></div>
-            <div class="min-row" style="--m:588"><em>GK</em><strong>Jackson Smith</strong><div class="track"><i></i></div><b>588</b></div>
-            <div class="min-row is-loan" style="--m:563"><em>CF</em><strong>Oliver Lynch (L)</strong><div class="track"><i></i></div><b>563</b></div>
-            <div class="min-row" style="--m:529"><em>CB</em><strong>Connor Hall</strong><div class="track"><i></i></div><b>529</b></div>
-            <div class="min-row" style="--m:494"><em>CB</em><strong>Lewis Montsma</strong><div class="track"><i></i></div><b>494</b></div>
-            <div class="min-row" style="--m:429"><em>CM</em><strong>Ben Garrity</strong><div class="track"><i></i></div><b>429</b></div>
-            <div class="min-row" style="--m:406"><em>CB</em><strong>Cameron Humphreys</strong><div class="track"><i></i></div><b>406</b></div>
-            <div class="min-row" style="--m:396"><em>LWB</em><strong>Liam Gordon</strong><div class="track"><i></i></div><b>396</b></div>
-            <div class="min-row" style="--m:385"><em>LWB</em><strong>Jaheim Headley</strong><div class="track"><i></i></div><b>385</b></div>
-            <div class="min-row" style="--m:376"><em>CM</em><strong>Rhys Walters</strong><div class="track"><i></i></div><b>376</b></div>
-            <div class="min-row" style="--m:362"><em>W</em><strong>Onel Hernández</strong><div class="track"><i></i></div><b>362</b></div>
-            <div class="min-row" style="--m:351"><em>AM</em><strong>George Hall</strong><div class="track"><i></i></div><b>351</b></div>
-            <div class="min-row" style="--m:298"><em>W</em><strong>Ben Waine</strong><div class="track"><i></i></div><b>298</b></div>
-            <div class="min-row" style="--m:249"><em>CM</em><strong>George Byers</strong><div class="track"><i></i></div><b>249</b></div>
-            <div class="min-row" style="--m:244"><em>CB</em><strong>Kyle John</strong><div class="track"><i></i></div><b>244</b></div>
-            <div class="min-row" style="--m:115"><em>CF</em><strong>Tyreece Simpson</strong><div class="track"><i></i></div><b>115</b></div>
-            <div class="min-row is-loan" style="--m:112"><em>CF</em><strong>Mo Faal (L)</strong><div class="track"><i></i></div><b>112</b></div>
-            <div class="min-row" style="--m:100"><em>GK</em><strong>Marko Maroši</strong><div class="track"><i></i></div><b>100</b></div>
-            <div class="min-row is-loan" style="--m:54"><em>AM</em><strong>Maleace Asamoah (L)</strong><div class="track"><i></i></div><b>54</b></div>
-            <div class="min-row" style="--m:54"><em>CM</em><strong>Matthew Craig</strong><div class="track"><i></i></div><b>54</b></div>
-            <div class="min-row" style="--m:49"><em>CF</em><strong>Max Watters</strong><div class="track"><i></i></div><b>49</b></div>
-            <div class="min-row" style="--m:31"><em>AM</em><strong>Ryan Croasdale</strong><div class="track"><i></i></div><b>31</b></div>
-            <div class="min-row is-loan" style="--m:27"><em>CF</em><strong>Keyrol Figueroa (L)</strong><div class="track"><i></i></div><b>27</b></div>
-            <div class="min-row" style="--m:22"><em>CB</em><strong>Jasper Moon</strong><div class="track"><i></i></div><b>22</b></div>
-          </div>
-          <p class="source">Impect league minutes including stoppage time. Not yet used in the league: Aaron McGowan.</p>
-        </div>
-      </section>
-
-      <!-- 16 Key performers -->
-      <section
-        class="slide"
-        data-label="Key performers"
-        data-notes="Five players to know first. Byers: two of our three league goals and the best average rating in the squad, from limited minutes. Gabriel: most minutes, our only league assist, second-best rating. Montsma: the most consistent of the back three. Dempsey: the midfield's minutes leader. Lynch: on loan from Luton, the striker with the most minutes and our only striker goal. Ratings are FotMob averages."
-      >
-        <div class="slide__bar">
-          <div class="slide__bar-left">
-            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
-            <span class="slide__bar-kicker">06 · Key performers</span>
-          </div>
-          <span class="slide__bar-num"></span>
-        </div>
-        <div class="slide__body">
-          <div class="head-row">
-            <h2 class="headline">Five players to know first</h2>
-            <p class="kicker">League so far · FotMob average rating</p>
-          </div>
-          <div class="pcards pcards--five">
-            <article class="pcard">
-              <div class="pcard__media"><span class="pcard__initials">GB</span><img src="/api/player-photo?name=George%20Byers" alt="" onerror="this.remove()" /></div>
-              <span class="pcard__pos">CM</span>
-              <div class="pcard__body">
-                <strong>George Byers</strong><span>30 · top scorer from midfield</span>
-                <div class="pcard__stats"><span><b>2</b>Goals</span><span><b>7.19</b>Rating</span><span><b>249</b>Mins</span></div>
-              </div>
-            </article>
-            <article class="pcard">
-              <div class="pcard__media"><span class="pcard__initials">JG</span><img src="/api/player-photo?name=Jordan%20Gabriel" alt="" onerror="this.remove()" /></div>
-              <span class="pcard__pos">RWB</span>
-              <div class="pcard__body">
-                <strong>Jordan Gabriel</strong><span>28 · ever-present</span>
-                <div class="pcard__stats"><span><b>1</b>Assist</span><span><b>7.12</b>Rating</span><span><b>689</b>Mins</span></div>
-              </div>
-            </article>
-            <article class="pcard">
-              <div class="pcard__media"><span class="pcard__initials">LM</span><img src="/api/player-photo?name=Lewis%20Montsma" alt="" onerror="this.remove()" /></div>
-              <span class="pcard__pos">CB</span>
-              <div class="pcard__body">
-                <strong>Lewis Montsma</strong><span>28 · summer signing</span>
-                <div class="pcard__stats"><span><b>6.77</b>Rating</span><span><b>494</b>Mins</span></div>
-              </div>
-            </article>
-            <article class="pcard">
-              <div class="pcard__media"><span class="pcard__initials">KD</span><img src="/api/player-photo?name=Kyle%20Dempsey" alt="" onerror="this.remove()" /></div>
-              <span class="pcard__pos">CM</span>
-              <div class="pcard__body">
-                <strong>Kyle Dempsey</strong><span>31 · summer signing</span>
-                <div class="pcard__stats"><span><b>6.71</b>Rating</span><span><b>654</b>Mins</span></div>
-              </div>
-            </article>
-            <article class="pcard pcard--loan">
-              <div class="pcard__media"><span class="pcard__initials">OL</span><img src="/api/player-photo?name=Oliver%20Lynch" alt="" onerror="this.remove()" /></div>
-              <span class="pcard__pos">CF</span>
-              <div class="pcard__body">
-                <strong>Oli Lynch</strong><span>21 · on loan from Luton</span>
-                <div class="pcard__stats"><span><b>1</b>Goal</span><span><b>6.21</b>Rating</span><span><b>563</b>Mins</span></div>
-              </div>
-            </article>
+      <!-- Chapter 03 -->
+      <section class="slide" data-label="03 The squad"
+        data-notes="Part three: the squad.">
+        <img class="chap__img" src="/static/sd-briefing/blocks.jpg" alt="" style="object-position:55% 25%" />
+        <div class="chap__fade"></div>
+        <div class="s">
+          <div class="chap">
+            <span class="chap__num">03</span>
+            <h2 class="chap__title">The squad</h2>
+            <p class="chap__sub">26 senior players after a big summer: depth by position, who is playing, who is performing, and where we are short.</p>
           </div>
         </div>
       </section>
 
-      <!-- 17 Watch-outs -->
-      <section
-        class="slide"
-        data-label="Squad watch-outs"
-        data-notes="Where the squad is exposed. Red is where performance and depth both point the same way: goals from strikers and wide creativity, which line up with the attacking numbers on the What Wins Games slide. Amber is depth to keep an eye on. Green is the area with the most cover. Contract lengths are not held in the hub, so they are not shown here."
-      >
-        <div class="slide__bar">
-          <div class="slide__bar-left">
-            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
-            <span class="slide__bar-kicker">06 · Squad watch-outs</span>
-          </div>
-          <span class="slide__bar-num"></span>
-        </div>
-        <div class="slide__body">
-          <div class="head-row">
-            <h2 class="headline">Where the squad is exposed</h2>
-            <p class="kicker">Red = act · amber = watch · green = covered</p>
-          </div>
-          <div class="watch">
-            <article><em>CF</em><strong>Goals from strikers</strong><p>Six strikers, one league goal (Lynch). Byers is top scorer from midfield. Three of the six are loans: Faal, Lynch, Figueroa.</p></article>
-            <article><em>W / No.10</em><strong>Wide creativity</strong><p>Hernández (33) and Asamoah (loan) are the only natural wide forwards. Attacking threat is 23rd of 24.</p></article>
-            <article class="is-amber"><em>CB</em><strong>Four for a back three</strong><p>Hall (33), Montsma, Humphreys, Moon, with John as cover. One injury leaves no spare.</p></article>
-            <article class="is-amber"><em>LWB</em><strong>Two left wing-backs</strong><p>Gordon and Headley. Shorrock is on loan at Sligo Rovers until 30 October.</p></article>
-            <article class="is-amber"><em>GK</em><strong>Two senior keepers</strong><p>Smith (24) and Maroši (32). Next in line are academy keepers Davies (20) and Moseley (18). Mason Terry's loan ended on 1 Sep (hand injury).</p></article>
-            <article class="is-ok"><em>MF</em><strong>Midfield covered</strong><p>Dempsey, Garrity, Byers, Craig, Croasdale, G. Hall, Walters. Seven options across holding and central roles.</p></article>
-          </div>
-        </div>
-      </section>
-
-      <!-- 18 Staff -->
-      <section
-        class="slide"
-        data-label="Staff structure"
-        data-notes="The first-team staff as listed on the club website's management page: 14 people across coaching, medical, physical performance, analysis and kit. The website does not publish reporting lines, so they are grouped by department here rather than as a reporting chart. Board, recruitment and academy staff pages on the website are currently empty."
-      >
-        <div class="slide__bar">
-          <div class="slide__bar-left">
-            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
-            <span class="slide__bar-kicker">07 · Staff structure</span>
-          </div>
-          <span class="slide__bar-num"></span>
-        </div>
-        <div class="slide__body">
-          <div class="head-row">
-            <h2 class="headline">The first-team staff</h2>
-            <p class="kicker">14 staff · grouped by department</p>
-          </div>
-          <div class="org">
-            <div class="org__top">
-              <div class="org-card"><strong>Sporting Director</strong><span>New · starts Monday 5 October</span></div>
-              <div class="org-card is-lead"><strong>Jon Brady</strong><span>Manager</span></div>
-              <div class="org-card"><strong>Gary Mills</strong><span>Assistant First-Team Manager</span></div>
+      <!-- Squad glance -->
+      <section class="slide" data-label="Squad"
+        data-notes="26 senior players: 22 owned and 4 on loan (Faal from Wrexham, Lynch from Luton, Asamoah from Wigan, Figueroa from Liverpool). Average age 26.5. The summer was a big turnover: 12 in and 19 out, 34 down to 26. Most recent league line-up was a 3-5-2. Academy goalkeepers Arron Davies and Keaton Moseley are next in line. Jack Shorrock is on loan at Sligo Rovers until 30 October.">
+        <div class="s">
+          <header class="hd"><i></i><b>03</b> The squad<img src="/standalone/port-vale-badge.png?v=2" alt="" /></header>
+          <h2 class="ttl">26 players, <em>12 of them new</em></h2>
+          <div class="bd">
+            <div class="kpis">
+              <div class="kpi"><b>26</b><strong>Senior squad</strong><span>22 owned · 4 loans</span></div>
+              <div class="kpi"><b>26.5</b><strong>Average age</strong><span>Strikers youngest, centre-backs oldest</span></div>
+              <div class="kpi"><b>12 / 19</b><strong>In / out</strong><span>Summer window · 34 down to 26</span></div>
+              <div class="kpi"><b>3-5-2</b><strong>Current shape</strong><span>Most recent league XI</span></div>
             </div>
-            <div class="org__depts">
-              <div class="dept">
-                <h3>Coaching</h3>
-                <div><strong>Jamie Smith</strong><span>Lead First Team Coach</span></div>
-                <div><strong>Richard O'Donnell</strong><span>First Team Coach</span></div>
-                <div><strong>Dan Watson</strong><span>First Team Goalkeeping Coach</span></div>
+            <div class="units">
+              <div class="unit"><em>GK</em><div class="unit__dots"><i></i><i></i></div><ul><li>Smith</li><li>Maroši</li></ul><div class="unit__age"><b>28.0</b>avg age</div></div>
+              <div class="unit"><em>RB</em><div class="unit__dots"><i></i><i></i><i></i></div><ul><li>Gabriel</li><li>John</li><li>McGowan</li></ul><div class="unit__age"><b>27.7</b>avg age</div></div>
+              <div class="unit"><em>CB</em><div class="unit__dots"><i></i><i></i><i></i><i></i></div><ul><li>C. Hall</li><li>Humphreys</li><li>Montsma</li><li>Moon</li></ul><div class="unit__age"><b>28.5</b>avg age</div></div>
+              <div class="unit"><em>LB</em><div class="unit__dots"><i></i><i></i></div><ul><li>Headley</li><li>Gordon</li></ul><div class="unit__age"><b>26.0</b>avg age</div></div>
+              <div class="unit"><em>DM</em><div class="unit__dots"><i></i><i></i></div><ul><li>Byers</li><li>Craig</li></ul><div class="unit__age"><b>26.5</b>avg age</div></div>
+              <div class="unit"><em>MF</em><div class="unit__dots"><i></i><i></i><i></i><i></i><i></i></div><ul><li>Dempsey</li><li>Garrity</li><li>Croasdale</li><li>G. Hall</li><li>Walters</li></ul><div class="unit__age"><b>26.8</b>avg age</div></div>
+              <div class="unit"><em>W</em><div class="unit__dots"><i></i><i class="l"></i></div><ul><li>Hernández</li><li class="l">Asamoah</li></ul><div class="unit__age"><b>28.0</b>avg age</div></div>
+              <div class="unit"><em>CF</em><div class="unit__dots"><i></i><i></i><i></i><i class="l"></i><i class="l"></i><i class="l"></i></div><ul><li>Waine</li><li>Watters</li><li>Simpson</li><li class="l">Faal</li><li class="l">Lynch</li><li class="l">Figueroa</li></ul><div class="unit__age"><b>23.3</b>avg age</div></div>
+            </div>
+          </div>
+          <p class="ft">Blue = loan. Ages today (FotMob). Squad and window from the Summer Window Review.</p>
+        </div>
+      </section>
+
+      <!-- Depth chart -->
+      <section class="slide" data-label="Depth chart"
+        data-notes="Depth in the 3-5-2 with league minutes (seven games, so about 630 is every minute). Kyle John covers both right wing-back and the right of the back three. Midfield is the deepest area. Left wing-back and natural wide forwards are the thinnest. Six strikers, three on loan.">
+        <div class="s">
+          <header class="hd"><i></i><b>03</b> The squad<img src="/standalone/port-vale-badge.png?v=2" alt="" /></header>
+          <h2 class="ttl">Depth in <em>the 3-5-2</em></h2>
+          <div class="bd">
+            <div class="dp">
+              <div class="pitch">
+                <div class="pitch__lines"></div><div class="pitch__box pitch__box--l"></div><div class="pitch__box pitch__box--r"></div>
+                <div class="pos" style="--x:13.5%;--y:22%"><em>GK</em><div><span>J. Smith</span><span>588</span></div><div><span>Maroši</span><span>100</span></div><div><span>Davies, Moseley</span><span>acad</span></div></div>
+                <div class="pos" style="--x:23%;--y:60%"><em>Back three</em><div><span>C. Hall</span><span>529</span></div><div><span>Montsma</span><span>494</span></div><div><span>Humphreys</span><span>406</span></div><div><span>K. John</span><span>244</span></div><div><span>Moon</span><span>22</span></div><div><span>McGowan</span><span>0</span></div></div>
+                <div class="pos" style="--x:45%;--y:15%"><em>Left wing-back</em><div><span>Gordon</span><span>396</span></div><div><span>Headley</span><span>385</span></div><div><span>Shorrock</span><span>loan out</span></div></div>
+                <div class="pos" style="--x:45%;--y:85%"><em>Right wing-back</em><div><span>Gabriel</span><span>689</span></div><div><span>K. John</span><span>also RCB</span></div><div><span>McGowan</span><span>0</span></div></div>
+                <div class="pos" style="--x:51%;--y:50%"><em>Midfield three</em><div><span>Dempsey</span><span>654</span></div><div><span>Garrity</span><span>429</span></div><div><span>Walters</span><span>376</span></div><div><span>Byers</span><span>249</span></div><div><span>Craig</span><span>54</span></div><div><span>Croasdale</span><span>31</span></div></div>
+                <div class="pos" style="--x:74%;--y:20%"><em>Wide / No.10</em><div><span>Hernández</span><span>362</span></div><div><span>G. Hall</span><span>351</span></div><div><span class="l">Asamoah (L)</span><span>54</span></div></div>
+                <div class="pos" style="--x:81%;--y:63%"><em>Strikers</em><div><span class="l">Lynch (L)</span><span>563</span></div><div><span>Waine</span><span>298</span></div><div><span>Simpson</span><span>115</span></div><div><span class="l">Faal (L)</span><span>112</span></div><div><span>Watters</span><span>49</span></div><div><span class="l">Figueroa (L)</span><span>27</span></div></div>
               </div>
-              <div class="dept">
-                <h3>Medical</h3>
-                <div><strong>Mike Hine</strong><span>Head of Medical Performance</span></div>
-                <div><strong>Lucy Burrows</strong><span>First Team Physiotherapist</span></div>
-                <div><strong>Sam Bebbington</strong><span>First Team Physiotherapist</span></div>
-              </div>
-              <div class="dept">
-                <h3>Physical performance</h3>
-                <div><strong>James Walsh</strong><span>Head of Physical Performance</span></div>
-                <div><strong>Stan Langmead</strong><span>First Team Physical Performance Coach</span></div>
-                <div><strong>Aaron Watkin</strong><span>First Team Sport Scientist</span></div>
-              </div>
-              <div class="dept">
-                <h3>Analysis</h3>
-                <div><strong>Jordan Smith</strong><span>Head of Performance Analysis</span></div>
-              </div>
-              <div class="dept">
-                <h3>Kit &amp; equipment</h3>
-                <div><strong>Steve Howkins</strong><span>Kit Manager</span></div>
-                <div><strong>Terry Bossons</strong><span>Assistant Kit Manager</span></div>
+              <div class="dp__key">
+                <article class="is-good"><strong>Deepest: midfield</strong><span>Six options. Byers is top scorer from just 249 minutes.</span></article>
+                <article><strong>Back three settled</strong><span>Hall, Montsma, Humphreys. John covers RCB and RWB.</span></article>
+                <article class="is-bad"><strong>Thin: left wing-back</strong><span>Gordon and Headley only. Shorrock at Sligo until 30 Oct.</span></article>
+                <article class="is-bad"><strong>Strikers: 1 league goal</strong><span>Six options, three on loan. Lynch has the only goal.</span></article>
               </div>
             </div>
           </div>
-          <p class="source">Source: port-vale.co.uk/staff/management. The website does not publish reporting lines.</p>
+          <p class="ft">League minutes from Impect. (L) = loan.</p>
         </div>
       </section>
 
-      <!-- 19 Fixtures -->
-      <section
-        class="slide"
-        data-label="Fixtures"
-        data-notes="The run ahead. Mansfield at home in the EFL Trophy on Tuesday, then three home league games out of the next five: Grimsby, Chesterfield and Rochdale. All five of the next league opponents are in the top 11. The Northampton home game and the Colchester away game still need new dates, and they are our two games in hand. Table positions are as of 4 October."
-      >
-        <div class="slide__bar">
-          <div class="slide__bar-left">
-            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
-            <span class="slide__bar-kicker">08 · Fixtures</span>
+      <!-- Key performers -->
+      <section class="slide" data-label="Key performers"
+        data-notes="Five players to know first. Byers: two of our three league goals and the best average rating in the squad, from limited minutes. Gabriel: most minutes, our only league assist. Montsma: the most consistent of the back three. Dempsey: midfield minutes leader. Lynch: on loan from Luton, most minutes of the strikers and our only striker goal. Ratings are FotMob averages.">
+        <div class="s">
+          <header class="hd"><i></i><b>03</b> The squad<img src="/standalone/port-vale-badge.png?v=2" alt="" /></header>
+          <h2 class="ttl">Five players <em>to know first</em></h2>
+          <div class="bd">
+            <div class="pc-grid">
+              <article class="pc"><span class="pc__ini">GB</span><img src="/api/player-photo?name=George%20Byers" alt="" onerror="this.remove()" /><span class="pc__pos">CM</span><div class="pc__body"><strong>George Byers</strong><span>30 · top scorer from midfield</span><div class="pc__stats"><span><b>2</b>Goals</span><span><b>7.19</b>Rating</span></div></div></article>
+              <article class="pc"><span class="pc__ini">JG</span><img src="/api/player-photo?name=Jordan%20Gabriel" alt="" onerror="this.remove()" /><span class="pc__pos">RWB</span><div class="pc__body"><strong>Jordan Gabriel</strong><span>28 · most minutes (689)</span><div class="pc__stats"><span><b>1</b>Assist</span><span><b>7.12</b>Rating</span></div></div></article>
+              <article class="pc"><span class="pc__ini">LM</span><img src="/api/player-photo?name=Lewis%20Montsma" alt="" onerror="this.remove()" /><span class="pc__pos">CB</span><div class="pc__body"><strong>Lewis Montsma</strong><span>28 · summer signing</span><div class="pc__stats"><span><b>494</b>Mins</span><span><b>6.77</b>Rating</span></div></div></article>
+              <article class="pc"><span class="pc__ini">KD</span><img src="/api/player-photo?name=Kyle%20Dempsey" alt="" onerror="this.remove()" /><span class="pc__pos">CM</span><div class="pc__body"><strong>Kyle Dempsey</strong><span>31 · summer signing</span><div class="pc__stats"><span><b>654</b>Mins</span><span><b>6.71</b>Rating</span></div></div></article>
+              <article class="pc is-loan"><span class="pc__ini">OL</span><img src="/api/player-photo?name=Oliver%20Lynch" alt="" onerror="this.remove()" /><span class="pc__pos">CF</span><div class="pc__body"><strong>Oli Lynch</strong><span>21 · on loan from Luton</span><div class="pc__stats"><span><b>1</b>Goal</span><span><b>563</b>Mins</span></div></div></article>
+            </div>
           </div>
-          <span class="slide__bar-num"></span>
-        </div>
-        <div class="slide__body">
-          <div class="head-row">
-            <h2 class="headline">The next two months</h2>
-            <p class="kicker">Gold = home · current league position in brackets</p>
-          </div>
-          <div class="fixtures">
-            <div class="fx is-home is-cup"><span>Tue 6 Oct</span><b>H</b><strong>Mansfield Town</strong><small>EFL Trophy</small></div>
-            <div class="fx is-home"><span>Sat 10 Oct</span><b>H</b><strong>Grimsby Town (9th)</strong><small>League Two</small></div>
-            <div class="fx is-home"><span>Sat 17 Oct</span><b>H</b><strong>Chesterfield (8th)</strong><small>League Two</small></div>
-            <div class="fx"><span>Tue 20 Oct</span><b>A</b><strong>Gillingham (10th)</strong><small>League Two</small></div>
-            <div class="fx"><span>Sat 24 Oct</span><b>A</b><strong>York City (6th)</strong><small>League Two</small></div>
-            <div class="fx is-home is-cup"><span>Tue 27 Oct</span><b>H</b><strong>Man City U21</strong><small>EFL Trophy</small></div>
-            <div class="fx is-home"><span>Sat 31 Oct</span><b>H</b><strong>Rochdale (11th)</strong><small>League Two</small></div>
-            <div class="fx is-home"><span>Sat 14 Nov</span><b>H</b><strong>Accrington Stanley (16th)</strong><small>League Two</small></div>
-            <div class="fx"><span>Sat 21 Nov</span><b>A</b><strong>Barnet (2nd)</strong><small>League Two</small></div>
-            <div class="fx is-home"><span>Sat 28 Nov</span><b>H</b><strong>Newport County (15th)</strong><small>League Two</small></div>
-            <div class="fx"><span>Tue 1 Dec</span><b>A</b><strong>Crawley Town (24th)</strong><small>League Two</small></div>
-            <div class="fx is-home is-tbc"><span>Date TBC</span><b>H</b><strong>Northampton Town (22nd)</strong><small>Rearranged</small></div>
-            <div class="fx is-tbc"><span>Date TBC</span><b>A</b><strong>Colchester United (19th)</strong><small>Rearranged</small></div>
-          </div>
-          <p class="source">Fixtures: FotMob. Positions as of 4 Oct 2026.</p>
+          <p class="ft">League only · FotMob average rating · Impect minutes.</p>
         </div>
       </section>
 
-      <!-- 20 Hub tools -->
-      <section
-        class="slide"
-        data-label="Hub tools"
-        data-notes="Everything in this deck comes from the Port Vale Analysis Hub, and it updates as games are played. These are the tools most useful for a Sporting Director. Most are admin-only, so a hub login with admin access is the first thing to set up."
-      >
-        <div class="slide__bar">
-          <div class="slide__bar-left">
-            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
-            <span class="slide__bar-kicker">08 · Analysis Hub</span>
-          </div>
-          <span class="slide__bar-num"></span>
-        </div>
-        <div class="slide__body">
-          <div class="head-row">
-            <h2 class="headline">Where to find all of this</h2>
-            <p class="kicker">Port Vale Analysis Hub · updates after every game</p>
-          </div>
-          <div class="tools">
-            <article><em>How are we tracking?</em><strong>Season Progress Report</strong><p>Live promotion pace against automatic, play-off and champion benchmarks. Points, goals and style stats.</p></article>
-            <article><em>What wins games?</em><strong>What Wins Games</strong><p>Which stats track winning across 96 League Two team-seasons, and where we rank on each.</p></article>
-            <article><em>The squad</em><strong>Squad Planner · Squad Balance · Shadow Teams</strong><p>Depth by position, player profile scores and shadow line-ups.</p></article>
-            <article><em>Recruitment</em><strong>Transfer Centre · Who To Scout · Port Vale Archetypes</strong><p>Targets by position, profiles that fit how we play, Player Comparison Tool.</p></article>
-            <article><em>Scouting</em><strong>Match Scouting · Reports Library · Player Pipelines</strong><p>Every scouting report in one place, the shared pipeline board and Loans Watch.</p></article>
-            <article><em>Matchday</em><strong>Pre-Match · Post-Match · Set Plays</strong><p>Opposition reports, post-match review and the set-play analysis behind slide 10.</p></article>
+      <!-- Watch-outs -->
+      <section class="slide" data-label="Squad watch-outs"
+        data-notes="Red is where performance and depth point the same way: goals from strikers and wide creativity, matching the attacking numbers on What Wins Games. Amber is depth to watch. Green is covered. Contract lengths are not held in the hub, so they are not shown.">
+        <div class="s">
+          <header class="hd"><i></i><b>03</b> The squad<img src="/standalone/port-vale-badge.png?v=2" alt="" /></header>
+          <h2 class="ttl">Where we are <em>exposed</em></h2>
+          <div class="bd">
+            <div class="watch">
+              <article class="wo"><span class="wo__pos">CF</span><em>Act</em><strong>Goals from strikers</strong><p>Six strikers, one league goal. Byers is top scorer from midfield. Faal, Lynch and Figueroa are all loans.</p></article>
+              <article class="wo"><span class="wo__pos">W</span><em>Act</em><strong>Wide creativity</strong><p>Hernández (33) and Asamoah (loan) are the only natural wide forwards. Attacking threat is 23rd of 24.</p></article>
+              <article class="wo is-amber"><span class="wo__pos">CB</span><em>Watch</em><strong>Four for a back three</strong><p>Hall (33), Montsma, Humphreys and Moon, with John as cover. One injury leaves no spare.</p></article>
+              <article class="wo is-amber"><span class="wo__pos">LWB</span><em>Watch</em><strong>Two left wing-backs</strong><p>Gordon and Headley. Shorrock is on loan at Sligo Rovers until 30 October.</p></article>
+              <article class="wo is-amber"><span class="wo__pos">GK</span><em>Watch</em><strong>Two senior keepers</strong><p>Smith (24) and Maroši (32), then academy keepers Davies (20) and Moseley (18). Terry's loan ended 1 Sep.</p></article>
+              <article class="wo is-ok"><span class="wo__pos">MF</span><em>Covered</em><strong>Midfield</strong><p>Dempsey, Garrity, Byers, Craig, Croasdale, G. Hall and Walters. Seven options.</p></article>
+            </div>
           </div>
         </div>
       </section>
 
-      <!-- 21 Summary -->
-      <section
-        class="slide"
-        data-label="Summary"
-        data-notes="Five things to take away. Bottom two but with games in hand and a tight league. Hard to beat at home, nothing away. We defend open play well but create too little, and League Two is won on chance quality. Set plays are the quickest fix. And the play-offs now need around 1.82 points a game, which is promotion form for the rest of the season."
-      >
-        <div class="slide__bar">
-          <div class="slide__bar-left">
-            <img class="slide__bar-badge" src="/standalone/port-vale-badge.png?v=2" alt="" />
-            <span class="slide__bar-kicker">Summary</span>
+      <!-- Chapter 04 -->
+      <section class="slide" data-label="04 Staff & next"
+        data-notes="Part four: the staff around the first team, the fixtures ahead and where to find the data.">
+        <img class="chap__img" src="/static/sd-briefing/captain.jpg" alt="" style="object-position:60% 40%" />
+        <div class="chap__fade"></div>
+        <div class="s">
+          <div class="chap">
+            <span class="chap__num">04</span>
+            <h2 class="chap__title">Staff &amp; what's next</h2>
+            <p class="chap__sub">The first-team staff, the run of fixtures to December, and the hub tools behind every number in this deck.</p>
           </div>
-          <span class="slide__bar-num"></span>
         </div>
-        <div class="slide__body">
-          <div class="head-row">
-            <h2 class="headline">Five things to know on day one</h2>
-            <p class="kicker">Port Vale · 26/27 · after 7 league games</p>
+      </section>
+
+      <!-- Staff -->
+      <section class="slide" data-label="Staff structure"
+        data-notes="The first-team staff as listed on the club website's management page: 14 people across coaching, medical, physical performance, analysis and kit. The website does not publish reporting lines, so they are grouped by department.">
+        <div class="s">
+          <header class="hd"><i></i><b>04</b> Staff<img src="/standalone/port-vale-badge.png?v=2" alt="" /></header>
+          <h2 class="ttl">The first-team <em>staff</em></h2>
+          <div class="bd">
+            <div class="org">
+              <div class="org__top">
+                <div class="oc is-new"><strong>Sporting Director</strong><span>Starts Monday 5 October</span></div>
+                <div class="oc is-lead"><strong>Jon Brady</strong><span>Manager</span></div>
+                <div class="oc"><strong>Gary Mills</strong><span>Assistant First-Team Manager</span></div>
+              </div>
+              <div class="org__link"></div>
+              <div class="org__depts">
+                <div class="dept" style="--c:var(--gold)"><h3>Coaching</h3><div><strong>Jamie Smith</strong><span>Lead First Team Coach</span></div><div><strong>Richard O'Donnell</strong><span>First Team Coach</span></div><div><strong>Dan Watson</strong><span>First Team Goalkeeping Coach</span></div></div>
+                <div class="dept" style="--c:#f87171"><h3>Medical</h3><div><strong>Mike Hine</strong><span>Head of Medical Performance</span></div><div><strong>Lucy Burrows</strong><span>First Team Physiotherapist</span></div><div><strong>Sam Bebbington</strong><span>First Team Physiotherapist</span></div></div>
+                <div class="dept" style="--c:#4ade80"><h3>Physical</h3><div><strong>James Walsh</strong><span>Head of Physical Performance</span></div><div><strong>Stan Langmead</strong><span>First Team Physical Performance Coach</span></div><div><strong>Aaron Watkin</strong><span>First Team Sport Scientist</span></div></div>
+                <div class="dept" style="--c:#38bdf8"><h3>Analysis</h3><div><strong>Jordan Smith</strong><span>Head of Performance Analysis</span></div></div>
+                <div class="dept" style="--c:#a1a1aa"><h3>Kit</h3><div><strong>Steve Howkins</strong><span>Kit Manager</span></div><div><strong>Terry Bossons</strong><span>Assistant Kit Manager</span></div></div>
+              </div>
+            </div>
           </div>
-          <div class="close-list">
-            <div><em>1</em><p><b>Bottom two, but not cut adrift.</b> 23rd on 5 points with two games in hand. Nine points cover 1st to 21st.</p></div>
-            <div><em>2</em><p><b>Home and away are different teams.</b> Unbeaten at Vale Park with one goal conceded. No points and one goal in four away games.</p></div>
-            <div><em>3</em><p><b>We defend well and create too little.</b> xG against 5th best, xG for 22nd. League Two is won on chance quality both ways.</p></div>
-            <div><em>4</em><p><b>Set plays are the quickest fix.</b> Six of our nine goals conceded, nearly three times the play-off rate.</p></div>
-            <div><em>5</em><p><b>The maths from here.</b> 1.82 points a game for the play-offs, 2.00 for automatic, across 39 games.</p></div>
+          <p class="ft">Source: port-vale.co.uk/staff/management · grouped by department (reporting lines not published).</p>
+        </div>
+      </section>
+
+      <!-- Fixtures -->
+      <section class="slide" data-label="Fixtures"
+        data-notes="Mansfield at home in the EFL Trophy on Tuesday, then three home league games out of the next five: Grimsby, Chesterfield and Rochdale. All five of the next league opponents are in the top 11. Northampton at home and Colchester away still need new dates; they are our two games in hand.">
+        <div class="s">
+          <header class="hd"><i></i><b>04</b> What's next<img src="/standalone/port-vale-badge.png?v=2" alt="" /></header>
+          <h2 class="ttl">The next <em>two months</em></h2>
+          <div class="bd">
+            <div class="fx-grid">
+              <div class="fx is-home is-cup"><div class="fx__date"><b>6</b><span>Oct · Tue</span></div><span class="fx__ha">H</span><strong>Mansfield Town</strong><span class="fx__comp">EFL Trophy</span></div>
+              <div class="fx is-home"><div class="fx__date"><b>10</b><span>Oct · Sat</span></div><span class="fx__ha">H</span><strong>Grimsby Town<small>9th</small></strong><span class="fx__comp">League Two</span></div>
+              <div class="fx is-home"><div class="fx__date"><b>17</b><span>Oct · Sat</span></div><span class="fx__ha">H</span><strong>Chesterfield<small>8th</small></strong><span class="fx__comp">League Two</span></div>
+              <div class="fx"><div class="fx__date"><b>20</b><span>Oct · Tue</span></div><span class="fx__ha">A</span><strong>Gillingham<small>10th</small></strong><span class="fx__comp">League Two</span></div>
+              <div class="fx"><div class="fx__date"><b>24</b><span>Oct · Sat</span></div><span class="fx__ha">A</span><strong>York City<small>6th</small></strong><span class="fx__comp">League Two</span></div>
+              <div class="fx is-home is-cup"><div class="fx__date"><b>27</b><span>Oct · Tue</span></div><span class="fx__ha">H</span><strong>Man City U21</strong><span class="fx__comp">EFL Trophy</span></div>
+              <div class="fx is-home"><div class="fx__date"><b>31</b><span>Oct · Sat</span></div><span class="fx__ha">H</span><strong>Rochdale<small>11th</small></strong><span class="fx__comp">League Two</span></div>
+              <div class="fx is-home"><div class="fx__date"><b>14</b><span>Nov · Sat</span></div><span class="fx__ha">H</span><strong>Accrington Stanley<small>16th</small></strong><span class="fx__comp">League Two</span></div>
+              <div class="fx"><div class="fx__date"><b>21</b><span>Nov · Sat</span></div><span class="fx__ha">A</span><strong>Barnet<small>2nd</small></strong><span class="fx__comp">League Two</span></div>
+              <div class="fx is-home"><div class="fx__date"><b>28</b><span>Nov · Sat</span></div><span class="fx__ha">H</span><strong>Newport County<small>15th</small></strong><span class="fx__comp">League Two</span></div>
+              <div class="fx"><div class="fx__date"><b>1</b><span>Dec · Tue</span></div><span class="fx__ha">A</span><strong>Crawley Town<small>24th</small></strong><span class="fx__comp">League Two</span></div>
+              <div class="fx is-home is-tbc"><div class="fx__date"><b>TBC</b><span>Rearr.</span></div><span class="fx__ha">H</span><strong>Northampton Town<small>22nd</small></strong><span class="fx__comp">Game in hand</span></div>
+              <div class="fx is-tbc"><div class="fx__date"><b>TBC</b><span>Rearr.</span></div><span class="fx__ha">A</span><strong>Colchester United<small>19th</small></strong><span class="fx__comp">Game in hand</span></div>
+            </div>
+          </div>
+          <p class="ft">Fixtures: FotMob. League positions as of 4 Oct 2026.</p>
+        </div>
+      </section>
+
+      <!-- Hub tools -->
+      <section class="slide" data-label="Hub tools"
+        data-notes="Everything in this deck comes from the Port Vale Analysis Hub and updates as games are played. Most of these tools are admin-only, so a hub login with admin access is the first thing to set up.">
+        <div class="s">
+          <header class="hd"><i></i><b>04</b> What's next<img src="/standalone/port-vale-badge.png?v=2" alt="" /></header>
+          <h2 class="ttl">Where to find <em>all of this</em></h2>
+          <p class="sub">Port Vale Analysis Hub. Updates after every game.</p>
+          <div class="bd">
+            <div class="tools">
+              <article class="tl"><em>How are we tracking?</em><strong>Season Progress Report</strong><p>Live promotion pace against automatic, play-off and champion benchmarks.</p></article>
+              <article class="tl"><em>What wins games?</em><strong>What Wins Games</strong><p>Which stats track winning in League Two, and where we rank on each.</p></article>
+              <article class="tl"><em>The squad</em><strong>Squad Planner · Shadow Teams</strong><p>Depth by position, player profile scores, Squad Balance and shadow line-ups.</p></article>
+              <article class="tl"><em>Recruitment</em><strong>Transfer Centre · Who To Scout</strong><p>Targets by position, Port Vale Archetypes and the Player Comparison Tool.</p></article>
+              <article class="tl"><em>Scouting</em><strong>Match Scouting · Reports Library</strong><p>Every scouting report in one place, Player Pipelines and Loans Watch.</p></article>
+              <article class="tl"><em>Matchday</em><strong>Pre-Match · Post-Match · Set Plays</strong><p>Opposition reports, post-match review and set-play analysis.</p></article>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Close -->
+      <section class="slide" data-label="Summary"
+        data-notes="Five things to take away. Bottom two but with games in hand and a tight league. Hard to beat at home, nothing away. We defend open play well but create too little, and League Two is won on chance quality. Set plays are the quickest fix. The play-offs now need around 1.82 points a game.">
+        <img class="close__img" src="/static/sd-briefing/embrace.png" alt="" />
+        <div class="close__fade"></div>
+        <div class="s">
+          <div class="close">
+            <header class="hd"><i></i>Summary</header>
+            <h2 class="ttl">Five things to know <em>on day one</em></h2>
+            <div class="takeaways">
+              <div><em>1</em><p><b>Bottom two, not cut adrift</b>23rd with two games in hand. Nine points cover 1st to 21st.</p></div>
+              <div><em>2</em><p><b>Two different teams</b>Unbeaten at Vale Park. No points and one goal away.</p></div>
+              <div><em>3</em><p><b>Defend well, create too little</b>xG against 5th, xG for 22nd. Chance quality wins this league.</p></div>
+              <div><em>4</em><p><b>Set plays: the quickest fix</b>Six of nine conceded, nearly three times the play-off rate.</p></div>
+              <div><em>5</em><p><b>The maths from here</b>1.82 points a game for the play-offs, 2.00 for automatic.</p></div>
+            </div>
           </div>
         </div>
       </section>
@@ -937,7 +597,7 @@
   <div class="present-ui" aria-hidden="true">
     <button type="button" id="presentPrev" aria-label="Previous slide">‹</button>
     <div id="presentProgress"></div>
-    <span id="presentCount">01 / 21</span>
+    <span id="presentCount">01 / 24</span>
     <button type="button" id="presentNext" aria-label="Next slide">›</button>
   </div>
   <div id="export-overlay"></div>
