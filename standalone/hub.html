@@ -2381,12 +2381,6 @@
               <span class="masthead__league" id="mastheadLeague" hidden></span>
             </p>
           </div>
-          <div class="masthead__breach" id="mastheadBreach">
-            <span class="masthead__breach-count" id="mastheadBreachCount">0</span>
-            <span class="masthead__breach-text">
-              <span class="masthead__breach-label">Days since club <span class="masthead__breach-word">breached</span> my employment terms</span>
-            </span>
-          </div>
           <a class="masthead__next" id="mastheadNext" href="#homePvUpcoming" hidden>
             <span class="masthead__next-label">Next up</span>
             <span class="masthead__next-main">
@@ -2908,15 +2902,6 @@
         day: "numeric",
         month: "long",
       });
-      updateBreachCount(now);
-    }
-
-    function updateBreachCount(now) {
-      const el = document.getElementById("mastheadBreachCount");
-      if (!el) return;
-      const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-      const days = Math.max(0, Math.round((today - Date.UTC(2026, 8, 28)) / 86_400_000));
-      el.textContent = String(days);
     }
 
     function isHubAdmin() {
