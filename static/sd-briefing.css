@@ -2756,3 +2756,94 @@
   font-size: 0.55em;
   color: var(--dim);
 }
+
+/* ---------- Staff headshots ---------- */
+.org__top .oc {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 0.8em;
+  padding: 0.6em 1.2em 0.6em 0.6em;
+  text-align: left;
+}
+
+.oc img,
+.oc__ph {
+  grid-row: 1 / 3;
+  width: 3.4em;
+  height: 3.4em;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: 50% 8%;
+  background: #2a2a2e;
+}
+
+.oc.is-lead img { background: #fff3c4; }
+
+.oc__ph {
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 1.3em;
+  font-weight: 800;
+  color: var(--gold);
+  border: 1px dashed var(--gold);
+  background: transparent;
+  width: 2.6em;
+  height: 2.6em;
+}
+
+.org__top .oc strong { align-self: end; }
+.org__top .oc span { align-self: start; margin-top: 0.2em; }
+
+.dept .sp {
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
+  padding: 0.5em 0.7em 0.5em 0.5em;
+}
+
+.sp img {
+  flex: none;
+  width: 3em;
+  height: 3em;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: 50% 8%;
+  background: #2a2a2e;
+}
+
+.sp p {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0;
+}
+
+.sp p span { font-size: 0.78em; line-height: 1.3; }
+
+.sp__note {
+  margin-top: 0.25em;
+  font-style: normal;
+  font-size: 0.72em;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #fbbf24;
+}
+.org__link { height: 1.6em; }
+.org__depts { min-height: 0; }
+.dept { gap: 0.4em; padding: 0.8em; overflow: hidden; }
+.dept .sp { gap: 0.55em; padding: 0.4em 0.5em 0.4em 0.4em; }
+.sp img { width: 2.5em; height: 2.5em; }
+.dept .sp strong { font-size: 0.9em; white-space: nowrap; }
+.sp p span { font-size: 0.7em; }
+.sp__note { font-size: 0.66em; }
+.org__gaps { margin-top: 0.8em; padding: 0.6em 1.1em; }
+.dept { gap: 0.55em; }
+.dept .sp { padding: 0.55em 0.6em 0.55em 0.5em; }
+.sp img { width: 3.1em; height: 3.1em; }
+.dept .sp strong { font-size: 1em; }
+.sp p span { font-size: 0.74em; }
+.sp__note { font-size: 0.7em; }
