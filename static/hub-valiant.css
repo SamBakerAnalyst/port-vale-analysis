@@ -1136,8 +1136,6 @@ a.home-subtab:hover {
 }
 
 .home-filter__btn,
-.home-cal-nav__btn,
-.home-cal-people__btn,
 .home-promote-btn {
   border-radius: var(--radius);
 }
@@ -1277,18 +1275,6 @@ a.home-subtab:hover {
   border: 1px solid rgba(224, 168, 0, 0.35);
 }
 
-.home-cal-people__btn {
-  border-radius: var(--radius);
-}
-
-.home-cal-nav__label {
-  font-family: var(--display);
-  font-size: 1.05rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .home-feed__icon {
   display: none;
 }
@@ -1325,94 +1311,3 @@ a.home-subtab:hover {
   border-radius: var(--radius);
 }
 
-.home-cal {
-  gap: 0;
-}
-
-.home-cal__weekday {
-  font-family: var(--display);
-  letter-spacing: 0.12em;
-}
-
-.home-cal__legend i {
-  border-radius: 0;
-}
-
-.home-cal__day {
-  border-radius: 0;
-  background: transparent;
-  border: 1px solid var(--border);
-}
-
-.home-cal__num {
-  font-family: var(--display);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
-/* Solid fills must match the legend — muted tints vanish on the dark desk. */
-.home-cal__day--training {
-  background: #34d399;
-  border-color: #22c07a;
-  box-shadow: none;
-}
-
-.home-cal__day--regen {
-  background: #f87171;
-  border-color: #ef4444;
-  box-shadow: none;
-}
-
-.home-cal__day--preseason {
-  background: #8b9bb0;
-  border-color: #6b7a8f;
-  box-shadow: none;
-}
-
-.home-cal__day--match.home-cal__day--home {
-  background: #f5c518;
-  border-color: #e0a800;
-  box-shadow: none;
-}
-
-.home-cal__day--match.home-cal__day--away {
-  background: #e8edf4;
-  border-color: #c5cad3;
-  box-shadow: none;
-}
-
-.home-cal__day--training .home-cal__num,
-.home-cal__day--training .home-cal__session,
-.home-cal__day--training .home-cal__session span,
-.home-cal__day--preseason .home-cal__num,
-.home-cal__day--preseason .home-cal__session,
-.home-cal__day--preseason .home-cal__session span,
-.home-cal__day--match.home-cal__day--home .home-cal__num,
-.home-cal__day--match.home-cal__day--away .home-cal__num,
-.home-cal__day--match.home-cal__day--away .home-cal__session,
-.home-cal__day--match.home-cal__day--away .home-cal__fixture,
-.home-cal__day--match.home-cal__day--away .home-cal__fixture-meta {
-  color: #0c0f14;
-  text-shadow: none;
-}
-
-.home-cal__day--regen .home-cal__num,
-.home-cal__day--regen .home-cal__session,
-.home-cal__day--regen .home-cal__session span {
-  color: #e8edf4;
-  text-shadow: none;
-}
-
-.home-cal__day--match.home-cal__day--away .home-cal__fixture {
-  background: rgba(16, 16, 15, 0.08);
-  border-left-color: #0c0f14;
-}
-
-.home-cal__day--match.home-cal__day--home .home-cal__fixture {
-  background: rgba(16, 16, 15, 0.12);
-  border-left-color: #0c0f14;
-}
-
-.home-cal__day--match.home-cal__day--home .home-cal__fixture-meta {
-  color: #0c0f14;
-}

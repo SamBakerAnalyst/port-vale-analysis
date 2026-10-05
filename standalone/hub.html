@@ -692,8 +692,18 @@
     /* Landing-only roles: keep the home chrome, hide the data widgets.
        .home-kpis / .home-grid set display:grid and would otherwise beat [hidden]. */
     #homeDashboard.is-landing-only .home-kpis,
-    #homeDashboard.is-landing-only .home-grid,
+    #homeDashboard.is-landing-only .home-grid > :not(#homeMonthCard),
     #homeDashboard.is-landing-only .home-live-grid {
+      display: none !important;
+    }
+
+    /* Every login sees the shared Month view, even landing-only roles. */
+    #homeDashboard.is-landing-only .home-grid:has(#homeMonthCard) {
+      display: block !important;
+      max-width: 980px;
+    }
+
+    #homeDashboard.is-landing-only .home-grid:not(:has(#homeMonthCard)) {
       display: none !important;
     }
 
@@ -1813,13 +1823,17 @@
       align-items: center;
       justify-content: space-between;
       gap: 0.5rem;
-      margin-bottom: 0.65rem;
+      margin-bottom: 0.6rem;
     }
 
     .home-cal-nav__label {
       margin: 0;
-      font-size: 0.9rem;
-      font-weight: 700;
+      font-family: var(--display);
+      font-size: 1.35rem;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      line-height: 1;
     }
 
     .home-cal-nav__btns {
@@ -1828,283 +1842,323 @@
     }
 
     .home-cal-nav__btn {
-      padding: 0.3rem 0.55rem;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: var(--surface-2);
-      color: var(--text);
+      min-width: 2.1rem;
+      height: 2.1rem;
+      padding: 0 0.8rem;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.05);
+      color: #e5e7eb;
       font: inherit;
-      font-size: 0.72rem;
-      font-weight: 600;
+      font-size: 0.8rem;
+      font-weight: 700;
       cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
     }
 
-    .home-cal-nav__btn:hover {
-      border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+    .home-cal-nav__btn:hover { background: rgba(255, 255, 255, 0.1); }
+
+    #homeMonthCal {
+      --cal-in: #1fa855;
+      --cal-in-2: #26b862;
+      --cal-in-late: #0b6b34;
+      --cal-in-late-2: #128a45;
+      --cal-regen: #d93a57;
+      --cal-regen-2: #ea546f;
+      --cal-pre: #0b7fc0;
+      --cal-pre-2: #1592d6;
+      --cal-home: #c4961b;
+      --cal-home-2: #e2b93d;
+      --cal-away: #1b3592;
+      --cal-away-2: #2a4fc4;
+      --cal-note: #f9a8c9;
+      --cal-note-deep: #e75a96;
+      --cal-r: #f5c518;
     }
 
     .home-cal {
       display: grid;
       grid-template-columns: repeat(7, minmax(0, 1fr));
-      gap: 0.25rem;
+      gap: 0.3rem;
+      padding: 0.45rem;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid rgba(255, 255, 255, 0.06);
     }
 
     .home-cal__weekday {
+      padding: 0.2rem 0 0.4rem;
+      text-align: center;
       font-size: 0.62rem;
-      font-weight: 700;
-      letter-spacing: 0.04em;
+      font-weight: 800;
+      letter-spacing: 0.14em;
       text-transform: uppercase;
       color: var(--text-muted);
-      text-align: center;
-      padding-bottom: 0.25rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      margin-bottom: 0.1rem;
     }
 
     .home-cal__day {
-      min-height: 4.1rem;
-      padding: 0.25rem 0.2rem;
-      border-radius: 8px;
-      background: rgba(20, 26, 34, 0.55);
-      border: 1px solid transparent;
-      cursor: pointer;
-      position: relative;
-      user-select: none;
-      transition: background 0.12s ease, border-color 0.12s ease;
-    }
-
-    .home-cal__day:hover {
-      border-color: rgba(255, 255, 255, 0.12);
-    }
-
-    .home-cal__day--muted { visibility: hidden; pointer-events: none; cursor: default; }
-
-    .home-cal__day--today {
-      border-color: rgba(245, 197, 24, 0.45);
-      background: rgba(245, 197, 24, 0.06);
-    }
-
-    .home-cal__day--training {
-      background: #34d399;
-      border-color: #22c07a;
-      box-shadow: none;
-    }
-
-    .home-cal__day--regen {
-      background: #f87171;
-      border-color: #ef4444;
-      box-shadow: none;
-    }
-
-    .home-cal__day--preseason {
-      background: #8b9bb0;
-      border-color: #6b7a8f;
-      box-shadow: none;
-    }
-
-    .home-cal__day--match.home-cal__day--home {
-      background: #f5c518;
-      border-color: #e0a800;
-      box-shadow: none;
-    }
-
-    .home-cal__day--match.home-cal__day--away {
-      background: #e8edf4;
-      border-color: #c5cad3;
-      box-shadow: none;
-    }
-
-    .home-cal__day--training .home-cal__num,
-    .home-cal__day--preseason .home-cal__num,
-    .home-cal__day--match.home-cal__day--home .home-cal__num,
-    .home-cal__day--match.home-cal__day--away .home-cal__num {
-      color: #0c0f14;
-    }
-
-    .home-cal__day--regen .home-cal__num {
-      color: #e8edf4;
-    }
-
-    .home-cal__session {
+      min-height: 5.6rem;
+      padding: 0.3rem 0.35rem 0.35rem;
+      border-radius: 9px;
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      background: #222731;
       display: flex;
       flex-direction: column;
-      gap: 0.05rem;
-      align-items: center;
-      font-size: 0.68rem;
-      font-weight: 800;
-      letter-spacing: 0.05em;
-      color: #0c0f14;
-      line-height: 1.15;
-      text-shadow: none;
-    }
-
-    .home-cal__session span {
-      font-weight: 700;
-      letter-spacing: 0;
+      position: relative;
+      overflow: hidden;
+      font: inherit;
       color: inherit;
-      opacity: 0.9;
+      text-align: left;
+      cursor: pointer;
+      user-select: none;
+      container-type: inline-size;
+      transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
     }
 
-    .home-cal__day--regen .home-cal__session {
-      color: #e8edf4;
+    .home-cal__day:not(.home-cal__day--muted):not(.home-cal__day--readonly):hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+      filter: brightness(1.05);
     }
 
-    .home-cal__fixture {
+    .home-cal__day--readonly { cursor: default; }
+
+    .home-cal__day--muted {
+      background: transparent;
+      border-style: dashed;
+      border-color: rgba(255, 255, 255, 0.04);
+      cursor: default;
+    }
+
+    .home-cal__day--in { background: linear-gradient(160deg, var(--cal-in-2), var(--cal-in)); border-color: transparent; }
+    .home-cal__day--in-late { background: linear-gradient(160deg, var(--cal-in-late-2), var(--cal-in-late)); border-color: transparent; }
+    .home-cal__day--regen { background: linear-gradient(160deg, var(--cal-regen-2), var(--cal-regen)); border-color: transparent; }
+    .home-cal__day--preseason { background: linear-gradient(160deg, var(--cal-pre-2), var(--cal-pre)); border-color: transparent; }
+    .home-cal__day--home { background: linear-gradient(160deg, var(--cal-home-2), var(--cal-home)); border-color: transparent; color: #1d1600; }
+    .home-cal__day--away { background: linear-gradient(160deg, var(--cal-away-2), var(--cal-away)); border-color: transparent; color: #fff; }
+
+    .home-cal__day--today { box-shadow: inset 0 0 0 2px var(--cal-r); }
+    .home-cal__day--today:not(.home-cal__day--readonly):hover { box-shadow: inset 0 0 0 2px var(--cal-r), 0 6px 14px rgba(0, 0, 0, 0.35); }
+
+    .home-cal__head {
       display: flex;
       align-items: center;
-      gap: 0.2rem;
-      padding: 0.18rem 0.22rem;
-      border-radius: 5px;
-      border-left: 3px solid transparent;
-      min-width: 0;
-      background: rgba(16, 16, 15, 0.08);
-    }
-
-    .home-cal__fixture--home {
-      border-left-color: #0c0f14;
-      background: rgba(16, 16, 15, 0.12);
-    }
-
-    .home-cal__fixture--home .home-cal__fixture-meta {
-      color: #0c0f14;
-    }
-
-    .home-cal__fixture--away {
-      border-left-color: #0c0f14;
-      background: rgba(16, 16, 15, 0.08);
-    }
-
-    .home-cal__fixture--away .home-cal__fixture-meta {
-      color: #0c0f14;
-    }
-
-    .home-cal__day--training.home-cal__day--today,
-    .home-cal__day--regen.home-cal__day--today,
-    .home-cal__day--preseason.home-cal__day--today,
-    .home-cal__day--match.home-cal__day--today {
-      box-shadow:
-        inset 0 0 0 1px rgba(255, 255, 255, 0.35),
-        0 0 0 2px rgba(245, 197, 24, 0.75);
+      gap: 0.25rem;
+      min-height: 1rem;
     }
 
     .home-cal__num {
-      font-size: 0.68rem;
-      font-weight: 700;
-      color: var(--text-muted);
-      text-align: center;
-      margin-bottom: 0.2rem;
+      font-family: var(--display);
+      font-size: 0.95rem;
+      font-weight: 800;
+      line-height: 1;
+      color: #c5cad3;
     }
 
-    .home-cal__day--today .home-cal__num { color: var(--gold); }
+    .home-cal__day--in .home-cal__num,
+    .home-cal__day--in-late .home-cal__num,
+    .home-cal__day--regen .home-cal__num,
+    .home-cal__day--preseason .home-cal__num,
+    .home-cal__day--away .home-cal__num { color: rgba(255, 255, 255, 0.85); }
+
+    .home-cal__day--home .home-cal__num { color: rgba(29, 22, 0, 0.7); }
+
+    .home-cal__today-tag {
+      margin-left: auto;
+      padding: 0.08rem 0.3rem;
+      border-radius: 999px;
+      background: var(--cal-r);
+      color: #111;
+      font-size: 0.5rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+    }
 
     .home-cal__r {
-      position: absolute;
-      top: 0.15rem;
-      right: 0.2rem;
+      margin-left: auto;
       width: 0.95rem;
       height: 0.95rem;
       border-radius: 4px;
-      background: #f5c518;
+      background: var(--cal-r);
       color: #111;
       font-size: 0.58rem;
       font-weight: 800;
       line-height: 0.95rem;
       text-align: center;
-      letter-spacing: 0;
+      flex-shrink: 0;
     }
 
-    .home-cal__dots {
+    .home-cal__today-tag + .home-cal__r { margin-left: 0; }
+
+    .home-cal__body {
+      flex: 1;
+      min-height: 0;
       display: flex;
       flex-direction: column;
-      gap: 0.18rem;
-      align-items: stretch;
-      min-width: 0;
+      gap: 0.2rem;
     }
 
-    .home-cal__dot {
-      height: 0.28rem;
+    .home-cal__session,
+    .home-cal__match {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 0.22rem;
+    }
+
+    .home-cal__label {
+      font-family: var(--display);
+      font-size: clamp(0.85rem, 21cqi, 1.45rem);
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      line-height: 1;
+      color: #fff;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+    }
+
+    .home-cal__label--sm { font-size: clamp(0.6rem, 12cqi, 0.95rem); }
+
+    .home-cal__chip {
+      display: inline-block;
+      max-width: 100%;
+      padding: 0.08rem 0.45rem;
       border-radius: 999px;
+      background: rgba(255, 255, 255, 0.94);
+      color: #111827;
+      font-size: clamp(0.52rem, 8.5cqi, 0.64rem);
+      font-weight: 800;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
-    .home-cal__dot--pv { background: var(--gold); }
-    .home-cal__dot--live { background: var(--green); }
-    .home-cal__dot--video { background: var(--accent); }
+    @container (max-width: 84px) {
+      .home-cal__ha { display: none; }
+    }
+
+    .home-cal__badge-wrap {
+      width: 1.7rem;
+      height: 1.7rem;
+      border-radius: 50%;
+      background: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    }
 
     .home-cal__badge {
-      width: 1.55rem;
-      height: 1.55rem;
+      width: 1.25rem;
+      height: 1.25rem;
       object-fit: contain;
-      border-radius: 3px;
-      flex-shrink: 0;
-      background: rgba(0, 0, 0, 0.2);
     }
 
-    .home-cal__fixture-meta {
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 0.02rem;
-      overflow: hidden;
-      font-size: 0.58rem;
-      font-weight: 700;
-      color: #0c0f14;
-      line-height: 1.1;
-    }
-
-    .home-cal__fixture-meta strong {
+    .home-cal__match-name {
+      max-width: 100%;
+      font-family: var(--display);
+      font-size: clamp(0.62rem, 10cqi, 0.82rem);
+      font-weight: 800;
+      line-height: 1.05;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      font-weight: 800;
     }
 
-    .home-cal__fixture-meta span {
-      font-weight: 700;
-      opacity: 0.92;
+    .home-cal__notes {
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
     }
+
+    .home-cal__note {
+      padding: 0.14rem 0.3rem;
+      border-radius: 5px;
+      border-left: 3px solid var(--cal-note-deep);
+      background: rgba(255, 255, 255, 0.96);
+      color: #111827;
+      font-size: 0.58rem;
+      font-weight: 700;
+      line-height: 1.2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .home-cal__note b {
+      margin-right: 0.2rem;
+      color: #be185d;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .home-cal__note-more {
+      font-size: 0.55rem;
+      font-weight: 800;
+      opacity: 0.85;
+      padding-left: 0.15rem;
+    }
+
+    .home-cal__day--has-notes .home-cal__label { font-size: clamp(0.8rem, 16cqi, 1.1rem); }
+    .home-cal__day--has-notes .home-cal__label--sm { font-size: clamp(0.55rem, 10cqi, 0.8rem); }
+    .home-cal__day--has-notes .home-cal__badge-wrap { width: 1.35rem; height: 1.35rem; }
+    .home-cal__day--has-notes .home-cal__badge { width: 1rem; height: 1rem; }
+    .home-cal__day--has-notes .home-cal__session,
+    .home-cal__day--has-notes .home-cal__match { gap: 0.12rem; }
 
     .home-cal-people {
       display: flex;
       flex-wrap: wrap;
       gap: 0.35rem;
-      margin: 0 0 0.7rem;
+      margin: 0 0 0.75rem;
     }
 
     .home-cal-people__btn {
-      padding: 0.32rem 0.7rem;
+      padding: 0.36rem 0.85rem;
       border-radius: 999px;
-      border: 1px solid var(--border);
-      background: var(--surface-2);
-      color: var(--text-muted);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.05);
+      color: #e5e7eb;
       font: inherit;
-      font-size: 0.72rem;
+      font-size: 0.78rem;
       font-weight: 700;
       cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
     }
 
-    .home-cal-people__btn:hover {
-      border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-      color: var(--text);
-    }
+    .home-cal-people__btn:hover { background: rgba(255, 255, 255, 0.1); }
 
     .home-cal-people__btn.is-active {
-      background: rgba(245, 197, 24, 0.14);
-      border-color: rgba(245, 197, 24, 0.55);
+      background: rgba(245, 197, 24, 0.16);
+      border-color: rgba(245, 197, 24, 0.65);
       color: var(--gold);
     }
 
     .home-cal__hint {
-      margin: 0.55rem 0 0;
+      margin: 0.5rem 0 0;
       color: var(--text-muted);
-      font-size: 0.72rem;
-      line-height: 1.35;
+      font-size: 0.7rem;
+      line-height: 1.4;
     }
+
+    .home-cal__hint a { color: var(--gold); font-weight: 700; }
 
     .home-cal__legend {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.55rem 0.85rem;
+      gap: 0.4rem 0.9rem;
       margin-top: 0.65rem;
-      font-size: 0.68rem;
-      color: var(--text-muted);
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: #c5cad3;
     }
 
     .home-cal__legend span {
@@ -2113,26 +2167,28 @@
       gap: 0.35rem;
     }
 
-    .home-cal__legend i {
+    .home-cal__sw {
       display: inline-block;
-      width: 0.55rem;
-      height: 0.55rem;
-      border-radius: 999px;
+      width: 0.7rem;
+      height: 0.7rem;
+      border-radius: 3px;
       font-style: normal;
     }
 
-    .home-cal__legend-r {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 0.85rem;
-      height: 0.85rem;
-      border-radius: 3px;
-      background: #f5c518;
+    .home-cal__sw--in { background: var(--cal-in); }
+    .home-cal__sw--in-late { background: var(--cal-in-late-2); }
+    .home-cal__sw--regen { background: var(--cal-regen); }
+    .home-cal__sw--pre { background: var(--cal-pre); }
+    .home-cal__sw--home { background: var(--cal-home-2); }
+    .home-cal__sw--away { background: var(--cal-away-2); }
+    .home-cal__sw--note { background: var(--cal-note); }
+    .home-cal__sw--r {
+      background: var(--cal-r);
       color: #111;
-      font-size: 0.55rem;
+      font-size: 0.52rem;
       font-weight: 800;
-      font-style: normal;
+      text-align: center;
+      line-height: 0.7rem;
     }
 
     .home-live-grid {
@@ -2449,7 +2505,7 @@
                 <div id="homeChangelog"><p class="home-empty">Loading release notes…</p></div>
               </article>
             </div>
-            <article class="home-card">
+            <article class="home-card" id="homeMonthCard">
               <div class="home-card__head">
                 <h2 class="home-card__title">Month view</h2>
                 <a class="home-card__link" href="/schedule">Full schedule →</a>
@@ -3178,6 +3234,7 @@
       }
       btn.disabled = false;
       if (window.HubHome && canLoadHomeDashboard()) HubHome.load();
+      else if (window.HubHome) HubHome.loadMonthView();
     }
 
     setGreeting("");
@@ -3468,6 +3525,8 @@
       setInterval(checkServer, 30_000);
       if (window.HubHome && canLoadHomeDashboard()) {
         HubHome.load();
+      } else if (window.HubHome) {
+        HubHome.loadMonthView();
       }
     }
     bootHub();

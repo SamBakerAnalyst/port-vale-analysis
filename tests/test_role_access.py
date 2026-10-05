@@ -280,3 +280,15 @@ def test_user_payload_reports_whether_login_is_enabled():
     payload = current_user_payload(Req())
     assert payload["auth_enabled"] is True
     assert payload["display_name"] == "Sam Baker"
+
+
+def test_every_role_can_read_schedule_but_only_schedule_roles_can_edit(monkeypatch):
+    """Hub home Month view must look the same on every login."""
+    from app.auth import _request_allowed_for_role
+
+    monkeypatch.setenv("TEAM_PASSWORD", "x")
+    for role in ROLE_GROUPS:
+        assert _request_allowed_for_role("GET", "/api/schedule", role), role
+        can_edit = role == "admin" or role in _app("schedule")["roles"]
+        assert _request_allowed_for_role("PUT", "/api/schedule/day/2026-10-05", role) is can_edit, role
+        assert _request_allowed_for_role("POST", "/api/schedule/events", role) is can_edit, role

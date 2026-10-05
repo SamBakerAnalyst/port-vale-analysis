@@ -161,6 +161,8 @@ ROLE_ALLOWED_EXACT = frozenset(
     {"/", "/hub", "/api/auth/me", "/api/auth/logout", "/api/apps", "/api/system-lock"}
 )
 ANALYSIS_ALLOWED_EXACT = ROLE_ALLOWED_EXACT
+# Hub home Month view reads these for every account; writes stay manifest-gated.
+ROLE_READ_ONLY_EXACT = frozenset({"/api/schedule"})
 
 
 def _role_allowed_prefixes(role: str) -> tuple[str, ...]:
@@ -365,6 +367,12 @@ def _path_allowed_for_role(path: str, role: str) -> bool:
     )
 
 
+def _request_allowed_for_role(method: str, path: str, role: str) -> bool:
+    if method in ("GET", "HEAD") and path in ROLE_READ_ONLY_EXACT:
+        return True
+    return _path_allowed_for_role(path, role)
+
+
 class LoginRequest(BaseModel):
     username: str = Field(..., min_length=1)
     password: str = Field(..., min_length=1)
@@ -401,7 +409,7 @@ class HubAuthMiddleware(BaseHTTPMiddleware):
                 headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"},
             )
 
-        if not _path_allowed_for_role(path, role):
+        if not _request_allowed_for_role(request.method, path, role):
             accept = request.headers.get("accept", "")
             if path.startswith("/api/") or "application/json" in accept:
                 return JSONResponse(

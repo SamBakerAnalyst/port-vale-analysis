@@ -144,7 +144,8 @@
   }
 
   function todayKey() {
-    return new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   }
 
   function monthKeyFromDate(dateKey) {
@@ -398,9 +399,7 @@
       return cachedSchedule;
     } catch (err) {
       if (!silent) console.warn("Schedule:", err.message);
-      if (!cachedSchedule) {
-        cachedSchedule = { days: {}, owners: SCHEDULE_OWNERS, owner: scheduleOwner };
-      }
+      cachedSchedule = { days: {}, owners: SCHEDULE_OWNERS, owner: scheduleOwner, error: err.message };
       return cachedSchedule;
     }
   }
@@ -439,68 +438,76 @@
     return m ? `${hour12}:${String(m).padStart(2, "0")}${suffix}` : `${hour12}${suffix}`;
   }
 
-  function formatKickoffShort(iso) {
-    if (!iso) return "";
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return "";
-    const h = d.getHours();
-    const m = d.getMinutes();
-    const suffix = h >= 12 ? "pm" : "am";
-    const hour12 = ((h + 11) % 12) + 1;
-    return m ? `${hour12}:${String(m).padStart(2, "0")}${suffix}` : `${hour12}${suffix}`;
+  const SCHEDULE_EDIT_ROLES = new Set(["admin", "analysis", "ops"]);
+
+  function canEditSchedule() {
+    const auth = global.HubAuth || {};
+    if (auth.role === "pending") return false;
+    if (auth.allow_all || !auth.auth_enabled) return true;
+    return SCHEDULE_EDIT_ROLES.has(auth.role);
   }
 
   function homeCalBadge(src, alt) {
     if (!src) return "";
-    return `<img class="home-cal__badge" src="${escapeAttr(src)}" alt="${escapeAttr(alt || "")}" loading="lazy" width="28" height="28" onerror="this.style.display='none'" />`;
+    return `<span class="home-cal__badge-wrap"><img class="home-cal__badge" src="${escapeAttr(src)}" alt="${escapeAttr(alt || "")}" loading="lazy" width="24" height="24" onerror="this.parentElement.style.display='none'" /></span>`;
   }
 
-  function homeCalFixtureChip(row) {
+  function homeCalFixture(row) {
     const isHome = Boolean(row.isHome);
     const oppName =
       (typeof row.opponent === "string" ? row.opponent : row.opponent?.name) ||
       (isHome ? row.away : row.home) ||
       "TBC";
-    const ha = isHome ? "H" : "A";
     const oppBadge =
       row.opponent_badge ||
+      (typeof row.opponent === "object" ? row.opponent?.badge : "") ||
       (isHome ? row.away_badge : row.home_badge) ||
       "";
     const played = row.status === "completed" || Boolean(row.outcome);
     const score = played ? row.scoreLabel || row.score || "" : "";
-    const ko = formatKickoffShort(row.kickoff_utc || row.scheduledDate);
-    const timeLine = score || ko;
-    const title = `${isHome ? "Home" : "Away"} vs ${oppName}${ko ? ` · ${ko}` : ""}${
-      score ? ` · ${score}` : ""
-    }${row.competition ? ` · ${row.competition}` : ""}`;
-    return `<span class="home-cal__fixture home-cal__fixture--${isHome ? "home" : "away"}" title="${escapeAttr(title)}">
+    const ko = formatTime(row.kickoff_utc || row.scheduledDate);
+    const meta = score || ko;
+    return `<div class="home-cal__match">
       ${homeCalBadge(oppBadge, oppName)}
-      <span class="home-cal__fixture-meta">
-        <strong>${escapeAttr(ha)} ${escapeAttr(oppName)}</strong>
-        ${timeLine ? `<span>${escapeAttr(timeLine)}</span>` : ""}
-      </span>
-    </span>`;
+      <div class="home-cal__match-name">${escapeAttr(oppName)}</div>
+      <span class="home-cal__chip"><span class="home-cal__ha">${isHome ? "H" : "A"} · </span>${escapeAttr(meta)}</span>
+    </div>`;
   }
 
-  function renderMonthCalendar(matches, scoutByDate) {
+  function homeCalSession(dayType, entry) {
+    if (dayType === "training") {
+      return `<div class="home-cal__session">
+        <div class="home-cal__label">IN</div>
+        <span class="home-cal__chip">${escapeAttr(formatHomeReport(entry?.report_time || "09:00"))}</span>
+      </div>`;
+    }
+    if (dayType === "regen") return `<div class="home-cal__session"><div class="home-cal__label">REGEN</div></div>`;
+    if (dayType === "preseason") {
+      return `<div class="home-cal__session"><div class="home-cal__label home-cal__label--sm">PRE-SEASON</div></div>`;
+    }
+    return "";
+  }
+
+  function renderMonthCalendar() {
     if (!scheduleMonthKey) scheduleMonthKey = monthKeyFromDate(todayKey());
     setText("homeMonthCalLabel", formatMonthLabel(scheduleMonthKey));
     renderPeopleTabs();
 
-    const calendarRows =
-      cachedFixtures?.calendar?.length
-        ? cachedFixtures.calendar
-        : cachedFixtures?.fixtures?.length
-          ? cachedFixtures.fixtures
-          : matches;
-    const pvByDate = pvMatchesByDate(calendarRows);
-    const dayState = cachedSchedule?.days || {};
+    if (!cachedSchedule) return;
+    if (cachedSchedule.error) {
+      setHtml("homeMonthCal", `<p class="home-empty">Could not load the schedule: ${escapeAttr(cachedSchedule.error)}</p>`);
+      return;
+    }
+
+    const editable = canEditSchedule();
+    const dayState = cachedSchedule.days || {};
+    const fixturesByDate = cachedSchedule.fixtures_by_date || {};
+    const eventsByDate = cachedSchedule.events_by_date || {};
     const [year, month] = scheduleMonthKey.split("-").map(Number);
     const firstDay = new Date(year, month - 1, 1);
     const startOffset = (firstDay.getDay() + 6) % 7;
     const daysInMonth = new Date(year, month, 0).getDate();
     const today = todayKey();
-    const showScoutDots = scheduleOwner === "team";
 
     const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
       .map((d) => `<div class="home-cal__weekday">${d}</div>`)
@@ -516,77 +523,74 @@
       const entry = dayState[dateKey];
       const dayType = entry?.type || "";
       const recruitmentIn = Boolean(entry?.recruitment_in);
-      const pvEvents = pvByDate[dateKey] || [];
-      const scoutEvents = showScoutDots ? scoutByDate[dateKey] || [] : [];
-      const match = pvEvents[0] || null;
+      const match = (fixturesByDate[dateKey] || [])[0] || null;
+      const events = eventsByDate[dateKey] || [];
+      const lateReport = dayType === "training" && (entry?.report_time || "09:00") !== "09:00";
 
       const classes = ["home-cal__day"];
       if (dateKey === today) classes.push("home-cal__day--today");
+      if (!editable) classes.push("home-cal__day--readonly");
       if (match) {
-        classes.push("home-cal__day--match");
         classes.push(match.isHome ? "home-cal__day--home" : "home-cal__day--away");
       } else if (dayType === "training") {
-        classes.push("home-cal__day--training");
+        classes.push(lateReport ? "home-cal__day--in-late" : "home-cal__day--in");
       } else if (dayType === "regen") {
         classes.push("home-cal__day--regen");
       } else if (dayType === "preseason") {
         classes.push("home-cal__day--preseason");
       }
+      if (events.length) classes.push("home-cal__day--has-notes");
 
-      let body = "";
-      if (match) {
-        body = homeCalFixtureChip(match);
-      } else if (dayType === "training") {
-        body = `<div class="home-cal__session"><strong>IN</strong><span>${escapeAttr(formatHomeReport(entry?.report_time || "09:00"))}</span></div>`;
-      } else if (dayType === "regen") {
-        body = `<div class="home-cal__session"><strong>REGEN</strong></div>`;
-      } else if (dayType === "preseason") {
-        body = `<div class="home-cal__session"><strong>PRE-SEASON</strong></div>`;
-      }
+      const body = match ? homeCalFixture(match) : homeCalSession(dayType, entry);
+      const notesHtml = events.length
+        ? `<div class="home-cal__notes">${events
+            .slice(0, 1)
+            .map((ev) => `<div class="home-cal__note">${ev.time ? `<b>${escapeAttr(ev.time)}</b>` : ""}${escapeAttr(ev.title || "Note")}</div>`)
+            .join("")}${events.length > 1 ? `<div class="home-cal__note-more">+${events.length - 1} more</div>` : ""}</div>`
+        : "";
 
-      const scoutHtml = scoutEvents
-        .slice(0, 2)
-        .map((row) => {
-          const live = String(row.watch_type || "").toUpperCase() === "LIVE";
-          return `<span class="home-cal__dot ${live ? "home-cal__dot--live" : "home-cal__dot--video"}" title="${escapeAttr(scoutFixtureLabel(row))}"></span>`;
-        })
-        .join("");
-
-      const titleParts = [];
+      const titleParts = [formatShortDate(dateKey)];
       if (match) titleParts.push(match.isHome ? "Home fixture" : "Away fixture");
       if (dayType === "training") titleParts.push(`IN · report ${entry?.report_time || "09:00"}`);
       if (dayType === "regen") titleParts.push("Regen");
       if (dayType === "preseason") titleParts.push("Pre-season game");
       if (recruitmentIn) titleParts.push("Recruitment in");
-      titleParts.push("Click: IN → Regen → Pre-season → blank · Shift-click: R");
+      events.forEach((ev) => titleParts.push([ev.time, ev.title].filter(Boolean).join(" ")));
 
-      cells.push(`<button type="button" class="${classes.join(" ")}" data-date="${dateKey}" title="${escapeAttr(titleParts.join(" · "))}">
-        ${recruitmentIn ? '<span class="home-cal__r" aria-label="Recruitment in">R</span>' : ""}
-        <div class="home-cal__num">${day}</div>
-        <div class="home-cal__dots">${body}${scoutHtml}</div>
-      </button>`);
+      const tag = editable ? "button" : "div";
+      cells.push(`<${tag}${editable ? ' type="button"' : ""} class="${classes.join(" ")}" data-date="${dateKey}" title="${escapeAttr(titleParts.join(" · "))}">
+        <div class="home-cal__head">
+          <span class="home-cal__num">${day}</span>
+          ${dateKey === today ? '<span class="home-cal__today-tag">TODAY</span>' : ""}
+          ${recruitmentIn ? '<span class="home-cal__r" aria-label="Recruitment in">R</span>' : ""}
+        </div>
+        <div class="home-cal__body">${body}${notesHtml}</div>
+      </${tag}>`);
     }
 
     const ownerLabel =
-      (cachedSchedule?.owners || SCHEDULE_OWNERS).find((row) => row.id === scheduleOwner)?.label ||
-      "Team";
+      (cachedSchedule.owners || SCHEDULE_OWNERS).find((row) => row.id === scheduleOwner)?.label || "Team";
+    const hint = editable
+      ? `${escapeAttr(ownerLabel)} · click a day: IN 9am → IN 10am → Regen → Pre-season → blank · Shift / right-click: R · <a href="/schedule">Full schedule</a> for notes and report times`
+      : `${escapeAttr(ownerLabel)} · view only`;
 
     setHtml(
       "homeMonthCal",
       `<div class="home-cal">${weekdays}${cells.join("")}</div>
       <div class="home-cal__legend">
-        <span><i style="background:#34d399"></i> IN</span>
-        <span><i style="background:#f87171"></i> Regen</span>
-        <span><i style="background:#8b9bb0"></i> Pre-season</span>
-        <span><i class="home-cal__legend-r">R</i> Recruitment in</span>
-        <span><i style="background:#f5c518"></i> Home</span>
-        <span><i style="background:#e8edf4"></i> Away</span>
-        ${showScoutDots ? `<span><i style="background:#34d399"></i> Scout LIVE</span>
-        <span><i style="background:#f5c518"></i> Scout VIDEO</span>` : ""}
+        <span><i class="home-cal__sw home-cal__sw--in"></i>IN 9am</span>
+        <span><i class="home-cal__sw home-cal__sw--in-late"></i>IN 10am</span>
+        <span><i class="home-cal__sw home-cal__sw--regen"></i>Regen</span>
+        <span><i class="home-cal__sw home-cal__sw--pre"></i>Pre-season</span>
+        <span><i class="home-cal__sw home-cal__sw--home"></i>Home</span>
+        <span><i class="home-cal__sw home-cal__sw--away"></i>Away</span>
+        <span><i class="home-cal__sw home-cal__sw--note"></i>Travel / notes</span>
+        <span><i class="home-cal__sw home-cal__sw--r">R</i>Recruitment in</span>
       </div>
-      <p class="home-cal__hint">${ownerLabel} — click: <strong>IN</strong> → <strong>Regen</strong> → <strong>Pre-season</strong> → blank. Shift-click for <strong>R</strong>. Open <a href="/schedule">Full schedule</a> for the big board.</p>`
+      <p class="home-cal__hint">${hint}</p>`
     );
 
+    if (!editable) return;
     const root = document.getElementById("homeMonthCal");
     root?.querySelectorAll(".home-cal__day[data-date]").forEach((btn) => {
       btn.addEventListener("click", async (event) => {
@@ -2729,5 +2733,11 @@
     refreshTimer = setInterval(loadFeeds, 60000);
   }
 
-  global.HubHome = { load: loadHomeDashboard, setTab };
+  async function loadMonthViewOnly() {
+    bindCalendarNav();
+    await loadTeamSchedule({ silent: true });
+    renderMonthCalendar();
+  }
+
+  global.HubHome = { load: loadHomeDashboard, loadMonthView: loadMonthViewOnly, setTab };
 })(window);
