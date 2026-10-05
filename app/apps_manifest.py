@@ -75,7 +75,7 @@ APPS: list[dict[str, Any]] = [
         "group": "reports",
         "title": "Pre-Match Report",
         "description": (
-            "Opponent prep — full slide deck plus editable Two pager handout."
+            "Opponent prep — the full pre-match slide deck."
         ),
         "href": "/pre-match",
         "icon": "📋",
@@ -83,6 +83,22 @@ APPS: list[dict[str, Any]] = [
         "tags": ["Opponent", "Prep"],
         "roles": ("analysis", "admin"),
         "api_prefixes": ("/pre-match", "/api/pre-match"),
+        "router": "pre_match",
+    },
+    {
+        "id": "opposition-tabs",
+        "group": "reports",
+        "title": "Opposition Tabs",
+        "description": (
+            "Editable two-pager opposition handout — last XI, average shape, "
+            "and staff notes on how we hurt them and how they hurt us."
+        ),
+        "href": "/opposition-tabs",
+        "icon": "🗂️",
+        "accent": "#fbbf24",
+        "tags": ["Opponent", "Two pager", "Handout"],
+        "roles": ("analysis", "admin"),
+        "api_prefixes": ("/opposition-tabs", "/pre-match/assets", "/api/pre-match"),
         "router": "pre_match",
     },
     {
@@ -598,6 +614,26 @@ APPS: list[dict[str, Any]] = [
         "router": "reports_library",
     },
     {
+        "id": "insight7",
+        "group": "recruitment",
+        "title": "Insight7",
+        "description": (
+            "Upload Insight7 Emerging Talent Bulletin PDFs — one per league per month. "
+            "Every player consolidated in one list with month-on-month minutes, goals, "
+            "assists, contracts, new additions and drop-offs, plus a coverage grid."
+        ),
+        "href": "/insight7",
+        "icon": "🧾",
+        "accent": "#f59e0b",
+        "tags": ["Data provider", "Emerging talent", "U21", "Monthly"],
+        "roles": ("scouts", "admin"),
+        "api_prefixes": (
+            "/insight7",
+            "/api/insight7",
+        ),
+        "router": "insight7",
+    },
+    {
         "id": "squad-planner",
         "group": "recruitment",
         "title": "Squad Planner",
@@ -1043,6 +1079,7 @@ LIVE_ESSENTIAL_IDS = frozenset(
     {
         # Analysis
         "pre-match",
+        "opposition-tabs",
         "set-piece-pre-match",
         "player-cards",
         "post-match",
@@ -1064,6 +1101,7 @@ LIVE_ESSENTIAL_IDS = frozenset(
         "video-watch",
         "reports-library",
         "loans-watch",
+        "insight7",
         # Scouts
         "fixture-planner",
         "played-fixtures",

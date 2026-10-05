@@ -23,6 +23,7 @@ data/inbox/*
 data/goals-analysis/*
 !data/goals-analysis/.gitkeep
 data/pa-meeting-slides.json
+data/insight7/
 
 strategy-reports/.cache_*
 

@@ -61,6 +61,7 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
     from app.goals_analysis import register_goals_analysis_routes
     from app.video_watch import register_video_watch_routes
     from app.reports_library import register_reports_library_routes
+    from app.insight7 import register_insight7_routes
 
     return {
         "match_dashboards": register_match_dashboards_routes,
@@ -84,6 +85,7 @@ def _load_router_registrars() -> dict[str, Callable[[FastAPI], None]]:
         "games_to_watch": register_games_to_watch_routes,
         "video_watch": register_video_watch_routes,
         "reports_library": register_reports_library_routes,
+        "insight7": register_insight7_routes,
         "goals_analysis": register_goals_analysis_routes,
         "blocks_analysis": register_blocks_analysis_routes,
         "schedule": register_schedule_routes,

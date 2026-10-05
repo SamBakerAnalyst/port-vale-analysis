@@ -66,13 +66,27 @@ window.IMPECT_APPS = [
     "id": "pre-match",
     "group": "reports",
     "title": "Pre-Match Report",
-    "description": "Opponent prep — full slide deck plus editable Two pager handout.",
+    "description": "Opponent prep — the full pre-match slide deck.",
     "href": "/pre-match",
     "icon": "📋",
     "accent": "#fbbf24",
     "tags": [
       "Opponent",
       "Prep"
+    ]
+  },
+  {
+    "id": "opposition-tabs",
+    "group": "reports",
+    "title": "Opposition Tabs",
+    "description": "Editable two-pager opposition handout — last XI, average shape, and staff notes on how we hurt them and how they hurt us.",
+    "href": "/opposition-tabs",
+    "icon": "🗂️",
+    "accent": "#fbbf24",
+    "tags": [
+      "Opponent",
+      "Two pager",
+      "Handout"
     ]
   },
   {
@@ -429,6 +443,16 @@ window.IMPECT_APPS = [
     "icon": "📚",
     "accent": "#38bdf8",
     "tags": ["Reports", "Scouting", "Library"]
+  },
+  {
+    "id": "insight7",
+    "group": "recruitment",
+    "title": "Insight7",
+    "description": "Upload Insight7 Emerging Talent Bulletin PDFs — one per league per month. Every player consolidated in one list with month-on-month minutes, goals, assists, contracts, new additions and drop-offs, plus a coverage grid.",
+    "href": "/insight7",
+    "icon": "🧾",
+    "accent": "#f59e0b",
+    "tags": ["Data provider", "Emerging talent", "U21", "Monthly"]
   },
   {
     "id": "squad-planner",

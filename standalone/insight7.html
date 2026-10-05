@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Insight7</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/insight7.css?v=4" />
+</head>
+<body>
+  <div class="i7" id="i7App">
+    <header class="i7-top">
+      <div class="i7-title">
+        <p class="i7-eyebrow">Recruitment · <a href="/">← All apps</a> · <a href="/loans-watch">Loans Watch</a> · <a href="/player-pipelines">Player Pipelines</a></p>
+        <h1><span class="i7-logo">i7</span>Insight7 <span class="i7-h1-sub">Emerging Talent</span></h1>
+        <p class="i7-sub" id="i7Counts">Loading…</p>
+      </div>
+      <div class="i7-top__right">
+        <div class="i7-seg" id="i7Tabs" role="tablist" aria-label="View">
+          <button type="button" class="is-on" data-tab="players">Players</button>
+          <button type="button" data-tab="month">This month</button>
+          <button type="button" data-tab="uploads">Uploads &amp; coverage</button>
+        </div>
+        <button type="button" class="i7-btn i7-btn--primary" id="i7UploadBtn"><span aria-hidden="true">⤒</span> Upload PDFs</button>
+        <input type="file" id="i7File" accept="application/pdf,.pdf" multiple hidden />
+      </div>
+    </header>
+
+    <div id="i7Status" class="i7-toast hidden" role="status"></div>
+
+    <section class="i7-view" data-view="players">
+      <div class="i7-kpis-strip" id="i7Kpis"></div>
+
+      <div class="i7-toolbar">
+        <div class="i7-search-wrap">
+          <span aria-hidden="true">⌕</span>
+          <input type="search" class="i7-search" id="i7Search" placeholder="Search player, club, agent, career…" autocomplete="off" />
+        </div>
+        <div class="i7-pills" id="i7Pos" role="group" aria-label="Position">
+          <button type="button" class="is-on" data-pos="">All</button>
+          <button type="button" data-pos="GK">GK</button>
+          <button type="button" data-pos="DEF">CB</button>
+          <button type="button" data-pos="FB">FB</button>
+          <button type="button" data-pos="MID">MID</button>
+          <button type="button" data-pos="WIDE">Wide</button>
+          <button type="button" data-pos="ST">ST</button>
+        </div>
+        <select id="i7League" class="i7-select" aria-label="League"><option value="">All leagues</option></select>
+        <select id="i7Age" class="i7-select" aria-label="Age">
+          <option value="">All ages</option>
+          <option value="17">17 and under</option>
+          <option value="18">18 and under</option>
+          <option value="19">19 and under</option>
+          <option value="20">20 and under</option>
+        </select>
+        <select id="i7Section" class="i7-select" aria-label="Insight7 list"><option value="">All Insight7 lists</option></select>
+        <div class="i7-toolbar__end">
+          <div class="i7-seg i7-seg--icon" id="i7Layout" role="group" aria-label="Layout">
+            <button type="button" class="is-on" data-layout="table" title="Table">☰ Table</button>
+            <button type="button" data-layout="cards" title="Cards">▦ Cards</button>
+          </div>
+          <button type="button" class="i7-btn" id="i7Csv">Export CSV</button>
+        </div>
+      </div>
+
+      <div class="i7-spot" id="i7Spot" role="group" aria-label="Spotlight"></div>
+
+      <div class="i7-body">
+        <div class="i7-main">
+          <div class="i7-tablewrap" id="i7TableWrap">
+            <table class="i7-table" id="i7Table">
+              <thead id="i7Head"></thead>
+              <tbody id="i7Rows"></tbody>
+            </table>
+          </div>
+          <div class="i7-cards hidden" id="i7Cards"></div>
+          <div class="i7-empty hidden" id="i7Empty"></div>
+        </div>
+        <aside class="i7-drawer hidden" id="i7Drawer" aria-label="Player"></aside>
+      </div>
+    </section>
+
+    <section class="i7-view hidden" data-view="month">
+      <div class="i7-month" id="i7Month"></div>
+    </section>
+
+    <section class="i7-view hidden" data-view="uploads">
+      <div class="i7-drop" id="i7Drop">
+        <div class="i7-drop__icon" aria-hidden="true">⤒</div>
+        <strong>Drop Insight7 bulletin PDFs here</strong>
+        <span>One per league per month. League and month are read from the PDF — uploading the same league and month again replaces it.</span>
+        <button type="button" class="i7-btn" id="i7DropBtn">Choose files</button>
+      </div>
+      <h2 class="i7-h2">Coverage</h2>
+      <div class="i7-panel" id="i7Coverage"></div>
+      <h2 class="i7-h2">Uploaded bulletins</h2>
+      <div class="i7-panel" id="i7Uploads"></div>
+    </section>
+
+    <div class="i7-dragover hidden" id="i7DragOver"><div><span aria-hidden="true">⤒</span> Drop PDFs to upload</div></div>
+  </div>
+
+  <script defer src="/static/insight7.js?v=4"></script>
+  <script defer src="/static/hub-feedback.js"></script>
+</body>
+</html>
