@@ -1486,7 +1486,112 @@ a:hover { text-decoration: underline; }
 
 .vw-tip__note { color: var(--text); }
 
+/* Manual player report — search any player, no team sheet */
+.vw-chip--new {
+  border-color: rgba(34, 197, 94, 0.55);
+  color: var(--green);
+  text-decoration: none;
+}
+a.vw-chip { text-decoration: none; }
+
+.vw[data-view="search"] .vw-top,
+.vw[data-view="search"] .vw-status {
+  width: min(48rem, 100%);
+  margin-inline: auto;
+}
+
+#vwSearchView { overflow: auto; }
+
+.vw-find {
+  display: grid;
+  gap: 0.75rem;
+  width: min(48rem, 100%);
+  margin: 0 auto;
+  align-content: start;
+}
+
+.vw-find__bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 0.9fr);
+  gap: 0.5rem;
+}
+
+.vw-find__bar .vw-search { width: 100%; max-width: none; }
+.vw-find__q { font-size: 1.05rem; }
+.vw-find__hint { margin: 0; color: var(--muted); font-size: 0.84rem; }
+
+.vw-find__results {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.vw-find__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vw-find__row:hover { background: var(--surface-2); border-color: #3a4554; }
+.vw-find__copy { display: grid; gap: 0.15rem; min-width: 0; }
+.vw-find__copy strong { font-size: 1rem; }
+.vw-find__copy small { color: var(--muted); font-size: 0.82rem; }
+.vw-find__side { display: flex; align-items: center; gap: 0.4rem; }
+.vw-find__add { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.88rem; }
+.vw-find__form { padding: 0.9rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+
+.vw-linkbtn {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent-2);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.vw-report-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+.vw-report-meta {
+  margin: 0 0 0.7rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.vw-report-meta h3 small {
+  margin-left: 0.35rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.vw-meta-chip--manual {
+  background: rgba(167, 139, 250, 0.18);
+  color: #c4b5fd;
+}
+
+#vwDesk.is-manual .vw-sheet { display: none; }
+#vwDesk.is-manual .vw-pitch,
+#vwDesk.is-manual .vw-pitch.is-formation {
+  grid-template-columns: minmax(0, 56rem);
+  justify-content: center;
+}
+
 @media (max-width: 980px) {
+  .vw-find__bar,
+  .vw-report-grid--3 { grid-template-columns: 1fr; }
   .vw { height: auto; }
   #vwFixtures,
   .vw-pitch,

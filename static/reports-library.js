@@ -9,6 +9,7 @@
     level: document.getElementById("rlLevel"),
     action: document.getElementById("rlAction"),
     scout: document.getElementById("rlScout"),
+    source: document.getElementById("rlSource"),
     sort: document.getElementById("rlSort"),
     status: document.getElementById("rlStatus"),
     list: document.getElementById("rlList"),
@@ -25,6 +26,7 @@
     level: "",
     action: "",
     scout: "",
+    source: "",
     sort: "recent",
     selected: "",
   };
@@ -112,6 +114,7 @@
     els.level.value = state.level;
     els.action.value = state.action;
     els.scout.value = state.scout;
+    els.source.value = state.source;
     els.sort.value = state.sort;
     els.search.value = state.query;
   }
@@ -126,8 +129,8 @@
       btn.innerHTML = `${label}<span class="rl-chip__n">${n[kind]}</span>`;
     });
     els.counts.textContent = c.total
-      ? `${c.total} report${c.total === 1 ? "" : "s"} on ${c.players} player${c.players === 1 ? "" : "s"} · ${c.general} general · ${c.detailed} detailed`
-      : "No reports filed yet. File general or detailed reports in Match Scouting and they appear here.";
+      ? `${c.total} report${c.total === 1 ? "" : "s"} on ${c.players} player${c.players === 1 ? "" : "s"} · ${c.general} general · ${c.detailed} detailed${c.manual ? ` · ${c.manual} manual` : ""}`
+      : "No reports filed yet. File one from a fixture or search any player and it appears here.";
   }
 
   function filtered() {
@@ -138,8 +141,9 @@
       if (state.level && row.pvfc_level !== state.level) return false;
       if (state.action && row.next_action !== state.action) return false;
       if (state.scout && row.scout !== state.scout) return false;
+      if (state.source && (row.source || "fixture") !== state.source) return false;
       if (!q) return true;
-      return [row.name, row.club, row.league, row.fixture_label, row.scout, row.updated_by, row.excerpt]
+      return [row.name, row.club, row.league, row.fixture_label, row.competition, row.scout, row.updated_by, row.excerpt]
         .join(" ")
         .toLowerCase()
         .includes(q);
@@ -155,7 +159,9 @@
   }
 
   function cardHtml(row) {
-    const meta = [row.club, row.fixture_label, formatDate(row.updated_at), row.scout]
+    const manual = row.source === "manual";
+    const when = manual && row.match_date ? formatDate(`${row.match_date}T12:00:00`) : formatDate(row.updated_at);
+    const meta = [row.club, row.fixture_label, manual ? row.competition : "", when, row.scout]
       .filter(Boolean)
       .map(escapeHtml)
       .join(" · ");
@@ -168,6 +174,7 @@
         ${row.excerpt ? `<div class="rl-card__excerpt">${escapeHtml(row.excerpt)}</div>` : ""}
       </span>
       <span class="rl-card__side">
+        ${manual ? `<span class="rl-tag rl-tag--manual" title="Filed from a player search, not a fixture team sheet">Manual</span>` : ""}
         <span class="rl-tag rl-tag--${row.kind}" title="${both ? "General and detailed both filed for this game" : ""}">${kindLabel(row.kind)}${both ? " +1" : ""}</span>
         ${row.match_rating != null ? `<span class="rl-rating">${Number(row.match_rating).toFixed(1)}</span>` : ""}
         ${row.pvfc_level ? `<span class="rl-level rl-level--${escapeHtml(row.pvfc_level)}" title="${escapeHtml(row.pvfc_level_label)}">${escapeHtml(row.pvfc_level)}</span>` : ""}
@@ -179,7 +186,7 @@
   function renderList() {
     const rows = filtered();
     if (!state.reports.length) {
-      els.list.innerHTML = `<div class="rl-none">No reports yet.<br /><a href="/match-scouting">Open Match Scouting →</a></div>`;
+      els.list.innerHTML = `<div class="rl-none">No reports yet.<br /><a href="/match-scouting">From a fixture →</a> · <a href="/match-scouting?new=search">Search a player →</a></div>`;
       return;
     }
     if (!rows.length) {
@@ -209,6 +216,7 @@
     if (state.level) params.set("level", state.level);
     if (state.action) params.set("action", state.action);
     if (state.scout) params.set("scout", state.scout);
+    if (state.source) params.set("source", state.source);
     if (state.sort !== "recent") params.set("sort", state.sort);
     if (state.selected) params.set("report", state.selected);
     const next = params.toString();
@@ -305,7 +313,11 @@
 
   function matchScoutingHref(summary) {
     const params = new URLSearchParams();
-    if (summary.league) params.set("league", summary.league);
+    if (summary.source === "manual") {
+      params.set("manual", "1");
+    } else if (summary.league) {
+      params.set("league", summary.league);
+    }
     params.set("fixture", summary.fixture_id);
     params.set("player", String(summary.player_id));
     return `/match-scouting?${params}`;
@@ -324,7 +336,11 @@
       .map(escapeHtml)
       .join(" · ");
     const fixtureLine = [
-      meta.fixture_label,
+      summary.source === "manual" ? "Manual report" : "",
+      meta.fixture_label && meta.fixture_label !== "Manual report" ? meta.fixture_label : "",
+      meta.competition,
+      meta.match_date ? formatDate(`${meta.match_date}T12:00:00`) : "",
+      meta.viewing_label,
       meta.home_away,
       summary.position_label ? `Played ${summary.position_label}` : "",
     ]
@@ -350,7 +366,7 @@
         </div>
         <div class="rl-doc__actions">
           ${companion?.available ? `<button type="button" class="rl-btn" data-open="${escapeHtml(`${companion.kind}:${summary.player_id}:${summary.fixture_id}`)}">View ${kindLabel(companion.kind).toLowerCase()} report</button>` : ""}
-          <a class="rl-btn" href="/player/${encodeURIComponent(summary.player_id)}">Player page</a>
+          ${summary.is_stub ? "" : `<a class="rl-btn" href="/player/${encodeURIComponent(summary.player_id)}">Player page</a>`}
           <a class="rl-btn rl-btn--primary" href="${escapeHtml(matchScoutingHref(summary))}">Edit in Match Scouting</a>
         </div>
       </div>
@@ -434,6 +450,7 @@
       ["level", els.level],
       ["action", els.action],
       ["scout", els.scout],
+      ["source", els.source],
       ["sort", els.sort],
     ]) {
       el.addEventListener("change", () => {
@@ -459,6 +476,7 @@
     state.level = params.get("level") || "";
     state.action = params.get("action") || "";
     state.scout = params.get("scout") || "";
+    state.source = ["fixture", "manual"].includes(params.get("source")) ? params.get("source") : "";
     state.sort = ["recent", "rating", "player"].includes(params.get("sort")) ? params.get("sort") : "recent";
     state.selected = params.get("report") || "";
     bind();

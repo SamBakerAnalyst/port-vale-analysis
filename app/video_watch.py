@@ -32,13 +32,22 @@ from app.player_dossier import (
     create_player_note,
 )
 from app.player_pipelines import STAGES, pipeline_index_by_player_id, upsert_pipeline_from_scout
+from app.player_catalog import lookup_player, search_players
 from app.player_reports import (
     DetailedReportBody,
     GeneralReportBody,
     MatchConditionsBody,
     PlayerCmsBody,
+    PlayerStubBody,
+    create_player_stub,
+    is_manual_fixture,
+    is_stub_player,
+    known_scouts,
+    manual_fixture_label,
     match_conditions_for_fixture,
+    report_context,
     report_file_for_player,
+    resolve_report_fixture,
     save_cms,
     save_detailed_report,
     save_general_report,
@@ -71,7 +80,7 @@ class VideoWatchNoteBody(BaseModel):
 
 
 def _report_meta(body: BaseModel) -> dict[str, Any]:
-    return {
+    meta = {
         key: getattr(body, key, "")
         for key in (
             "name",
@@ -84,8 +93,42 @@ def _report_meta(body: BaseModel) -> dict[str, Any]:
             "home_name",
             "away_name",
             "sheet_side",
+            "scout",
+            "source",
         )
     }
+    if meta.get("source") == "manual":
+        meta["match_info"] = getattr(body, "match_info", {}) or {}
+    return meta
+
+
+def _prepare_report_body(body: GeneralReportBody | DetailedReportBody) -> None:
+    """Manual reports: allocate the ``manual-…`` token, label the match, and fill player details."""
+    source = str(body.source or "").strip().casefold()
+    if source != "manual" and is_manual_fixture(body.fixture_id):
+        source = "manual"
+    body.source = "manual" if source == "manual" else "fixture"
+    if not str(body.scout or "").strip() and body.fixture_id:
+        body.scout = report_context(body.player_id, body.fixture_id)["scout"]
+    if body.source != "manual":
+        return
+    body.fixture_id = resolve_report_fixture(body.fixture_id, "manual")
+    if not is_manual_fixture(body.fixture_id):
+        raise HTTPException(status_code=400, detail="Manual reports cannot reuse a fixture id.")
+    if not body.name or not body.club:
+        known = lookup_player(body.player_id)
+        body.name = body.name or str(known.get("name") or "")
+        body.club = body.club or str(known.get("club") or "")
+        body.league = body.league or str(known.get("league") or "")
+        body.position = body.position or str(known.get("position") or "")
+        if body.age is None:
+            body.age = known.get("age")
+    body.fixture_label = manual_fixture_label(body.match_info, body.club)
+    body.home_name = ""
+    body.away_name = ""
+    body.sheet_side = str((body.match_info or {}).get("home_away") or "")
+    if body.sheet_side not in {"home", "away"}:
+        body.sheet_side = ""
 
 
 def _staff_name(request: Request) -> str:
@@ -356,7 +399,8 @@ def build_watch_player(
         "reports": activity["reports"],
         "ability": activity.get("ability"),
         "pipeline": pipeline,
-        "dossier_href": f"/player/{int(player_id)}",
+        "is_stub": is_stub_player(player_id),
+        "dossier_href": "" if is_stub_player(player_id) else f"/player/{int(player_id)}",
         "scoutable_href": f"/scoutable-teams?club={club}" if club else "/scoutable-teams",
         "who_to_scout_href": "/who-to-scout",
         **report_file,
@@ -515,13 +559,14 @@ def register_video_watch_routes(app: FastAPI) -> None:
     ) -> dict[str, Any]:
         if not player_id:
             raise HTTPException(status_code=400, detail="player_id is required")
+        known = lookup_player(player_id) if not name or not club else {}
         sheet_player = {
-            "name": name or "",
-            "club": club or "",
-            "league": league or "",
-            "position": position or "",
-            "position_label": position_label or "",
-            "age": age,
+            "name": name or known.get("name") or "",
+            "club": club or known.get("club") or "",
+            "league": league or known.get("league") or "",
+            "position": position or known.get("position") or "",
+            "position_label": position_label or known.get("position_label") or "",
+            "age": age if age is not None else known.get("age"),
             "sheet_side": sheet_side or "",
         }
         return {
@@ -535,6 +580,31 @@ def register_video_watch_routes(app: FastAPI) -> None:
                 sheet_side=sheet_side or "",
             )
         }
+
+    @app.get("/api/video-watch/player-search")
+    def video_watch_player_search(
+        q: str = Query(""),
+        club: str = Query(""),
+        position: str = Query(""),
+        limit: int = Query(30, ge=1, le=100),
+    ) -> dict[str, Any]:
+        return search_players(q, club=club, position=position, limit=limit)
+
+    @app.post("/api/video-watch/player-stub")
+    def video_watch_player_stub(request: Request, body: PlayerStubBody) -> dict[str, Any]:
+        player = create_player_stub(
+            name=body.name,
+            club=body.club,
+            league=body.league,
+            position=body.position,
+            age=body.age,
+            staff=_staff_name(request),
+        )
+        return {"ok": True, "player": player}
+
+    @app.get("/api/video-watch/scouts")
+    def video_watch_scouts(request: Request) -> dict[str, Any]:
+        return {"scouts": known_scouts(), "me": _staff_name(request)}
 
     @app.post("/api/video-watch/notes")
     def video_watch_save_note(request: Request, body: VideoWatchNoteBody) -> dict[str, Any]:
@@ -637,6 +707,7 @@ def register_video_watch_routes(app: FastAPI) -> None:
         request: Request, body: GeneralReportBody
     ) -> dict[str, Any]:
         staff = _staff_name(request)
+        _prepare_report_body(body)
         conditions = save_match_conditions(
             fixture_id=body.fixture_id,
             fixture_label=body.fixture_label,
@@ -679,6 +750,8 @@ def register_video_watch_routes(app: FastAPI) -> None:
         )
         return {
             "ok": True,
+            "fixture_id": body.fixture_id,
+            "source": body.source,
             "match_conditions": conditions,
             "general_report": general,
             "pipeline": pipeline,
@@ -691,6 +764,7 @@ def register_video_watch_routes(app: FastAPI) -> None:
         request: Request, body: DetailedReportBody
     ) -> dict[str, Any]:
         staff = _staff_name(request)
+        _prepare_report_body(body)
         detailed = save_detailed_report(
             player_id=body.player_id,
             fixture_id=body.fixture_id,
@@ -725,6 +799,8 @@ def register_video_watch_routes(app: FastAPI) -> None:
         )
         return {
             "ok": True,
+            "fixture_id": body.fixture_id,
+            "source": body.source,
             "detailed_report": detailed,
             "pipeline": pipeline,
             "pipeline_error": pipeline_error,

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import re
 import threading
+import uuid
 from datetime import UTC, datetime
 from typing import Any
 
@@ -35,6 +36,14 @@ from app.player_report_schema import (
 
 PLAYER_REPORTS_PATH = DATA_ROOT / "player-reports.json"
 _STORE_LOCK = threading.Lock()
+
+MANUAL_FIXTURE_PREFIX = "manual-"
+STUB_PLAYER_ID_START = 900_000_001
+REPORT_SOURCES = ("fixture", "manual")
+VIEWING_OPTIONS: tuple[tuple[str, str], ...] = (("live", "Live"), ("video", "Video"))
+HOME_AWAY_OPTIONS: tuple[tuple[str, str], ...] = (("home", "Home"), ("away", "Away"), ("neutral", "Neutral"))
+MATCH_INFO_FIELDS: tuple[str, ...] = ("competition", "opponent", "match_date", "viewing", "home_away")
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 WEATHER_OPTIONS: tuple[tuple[str, str], ...] = (
     ("dry", "Dry"),
@@ -74,7 +83,7 @@ class MatchConditionsBody(BaseModel):
 
 class GeneralReportBody(BaseModel):
     player_id: int
-    fixture_id: str
+    fixture_id: str = ""
     fixture_label: str = ""
     weather: str = ""
     weather_note: str = ""
@@ -99,11 +108,14 @@ class GeneralReportBody(BaseModel):
     add_to_pipeline: bool = False
     pipeline_stage: str = "video_scouted"
     next_action: str = ""
+    source: str = "fixture"
+    scout: str = ""
+    match_info: dict[str, str] = Field(default_factory=dict)
 
 
 class DetailedReportBody(BaseModel):
     player_id: int
-    fixture_id: str
+    fixture_id: str = ""
     fixture_label: str = ""
     name: str = ""
     club: str = ""
@@ -125,6 +137,17 @@ class DetailedReportBody(BaseModel):
     add_to_pipeline: bool = False
     pipeline_stage: str = "video_scouted"
     next_action: str = ""
+    source: str = "fixture"
+    scout: str = ""
+    match_info: dict[str, str] = Field(default_factory=dict)
+
+
+class PlayerStubBody(BaseModel):
+    name: str
+    club: str = ""
+    league: str = ""
+    position: str = ""
+    age: int | None = None
 
 
 class PlayerCmsBody(BaseModel):
@@ -143,6 +166,8 @@ def option_catalog() -> dict[str, Any]:
     return {
         "weather": [{"id": key, "label": label} for key, label in WEATHER_OPTIONS],
         "pitch": [{"id": key, "label": label} for key, label in PITCH_OPTIONS],
+        "viewing": [{"id": key, "label": label} for key, label in VIEWING_OPTIONS],
+        "home_away": [{"id": key, "label": label} for key, label in HOME_AWAY_OPTIONS],
         **option_fields(),
     }
 
@@ -158,7 +183,11 @@ def _empty_store() -> dict[str, Any]:
         "general_reports": {},
         "detailed_reports": {},
         "cms": {},
+        "players": {},
     }
+
+
+_STORE_SECTIONS = ("match_conditions", "general_reports", "detailed_reports", "cms", "players")
 
 
 def _load_store() -> dict[str, Any]:
@@ -172,7 +201,7 @@ def _load_store() -> dict[str, Any]:
     if not isinstance(payload, dict):
         return _empty_store()
     out = _empty_store()
-    for key in ("match_conditions", "general_reports", "detailed_reports", "cms"):
+    for key in _STORE_SECTIONS:
         rows = payload.get(key)
         if isinstance(rows, dict):
             out[key] = rows
@@ -181,13 +210,7 @@ def _load_store() -> dict[str, Any]:
 
 def _save_store(store: dict[str, Any]) -> None:
     ensure_data_dirs()
-    payload = {
-        "version": 1,
-        "match_conditions": store.get("match_conditions") or {},
-        "general_reports": store.get("general_reports") or {},
-        "detailed_reports": store.get("detailed_reports") or {},
-        "cms": store.get("cms") or {},
-    }
+    payload = {"version": 1, **{key: store.get(key) or {} for key in _STORE_SECTIONS}}
     with _STORE_LOCK:
         temp_path = PLAYER_REPORTS_PATH.with_suffix(".json.tmp")
         temp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -385,12 +408,65 @@ def _clean_meta(meta: dict[str, Any] | None) -> dict[str, Any]:
     return out
 
 
+def is_manual_fixture(fixture_id: Any) -> bool:
+    return str(fixture_id or "").strip().startswith(MANUAL_FIXTURE_PREFIX)
+
+
+def new_manual_fixture_id() -> str:
+    return f"{MANUAL_FIXTURE_PREFIX}{uuid.uuid4().hex[:12]}"
+
+
+def resolve_report_fixture(fixture_id: Any, source: Any) -> str:
+    """Fixture token for a save. Manual reports without one get a fresh ``manual-…`` token."""
+    token = str(fixture_id or "").strip()
+    if str(source or "").strip().casefold() == "manual" and not token:
+        return new_manual_fixture_id()
+    return token
+
+
+def clean_match_info(value: Any) -> dict[str, str]:
+    source = value if isinstance(value, dict) else {}
+    date = _clean_text(source.get("match_date"), limit=10)
+    return {
+        "competition": _clean_text(source.get("competition"), limit=80),
+        "opponent": _clean_text(source.get("opponent"), limit=80),
+        "match_date": date if _DATE_RE.match(date) else "",
+        "viewing": _clean_choice(source.get("viewing"), {key for key, _label in VIEWING_OPTIONS}),
+        "home_away": _clean_choice(source.get("home_away"), {key for key, _label in HOME_AWAY_OPTIONS}),
+    }
+
+
+def manual_fixture_label(match_info: dict[str, Any] | None, club: str = "") -> str:
+    info = clean_match_info(match_info)
+    opponent = info["opponent"]
+    club_name = _clean_text(club, limit=80)
+    if opponent and club_name:
+        if info["home_away"] == "away":
+            return f"{opponent} vs {club_name}"
+        return f"{club_name} vs {opponent}"
+    if opponent:
+        return f"vs {opponent}"
+    return "Manual report"
+
+
+def report_source(row: dict[str, Any] | None, fixture_id: str = "") -> str:
+    stored = str((row or {}).get("source") or "").strip().casefold()
+    if stored in REPORT_SOURCES:
+        return stored
+    return "manual" if is_manual_fixture(fixture_id) else "fixture"
+
+
+def report_scout(row: dict[str, Any] | None) -> str:
+    row = row or {}
+    return str(row.get("scout") or row.get("created_by") or row.get("updated_by") or "").strip()
+
+
 def _stamp_report(
     cleaned: dict[str, Any],
     existing: Any,
     meta: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """Keep player / fixture details and first-filed stamp on the stored row."""
+    """Keep player / fixture details, scout credit and first-filed stamp on the stored row."""
     prior = existing if isinstance(existing, dict) else {}
     fresh = _clean_meta(meta)
     for key in (*REPORT_META_FIELDS, "age"):
@@ -398,7 +474,117 @@ def _stamp_report(
         cleaned[key] = value if value not in ("", None) else prior.get(key, value)
     cleaned["created_at"] = prior.get("created_at") or cleaned.get("updated_at") or _now()
     cleaned["created_by"] = prior.get("created_by") or cleaned.get("updated_by") or "Staff"
+    source_meta = meta if isinstance(meta, dict) else {}
+    scout = _clean_text(source_meta.get("scout"), limit=80)
+    cleaned["scout"] = scout or str(prior.get("scout") or "")
+    source = str(source_meta.get("source") or "").strip().casefold()
+    cleaned["source"] = source if source in REPORT_SOURCES else report_source(prior, cleaned.get("fixture_id", ""))
+    if "match_info" in source_meta:
+        cleaned["match_info"] = clean_match_info(source_meta.get("match_info"))
+    elif isinstance(prior.get("match_info"), dict):
+        cleaned["match_info"] = clean_match_info(prior.get("match_info"))
     return cleaned
+
+
+def report_context(player_id: int, fixture_id: str) -> dict[str, Any]:
+    """Source, credited scout and optional match info shared by the general / detailed pair."""
+    token = str(fixture_id or "").strip()
+    rows: list[dict[str, Any]] = []
+    if player_id and token:
+        store = _load_store()
+        key = _report_key(player_id, token)
+        rows = [
+            row
+            for row in (store["detailed_reports"].get(key), store["general_reports"].get(key))
+            if isinstance(row, dict)
+        ]
+    scout = next((str(row.get("scout") or "") for row in rows if row.get("scout")), "")
+    info = next(
+        (row["match_info"] for row in rows if isinstance(row.get("match_info"), dict) and any(row["match_info"].values())),
+        {},
+    )
+    return {
+        "source": report_source(rows[0] if rows else None, token),
+        "scout": scout,
+        "match_info": clean_match_info(info),
+        "fixture_label": next((str(row.get("fixture_label") or "") for row in rows if row.get("fixture_label")), ""),
+    }
+
+
+def known_scouts() -> list[str]:
+    """Everyone credited on a filed report so far, for the scout picker and library filter."""
+    store = _load_store()
+    names: dict[str, str] = {}
+    for section in ("general_reports", "detailed_reports"):
+        for row in (store.get(section) or {}).values():
+            if not isinstance(row, dict):
+                continue
+            for value in (row.get("scout"), row.get("created_by")):
+                name = str(value or "").strip()
+                if name and name.casefold() != "staff":
+                    names.setdefault(name.casefold(), name)
+    return sorted(names.values(), key=str.casefold)
+
+
+def player_stubs() -> dict[int, dict[str, Any]]:
+    store = _load_store()
+    out: dict[int, dict[str, Any]] = {}
+    for key, row in (store.get("players") or {}).items():
+        try:
+            pid = int(key)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(row, dict):
+            out[pid] = {**row, "player_id": pid}
+    return out
+
+
+def is_stub_player(player_id: Any) -> bool:
+    try:
+        return int(player_id) >= STUB_PLAYER_ID_START
+    except (TypeError, ValueError):
+        return False
+
+
+def create_player_stub(
+    *,
+    name: str,
+    club: str = "",
+    league: str = "",
+    position: str = "",
+    age: int | None = None,
+    staff: str = "Staff",
+) -> dict[str, Any]:
+    """Hub-only player for someone outside the Impect catalog, so a report can be filed on him."""
+    clean_name = _clean_text(name, limit=80)
+    if len(clean_name) < 2:
+        raise HTTPException(status_code=400, detail="Add the player's name.")
+    clean_club = _clean_text(club, limit=80)
+    store = _load_store()
+    players = store["players"]
+    for key, row in players.items():
+        if not isinstance(row, dict):
+            continue
+        if (
+            str(row.get("name") or "").casefold() == clean_name.casefold()
+            and str(row.get("club") or "").casefold() == clean_club.casefold()
+        ):
+            return {**row, "player_id": int(key)}
+    used = [int(key) for key in players if str(key).isdigit()]
+    player_id = max([STUB_PLAYER_ID_START - 1, *used]) + 1
+    meta = _clean_meta({"name": clean_name, "club": clean_club, "league": league, "age": age})
+    row = {
+        "name": clean_name,
+        "club": clean_club,
+        "league": meta["league"],
+        "position": clean_position(position),
+        "age": meta["age"],
+        "created_by": str(staff or "").strip() or "Staff",
+        "created_at": _now(),
+    }
+    players[str(player_id)] = row
+    _save_store(store)
+    return {**row, "player_id": player_id}
 
 
 def all_report_rows() -> dict[str, Any]:
@@ -408,6 +594,7 @@ def all_report_rows() -> dict[str, Any]:
         "general_reports": dict(store.get("general_reports") or {}),
         "detailed_reports": dict(store.get("detailed_reports") or {}),
         "match_conditions": dict(store.get("match_conditions") or {}),
+        "players": dict(store.get("players") or {}),
     }
 
 
@@ -810,6 +997,10 @@ def report_file_for_player(
     position: str = "",
     player_profiles: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    context = report_context(player_id, fixture_id)
+    if context["source"] == "manual":
+        sheet_side = sheet_side or context["match_info"].get("home_away", "")
+        fixture_label = fixture_label or context["fixture_label"]
     conditions = match_conditions_for_fixture(fixture_id, fixture_label=fixture_label)
     general = general_report_for_player(player_id, fixture_id)
     detailed = detailed_report_for_player(player_id, fixture_id)
@@ -835,5 +1026,6 @@ def report_file_for_player(
         ),
         "general_report": general,
         "detailed_report": detailed,
+        "report_context": context,
         "cms": cms_for_player(player_id, name=name, club=club),
     }

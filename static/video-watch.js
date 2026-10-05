@@ -51,7 +51,10 @@
     away: document.getElementById("vwAway"),
     empty: document.getElementById("vwEmpty"),
     profile: document.getElementById("vwProfile"),
+    search: document.getElementById("vwSearchView"),
   };
+
+  const EMPTY_MATCH_INFO = { competition: "", opponent: "", match_date: "", viewing: "", home_away: "" };
 
   const state = {
     view: "leagues",
@@ -112,6 +115,11 @@
     sortDir: "desc",
     deskView: "sheet",
     formations: { home: "", away: "" },
+    manual: { active: false, fixtureId: "", info: { ...EMPTY_MATCH_INFO } },
+    scoutDraft: "",
+    scouts: [],
+    me: "",
+    search: { q: "", club: "", position: "", results: [], message: "", loading: false, adding: false },
   };
 
   function escapeHtml(value) {
@@ -302,6 +310,17 @@
       state.generalDraft.position_in_game = reportPos.value;
       state.detailedDraft.position_in_game = reportPos.value;
     }
+    const scout = document.getElementById("vwScout");
+    if (scout) state.scoutDraft = scout.value.trim();
+    if (state.manual.active && document.getElementById("vwMiOpponent")) {
+      state.manual.info = {
+        competition: document.getElementById("vwMiCompetition")?.value.trim() || "",
+        opponent: document.getElementById("vwMiOpponent")?.value.trim() || "",
+        match_date: document.getElementById("vwMiDate")?.value || "",
+        viewing: document.getElementById("vwMiViewing")?.value || "",
+        home_away: document.getElementById("vwMiHomeAway")?.value || "",
+      };
+    }
     const weather = document.getElementById("vwWeather");
     const generalForm = document.getElementById("vwGeneralForm");
     if (weather || generalForm) {
@@ -361,9 +380,28 @@
     return `${sideName(row.home)} vs ${sideName(row.away)}`;
   }
 
+  function manualMatchLabel() {
+    const info = state.manual.info || {};
+    const club = state.player?.club || "";
+    if (info.opponent && club) {
+      return info.home_away === "away" ? `${info.opponent} vs ${club}` : `${club} vs ${info.opponent}`;
+    }
+    if (info.opponent) return `vs ${info.opponent}`;
+    return "Manual report";
+  }
+
   function fixtureContext() {
     const sheet = state.sheet || {};
     const player = state.player || {};
+    if (state.manual.active) {
+      return {
+        fixture_id: state.manual.fixtureId || "",
+        fixture_label: manualMatchLabel(),
+        home_name: "",
+        away_name: "",
+        sheet_side: "",
+      };
+    }
     return {
       fixture_id: state.fixtureId || sheet.fixture_id || "",
       fixture_label: fixtureLabel(sheet),
@@ -480,6 +518,12 @@
   }
 
   function homeAwayCopy(player) {
+    if (state.manual.active) {
+      const pick = (optionList("home_away").length ? optionList("home_away") : [])
+        .find((row) => row.id === state.manual.info.home_away);
+      const label = pick?.label || { home: "Home", away: "Away", neutral: "Neutral" }[state.manual.info.home_away];
+      return label ? { label, source: "set on this report" } : { label: "—", source: "set below in match info" };
+    }
     const row = player?.home_away || {};
     if (row.label) {
       const source = row.source === "match title" ? "auto from match title" : row.source || "auto";
@@ -515,6 +559,11 @@
     if (state.sortKey && state.sortKey !== "date") params.set("sort", state.sortKey);
     if (state.sortDir && state.sortDir !== "desc") params.set("dir", state.sortDir);
     if (state.fixtureId) params.set("fixture", state.fixtureId);
+    if (state.manual.active) {
+      params.set("manual", "1");
+      if (state.manual.fixtureId) params.set("fixture", state.manual.fixtureId);
+    }
+    if (state.view === "search") params.set("new", "search");
     if (state.playerId) params.set("player", String(state.playerId));
     if (state.deskView && state.deskView !== "sheet") params.set("desk", state.deskView);
     const next = params.toString();
@@ -526,19 +575,52 @@
     els.app.dataset.view = view;
     els.leagues.classList.toggle("hidden", view !== "leagues");
     els.fixtures.classList.toggle("hidden", view !== "fixtures");
-    els.desk.classList.toggle("hidden", view !== "desk");
+    els.desk.classList.toggle("hidden", view !== "desk" && view !== "manual");
+    els.desk.classList.toggle("is-manual", view === "manual");
+    els.search?.classList.toggle("hidden", view !== "search");
     if (view === "leagues") els.title.textContent = "Which league are you watching?";
     if (view === "fixtures") els.title.textContent = "Which match interests you?";
     if (view === "desk") els.title.textContent = fixtureLabel(state.sheet) || "Match Scouting";
+    if (view === "search") els.title.textContent = "Which player are you reporting on?";
+    if (view === "manual") els.title.textContent = `Player report${state.player?.name ? ` · ${state.player.name}` : ""}`;
     renderTools();
   }
 
+  function bindSearchChip(root) {
+    root.querySelector("[data-new-search]")?.addEventListener("click", () => openSearch());
+  }
+
+  function leaveManual() {
+    state.manual = { active: false, fixtureId: "", info: { ...EMPTY_MATCH_INFO } };
+    state.playerId = null;
+    state.player = null;
+  }
+
   function renderTools() {
+    const searchChip = `<button type="button" class="vw-chip vw-chip--new" data-new-search>+ Search player</button>`;
     if (state.view === "leagues") {
-      els.tools.innerHTML = state.loadError
+      els.tools.innerHTML = `${state.loadError
         ? `<button type="button" class="vw-chip" data-retry>Retry fixtures</button>`
-        : "";
+        : ""}${searchChip}`;
       els.tools.querySelector("[data-retry]")?.addEventListener("click", () => loadGames());
+      bindSearchChip(els.tools);
+      return;
+    }
+    if (state.view === "search" || state.view === "manual") {
+      els.tools.innerHTML = `
+        ${state.view === "manual" ? `<button type="button" class="vw-chip" data-back="search">← Search players</button>` : ""}
+        <button type="button" class="vw-chip" data-back="leagues">From a fixture</button>
+        <a class="vw-chip" href="/reports-library">Reports Library</a>
+      `;
+      els.tools.querySelector('[data-back="search"]')?.addEventListener("click", () => openSearch());
+      els.tools.querySelector('[data-back="leagues"]')?.addEventListener("click", () => {
+        leaveManual();
+        state.fixtureId = "";
+        state.sheet = null;
+        showView("leagues");
+        writeUrl();
+        renderLeagues();
+      });
       return;
     }
     if (state.view === "fixtures") {
@@ -547,7 +629,9 @@
         <button type="button" class="vw-chip ${state.phase === "played" ? "is-on" : ""}" data-phase="played">Played</button>
         <button type="button" class="vw-chip ${state.phase === "upcoming" ? "is-on" : ""}" data-phase="upcoming">Upcoming</button>
         <input class="vw-search" id="vwSearch" type="search" placeholder="Search matches" value="${escapeHtml(state.query)}" autocomplete="off" />
+        ${searchChip}
       `;
+      bindSearchChip(els.tools);
       els.tools.querySelector("[data-back]")?.addEventListener("click", () => {
         state.league = "";
         state.club = "";
@@ -1275,6 +1359,20 @@
     hidePlayerTip();
     const sheet = state.sheet;
     const formation = state.deskView === "formation";
+    if (state.manual.active) {
+      const info = state.manual.info || {};
+      const bits = [info.competition, info.match_date ? formatDate(info.match_date, "long") : "", { live: "Live", video: "Video" }[info.viewing] || ""]
+        .filter(Boolean);
+      els.match.innerHTML = `
+        <span class="vw-meta-chip vw-meta-chip--manual">Manual report</span>
+        ${state.manual.info.opponent ? `<strong>${escapeHtml(manualMatchLabel())}</strong>` : ""}
+        ${bits.map((bit) => `<span>${escapeHtml(bit)}</span>`).join("")}
+        <span>${state.manual.fixtureId ? "Saved to the Reports Library" : "Not saved yet"}</span>
+      `;
+      els.home.innerHTML = "";
+      els.away.innerHTML = "";
+      return;
+    }
     els.desk?.classList.toggle("is-sheet", !formation);
     document.querySelector(".vw-pitch")?.classList.toggle("is-formation", formation);
     if (!sheet) {
@@ -1555,10 +1653,14 @@
   function matchConditionsBlock(player, draft) {
     const conditions = matchConditions();
     const homeAway = homeAwayCopy(player);
-    const matchName = fixtureLabel(state.sheet) || conditions.fixture_label || "this match";
-    const sharedHint = conditions.filled
-      ? `Loaded from ${matchName} — change it here and every other report on this game updates.`
-      : `Once saved, weather and pitch auto-load on every other report for ${matchName}.`;
+    const matchName = state.manual.active
+      ? manualMatchLabel()
+      : fixtureLabel(state.sheet) || conditions.fixture_label || "this match";
+    const sharedHint = state.manual.active
+      ? "Weather and pitch are kept with this report only."
+      : conditions.filled
+        ? `Loaded from ${matchName} — change it here and every other report on this game updates.`
+        : `Once saved, weather and pitch auto-load on every other report for ${matchName}.`;
     return `<div class="vw-report-grid">
           <label>Home / Away
             <div class="vw-homeaway">
@@ -1589,6 +1691,61 @@
             <input id="vwPitchNote" type="text" maxlength="160" placeholder="Cut, bobble, heavy areas" value="${escapeHtml(draft.pitch_note || "")}" />
           </label>
         </div>`;
+  }
+
+  function scoutOptions() {
+    const names = new Set([...(state.scouts || []), state.me].filter(Boolean));
+    return [...names].sort((a, b) => a.localeCompare(b)).map((name) => `<option value="${escapeHtml(name)}"></option>`).join("");
+  }
+
+  function leagueDatalist() {
+    return LEAGUES.map((row) => `<option value="${escapeHtml(row.name)}"></option>`).join("");
+  }
+
+  function choiceOptions(kind, fallback, selected) {
+    const rows = optionList(kind).length ? optionList(kind) : fallback;
+    return `<option value="">—</option>${rows
+      .map((row) => `<option value="${escapeHtml(row.id)}" ${row.id === selected ? "selected" : ""}>${escapeHtml(row.label)}</option>`)
+      .join("")}`;
+  }
+
+  function reportMetaBar() {
+    const info = state.manual.info || {};
+    const scoutField = `<label>Scout / author
+        <input id="vwScout" type="text" maxlength="80" list="vwScoutList" autocomplete="off" placeholder="${escapeHtml(state.me ? `${state.me} (you)` : "Who watched him?")}" value="${escapeHtml(state.scoutDraft)}" />
+        <datalist id="vwScoutList">${scoutOptions()}</datalist>
+        <span class="vw-field-hint">Credited in the Reports Library. Leave blank to file it under your name.</span>
+      </label>`;
+    if (!state.manual.active) {
+      return `<section class="vw-report-block vw-report-meta">${scoutField}</section>`;
+    }
+    return `<section class="vw-report-block vw-report-meta">
+      <div>
+        <h3>Match info <small>optional</small></h3>
+        <p>No team sheet needed. Add what you know — it shows on the library row.</p>
+      </div>
+      ${scoutField}
+      <div class="vw-report-grid">
+        <label>Competition
+          <input id="vwMiCompetition" type="text" maxlength="80" list="vwMiLeagues" placeholder="League Two, FA Trophy…" value="${escapeHtml(info.competition)}" />
+          <datalist id="vwMiLeagues">${leagueDatalist()}</datalist>
+        </label>
+        <label>Opponent
+          <input id="vwMiOpponent" type="text" maxlength="80" placeholder="Who were they playing?" value="${escapeHtml(info.opponent)}" />
+        </label>
+      </div>
+      <div class="vw-report-grid vw-report-grid--3">
+        <label>Date
+          <input id="vwMiDate" type="date" value="${escapeHtml(info.match_date)}" />
+        </label>
+        <label>Watched
+          <select id="vwMiViewing">${choiceOptions("viewing", [{ id: "live", label: "Live" }, { id: "video", label: "Video" }], info.viewing)}</select>
+        </label>
+        <label>Home / Away
+          <select id="vwMiHomeAway">${choiceOptions("home_away", [{ id: "home", label: "Home" }, { id: "away", label: "Away" }, { id: "neutral", label: "Neutral" }], info.home_away)}</select>
+        </label>
+      </div>
+    </section>`;
   }
 
   function generalReportBody(player) {
@@ -1716,7 +1873,7 @@
         <button type="submit" class="vw-save" id="vwSave">Save comment</button>
       </div>
       <div class="vw-links">
-        <a href="${escapeHtml(player.dossier_href || `/player/${player.player_id}`)}">Player page →</a>
+        ${player.is_stub ? "" : `<a href="${escapeHtml(player.dossier_href || `/player/${player.player_id}`)}">Player page →</a>`}
         <a href="${escapeHtml(player.scoutable_href || "/scoutable-teams")}">Scoutable Teams →</a>
         <a href="${escapeHtml(player.who_to_scout_href || "/who-to-scout")}">Who to Scout →</a>
       </div>
@@ -1812,6 +1969,7 @@
       </div>
       ${profiles ? `<div class="vw-profiles">${profiles}</div>` : ""}
       ${reportPositionBar(player)}
+      ${state.tab === "general" || state.tab === "detailed" ? reportMetaBar() : ""}
       <div class="vw-tabs" role="tablist">
         ${tabs
           .map(
@@ -1866,6 +2024,12 @@
     document.getElementById("vwReportPosition")?.addEventListener("change", () => {
       captureDraft();
       renderProfile();
+    });
+    ["vwMiCompetition", "vwMiOpponent", "vwMiDate", "vwMiViewing", "vwMiHomeAway"].forEach((id) => {
+      document.getElementById(id)?.addEventListener("change", () => {
+        captureDraft();
+        renderSheets();
+      });
     });
     els.profile.querySelectorAll("[data-chip]").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -1972,17 +2136,18 @@
     if (!player) return;
     captureDraft();
     const ctx = fixtureContext();
-    if (!ctx.fixture_id) {
+    if (!ctx.fixture_id && !state.manual.active) {
       setStatus("Open a match before saving match conditions.", "is-error");
       return;
     }
     const btn = document.getElementById("vwSaveGeneral");
     if (btn) btn.disabled = true;
-    setStatus("Saving match conditions…");
+    setStatus(state.manual.active ? "Saving general report…" : "Saving match conditions…");
     try {
       const data = await fetchJson("/api/video-watch/general-report", {
         method: "POST",
         body: JSON.stringify({
+          ...reportSourceFields(),
           player_id: player.player_id,
           fixture_id: ctx.fixture_id,
           fixture_label: ctx.fixture_label,
@@ -2012,6 +2177,7 @@
         }),
       });
       applyMatchConditions(data.match_conditions);
+      rememberManualSave(data);
       state.player = {
         ...player,
         ...(data.player || {}),
@@ -2026,7 +2192,12 @@
         : data.pipeline?.target
           ? " On the pipeline."
           : "";
-      setStatus(`General report saved. Weather and pitch load on every other report for this game.${pipelineNote}`, "is-ok");
+      setStatus(
+        state.manual.active
+          ? `General report saved to the Reports Library.${pipelineNote}`
+          : `General report saved. Weather and pitch load on every other report for this game.${pipelineNote}`,
+        "is-ok",
+      );
       renderSheets();
       renderProfile();
     } catch (error) {
@@ -2041,7 +2212,7 @@
     if (!player) return;
     captureDraft();
     const ctx = fixtureContext();
-    if (!ctx.fixture_id) {
+    if (!ctx.fixture_id && !state.manual.active) {
       setStatus("Open a match before saving a detailed report.", "is-error");
       return;
     }
@@ -2053,6 +2224,7 @@
       const data = await fetchJson("/api/video-watch/detailed-report", {
         method: "POST",
         body: JSON.stringify({
+          ...reportSourceFields(),
           player_id: player.player_id,
           fixture_id: ctx.fixture_id,
           fixture_label: ctx.fixture_label,
@@ -2078,6 +2250,7 @@
           next_action: state.detailedDraft.next_action,
         }),
       });
+      rememberManualSave(data);
       state.player = {
         ...player,
         ...(data.player || {}),
@@ -2093,7 +2266,7 @@
         : pipeline
           ? ` On the pipeline.`
           : "";
-      setStatus(`Detailed report saved.${extra}`, "is-ok");
+      setStatus(`Detailed report saved${state.manual.active ? " to the Reports Library" : ""}.${extra}`, "is-ok");
       renderSheets();
       renderProfile();
     } catch (error) {
@@ -2131,6 +2304,254 @@
     }
   }
 
+  function reportSourceFields() {
+    if (!state.manual.active) return { source: "fixture", scout: state.scoutDraft };
+    return { source: "manual", scout: state.scoutDraft, match_info: { ...state.manual.info } };
+  }
+
+  function rememberManualSave(data) {
+    if (!state.manual.active || !data?.fixture_id) return;
+    state.manual.fixtureId = data.fixture_id;
+    if (state.scoutDraft && !state.scouts.includes(state.scoutDraft)) state.scouts.push(state.scoutDraft);
+    writeUrl();
+  }
+
+  async function loadScouts() {
+    try {
+      const data = await fetchJson("/api/video-watch/scouts");
+      state.scouts = data.scouts || [];
+      state.me = data.me || "";
+    } catch (_error) {
+      state.scouts = [];
+    }
+  }
+
+  function searchResultRow(row) {
+    const meta = [row.club, row.league, row.position_label || row.position_short, row.age != null ? `${row.age}y` : ""]
+      .filter(Boolean)
+      .map(escapeHtml)
+      .join(" · ");
+    const tag = row.is_stub
+      ? `<span class="vw-tag">Added in hub</span>`
+      : row.source === "pipeline"
+        ? `<span class="vw-tag">Pipeline</span>`
+        : "";
+    const src = row.is_stub ? "" : photoUrl(row, row.club);
+    return `<button type="button" class="vw-find__row" data-pick="${escapeHtml(String(row.player_id))}">
+      <span class="vw-player__face">
+        ${src ? `<img class="vw-player__photo" src="${escapeHtml(src)}" alt="" data-photo-fallback />` : ""}
+        <span class="vw-player__photo is-fallback" data-photo-slot ${src ? "hidden" : ""}>${escapeHtml(playerInitials(row.name))}</span>
+      </span>
+      <span class="vw-find__copy">
+        <strong>${escapeHtml(row.name)}</strong>
+        <small>${meta}</small>
+      </span>
+      <span class="vw-find__side">
+        ${tag}
+        ${row.report_count ? `<span class="vw-tag">${row.report_count} report${row.report_count === 1 ? "" : "s"}</span>` : ""}
+        <span class="vw-go">Report</span>
+      </span>
+    </button>`;
+  }
+
+  function renderSearchResults() {
+    const box = document.getElementById("vwFindResults");
+    if (!box) return;
+    const s = state.search;
+    if (s.loading) {
+      box.innerHTML = `<p class="vw-empty-list">Searching…</p>`;
+      return;
+    }
+    if (!s.results.length) {
+      box.innerHTML = `<p class="vw-empty-list">${escapeHtml(s.message || "Type a name to search every player the hub knows.")}</p>`;
+      return;
+    }
+    box.innerHTML = s.results.map(searchResultRow).join("");
+    bindPhotos(box);
+    box.querySelectorAll("[data-pick]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const row = s.results.find((r) => String(r.player_id) === btn.dataset.pick);
+        if (row) openManual(row.player_id, "", row);
+      });
+    });
+  }
+
+  let searchTimer = 0;
+  let searchSeq = 0;
+
+  async function runSearch() {
+    const s = state.search;
+    const seq = ++searchSeq;
+    if (s.q.trim().length < 2 && !s.club.trim()) {
+      s.results = [];
+      s.message = "";
+      s.loading = false;
+      renderSearchResults();
+      return;
+    }
+    s.loading = true;
+    renderSearchResults();
+    try {
+      const params = new URLSearchParams({ q: s.q, club: s.club, position: s.position });
+      const data = await fetchJson(`/api/video-watch/player-search?${params}`);
+      if (seq !== searchSeq) return;
+      s.results = data.players || [];
+      s.message = data.message || "";
+    } catch (error) {
+      if (seq !== searchSeq) return;
+      s.results = [];
+      s.message = error.message || "Search failed";
+    }
+    s.loading = false;
+    renderSearchResults();
+  }
+
+  function addPlayerForm() {
+    const s = state.search;
+    if (!s.adding) {
+      return `<p class="vw-find__add">Not in the list? <button type="button" class="vw-linkbtn" data-add-open>Add a new player</button> — for anyone outside our six leagues or not yet in Impect.</p>`;
+    }
+    return `<form class="vw-report-block vw-find__form" id="vwAddPlayer">
+      <div>
+        <h3>Add a new player</h3>
+        <p>Creates a hub-only player so you can file the report now. Search finds him next time.</p>
+      </div>
+      <div class="vw-report-grid">
+        <label>Name<input id="vwAddName" type="text" maxlength="80" required value="${escapeHtml(s.q)}" /></label>
+        <label>Club<input id="vwAddClub" type="text" maxlength="80" value="${escapeHtml(s.club)}" /></label>
+      </div>
+      <div class="vw-report-grid vw-report-grid--3">
+        <label>League<input id="vwAddLeague" type="text" maxlength="80" list="vwMiLeagues" /></label>
+        <label>Position<select id="vwAddPosition">${positionChoices()
+          .map((row) => `<option value="${escapeHtml(row.id)}" ${row.id === s.position ? "selected" : ""}>${escapeHtml(row.short)} · ${escapeHtml(row.label)}</option>`)
+          .join("")}</select></label>
+        <label>Age<input id="vwAddAge" type="number" min="14" max="45" inputmode="numeric" /></label>
+      </div>
+      <datalist id="vwMiLeagues">${leagueDatalist()}</datalist>
+      <div class="vw-form__row vw-form__row--save">
+        <button type="button" class="vw-chip" data-add-cancel>Cancel</button>
+        <button type="submit" class="vw-save">Add player and start report</button>
+      </div>
+    </form>`;
+  }
+
+  function renderSearch() {
+    const s = state.search;
+    els.search.innerHTML = `
+      <div class="vw-find">
+        <div class="vw-find__bar">
+          <input class="vw-search vw-find__q" id="vwFindQ" type="search" placeholder="Player name" value="${escapeHtml(s.q)}" autocomplete="off" />
+          <input class="vw-search" id="vwFindClub" type="search" placeholder="Club (optional)" value="${escapeHtml(s.club)}" autocomplete="off" />
+          <select class="vw-search" id="vwFindPos">
+            <option value="">Any position</option>
+            ${positionChoices()
+              .map((row) => `<option value="${escapeHtml(row.id)}" ${row.id === s.position ? "selected" : ""}>${escapeHtml(row.short)} · ${escapeHtml(row.label)}</option>`)
+              .join("")}
+          </select>
+        </div>
+        <p class="vw-find__hint">Every player in our six scouted leagues, pipeline targets and anyone already reported. No team sheet needed.</p>
+        <div class="vw-find__results" id="vwFindResults"></div>
+        ${addPlayerForm()}
+      </div>
+    `;
+    const onInput = () => {
+      s.q = document.getElementById("vwFindQ").value;
+      s.club = document.getElementById("vwFindClub").value;
+      s.position = document.getElementById("vwFindPos").value;
+      window.clearTimeout(searchTimer);
+      searchTimer = window.setTimeout(runSearch, 180);
+    };
+    ["vwFindQ", "vwFindClub"].forEach((id) => document.getElementById(id)?.addEventListener("input", onInput));
+    document.getElementById("vwFindPos")?.addEventListener("change", onInput);
+    els.search.querySelector("[data-add-open]")?.addEventListener("click", () => {
+      s.adding = true;
+      renderSearch();
+      document.getElementById("vwAddName")?.focus();
+    });
+    els.search.querySelector("[data-add-cancel]")?.addEventListener("click", () => {
+      s.adding = false;
+      renderSearch();
+    });
+    document.getElementById("vwAddPlayer")?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const ageRaw = document.getElementById("vwAddAge")?.value;
+      try {
+        const data = await fetchJson("/api/video-watch/player-stub", {
+          method: "POST",
+          body: JSON.stringify({
+            name: document.getElementById("vwAddName")?.value.trim() || "",
+            club: document.getElementById("vwAddClub")?.value.trim() || "",
+            league: document.getElementById("vwAddLeague")?.value.trim() || "",
+            position: document.getElementById("vwAddPosition")?.value || "",
+            age: ageRaw ? Number(ageRaw) : null,
+          }),
+        });
+        s.adding = false;
+        setStatus(`${data.player.name} added to the hub.`, "is-ok");
+        openManual(data.player.player_id, "", data.player);
+      } catch (error) {
+        setStatus(error.message || "Could not add player", "is-error");
+      }
+    });
+    renderSearchResults();
+  }
+
+  function openSearch() {
+    leaveManual();
+    state.fixtureId = "";
+    state.sheet = null;
+    showView("search");
+    writeUrl();
+    renderSearch();
+    document.getElementById("vwFindQ")?.focus();
+    if (state.search.q && !state.search.results.length) runSearch();
+  }
+
+  async function openManual(playerId, fixtureId, seed) {
+    if (!playerId) return;
+    const base = seed || {};
+    state.manual = { active: true, fixtureId: fixtureId || "", info: { ...EMPTY_MATCH_INFO } };
+    state.fixtureId = "";
+    state.sheet = null;
+    state.playerId = Number(playerId);
+    state.player = { ...base, player_id: Number(playerId) };
+    state.scoutDraft = "";
+    if (!["general", "detailed", "notes", "cms"].includes(state.tab)) state.tab = "general";
+    state.draft = { text: "", minute: "", title: "" };
+    fillGeneralDraft({ match_conditions: {}, general_report: {}, position: base.position || "" });
+    fillDetailedDraft({ position: base.position || "" });
+    fillCmsDraft({});
+    showView("manual");
+    writeUrl();
+    renderSheets();
+    renderProfile();
+    try {
+      const params = new URLSearchParams({ player_id: String(playerId) });
+      if (base.name) params.set("name", base.name);
+      if (base.club) params.set("club", base.club);
+      if (base.league) params.set("league", base.league);
+      if (base.position) params.set("position", base.position);
+      if (base.position_label) params.set("position_label", base.position_label);
+      if (base.age != null) params.set("age", String(base.age));
+      if (fixtureId) params.set("fixture_id", fixtureId);
+      const data = await fetchJson(`/api/video-watch/player?${params}`);
+      if (state.playerId !== Number(playerId)) return;
+      state.player = { ...base, ...(data.player || {}) };
+      const ctx = state.player.report_context || {};
+      state.manual.info = { ...EMPTY_MATCH_INFO, ...(ctx.match_info || {}) };
+      state.scoutDraft = ctx.scout || "";
+      state.draft.text = state.player.scout_comment || "";
+      fillGeneralDraft(state.player);
+      fillDetailedDraft(state.player);
+      fillCmsDraft(state.player);
+      showView("manual");
+      renderSheets();
+      renderProfile();
+    } catch (error) {
+      setStatus(error.message || "Could not load player", "is-error");
+    }
+  }
+
   async function openPlayer(playerId) {
     if (!playerId) return;
     const sheetPlayer = findSheetPlayer(playerId) || {};
@@ -2141,6 +2562,7 @@
     state.ca = 0;
     state.pa = 0;
     state.draft = { text: sheetPlayer.scout_comment || "", minute: "", title: "" };
+    state.scoutDraft = "";
     fillGeneralDraft({
       match_conditions: sheetPlayer.match_conditions || state.sheet?.match_conditions,
       general_report: {},
@@ -2176,6 +2598,7 @@
         sheet_side: sheetPlayer.sheet_side || data.player?.sheet_side || "",
       };
       if (state.player.match_conditions) applyMatchConditions(state.player.match_conditions);
+      state.scoutDraft = state.player.report_context?.scout || "";
       if (!state.draft.text && state.player.scout_comment) {
         state.draft.text = state.player.scout_comment;
       }
@@ -2223,8 +2646,12 @@
     gamesPoll = window.setTimeout(() => loadGames({ silent: true }), delayMs);
   }
 
+  function onManualScreens() {
+    return state.view === "search" || state.view === "manual";
+  }
+
   async function loadGames({ silent } = {}) {
-    if (!silent) {
+    if (!silent && !onManualScreens()) {
       state.loadError = "";
       setStatus("Loading fixtures…");
       renderLeagues();
@@ -2234,6 +2661,10 @@
       const payload = await fetchJsonRetry("/api/video-watch/games", { timeoutMs: 20000 });
       state.payload = payload;
       state.loadError = "";
+      if (onManualScreens()) {
+        if (!gamesReady()) scheduleGamesPoll(2500);
+        return;
+      }
       if (!gamesReady()) {
         setStatus("Building the fixture list… this can take a minute after a restart.");
         scheduleGamesPoll(2500);
@@ -2253,8 +2684,9 @@
       renderTools();
     } catch (error) {
       state.loadError = friendlyFetchError(error);
-      setStatus(state.loadError, "is-error");
       scheduleGamesPoll(4000);
+      if (onManualScreens()) return;
+      setStatus(state.loadError, "is-error");
       showView("leagues");
       renderLeagues();
       renderTools();
@@ -2271,6 +2703,21 @@
     state.deskView = params.get("desk") === "formation" ? "formation" : "sheet";
     state.fixtureId = params.get("fixture") || params.get("fixture_id") || "";
     state.playerId = Number(params.get("player") || params.get("player_id") || 0) || null;
+    const scoutsReady = loadScouts();
+    const manualFixture = state.fixtureId.startsWith("manual-") ? state.fixtureId : "";
+    if ((params.get("manual") === "1" || manualFixture) && state.playerId) {
+      state.fixtureId = "";
+      await scoutsReady;
+      openManual(state.playerId, manualFixture, null);
+      loadGames({ silent: true });
+      return;
+    }
+    if (params.get("new") === "search") {
+      state.search.q = params.get("q") || "";
+      openSearch();
+      loadGames({ silent: true });
+      return;
+    }
     renderLeagues();
     await loadGames();
   }

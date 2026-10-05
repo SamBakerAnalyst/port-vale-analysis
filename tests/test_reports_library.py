@@ -71,7 +71,7 @@ def test_library_lists_general_and_detailed_with_filters_data(tmp_path, monkeypa
         pvfc_level="A", next_action="sign", staff="Scout A", meta=meta,
     )
     payload = library.list_reports()
-    assert payload["counts"] == {"total": 2, "general": 1, "detailed": 1, "players": 1}
+    assert payload["counts"] == {"total": 2, "general": 1, "detailed": 1, "players": 1, "manual": 0}
     detailed = next(row for row in payload["reports"] if row["kind"] == "detailed")
     assert detailed["name"] == "Test Player"
     assert detailed["home_away"] == "Home"

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/video-watch.css?v=20" />
+  <link rel="stylesheet" href="/static/video-watch.css?v=21" />
 </head>
 <body>
   <div class="vw" data-view="leagues" id="vwApp">
@@ -22,6 +22,8 @@
     <p id="vwStatus" class="vw-status hidden" role="status"></p>
 
     <section class="vw-screen" id="vwLeagues" aria-label="Choose a league"></section>
+
+    <section class="vw-screen hidden" id="vwSearchView" aria-label="Search any player"></section>
 
     <section class="vw-screen hidden" id="vwFixtures" aria-label="Fixtures">
       <aside class="vw-clubs" id="vwClubs"></aside>
@@ -48,7 +50,7 @@
     <div id="vwTip" class="vw-tip hidden" role="tooltip"></div>
   </div>
 
-  <script defer src="/static/video-watch.js?v=21"></script>
+  <script defer src="/static/video-watch.js?v=22"></script>
   <script defer src="/static/hub-feedback.js"></script>
 </body>
 </html>
