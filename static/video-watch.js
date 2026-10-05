@@ -110,7 +110,7 @@
     loadError: "",
     sortKey: "date",
     sortDir: "desc",
-    deskView: "formation",
+    deskView: "sheet",
     formations: { home: "", away: "" },
   };
 
@@ -516,7 +516,7 @@
     if (state.sortDir && state.sortDir !== "desc") params.set("dir", state.sortDir);
     if (state.fixtureId) params.set("fixture", state.fixtureId);
     if (state.playerId) params.set("player", String(state.playerId));
-    if (state.deskView && state.deskView !== "formation") params.set("desk", state.deskView);
+    if (state.deskView && state.deskView !== "sheet") params.set("desk", state.deskView);
     const next = params.toString();
     window.history.replaceState({}, "", next ? `${window.location.pathname}?${next}` : window.location.pathname);
   }
@@ -584,7 +584,7 @@
     });
     els.tools.querySelectorAll("[data-desk]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        state.deskView = btn.dataset.desk || "formation";
+        state.deskView = btn.dataset.desk || "sheet";
         writeUrl();
         renderSheets();
         renderTools();
@@ -934,7 +934,13 @@
       if (!best) best = pool.find((player) => !used.has(Number(player.player_id)));
       if (!best) break;
       used.add(Number(best.player_id));
-      xi.push({ ...best, x_pct: x, y_pct: y, formation_slot: slot, slot_side: side });
+      xi.push({
+        ...best,
+        x_pct: Math.max(13, Math.min(87, x)),
+        y_pct: Math.max(12, Math.min(88, y)),
+        formation_slot: slot,
+        slot_side: side,
+      });
     }
     return xi;
   }
@@ -1112,21 +1118,96 @@
     return Math.round((minutes / max) * 100);
   }
 
+  const LINE_ORDER = ["gk", "def", "dm", "cm", "am", "cf"];
+
+  function playedLine(player) {
+    const code = positionCode(player);
+    if (code.includes("GOAL")) return "gk";
+    if (code.includes("DEFENSE_MID") || code.includes("DEFENSIVE_MID")) return "dm";
+    if (code.includes("DEF") || code.includes("BACK")) return "def";
+    if (code.includes("ATTACKING_MID") || code.includes("WING") || code.includes("LEFT_MID") || code.includes("RIGHT_MID")) return "am";
+    if (code.includes("FORWARD") || code.includes("STRIKER")) return "cf";
+    return "cm";
+  }
+
+  function lineSideRank(player) {
+    const code = positionCode(player);
+    if (code.includes("LEFT")) return 0;
+    if (code.includes("RIGHT")) return 2;
+    return 1;
+  }
+
+  function lineXs(count) {
+    if (count <= 1) return [50];
+    const span = Math.min(76, (count - 1) * 27);
+    const start = 50 - span / 2;
+    return Array.from({ length: count }, (_, i) => start + (span * i) / (count - 1));
+  }
+
+  function playedLines(starters) {
+    const lines = new Map(LINE_ORDER.map((key) => [key, []]));
+    for (const player of starters) lines.get(playedLine(player)).push(player);
+    return LINE_ORDER.map((key) => [key, lines.get(key)]).filter(([, rows]) => rows.length);
+  }
+
+  function playedShape(starters) {
+    return playedLines(starters)
+      .filter(([key]) => key !== "gk")
+      .map(([, rows]) => rows.length)
+      .join("-");
+  }
+
+  function layoutAsPlayed(starters) {
+    const lines = playedLines(starters);
+    const outfield = lines.filter(([key]) => key !== "gk");
+    const top = 13;
+    const bottom = 70;
+    const step = outfield.length > 1 ? (bottom - top) / (outfield.length - 1) : 0;
+    const out = [];
+    lines.forEach(([key, rows]) => {
+      const idx = outfield.findIndex(([k]) => k === key);
+      const y = key === "gk" ? 88 : outfield.length > 1 ? bottom - idx * step : 42;
+      const sorted = [...rows].sort(
+        (a, b) => lineSideRank(a) - lineSideRank(b) || (Number(a.x_pct) || 50) - (Number(b.x_pct) || 50),
+      );
+      const xs = lineXs(sorted.length);
+      sorted.forEach((player, i) => out.push({ ...player, x_pct: xs[i], y_pct: y }));
+    });
+    return out;
+  }
+
+  function fieldXi(side) {
+    const team = state.sheet?.[side];
+    const starters = (team?.players || []).filter((row) => row.started);
+    if (!starters.length) return [];
+    if (state.formations[side] && FORMATIONS[state.formations[side]]) {
+      return assignFormation(starters, state.formations[side]);
+    }
+    return layoutAsPlayed(starters);
+  }
+
   function formationOptions(side) {
-    const current = sideFormation(side);
-    return Object.keys(FORMATIONS)
-      .map((name) => `<option value="${escapeHtml(name)}" ${name === current ? "selected" : ""}>${escapeHtml(name)}</option>`)
-      .join("");
+    const picked = state.formations[side] && FORMATIONS[state.formations[side]] ? state.formations[side] : "";
+    const starters = (state.sheet?.[side]?.players || []).filter((row) => row.started);
+    const shape = starters.length ? playedShape(starters) : "";
+    const played = `<option value="" ${picked ? "" : "selected"}>As played${shape ? ` · ${escapeHtml(shape)}` : ""}</option>`;
+    return (
+      played +
+      Object.keys(FORMATIONS)
+        .map((name) => `<option value="${escapeHtml(name)}" ${name === picked ? "selected" : ""}>${escapeHtml(name)}</option>`)
+        .join("")
+    );
   }
 
   function fieldMarkings() {
-    return `<div class="vw-field__marks" aria-hidden="true">
-      <b class="vw-field__box vw-field__box--top"></b>
-      <b class="vw-field__six vw-field__six--top"></b>
-      <b class="vw-field__box vw-field__box--bot"></b>
-      <b class="vw-field__six vw-field__six--bot"></b>
-      <b class="vw-field__half"></b>
-      <b class="vw-field__circle"></b>
+    return `<div class="vw-xi-field__marks" aria-hidden="true">
+      <b class="vw-xi-field__box vw-xi-field__box--top"></b>
+      <b class="vw-xi-field__six vw-xi-field__six--top"></b>
+      <b class="vw-xi-field__box vw-xi-field__box--bot"></b>
+      <b class="vw-xi-field__six vw-xi-field__six--bot"></b>
+      <b class="vw-xi-field__half"></b>
+      <b class="vw-xi-field__circle"></b>
+      <b class="vw-xi-field__spot"></b>
     </div>`;
   }
 
@@ -1139,24 +1220,25 @@
     const pct = minutesPct(player, squad);
     const score = player.overall == null ? null : Math.round(Number(player.overall));
     const tone = scoreTone(score);
-    return `<button type="button" class="vw-dot${on} ${tone.cls}" data-player="${escapeHtml(id)}" data-side="${side}" style="left:${Number(player.x_pct) || 50}%;top:${Number(player.y_pct) || 50}%">
-      <span class="vw-dot__face">
+    const pos = positionShort(player);
+    return `<button type="button" class="vw-xi${on} ${tone.cls}${player.has_scout_note ? " has-note" : ""}" data-player="${escapeHtml(id)}" data-side="${side}" style="left:${Number(player.x_pct) || 50}%;top:${Number(player.y_pct) || 50}%">
+      <span class="vw-xi__face">
         ${src ? `<img class="vw-player__photo" src="${escapeHtml(src)}" alt="" data-photo-fallback />` : ""}
         <span class="vw-player__photo is-fallback" data-photo-slot ${src ? "hidden" : ""}>${escapeHtml(initials)}</span>
-        <em>${pct == null ? "n.a." : `${pct}%`}</em>
+        <i class="vw-xi__score">${score == null ? "—" : score}</i>
       </span>
-      ${shirt ? `<small class="vw-dot__no">${escapeHtml(shirt)}</small>` : ""}
-      <strong>${escapeHtml(lastName(player.name))}</strong>
+      <span class="vw-xi__name">${shirt ? `<b>${escapeHtml(shirt)}</b>` : ""}${escapeHtml(lastName(player.name))}</span>
+      <span class="vw-xi__meta">${escapeHtml(pos)}${pct == null ? "" : ` · ${pct}% mins`}</span>
     </button>`;
   }
 
   function formationColumn(side, team) {
     const players = team?.players || [];
-    const xi = sideXi(side);
+    const xi = fieldXi(side);
     const bench = sideSubs(side);
     const noted = players.filter((row) => row.has_scout_note).length;
     const u27 = players.filter((row) => row.u27).length;
-    if (!players.length) {
+    if (!players.length || !xi.length) {
       return `
         <div class="vw-sheet__head">
           <h2>${badge(team?.image_url, sideName(team))}${escapeHtml(sideName(team) || (side === "home" ? "Home" : "Away"))}</h2>
@@ -1174,7 +1256,8 @@
         <span>Formation</span>
         <select data-formation="${side}">${formationOptions(side)}</select>
       </label>
-      <div class="vw-field">${fieldMarkings()}${xi.map((player) => fieldPlayer(player, side, players)).join("")}</div>
+      <div class="vw-xi-field">${fieldMarkings()}${xi.map((player) => fieldPlayer(player, side, players)).join("")}</div>
+      ${bench.length ? `<div class="vw-xi-bench"><span>Came on</span>${bench.map((player) => `<button type="button" class="vw-xi-bench__chip" data-player="${escapeHtml(String(player.player_id || ""))}" data-side="${side}">${shirtNo(player) ? `<b>${escapeHtml(shirtNo(player))}</b>` : ""}${escapeHtml(lastName(player.name))}${player.match_minute ? ` <small>${escapeHtml(String(player.match_minute))}′</small>` : ""}</button>`).join("")}</div>` : ""}
     `;
   }
 
@@ -2185,7 +2268,7 @@
     state.phase = params.get("phase") || "played";
     state.sortKey = ["date", "match", "watch"].includes(params.get("sort") || "") ? params.get("sort") : "date";
     state.sortDir = params.get("dir") === "asc" ? "asc" : "desc";
-    state.deskView = params.get("desk") === "sheet" ? "sheet" : "formation";
+    state.deskView = params.get("desk") === "formation" ? "formation" : "sheet";
     state.fixtureId = params.get("fixture") || params.get("fixture_id") || "";
     state.playerId = Number(params.get("player") || params.get("player_id") || 0) || null;
     renderLeagues();
