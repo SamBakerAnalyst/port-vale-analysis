@@ -1369,29 +1369,9 @@ def _fetch_iteration_profile_scores(
     positions: list[str],
     min_games: float,
 ) -> list[dict[str, Any]]:
-    cache_key = ("profiles", CACHE_VERSION, iteration_id, tuple(positions), min_games)
-    cached = _iteration_scores_cache.get(cache_key)
-    if cached and time.time() - cached[0] < PLAYERS_CACHE_TTL_SECONDS:
-        return cached[1]
-
-    squad_ids = _fetch_squad_ids(iteration_id)
-    merged: list[dict[str, Any]] = []
-
-    def load_squad(squad_id: int) -> list[dict[str, Any]]:
-        try:
-            rows, _ = _fetch_profile_scores(iteration_id, squad_id, positions, min_games)
-            return _annotate_score_rows_with_squad(rows, squad_id)
-        except HTTPException:
-            return []
-
-    max_workers = min(2, max(len(squad_ids), 1))
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(load_squad, squad_id) for squad_id in squad_ids]
-        for future in as_completed(futures):
-            merged.extend(future.result())
-
-    _iteration_scores_cache[cache_key] = (time.time(), merged)
-    return merged
+    return _fetch_iteration_squad_scores(
+        "profiles", _fetch_profile_scores, iteration_id, positions, min_games
+    )
 
 
 def _fetch_iteration_player_scores(
@@ -1399,26 +1379,85 @@ def _fetch_iteration_player_scores(
     positions: list[str],
     min_games: float,
 ) -> list[dict[str, Any]]:
-    cache_key = ("metrics", CACHE_VERSION, iteration_id, tuple(positions), min_games)
+    return _fetch_iteration_squad_scores(
+        "metrics", _fetch_player_scores, iteration_id, positions, min_games
+    )
+
+
+SQUAD_SCORES_RETRY_PAUSE_SECONDS = 5.0
+_squad_score_failures: dict[tuple[int, str], float] = {}
+_squad_score_failures_lock = threading.Lock()
+
+
+def squad_score_failures_since(position: str, since: float) -> list[int]:
+    """Iterations where at least one club's rows for ``position`` failed to load after ``since``."""
+    with _squad_score_failures_lock:
+        return sorted(
+            iteration_id
+            for (iteration_id, failed_position), failed_at in _squad_score_failures.items()
+            if failed_position == position and failed_at >= since
+        )
+
+
+def _fetch_iteration_squad_scores(
+    kind: str,
+    fetch_squad: Any,
+    iteration_id: int,
+    positions: list[str],
+    min_games: float,
+) -> list[dict[str, Any]]:
+    cache_key = (kind, CACHE_VERSION, iteration_id, tuple(positions), min_games)
     cached = _iteration_scores_cache.get(cache_key)
     if cached and time.time() - cached[0] < PLAYERS_CACHE_TTL_SECONDS:
         return cached[1]
 
     squad_ids = _fetch_squad_ids(iteration_id)
     merged: list[dict[str, Any]] = []
+    failed: list[int] = []
 
-    def load_squad(squad_id: int) -> list[dict[str, Any]]:
+    def load_squad(squad_id: int) -> list[dict[str, Any]] | None:
         try:
-            rows, _ = _fetch_player_scores(iteration_id, squad_id, positions, min_games)
+            rows, _ = fetch_squad(iteration_id, squad_id, positions, min_games)
             return _annotate_score_rows_with_squad(rows, squad_id)
         except HTTPException:
-            return []
+            return None
 
     max_workers = min(2, max(len(squad_ids), 1))
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(load_squad, squad_id) for squad_id in squad_ids]
+        futures = {executor.submit(load_squad, squad_id): squad_id for squad_id in squad_ids}
         for future in as_completed(futures):
-            merged.extend(future.result())
+            rows = future.result()
+            if rows is None:
+                failed.append(futures[future])
+            else:
+                merged.extend(rows)
+
+    # A rate-limited club used to vanish from the list (and stay cached for hours).
+    if failed:
+        time.sleep(SQUAD_SCORES_RETRY_PAUSE_SECONDS)
+        still_failed: list[int] = []
+        for squad_id in failed:
+            rows = load_squad(squad_id)
+            if rows is None:
+                still_failed.append(squad_id)
+            else:
+                merged.extend(rows)
+        failed = still_failed
+
+    if failed:
+        logger.warning(
+            "Impect %s scores incomplete for iteration %s %s: %d of %d clubs failed",
+            kind,
+            iteration_id,
+            ",".join(positions),
+            len(failed),
+            len(squad_ids),
+        )
+        now = time.time()
+        with _squad_score_failures_lock:
+            for position in positions:
+                _squad_score_failures[(iteration_id, position)] = now
+        return merged
 
     _iteration_scores_cache[cache_key] = (time.time(), merged)
     return merged

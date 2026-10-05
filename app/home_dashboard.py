@@ -2248,20 +2248,67 @@ def _load_season_position_players(
     return [], f"{label}: Impect API rate limit — retries exhausted."
 
 
+def _previous_standouts_season_rows(season_mode: str) -> list[dict[str, Any]]:
+    disk = _load_standouts_disk(_standouts_raw_cache_key("season"))
+    if disk is None:
+        return []
+    payload = disk[1]
+    if str(payload.get("season_mode") or "") != season_mode:
+        return []
+    return [row for row in payload.get("players") or [] if isinstance(row, dict)]
+
+
+def _standouts_row_iteration(row: dict[str, Any]) -> int | None:
+    head = str(row.get("id") or "").split(":", 1)[0]
+    return int(head) if head.isdigit() else None
+
+
+def _carry_over_standouts_rows(
+    previous_rows: list[dict[str, Any]],
+    fresh_rows: list[dict[str, Any]],
+    *,
+    position: str,
+    iterations: set[int] | None,
+) -> list[dict[str, Any]]:
+    """Last good rows for a position (optionally only some leagues) that this build failed to load."""
+    fresh_ids = {str(row.get("id")) for row in fresh_rows}
+    return [
+        row
+        for row in previous_rows
+        if row.get("position") == position
+        and str(row.get("id")) not in fresh_ids
+        and (iterations is None or _standouts_row_iteration(row) in iterations)
+    ]
+
+
 def _build_standouts_season_payload() -> dict[str, Any]:
     from app import main as impect
 
     season_mode, season_label = _resolve_standouts_season_mode()
     warnings: list[str] = []
     players: list[dict[str, Any]] = []
+    previous_rows = _previous_standouts_season_rows(season_mode)
 
     # Load one position at a time — parallel long-list builds hit Impect rate limits
     # and Goalkeeper pools were coming back empty for most leagues.
     for index, position in enumerate(impect.ALLOWED_POSITIONS):
+        started = time.time()
         rows, warning = _load_season_position_players(position, season_mode=season_mode)
+        failed_iterations = set(impect.squad_score_failures_since(position, started))
+        if warning or failed_iterations:
+            kept = _carry_over_standouts_rows(
+                previous_rows,
+                rows,
+                position=position,
+                iterations=None if warning else failed_iterations,
+            )
+            rows = rows + kept
+            label = warning or (
+                f"{position}: some clubs hit the Impect rate limit — "
+                f"kept {len(kept)} players from the last full build."
+            )
+            warnings.append(label)
         players.extend(rows)
-        if warning:
-            warnings.append(warning)
         if index + 1 < len(impect.ALLOWED_POSITIONS):
             time.sleep(2.0)
 
