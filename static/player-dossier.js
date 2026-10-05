@@ -1094,6 +1094,8 @@
         charts.hidden = true;
       }
       if (data.links?.compare) compare.href = data.links.compare;
+      const scoutReport = document.getElementById("pdScoutReportLink");
+      if (scoutReport) scoutReport.href = `/match-scouting?manual=1&player=${encodeURIComponent(data.player.id)}`;
       wirePipelineButton(data.player);
       actionsEl.hidden = false;
       if (shellEl) shellEl.hidden = false;

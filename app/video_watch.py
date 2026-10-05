@@ -136,6 +136,21 @@ def _staff_name(request: Request) -> str:
     return str(payload.get("display_name") or payload.get("username") or "Staff").strip() or "Staff"
 
 
+def _hub_scout_names() -> list[str]:
+    """Scout / admin account display names, so the author can be picked before they've filed."""
+    try:
+        from app.auth import _hub_users
+
+        users = _hub_users()
+    except Exception:
+        return []
+    return [
+        str(user.get("display_name") or user.get("username") or "").strip()
+        for user in users
+        if user.get("role") in {"scouts", "admin"}
+    ]
+
+
 POSITION_SHORT = {
     "GOALKEEPER": "GK",
     "LEFT_WINGBACK_DEFENDER": "LB",
@@ -604,7 +619,7 @@ def register_video_watch_routes(app: FastAPI) -> None:
 
     @app.get("/api/video-watch/scouts")
     def video_watch_scouts(request: Request) -> dict[str, Any]:
-        return {"scouts": known_scouts(), "me": _staff_name(request)}
+        return {"scouts": known_scouts(_hub_scout_names()), "me": _staff_name(request)}
 
     @app.post("/api/video-watch/notes")
     def video_watch_save_note(request: Request, body: VideoWatchNoteBody) -> dict[str, Any]:
@@ -708,6 +723,7 @@ def register_video_watch_routes(app: FastAPI) -> None:
     ) -> dict[str, Any]:
         staff = _staff_name(request)
         _prepare_report_body(body)
+        body.scout = str(body.scout or "").strip() or staff
         conditions = save_match_conditions(
             fixture_id=body.fixture_id,
             fixture_label=body.fixture_label,
@@ -765,6 +781,7 @@ def register_video_watch_routes(app: FastAPI) -> None:
     ) -> dict[str, Any]:
         staff = _staff_name(request)
         _prepare_report_body(body)
+        body.scout = str(body.scout or "").strip() or staff
         detailed = save_detailed_report(
             player_id=body.player_id,
             fixture_id=body.fixture_id,

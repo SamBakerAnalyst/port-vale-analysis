@@ -211,6 +211,65 @@ def test_fixture_reports_are_unchanged_but_can_credit_a_scout(isolated):
     assert "Martin Foyle" in reports.known_scouts()
 
 
+GEMINI_NOTES = (
+    "[Migrated from Gemini Sports]\n"
+    "Original scout (Gemini): Martin Foyle — created Oct 5 - 9:58am 2026\n"
+    "Gemini match: Accrington v Cheltenham (Live Scouting)\n\nScout comments (Martin Foyle):\nCame through the hard way."
+)
+
+
+@pytest.mark.parametrize("text, name", [
+    (GEMINI_NOTES, "Martin Foyle"),
+    ("Gemini verdict: Yes. Original scout (Gemini): Lee Darnbrough — created Sep 1", "Lee Darnbrough"),
+    ("Original scout: Tom Fry", "Tom Fry"),
+    ("Original scout (Gemini): Seán O'Brien-Smith.", "Seán O'Brien-Smith"),
+    ("No author line here.", ""),
+])
+def test_parse_original_scout(text, name):
+    assert reports.parse_original_scout(text) == name
+
+
+def test_migrated_reports_show_the_original_scout_not_the_saver(isolated):
+    reports.save_general_report(player_id=501, fixture_id="League Two|a|b|2026-10-03", notes=GEMINI_NOTES,
+                                staff="Sam Baker", meta={"name": "Jamie Ndlovu"})
+    row = library.list_reports()["reports"][0]
+    assert row["scout"] == "Martin Foyle"
+    assert row["updated_by"] == "Sam Baker"
+    assert reports.report_context(501, "League Two|a|b|2026-10-03")["scout"] == "Martin Foyle"
+    assert "Martin Foyle" in reports.known_scouts() and "Sam Baker" not in reports.known_scouts()
+
+    dry = reports.backfill_report_scouts()
+    assert dry["updated"] == 1 and dry["changes"][0]["scout"] == "Martin Foyle"
+    stored = json.loads((isolated / "player-reports.json").read_text())["general_reports"]
+    assert not stored["501:League Two|a|b|2026-10-03"].get("scout")
+    assert reports.backfill_report_scouts(dry_run=False)["updated"] == 1
+    stored = json.loads((isolated / "player-reports.json").read_text())["general_reports"]
+    assert stored["501:League Two|a|b|2026-10-03"]["scout"] == "Martin Foyle"
+    assert stored["501:League Two|a|b|2026-10-03"]["created_by"] == "Sam Baker"
+    assert reports.backfill_report_scouts()["updated"] == 0
+
+
+def test_author_set_while_sam_is_logged_in_wins_and_defaults_to_saver(isolated):
+    client = _client()
+    client.post("/api/video-watch/general-report", json={
+        "player_id": 501, "fixture_id": "f1", "notes": "Live look.", "scout": "Martin Foyle"})
+    client.post("/api/video-watch/general-report", json={
+        "player_id": 503, "fixture_id": "f2", "notes": "Own look."})
+    rows = {row["player_id"]: row for row in client.get("/api/reports-library").json()["reports"]}
+    assert rows[501]["scout"] == "Martin Foyle" and rows[501]["updated_by"] == "Sam"
+    assert rows[503]["scout"] == "Sam"
+    stored = json.loads((isolated / "player-reports.json").read_text())["general_reports"]
+    assert stored["503:f2"]["scout"] == "Sam"
+    assert stored["501:f1"]["created_by"] == "Sam"
+
+
+def test_scout_picker_lists_hub_scouts_and_report_authors(isolated, monkeypatch):
+    monkeypatch.setattr(vw, "_hub_scout_names", lambda: ["Tommy Johnson", "Sam"])
+    reports.save_general_report(player_id=501, fixture_id="f1", notes=GEMINI_NOTES, staff="Sam")
+    data = _client().get("/api/video-watch/scouts", params={"request": None}).json()
+    assert data["scouts"] == ["Martin Foyle", "Sam", "Tommy Johnson"]
+
+
 def test_stub_reports_list_with_their_details(isolated):
     stub = reports.create_player_stub(name="Trialist Keeper", club="Hednesford", league="Northern Premier")
     reports.save_general_report(

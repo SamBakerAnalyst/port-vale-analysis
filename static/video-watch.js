@@ -1714,7 +1714,7 @@
     const scoutField = `<label>Scout / author
         <input id="vwScout" type="text" maxlength="80" list="vwScoutList" autocomplete="off" placeholder="${escapeHtml(state.me ? `${state.me} (you)` : "Who watched him?")}" value="${escapeHtml(state.scoutDraft)}" />
         <datalist id="vwScoutList">${scoutOptions()}</datalist>
-        <span class="vw-field-hint">Credited in the Reports Library. Leave blank to file it under your name.</span>
+        <span class="vw-field-hint">Who actually wrote this report — shown on the Reports Library. Defaults to you; change it when filing for another scout.</span>
       </label>`;
     if (!state.manual.active) {
       return `<section class="vw-report-block vw-report-meta">${scoutField}</section>`;
@@ -2539,7 +2539,7 @@
       state.player = { ...base, ...(data.player || {}) };
       const ctx = state.player.report_context || {};
       state.manual.info = { ...EMPTY_MATCH_INFO, ...(ctx.match_info || {}) };
-      state.scoutDraft = ctx.scout || "";
+      state.scoutDraft = ctx.scout || state.me || "";
       state.draft.text = state.player.scout_comment || "";
       fillGeneralDraft(state.player);
       fillDetailedDraft(state.player);
@@ -2598,7 +2598,7 @@
         sheet_side: sheetPlayer.sheet_side || data.player?.sheet_side || "",
       };
       if (state.player.match_conditions) applyMatchConditions(state.player.match_conditions);
-      state.scoutDraft = state.player.report_context?.scout || "";
+      state.scoutDraft = state.player.report_context?.scout || state.me || "";
       if (!state.draft.text && state.player.scout_comment) {
         state.draft.text = state.player.scout_comment;
       }
@@ -2719,6 +2719,7 @@
       return;
     }
     renderLeagues();
+    await scoutsReady;
     await loadGames();
   }
 

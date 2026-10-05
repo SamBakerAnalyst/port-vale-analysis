@@ -456,9 +456,34 @@ def report_source(row: dict[str, Any] | None, fixture_id: str = "") -> str:
     return "manual" if is_manual_fixture(fixture_id) else "fixture"
 
 
-def report_scout(row: dict[str, Any] | None) -> str:
+_ORIGINAL_SCOUT_RE = re.compile(
+    r"Original scout(?:\s*\([^)]*\))?\s*:\s*([^\W\d_][\w'’.\- ]*?)\s*(?:[—–]|\s-\s|[\n,;(]|\.(?:\s|$)|$)",
+    re.I,
+)
+_AUTHOR_TEXT_FIELDS = ("notes", "write_up", "next_steps")
+
+
+def parse_original_scout(text: Any) -> str:
+    """Author from a migrated line like ``Original scout (Gemini): Martin Foyle — created …``."""
+    match = _ORIGINAL_SCOUT_RE.search(str(text or ""))
+    return _clean_text(match.group(1), limit=80) if match else ""
+
+
+def original_scout(row: dict[str, Any] | None) -> str:
     row = row or {}
-    return str(row.get("scout") or row.get("created_by") or row.get("updated_by") or "").strip()
+    for key in _AUTHOR_TEXT_FIELDS:
+        name = parse_original_scout(row.get(key))
+        if name:
+            return name
+    return ""
+
+
+def report_scout(row: dict[str, Any] | None) -> str:
+    """Who wrote the report: explicit author, then a migrated author line, then whoever filed it."""
+    row = row or {}
+    return str(
+        row.get("scout") or original_scout(row) or row.get("created_by") or row.get("updated_by") or ""
+    ).strip()
 
 
 def _stamp_report(
@@ -499,6 +524,10 @@ def report_context(player_id: int, fixture_id: str) -> dict[str, Any]:
             if isinstance(row, dict)
         ]
     scout = next((str(row.get("scout") or "") for row in rows if row.get("scout")), "")
+    scout = scout or next((name for name in (original_scout(row) for row in rows) if name), "")
+    scout = scout or next((report_scout(row) for row in rows if report_scout(row)), "")
+    if scout.casefold() == "staff":
+        scout = ""
     info = next(
         (row["match_info"] for row in rows if isinstance(row.get("match_info"), dict) and any(row["match_info"].values())),
         {},
@@ -511,19 +540,45 @@ def report_context(player_id: int, fixture_id: str) -> dict[str, Any]:
     }
 
 
-def known_scouts() -> list[str]:
-    """Everyone credited on a filed report so far, for the scout picker and library filter."""
+def known_scouts(extra: list[str] | None = None) -> list[str]:
+    """Everyone credited on a filed report so far (plus ``extra`` staff), for the author picker."""
     store = _load_store()
     names: dict[str, str] = {}
+    for value in extra or []:
+        name = str(value or "").strip()
+        if name:
+            names.setdefault(name.casefold(), name)
     for section in ("general_reports", "detailed_reports"):
         for row in (store.get(section) or {}).values():
             if not isinstance(row, dict):
                 continue
-            for value in (row.get("scout"), row.get("created_by")):
-                name = str(value or "").strip()
-                if name and name.casefold() != "staff":
-                    names.setdefault(name.casefold(), name)
+            name = report_scout(row)
+            if name and name.casefold() != "staff":
+                names.setdefault(name.casefold(), name)
     return sorted(names.values(), key=str.casefold)
+
+
+def backfill_report_scouts(*, dry_run: bool = True) -> dict[str, Any]:
+    """One-shot: copy a migrated ``Original scout …:`` author into the structured ``scout`` field.
+
+    Rows that already have a ``scout`` are left alone. The library reads the same line at
+    display time, so this only makes the author explicit on disk.
+    """
+    store = _load_store()
+    changes: list[dict[str, str]] = []
+    for section in ("general_reports", "detailed_reports"):
+        for key, row in (store.get(section) or {}).items():
+            if not isinstance(row, dict) or str(row.get("scout") or "").strip():
+                continue
+            name = original_scout(row)
+            if not name:
+                continue
+            changes.append({"section": section, "key": key, "scout": name, "was": str(row.get("created_by") or "")})
+            if not dry_run:
+                row["scout"] = name
+    if changes and not dry_run:
+        _save_store(store)
+    return {"dry_run": dry_run, "updated": len(changes), "changes": changes}
 
 
 def player_stubs() -> dict[int, dict[str, Any]]:
