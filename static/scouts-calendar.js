@@ -222,6 +222,20 @@ function renderWatchToggle() {
   });
 }
 
+function calendarEventHtml(row, isPast) {
+  const color = leagueColors[row.league] || "#34d399";
+  return `
+    <article class="so-cal-event${isPast ? " so-cal-event--past" : ""}" style="--league-color:${color}" title="${fixtureLabel(row)}">
+      <div class="so-cal-event__time">${formatTime(row.kickoff_utc)} · ${row.watch_type}</div>
+      <div class="so-cal-event__teams">${fixtureLabel(row)}</div>
+      <div class="so-cal-event__meta">
+        <span class="so-cal-event__league">${row.league || "League TBC"}</span>
+        ${state.staff ? "" : `<span class="so-cal-event__staff">${staffFirstName(row.staff)}</span>`}
+      </div>
+    </article>
+  `;
+}
+
 function renderCalendar() {
   if (!state.monthKey) {
     state.monthKey = monthKeyFromDate(todayKey());
@@ -244,31 +258,26 @@ function renderCalendar() {
     cells.push(`<div class="so-cal-day so-cal-day--muted"></div>`);
   }
 
+  const agendaDays = [];
   for (let day = 1; day <= daysInMonth; day += 1) {
     const dateKey = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const events = byDate[dateKey] || [];
     const isToday = dateKey === today;
+    const eventsHtml = events.map((row) => calendarEventHtml(row, dateKey < today)).join("");
     cells.push(`
       <div class="so-cal-day${isToday ? " so-cal-day--today" : ""}">
         <div class="so-cal-day__num${isToday ? " so-cal-day__num--today" : ""}">${day}</div>
-        ${events
-          .map((row) => {
-            const color = leagueColors[row.league] || "#34d399";
-            const isPast = dateKey < today;
-            return `
-              <article class="so-cal-event${isPast ? " so-cal-event--past" : ""}" style="--league-color:${color}" title="${fixtureLabel(row)}">
-                <div class="so-cal-event__time">${formatTime(row.kickoff_utc)} · ${row.watch_type}</div>
-                <div class="so-cal-event__teams">${fixtureLabel(row)}</div>
-                <div class="so-cal-event__meta">
-                  <span class="so-cal-event__league">${row.league || "League TBC"}</span>
-                  ${state.staff ? "" : `<span class="so-cal-event__staff">${staffFirstName(row.staff)}</span>`}
-                </div>
-              </article>
-            `;
-          })
-          .join("")}
+        ${eventsHtml}
       </div>
     `);
+    if (events.length) {
+      agendaDays.push(`
+        <section class="so-agenda-day${isToday ? " so-agenda-day--today" : ""}">
+          <h3 class="so-agenda-day__date">${isToday ? "Today · " : ""}${formatShortDate(dateKey)}</h3>
+          ${eventsHtml}
+        </section>
+      `);
+    }
   }
 
   const monthCount = (state.payload?.fixtures || []).filter(
@@ -286,6 +295,9 @@ function renderCalendar() {
         <div class="so-cal-grid">
           ${weekdayHtml}
           ${cells.join("")}
+        </div>
+        <div class="so-agenda">
+          ${agendaDays.join("") || `<p class="so-empty">No assignments this month.</p>`}
         </div>
       </section>
       ${renderUpcomingList()}

@@ -1294,18 +1294,46 @@ body.so-modal-open {
   }
 }
 
+.so-agenda {
+  display: none;
+}
+
+.so-controls__group--nav {
+  align-self: flex-end;
+}
+
 @media (max-width: 720px) {
   .so-cal-grid {
-    grid-template-columns: repeat(7, minmax(44px, 1fr));
+    display: none;
   }
 
-  .so-cal-day {
-    min-height: 5.5rem;
-    padding: .35rem;
+  .so-agenda {
+    display: flex;
+    flex-direction: column;
+    gap: .9rem;
+    padding: .85rem;
   }
 
-  .so-cal-event__teams {
+  .so-agenda-day {
+    display: flex;
+    flex-direction: column;
+    gap: .45rem;
+  }
+
+  .so-agenda-day__date {
+    margin: 0;
+    font-family: var(--mono);
     font-size: var(--fp-text-sm, .95rem);
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .so-agenda-day--today .so-agenda-day__date {
+    color: var(--gold);
+  }
+
+  .so-cal-shell__head {
+    flex-wrap: wrap;
   }
 }
 
