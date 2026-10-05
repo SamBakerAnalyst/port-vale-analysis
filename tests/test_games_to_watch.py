@@ -626,7 +626,7 @@ def test_upcoming_fixture_sheet_does_not_dump_a_club_squad(monkeypatch):
         lambda season: [
             {
                 "fixture_id": "future",
-                "date": "2026-10-01",
+                "date": "2099-10-01",
                 "status": "scheduled",
                 "league": "League Two",
                 "home": {"name": "Exeter City", "id": 1},
