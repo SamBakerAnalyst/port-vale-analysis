@@ -4,17 +4,24 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Insight7</title>
+  <link rel="icon" type="image/svg+xml" href="/static/insight7-mark.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/insight7.css?v=8" />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&family=Lato:wght@300&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/insight7.css?v=9" />
 </head>
 <body>
   <div class="i7" id="i7App">
     <header class="i7-top">
       <div class="i7-title">
         <p class="i7-eyebrow">Recruitment · <a href="/">← All apps</a> · <a href="/loans-watch">Loans Watch</a> · <a href="/player-pipelines">Player Pipelines</a></p>
-        <h1><span class="i7-logo">i7</span>Insight7 <span class="i7-h1-sub">Emerging Talent</span></h1>
+        <h1>
+          <span class="i7-logo" role="img" aria-label="insight7">
+            <img class="i7-logo__mark" src="/static/insight7-mark.svg" alt="" />
+            <span class="i7-logo__word">insight7</span>
+          </span>
+          <span class="i7-h1-sub">Emerging Talent</span>
+        </h1>
         <p class="i7-sub" id="i7Counts">Loading…</p>
       </div>
       <div class="i7-top__right">
@@ -103,7 +110,7 @@
     <div class="i7-dragover hidden" id="i7DragOver"><div><span aria-hidden="true">⤒</span> Drop PDFs to upload</div></div>
   </div>
 
-  <script defer src="/static/insight7.js?v=8"></script>
+  <script defer src="/static/insight7.js?v=9"></script>
   <script defer src="/static/hub-feedback.js"></script>
 </body>
 </html>
