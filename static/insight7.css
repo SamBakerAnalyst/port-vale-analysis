@@ -146,11 +146,14 @@ button { font: inherit; }
 
 .i7-toast.is-ok { border-color: rgba(34, 197, 94, 0.45); background: rgba(34, 197, 94, 0.08); color: #bbf7d0; }
 .i7-toast.is-error { border-color: rgba(239, 68, 68, 0.45); background: rgba(239, 68, 68, 0.08); color: #fecaca; }
-.i7-toast button { background: none; border: 0; color: inherit; cursor: pointer; font-size: 1.1rem; line-height: 1; opacity: 0.7; }
+.i7-toast [data-dismiss] { background: none; border: 0; color: inherit; cursor: pointer; font-size: 1.1rem; line-height: 1; opacity: 0.7; }
+.i7-toast .i7-btn { margin-top: 0.5rem; }
 
 .i7-view { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 0.75rem; }
 .i7-view[data-view="month"],
 .i7-view[data-view="uploads"] { overflow-y: auto; padding-right: 0.2rem; }
+.i7-view[data-view="month"] > *,
+.i7-view[data-view="uploads"] > * { flex-shrink: 0; }
 
 /* ---------- KPI strip ---------- */
 

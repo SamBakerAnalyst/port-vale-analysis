@@ -13,6 +13,7 @@
     search: $("i7Search"),
     pos: $("i7Pos"),
     league: $("i7League"),
+    season: $("i7Season"),
     age: $("i7Age"),
     section: $("i7Section"),
     layout: $("i7Layout"),
@@ -54,12 +55,10 @@
   const POS_COLOUR = { GK: "#f59e0b", DEF: "#3d8bfd", FB: "#22d3ee", MID: "#22c55e", WIDE: "#f472b6", ST: "#ef4444" };
 
   const SECTIONS = [
-    [/95%/, "95% GT", "#22c55e"],
-    [/<\s*18|under 18/i, "U18 30% GT", "#f472b6"],
-    [/goalscor/i, "Top scorer", "#f59e0b"],
-    [/assist/i, "Top assists", "#22d3ee"],
-    [/minutes per/i, "Min per G+A", "#a3e635"],
-    [/youngest/i, "Youngest", "#a78bfa"],
+    [/goalscor/i, "Top scorer", "#f59e0b", "goals"],
+    [/minutes per/i, "Min per G+A", "#a3e635", "mpga"],
+    [/assist/i, "Top assists", "#22d3ee", "assists"],
+    [/youngest/i, "Youngest", "#a78bfa", "youngest"],
   ];
 
   const SPOTS = [
@@ -85,9 +84,27 @@
       .replace(/'/g, "&#39;");
   }
 
+  const SECTION_CATS = [
+    ["gt", "Game-time regulars"],
+    ["young", "Young regulars (U18 / U20 / U21)"],
+    ["goals", "Top scorers"],
+    ["assists", "Top assists"],
+    ["mpga", "Minutes per goal / assist"],
+    ["youngest", "Youngest appearances"],
+    ["unused", "Youngest unused subs"],
+  ];
+
   function sectionInfo(label) {
-    for (const [re, short, colour] of SECTIONS) if (re.test(label)) return { short, colour };
-    return { short: label.length > 16 ? `${label.slice(0, 15)}…` : label, colour: "#8b9bb0" };
+    const gt = label.match(/achieving\s+(\d+)%/i);
+    if (gt) {
+      const under = label.match(/<\s*(\d+)/);
+      return under
+        ? { short: `U${under[1]} ${gt[1]}% GT`, colour: "#f472b6", cat: "young" }
+        : { short: `${gt[1]}% GT`, colour: "#22c55e", cat: "gt" };
+    }
+    if (/unused/i.test(label)) return { short: "Unused subs", colour: "#94a3b8", cat: "unused" };
+    for (const [re, short, colour, cat] of SECTIONS) if (re.test(label)) return { short, colour, cat };
+    return { short: label.length > 16 ? `${label.slice(0, 15)}…` : label, colour: "#8b9bb0", cat: label };
   }
 
   function listTag(label, full) {
@@ -267,9 +284,18 @@
       d.coverage.map((c) => `<option value="${esc(c.league_key)}">${esc(c.league)}</option>`).join("");
     els.league.value = keepLeague;
     els.league.classList.toggle("hidden", d.coverage.length < 2);
+    const keepSeason = els.season.value || "current";
+    els.season.innerHTML =
+      '<option value="current">Current bulletins</option><option value="">All seasons</option>' +
+      (d.seasons || []).map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join("");
+    els.season.value = keepSeason;
+    els.season.classList.toggle("hidden", !d.players.some((p) => p.month < recentEdition()) && (d.seasons || []).length < 2);
+    const cats = new Set(d.sections.map((s) => sectionInfo(s).cat));
+    const extra = [...cats].filter((c) => !SECTION_CATS.some(([id]) => id === c));
     els.section.innerHTML =
       '<option value="">All Insight7 lists</option>' +
-      d.sections.map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join("");
+      SECTION_CATS.filter(([id]) => cats.has(id)).map(([id, label]) => `<option value="${id}">${esc(label)}</option>`).join("") +
+      extra.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
     els.section.value = keepSection;
   }
 
@@ -291,7 +317,17 @@
 
   function leaguePlayers() {
     const league = els.league.value;
-    return state.data.players.filter((p) => !league || p.league_key === league);
+    const season = els.season.value;
+    const recent = recentEdition();
+    return state.data.players.filter(
+      (p) => (!league || p.league_key === league) && (!season || (season === "current" ? p.month >= recent : p.season === season)),
+    );
+  }
+
+  function recentEdition() {
+    const [y, m] = currentEdition().split("-").map(Number);
+    const d = new Date(y, m - 1 - 3, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   }
 
   function renderKpis() {
@@ -369,7 +405,7 @@
     const list = leaguePlayers().filter((p) => {
       if (group && !group.includes(String(p.position || "").toUpperCase())) return false;
       if (maxAge && !(p.age <= maxAge)) return false;
-      if (section && !(p.sections || []).includes(section)) return false;
+      if (section && !(p.sections || []).some((s) => sectionInfo(s).cat === section)) return false;
       if (spot && !spot.test(p)) return false;
       if (q) {
         const hay = [p.name, p.club, p.agent, p.career_note, p.international, p.league].join(" ").toLowerCase();
@@ -408,7 +444,7 @@
         label: "Club",
         cell: (p) => {
           const c = clubParts(p.club);
-          return `<span class="i7-club">${esc(c.base)}</span>${c.tag ? `<span class="i7-club__tag">${esc(c.tag)}</span>` : ""}${multiLeague ? `<div class="i7-club-sub">${esc(p.league)}</div>` : ""}`;
+          return `<span class="i7-club">${esc(c.base)}</span>${c.tag ? `<span class="i7-club__tag">${esc(c.tag)}</span>` : ""}${multiLeague ? `<div class="i7-club-sub">${esc(p.league)} · ${esc(monthLabel(p.month))}</div>` : ""}`;
         },
       },
       { key: "contract", label: "Contract", cell: contractChip },
@@ -690,11 +726,15 @@
   function coverageMonths() {
     const d = state.data;
     const now = new Date();
-    let end = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    let end = currentEdition();
     if (d.months.length && d.months[d.months.length - 1] > end) end = d.months[d.months.length - 1];
     const seasonYear = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
     let start = `${seasonYear}-08`;
     if (d.months.length && d.months[0] < start) start = d.months[0];
+    const [ey, em] = end.split("-").map(Number);
+    const floor = new Date(ey, em - 12, 1);
+    const floorKey = `${floor.getFullYear()}-${String(floor.getMonth() + 1).padStart(2, "0")}`;
+    if (start < floorKey) start = floorKey;
     const out = [];
     let [y, m] = start.split("-").map(Number);
     while (out.length < 24) {
@@ -710,10 +750,14 @@
     return out.slice(-12);
   }
 
+  function currentEdition() {
+    const d = new Date(Date.now() - 10 * 86400000);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  }
+
   function renderUploads() {
     const d = state.data;
-    const now = new Date();
-    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const thisMonth = currentEdition();
     if (!d.coverage.length) {
       els.coverage.innerHTML = '<div class="i7-empty" style="border:0">No leagues yet. Each league appears here after its first bulletin is uploaded.</div>';
       els.uploads.innerHTML = '<div class="i7-empty" style="border:0">No bulletins uploaded.</div>';
@@ -728,7 +772,7 @@
             .map((m) => {
               const r = c.months[m];
               if (r) return `<td><a class="i7-cell i7-cell--have" href="/api/insight7/reports/${esc(r.id)}/pdf" target="_blank" rel="noopener" title="Open PDF · ${esc(r.filename)}">✓ ${r.player_count}</a></td>`;
-              if (m === thisMonth) return '<td><span class="i7-cell i7-cell--due" title="This month’s bulletin not uploaded yet">Due</span></td>';
+              if (m === thisMonth) return '<td><span class="i7-cell i7-cell--due" title="This edition has not been uploaded yet">Due</span></td>';
               return '<td><span class="i7-cell i7-cell--miss">—</span></td>';
             })
             .join("")}</tr>`,
@@ -737,7 +781,7 @@
     </table>`;
 
     els.uploads.innerHTML = `<table class="i7-grid i7-uploads-grid">
-      <thead><tr><th>League</th><th>Month</th><th>Bulletin date</th><th>Season</th><th>Players</th><th>Uploaded</th><th>File</th><th></th></tr></thead>
+      <thead><tr><th>League</th><th>Edition</th><th>Bulletin date</th><th>Season</th><th>Players</th><th>Uploaded</th><th>File</th><th></th></tr></thead>
       <tbody>${d.reports
         .map(
           (r) => `<tr>
@@ -758,30 +802,74 @@
     </table>`;
   }
 
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const RETRY_WAITS_MS = [4000, 12000, 25000];
+  const isNetworkError = (msg) => /failed to fetch|networkerror|load failed|HTTP 5\d\d/i.test(String(msg || ""));
+
+  async function uploadOne(file) {
+    let lastError = "";
+    for (let attempt = 0; attempt <= RETRY_WAITS_MS.length; attempt += 1) {
+      const form = new FormData();
+      form.append("files", file);
+      try {
+        const res = await fetchJson("/api/insight7/upload", { method: "POST", body: form });
+        const r = (res.results || [])[0];
+        if (!r) return { filename: file.name, ok: false, error: "No response for this file" };
+        return r;
+      } catch (err) {
+        lastError = err.message;
+        // Network drops (e.g. a server restart) are retried; real rejections are not.
+        if (!isNetworkError(lastError)) break;
+        if (attempt < RETRY_WAITS_MS.length) await sleep(RETRY_WAITS_MS[attempt]);
+      }
+    }
+    return { filename: file.name, ok: false, error: lastError || "Upload failed" };
+  }
+
+  function uploadSummary(results) {
+    const ok = results.filter((r) => r.ok);
+    const bad = results.filter((r) => !r.ok);
+    const replaced = ok.filter((r) => r.report.replaced).length;
+    const lines = [
+      `${ok.length} of ${results.length} bulletin${results.length === 1 ? "" : "s"} uploaded${replaced ? ` (${replaced} replaced an earlier upload)` : ""}.`,
+    ];
+    if (ok.length && ok.length <= 6) {
+      for (const r of ok) lines.push(`✓ ${r.report.league} · ${monthLabel(r.report.month, true)} edition — ${r.report.player_count} players`);
+    }
+    for (const r of bad) lines.push(`✗ ${r.filename} — ${r.error}`);
+    return lines.join("\n");
+  }
+
   async function uploadFiles(fileList) {
     const files = [...fileList].filter((f) => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
     if (!files.length) {
       setStatus("Only PDF files can be uploaded.", "is-error");
       return;
     }
-    const form = new FormData();
-    for (const f of files) form.append("files", f);
     els.uploadBtn.disabled = true;
-    setStatus(`Reading ${files.length} PDF${files.length === 1 ? "" : "s"}…`);
+    const results = [];
     try {
-      const res = await fetchJson("/api/insight7/upload", { method: "POST", body: form });
-      const lines = res.results.map((r) =>
-        r.ok
-          ? `✓ ${r.report.league} · ${monthLabel(r.report.month, true)} — ${r.report.player_count} players${r.report.replaced ? " (replaced the earlier upload)" : ""}`
-          : `✗ ${r.filename} — ${r.error}`,
-      );
-      setStatus(lines.join("\n"), res.results.some((r) => !r.ok) ? "is-error" : "is-ok");
-      await load();
-    } catch (err) {
-      setStatus(`Upload failed: ${err.message}`, "is-error");
+      for (let i = 0; i < files.length; i += 1) {
+        const file = files[i];
+        setStatus(`Uploading ${i + 1} of ${files.length} — ${file.name}`);
+        results.push(await uploadOne(file));
+        if ((i + 1) % 5 === 0 && i + 1 < files.length) await load();
+      }
     } finally {
       els.uploadBtn.disabled = false;
       els.file.value = "";
+      await load();
+    }
+    const failed = files.filter((f) => results.some((r) => !r.ok && r.filename === f.name && isNetworkError(r.error)));
+    state.failedFiles = failed;
+    setStatus(uploadSummary(results), results.some((r) => !r.ok) ? "is-error" : "is-ok");
+    if (failed.length) {
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "i7-btn i7-btn--small";
+      retry.textContent = `Retry ${failed.length} failed`;
+      retry.addEventListener("click", () => uploadFiles(state.failedFiles || []));
+      els.status.firstElementChild.append(document.createElement("br"), retry);
     }
   }
 
@@ -790,7 +878,7 @@
     if (!r) return;
     const league = window.prompt("League name", r.league);
     if (league === null) return;
-    const month = window.prompt("Bulletin month (YYYY-MM)", r.month);
+    const month = window.prompt("Edition month (YYYY-MM)", r.month);
     if (month === null) return;
     const form = new FormData();
     form.append("league", league);
@@ -841,10 +929,12 @@
 
   els.search.addEventListener("input", renderPlayers);
   for (const el of [els.age, els.section]) el.addEventListener("change", renderPlayers);
-  els.league.addEventListener("change", () => {
-    renderKpis();
-    renderPlayers();
-  });
+  for (const el of [els.league, els.season]) {
+    el.addEventListener("change", () => {
+      renderKpis();
+      renderPlayers();
+    });
+  }
   els.csv.addEventListener("click", exportCsv);
 
   els.pos.addEventListener("click", (e) => {

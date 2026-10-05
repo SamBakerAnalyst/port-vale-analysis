@@ -8,12 +8,14 @@ with month-on-month changes.
 
 from __future__ import annotations
 
+import copy
 import json
+import logging
 import re
 import threading
 import unicodedata
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +30,7 @@ PDF_DIR = INSIGHT7_DIR / "pdfs"
 MAX_PDF_BYTES = 25 * 1024 * 1024
 
 _LOCK = threading.Lock()
+log = logging.getLogger(__name__)
 
 _MONTHS = {m: i for i, m in enumerate(
     ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"), start=1
@@ -60,8 +63,12 @@ _BOILERPLATE = (
     "new addition to the review",
     "emerging players are defined",
     "insight7",
+    "has been gathered",
 )
-_SEASON_LINE = re.compile(r"^(?P<league>.+?)\s*-\s*(?P<season>\d{4}-\d{2,4})\s*$")
+_SEASON_LINE = re.compile(r"^(?P<league>.*?[A-Za-z].*?)\s*(?:-\s*)?(?P<season>(?:19|20)\d{2}(?:[-/]\d{2,4})?)\s*$")
+# Bulletins go out from ~25th of the month to ~10th of the next; both ends are one edition.
+EDITION_GRACE_DAYS = 10
+SCHEMA_VERSION = 3
 _DATE_TAIL = re.compile(r"^(?P<intl>.*?)\s+(?P<debut>\d{1,2}/\d{1,2}/\d{2,4})$")
 
 
@@ -129,6 +136,12 @@ def _header_map(row: list[Any]) -> dict[int, str] | None:
     age_idx = cells.index("age")
     if age_idx > 0:
         mapping[age_idx - 1] = "name"
+    # The monthly chart's width varies page to page (and continuation pages have
+    # no header), so columns after it are keyed from the right edge (negative).
+    monthly_idx = next((i for i, k in mapping.items() if k == "monthly"), None)
+    if monthly_idx is not None:
+        width = len(cells)
+        mapping = {(i - width if i > monthly_idx else i): k for i, k in mapping.items()}
     return mapping
 
 
@@ -137,7 +150,12 @@ def _meta_lines(row: list[Any]) -> list[str]:
     for cell in row:
         for line in str(cell or "").split("\n"):
             line = " ".join(line.split())
-            if line:
+            if not line:
+                continue
+            # List titles sometimes wrap: "Aged <20 Achieving 25%" / "Game Time".
+            if lines and lines[-1].endswith("%") and line.casefold().startswith("game time"):
+                lines[-1] = f"{lines[-1]} {line}"
+            else:
                 lines.append(line)
     return lines
 
@@ -191,6 +209,8 @@ def _parse_pdf(pdf_bytes: bytes) -> dict[str, Any]:
                             league_line = league_line or season_match.group("league").strip()
                             season = season or season_match.group("season")
                             continue
+                        if line.endswith("."):
+                            continue
                         if len(line) <= 80 and not re.search(r"\d{2}/\d{2}/\d{2}", line):
                             section = line
                             if section not in sections_seen:
@@ -213,7 +233,7 @@ def _parse_pdf(pdf_bytes: bytes) -> dict[str, Any]:
 def _row_record(row: list[Any], mapping: dict[int, str]) -> dict[str, Any] | None:
     raw: dict[str, str] = {}
     for idx, key in mapping.items():
-        if idx < len(row):
+        if -len(row) <= idx < len(row):
             raw[key] = _clean(row[idx])
     name = raw.get("name", "")
     if not name or _to_int(raw.get("age")) is None:
@@ -268,23 +288,55 @@ def _report_date(filename: str, footer_date: str) -> str:
 def _league_label(filename: str, league_line: str) -> str:
     stem = Path(filename or "").stem
     prefix = re.split(r"\s+-\s+emerging talent bulletin", stem, flags=re.IGNORECASE)[0].strip()
-    if league_line and prefix and prefix != stem and league_line.casefold() in prefix.casefold():
+    if prefix and prefix != stem:
         return prefix
     return league_line or prefix or "Unknown league"
 
 
+def _edition_month(report_date: str) -> str:
+    try:
+        day = date.fromisoformat(report_date)
+    except ValueError:
+        return report_date[:7]
+    return (day - timedelta(days=EDITION_GRACE_DAYS)).isoformat()[:7]
+
+
+def _calendar_season_league(league: str) -> bool:
+    return bool(re.match(r"^(IRE|IRL|ROI|LOI)\b", league.strip(), flags=re.IGNORECASE))
+
+
+def _season_for(parsed_season: str, league: str, month: str) -> str:
+    season = (parsed_season or "").replace("/", "-").strip()
+    if season:
+        return season
+    try:
+        year, mon = int(month[:4]), int(month[5:7])
+    except ValueError:
+        return ""
+    if _calendar_season_league(league):
+        return str(year)
+    start = year if mon >= 7 else year - 1
+    return f"{start}-{(start + 1) % 100:02d}"
+
+
 # ---------------------------------------------------------------- storage
+
+_CACHE: dict[str, Any] = {"mtime": None, "data": None}
 
 
 def _load() -> dict[str, Any]:
     if not INDEX_PATH.exists():
         return {"reports": {}}
     try:
+        mtime = (str(INDEX_PATH), INDEX_PATH.stat().st_mtime_ns)
+        if _CACHE["mtime"] == mtime and _CACHE["data"] is not None:
+            return copy.deepcopy(_CACHE["data"])
         data = json.loads(INDEX_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {"reports": {}}
     if not isinstance(data.get("reports"), dict):
         data["reports"] = {}
+    _CACHE.update(mtime=mtime, data=copy.deepcopy(data))
     return data
 
 
@@ -293,6 +345,7 @@ def _save(data: dict[str, Any]) -> None:
     tmp = INDEX_PATH.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
     tmp.replace(INDEX_PATH)
+    _CACHE.update(mtime=None, data=None)
 
 
 def _report_meta(report: dict[str, Any]) -> dict[str, Any]:
@@ -313,12 +366,14 @@ def save_upload(filename: str, pdf_bytes: bytes, user: str) -> dict[str, Any]:
     parsed = _parse_pdf(pdf_bytes)
     report_date = _report_date(filename, parsed["footer_date"])
     league = _league_label(filename, parsed["league_line"])
+    month = _edition_month(report_date)
     report = {
         "id": uuid.uuid4().hex[:12],
+        "schema": SCHEMA_VERSION,
         "league": league,
         "league_key": _slug(league),
-        "season": parsed["season"],
-        "month": report_date[:7],
+        "season": _season_for(parsed["season"], league, month),
+        "month": month,
         "report_date": report_date,
         "filename": filename,
         "sections": parsed["sections"],
@@ -351,13 +406,15 @@ def update_report(report_id: str, league: str | None, month: str | None) -> dict
         report = data["reports"].get(report_id)
         if not report:
             raise HTTPException(status_code=404, detail="Report not found")
-        if league is not None and league.strip():
+        if league is not None and league.strip() and league.strip() != report["league"]:
             report["league"] = league.strip()
             report["league_key"] = _slug(report["league"])
-        if month is not None and month.strip():
+            report["edited_league"] = True
+        if month is not None and month.strip() and month.strip() != report["month"]:
             if not re.match(r"^20\d{2}-(0[1-9]|1[0-2])$", month.strip()):
                 raise HTTPException(status_code=400, detail="Month must look like 2026-10")
             report["month"] = month.strip()
+            report["edited_month"] = True
         clash = [
             rid for rid, r in data["reports"].items()
             if rid != report_id and r.get("league_key") == report["league_key"] and r.get("month") == report["month"]
@@ -412,13 +469,18 @@ def consolidated() -> dict[str, Any]:
     data = _load()
     reports = sorted(data["reports"].values(), key=lambda r: (r.get("month", ""), r.get("report_date", "")))
 
-    league_months: dict[str, list[str]] = {}
+    league_reports: dict[str, list[dict[str, Any]]] = {}
     league_names: dict[str, str] = {}
     for r in reports:
-        league_months.setdefault(r["league_key"], []).append(r["month"])
+        league_reports.setdefault(r["league_key"], []).append(r)
         league_names[r["league_key"]] = r["league"]
-    latest_month = {k: v[-1] for k, v in league_months.items()}
-    prev_month = {k: (v[-2] if len(v) > 1 else None) for k, v in league_months.items()}
+    latest_month = {k: v[-1]["month"] for k, v in league_reports.items()}
+    latest_season = {k: v[-1].get("season", "") for k, v in league_reports.items()}
+    # Changes only compare editions of the same season — a new season resets minutes.
+    prev_month = {
+        k: (v[-2]["month"] if len(v) > 1 and v[-2].get("season", "") == v[-1].get("season", "") else None)
+        for k, v in league_reports.items()
+    }
 
     by_player: dict[str, list[dict[str, Any]]] = {}
     for r in reports:
@@ -434,7 +496,10 @@ def consolidated() -> dict[str, Any]:
         same_month = [s for s in snaps if s["month"] == newest_month]
         primary = max(same_month, key=lambda s: s.get("league_mins") or 0)
         league_key = primary["league_key"]
-        prev_in_league = [s for s in snaps if s["league_key"] == league_key and s["month"] < newest_month]
+        prev_in_league = [
+            s for s in snaps
+            if s["league_key"] == league_key and s["month"] < newest_month and s["season"] == primary["season"]
+        ]
         prev = prev_in_league[-1] if prev_in_league else None
 
         is_current = newest_month == latest_month.get(league_key)
@@ -450,7 +515,7 @@ def consolidated() -> dict[str, Any]:
             "change": _diff(primary, prev) if prev and prev["month"] == expected_prev else None,
             "history": [
                 {k: s.get(k) for k in (
-                    "month", "league", "club", "league_mins", "league_gt", "goals", "assists",
+                    "month", "season", "league", "club", "league_mins", "league_gt", "goals", "assists",
                     "ga", "mins_per_ga", "sections", "contract", "age",
                 )}
                 for s in snaps
@@ -462,7 +527,7 @@ def consolidated() -> dict[str, Any]:
             dropped.append(summary)
 
     coverage = []
-    for league_key, months in league_months.items():
+    for league_key in league_reports:
         by_month = {
             r["month"]: _report_meta(r) for r in reports if r["league_key"] == league_key
         }
@@ -470,6 +535,7 @@ def consolidated() -> dict[str, Any]:
             "league_key": league_key,
             "league": league_names[league_key],
             "latest_month": latest_month[league_key],
+            "latest_season": latest_season[league_key],
             "previous_month": prev_month[league_key],
             "months": by_month,
         })
@@ -483,15 +549,72 @@ def consolidated() -> dict[str, Any]:
         "months": all_months,
         "reports": [_report_meta(r) for r in reversed(reports)],
         "sections": sorted({s for r in reports for s in r.get("sections") or []}),
+        "seasons": sorted({r.get("season", "") for r in reports if r.get("season")}, reverse=True),
         "today": date.today().isoformat(),
     }
+
+
+def migrate_reports() -> int:
+    """Re-read older uploads from their stored PDFs with the current parsing rules."""
+    pending = [
+        (rid, r) for rid, r in _load()["reports"].items() if int(r.get("schema") or 1) < SCHEMA_VERSION
+    ]
+    done = 0
+    for rid, old in pending:
+        pdf_path = PDF_DIR / f"{rid}.pdf"
+        parsed = None
+        if pdf_path.is_file():
+            try:
+                parsed = _parse_pdf(pdf_path.read_bytes())
+            except Exception as exc:
+                log.warning("Insight7: could not re-read %s (%s): %s", old.get("filename"), rid, exc)
+        with _LOCK:
+            data = _load()
+            report = data["reports"].get(rid)
+            if not report or int(report.get("schema") or 1) >= SCHEMA_VERSION:
+                continue
+            if parsed:
+                if not report.get("edited_league"):
+                    report["league"] = _league_label(report.get("filename", ""), parsed["league_line"])
+                    report["league_key"] = _slug(report["league"])
+                report["sections"] = parsed["sections"]
+                report["players"] = parsed["players"]
+                report["player_count"] = len(parsed["players"])
+            if not report.get("edited_month"):
+                month = _edition_month(report.get("report_date", ""))
+                clash = any(
+                    other_id != rid and other.get("league_key") == report["league_key"] and other.get("month") == month
+                    for other_id, other in data["reports"].items()
+                )
+                if not clash:
+                    report["month"] = month
+            report["season"] = _season_for(
+                parsed["season"] if parsed else report.get("season", ""), report["league"], report["month"]
+            )
+            report["schema"] = SCHEMA_VERSION
+            _save(data)
+            done += 1
+    if done:
+        log.info("Insight7: migrated %s bulletin(s) to schema %s", done, SCHEMA_VERSION)
+    return done
 
 
 # ---------------------------------------------------------------- routes
 
 
+def _migrate_in_background() -> None:
+    try:
+        migrate_reports()
+    except Exception:
+        log.exception("Insight7: background migration failed")
+
+
 def register_insight7_routes(app: FastAPI) -> None:
     page_path = STANDALONE_DIR / "insight7.html"
+
+    @app.on_event("startup")
+    def insight7_startup() -> None:
+        threading.Thread(target=_migrate_in_background, name="insight7-migrate", daemon=True).start()
 
     @app.get("/insight7", response_class=HTMLResponse)
     def insight7_page() -> HTMLResponse:
