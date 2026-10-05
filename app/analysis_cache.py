@@ -515,8 +515,15 @@ def refresh_analysis_data(*, force: bool = True) -> dict[str, Any]:
         played = [row for row in fixtures if row.get("played")]
         upcoming = [row for row in fixtures if not row.get("played")]
         next_fix = _pick_next_fixture(upcoming) or _pick_next_fixture(fixtures)
+        # Unplayed rows whose kickoff has passed (Impect lagging on the result)
+        # must not use up the "next two" slots, or the real next opponent never
+        # gets a report.
+        future = [
+            row for row in upcoming if not kickoff_should_have_result(row.get("scheduled_date"))
+        ]
+        lagging = [row for row in upcoming if row not in future]
         targets = list(played)
-        for row in upcoming[:2]:
+        for row in lagging + future[:2]:
             if row not in targets:
                 targets.append(row)
         built: list[str] = []

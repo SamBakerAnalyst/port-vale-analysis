@@ -76,11 +76,11 @@ window.IMPECT_APPS = [
     ]
   },
   {
-    "id": "opposition-tabs",
+    "id": "opposition-reports",
     "group": "reports",
-    "title": "Opposition Tabs",
+    "title": "Opposition Reports",
     "description": "Editable two-pager opposition handout — last XI, average shape, and staff notes on how we hurt them and how they hurt us.",
-    "href": "/opposition-tabs",
+    "href": "/opposition-reports",
     "icon": "🗂️",
     "accent": "#fbbf24",
     "tags": [

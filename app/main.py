@@ -233,7 +233,7 @@ async def pre_match_asset_no_cache(request: Request, call_next):
     response = await call_next(request)
     path = request.url.path
     # HTML shell only — JS/CSS are hashed (?b=) and may be cached.
-    if path == "/pre-match":
+    if path in ("/pre-match", "/opposition-reports"):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"

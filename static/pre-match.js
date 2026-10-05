@@ -1,4 +1,7 @@
 const PRE_MATCH_BUILD = document.querySelector('meta[name="pm-build"]')?.content || "";
+// /pre-match is the full deck; /opposition-reports is the two pager. The server stamps the body.
+const PAGE_DECK_MODE = document.body?.dataset.pmMode === "two_pager" ? "two_pager" : "full";
+const PAGE_PATH = PAGE_DECK_MODE === "two_pager" ? "/opposition-reports" : "/pre-match";
 
 (function ensureFreshPreMatchBuild() {
   if (!PRE_MATCH_BUILD) return;
@@ -8,9 +11,9 @@ const PRE_MATCH_BUILD = document.querySelector('meta[name="pm-build"]')?.content
     const bar = document.createElement("div");
     bar.setAttribute("role", "alert");
     bar.style.cssText = "position:fixed;inset:0 auto auto 0;right:0;z-index:99999;padding:.65rem 1rem;background:#b91c1c;color:#fff;font:700 .85rem/1.3 system-ui;text-align:center";
-    bar.innerHTML = 'Outdated bookmark — loading latest… <a href="/pre-match" style="color:#fff;text-decoration:underline">Open /pre-match</a>';
+    bar.innerHTML = `Outdated bookmark — loading latest… <a href="${PAGE_PATH}" style="color:#fff;text-decoration:underline">Open ${PAGE_PATH}</a>`;
     document.body?.prepend(bar);
-    window.location.replace("/pre-match");
+    window.location.replace(PAGE_PATH);
     return;
   }
   const prev = sessionStorage.getItem("pm-build");
@@ -31,7 +34,7 @@ const state = {
   reportLoadToken: 0,
   slideIndex: 0,
   slides: [],
-  deckMode: "two_pager",
+  deckMode: PAGE_DECK_MODE,
 };
 
 const els = {
@@ -60,8 +63,6 @@ const els = {
   prevSlideBtn: document.getElementById("prevSlideBtn"),
   nextSlideBtn: document.getElementById("nextSlideBtn"),
   slideCounter: document.getElementById("slideCounter"),
-  deckModeFullBtn: document.getElementById("deckModeFullBtn"),
-  deckModeTwoBtn: document.getElementById("deckModeTwoBtn"),
 };
 
 const SLIDE_EXPORT_WIDTH = 1920;
@@ -4810,26 +4811,6 @@ function bindTwoPagerNotes(root = els.deck) {
   });
 }
 
-function setDeckMode(mode) {
-  const next = mode === "two_pager" ? "two_pager" : "full";
-  state.deckMode = next;
-  document.body.classList.toggle("is-two-pager", next === "two_pager");
-  els.deckModeFullBtn?.classList.toggle("pm-deck-mode__btn--active", next === "full");
-  els.deckModeTwoBtn?.classList.toggle("pm-deck-mode__btn--active", next === "two_pager");
-  try {
-    localStorage.setItem("pm-deck-mode", next);
-  } catch {
-    /* ignore */
-  }
-  if (state.report) {
-    if (document.body.classList.contains("is-pdf-view")) setPdfView(false);
-    rebuildSlides();
-    paintDeck();
-    highlightSlide(0);
-    showSlide(0, { scroll: true });
-  }
-}
-
 function formatRankSplitValue(value) {
   const num = Number(value);
   if (!Number.isFinite(num)) return escapeHtml(String(value ?? "—"));
@@ -5242,7 +5223,9 @@ function renderEmptyDeck(message) {
   state.slides = [];
   state.slideIndex = 0;
   els.deck.innerHTML = `<div class="pm-slide pm-slide--active" style="display:flex !important;align-items:center;justify-content:center;background:#111;border:1px solid #2a2a2a;padding:3rem;text-align:center;color:#9ca3af;border-radius:12px;">${message}</div>`;
-  els.statusBar.textContent = message;
+  const scratch = document.createElement("div");
+  scratch.innerHTML = message.replace(/<br\s*\/?>/gi, " ");
+  els.statusBar.textContent = scratch.textContent.replace(/\s+/g, " ").trim();
   els.refreshBtn.disabled = true;
   setModeButtonsEnabled(false);
   updateSlideNav();
@@ -5263,7 +5246,42 @@ async function loadFixtures({ refresh = false } = {}) {
   return true;
 }
 
-async function loadReport({ refresh = false } = {}) {
+let reportPollTimer = 0;
+
+function selectedOpponentName() {
+  const squadId = Number(els.opponentId.value || 0);
+  const matchId = Number(els.matchId.value || 0);
+  const fixture =
+    state.fixtures.find((row) => matchId && Number(row.match_id) === matchId) ||
+    state.fixtures.find((row) => Number(row.opponent?.id) === squadId);
+  return fixture?.opponent?.name || "this opponent";
+}
+
+function showReportBuilding(report) {
+  const name = escapeHtml(selectedOpponentName());
+  const status = report?.build_status;
+  const detail = escapeHtml(report?.build_detail || "");
+  if (status === "unavailable") {
+    renderEmptyDeck(`No saved report for ${name}. ${detail}`);
+    setStatus("", "");
+    return 0;
+  }
+  if (status === "failed") {
+    renderEmptyDeck(
+      `Could not build the ${name} report yet.<br><span style="opacity:.75;font-size:.9em">${detail}</span><br>Retrying automatically — leave this page open.`,
+    );
+    setStatus(`Build failed — retrying shortly.`, "error");
+    return 30000;
+  }
+  renderEmptyDeck(
+    `Building the ${name} report from Impect…<br><span style="opacity:.75;font-size:.9em">${detail || "Usually a minute or two."} It appears here automatically.</span>`,
+  );
+  setStatus(`Building ${selectedOpponentName()} report…`, "loading");
+  return 5000;
+}
+
+async function loadReport({ refresh = false, poll = false } = {}) {
+  window.clearTimeout(reportPollTimer);
   const iterationId = Number(els.iterationId.value);
   const squadId = Number(els.opponentId.value);
   const matchId = Number(els.matchId.value || 0) || null;
@@ -5275,7 +5293,7 @@ async function loadReport({ refresh = false } = {}) {
   renderSeasonToggle();
   renderMatchBar();
   updateSlideNav();
-  setStatus("Opening local snapshot…", "loading");
+  if (!poll) setStatus("Opening local snapshot…", "loading");
 
   try {
     const report = await fetchJson("/api/pre-match/report", {
@@ -5289,8 +5307,12 @@ async function loadReport({ refresh = false } = {}) {
     if (token !== state.reportLoadToken) return;
     if (report?.building) {
       renderMatchBar();
-      renderEmptyDeck("No saved report for this opponent yet — Refresh pulls it when Impect has the match.");
-      setStatus("No saved report for this opponent yet.", "");
+      const delay = showReportBuilding(report);
+      if (delay) {
+        reportPollTimer = window.setTimeout(() => {
+          if (token === state.reportLoadToken) void loadReport({ poll: true });
+        }, delay);
+      }
       return;
     }
     renderMatchBar();
@@ -5396,21 +5418,7 @@ if (els.presentNext) {
 }
 els.prevSlideBtn.addEventListener("click", () => showSlide(state.slideIndex - 1));
 els.nextSlideBtn.addEventListener("click", () => showSlide(state.slideIndex + 1));
-els.deckModeFullBtn?.addEventListener("click", () => setDeckMode("full"));
-els.deckModeTwoBtn?.addEventListener("click", () => setDeckMode("two_pager"));
-try {
-  const savedMode = localStorage.getItem("pm-deck-mode");
-  // Default into Two pager for the polish pass; only honour an explicit Full deck choice.
-  const mode = savedMode === "full" ? "full" : "two_pager";
-  state.deckMode = mode;
-  document.body.classList.toggle("is-two-pager", mode === "two_pager");
-  els.deckModeFullBtn?.classList.toggle("pm-deck-mode__btn--active", mode === "full");
-  els.deckModeTwoBtn?.classList.toggle("pm-deck-mode__btn--active", mode === "two_pager");
-} catch {
-  document.body.classList.add("is-two-pager");
-  els.deckModeTwoBtn?.classList.add("pm-deck-mode__btn--active");
-  els.deckModeFullBtn?.classList.remove("pm-deck-mode__btn--active");
-}
+document.body.classList.toggle("is-two-pager", PAGE_DECK_MODE === "two_pager");
 
 document.addEventListener("fullscreenchange", () => {
   if (!document.fullscreenElement && document.body.classList.contains("is-present")) {

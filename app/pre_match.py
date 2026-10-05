@@ -3,8 +3,10 @@ from __future__ import annotations
 import base64
 import hashlib
 import io
+import logging
 import math
 import re
+import threading
 import time
 import zipfile
 from datetime import UTC, datetime, timedelta
@@ -13,7 +15,7 @@ from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from pydantic import BaseModel
 
 from app.pre_match_notes import load_two_pager_board, save_two_pager_board
@@ -32,6 +34,8 @@ from app.opponent_photos import (
 from app.paths import HUB_ROOT
 from app.scouting import SCOUTING_DIR
 from app.squad_photos import fetch_photo_bytes, resolve_local_photo_path
+
+logger = logging.getLogger(__name__)
 
 # Port Vale kick-offs always display in UK local time (GMT/BST).
 _UK_TZ = ZoneInfo("Europe/London")
@@ -5751,6 +5755,76 @@ def _pre_match_report_from_disk(
     return same_match or same_squad or same_iteration
 
 
+_BUILD_RETRY_DELAYS = (45.0, 90.0, 180.0)
+_BUILD_FAILED_COOLDOWN_SECONDS = 120.0
+_background_builds: dict[str, dict[str, Any]] = {}
+_background_builds_lock = threading.Lock()
+
+
+def _run_background_build(cache_key: str, body: PreMatchReportRequest) -> None:
+    from app.analysis_cache import write_json
+
+    error = ""
+    for attempt in range(len(_BUILD_RETRY_DELAYS) + 1):
+        try:
+            report = _build_pre_match_report_uncached(body)
+            write_json("pre-match", cache_key, report)
+            with _background_builds_lock:
+                _background_builds.pop(cache_key, None)
+            return
+        except HTTPException as exc:
+            error = str(exc.detail)
+            if exc.status_code != 429 or attempt >= len(_BUILD_RETRY_DELAYS):
+                break
+            with _background_builds_lock:
+                state = _background_builds.get(cache_key)
+                if state:
+                    state["detail"] = "Impect is rate-limiting — retrying shortly."
+            time.sleep(_BUILD_RETRY_DELAYS[attempt])
+        except Exception as exc:  # noqa: BLE001 - surfaced to the page, not raised
+            logger.exception("Pre-match background build %s failed", cache_key)
+            error = str(exc) or exc.__class__.__name__
+            break
+    with _background_builds_lock:
+        _background_builds[cache_key] = {
+            "status": "failed",
+            "detail": error or "Build failed.",
+            "finished": time.time(),
+        }
+
+
+def _queue_background_build(cache_key: str, body: PreMatchReportRequest) -> dict[str, Any]:
+    with _background_builds_lock:
+        state = _background_builds.get(cache_key)
+        if state and state["status"] == "running":
+            return dict(state)
+        if (
+            state
+            and state["status"] == "failed"
+            and time.time() - float(state.get("finished") or 0) < _BUILD_FAILED_COOLDOWN_SECONDS
+        ):
+            return dict(state)
+        state = {
+            "status": "running",
+            "detail": "Building from Impect — usually a minute or two.",
+            "started": time.time(),
+        }
+        _background_builds[cache_key] = state
+    job_body = PreMatchReportRequest(
+        iteration_id=int(body.iteration_id),
+        squad_id=int(body.squad_id),
+        match_id=body.match_id,
+        refresh=True,
+    )
+    threading.Thread(
+        target=_run_background_build,
+        args=(cache_key, job_body),
+        name=f"pre-match-build-{cache_key}",
+        daemon=True,
+    ).start()
+    return dict(state)
+
+
 def build_pre_match_report(body: PreMatchReportRequest) -> dict[str, Any]:
     from app.analysis_cache import REPORT_TTL_SECONDS, read_json, write_json
 
@@ -5771,8 +5845,16 @@ def build_pre_match_report(body: PreMatchReportRequest) -> dict[str, Any]:
             cached = _apply_fotmob_live_overlay(cached)
             cached["cache"] = {"hit": True, "refreshed": False}
             return cached
+        from app.brand import is_demo
+
+        if is_demo():
+            build_state = {"status": "unavailable", "detail": "Blank demo hub — no club data."}
+        else:
+            build_state = _queue_background_build(cache_key, body)
         return {
             "building": True,
+            "build_status": build_state.get("status"),
+            "build_detail": build_state.get("detail"),
             "iteration_id": int(body.iteration_id),
             "squad_id": int(body.squad_id),
             "match_id": body.match_id,
@@ -6390,13 +6472,38 @@ def register_pre_match_routes(app: FastAPI) -> None:
             "team_url": "/pre-match",
         }
 
+    def _with_deck_mode(html: str, mode: str, title: str) -> str:
+        html = html.replace("<body>", f'<body data-pm-mode="{mode}">', 1)
+        html = re.sub(r"<title>[^<]*</title>", f"<title>{title}</title>", html, count=1)
+        html = re.sub(
+            r'(<h1 class="pm-toolbar__title">)[^<]*(<span)',
+            rf"\g<1>{title} \2",
+            html,
+            count=1,
+        )
+        return html
+
     @app.get("/pre-match", response_class=HTMLResponse)
     def pre_match_page() -> HTMLResponse:
         html_path = _pre_match_page_template()
+        html = _prepare_pre_match_html(html_path.read_text(encoding="utf-8"))
         return HTMLResponse(
-            _prepare_pre_match_html(html_path.read_text(encoding="utf-8")),
+            _with_deck_mode(html, "full", "Pre-match report"),
             headers=no_cache_headers,
         )
+
+    @app.get("/opposition-reports", response_class=HTMLResponse)
+    def opposition_reports_page() -> HTMLResponse:
+        html_path = _pre_match_page_template()
+        html = _prepare_pre_match_html(html_path.read_text(encoding="utf-8"))
+        return HTMLResponse(
+            _with_deck_mode(html, "two_pager", "Opposition reports"),
+            headers=no_cache_headers,
+        )
+
+    @app.get("/opposition-tabs")
+    def opposition_tabs_redirect() -> RedirectResponse:
+        return RedirectResponse("/opposition-reports", status_code=301)
 
     @app.get("/api/pre-match/meta")
     def pre_match_meta_route(
