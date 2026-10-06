@@ -1486,11 +1486,32 @@ def _pipeline_row_for_player(player_id: int) -> dict[str, Any] | None:
         return None
 
 
+def _identity_row_for_player(player_id: int) -> dict[str, Any] | None:
+    """Pipeline target, else the all-leagues search index (players with no current-season data)."""
+    pipeline = _pipeline_row_for_player(player_id)
+    if pipeline is not None:
+        return pipeline
+    try:
+        from app.player_search_index import player_by_id
+
+        indexed = player_by_id(player_id)
+    except Exception:
+        return None
+    if indexed is None:
+        return None
+    return {
+        "name": indexed.get("name") or "",
+        "club": indexed.get("club") or "",
+        "league": indexed.get("league") or "",
+        "age": indexed.get("age"),
+    }
+
+
 def _cached_player_name(player_id: int) -> str:
     rows = _cached_rows_for_player(player_id)
     if rows:
         return str(rows[0].get("name") or "").strip()
-    pipeline = _pipeline_row_for_player(player_id)
+    pipeline = _identity_row_for_player(player_id)
     if pipeline:
         return str(pipeline.get("name") or "").strip()
     return ""
@@ -1744,7 +1765,7 @@ def build_player_dossier_from_cache(
     include_web: bool = False,
 ) -> dict[str, Any] | None:
     rows = _cached_rows_for_player(player_id)
-    pipeline = _pipeline_row_for_player(player_id)
+    pipeline = _pipeline_row_for_player(player_id) if rows else _identity_row_for_player(player_id)
     if not rows and pipeline is None:
         return None
 
@@ -2554,7 +2575,7 @@ def register_player_dossier_routes(app: FastAPI) -> None:
 
     def _cms_identity(player_id: int) -> tuple[str, str]:
         rows = _cached_rows_for_player(player_id)
-        pipeline = _pipeline_row_for_player(player_id) or {}
+        pipeline = _identity_row_for_player(player_id) or {}
         first = rows[0] if rows else {}
         name = str(first.get("name") or pipeline.get("name") or "").strip()
         club = str(first.get("club") or pipeline.get("club") or "").strip()

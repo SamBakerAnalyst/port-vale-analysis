@@ -37,6 +37,7 @@ from app.profile_resolve import (
     resolve_profile_definition,
 )
 from app.pdf_report import build_coach_report_pdf
+from app import player_search_index
 from app.slide_export import build_coach_slides_pptx
 from app.squad_photos import (
     fetch_photo_bytes,
@@ -4755,6 +4756,11 @@ def list_iterations() -> dict[str, Any]:
     return {"iterations": iterations, "competitions": competitions}
 
 
+@app.on_event("startup")
+def warm_player_search_index() -> None:
+    player_search_index.ensure_fresh()
+
+
 @app.post("/api/players")
 def list_players(body: PlayerCatalogRequest) -> dict[str, Any]:
     search = (body.search or "").strip()
@@ -4765,6 +4771,23 @@ def list_players(body: PlayerCatalogRequest) -> dict[str, Any]:
             "season_count": 0,
             "message": "Type a player name to search across our five leagues.",
         }
+
+    if search and not body.competition_name:
+        indexed = player_search_index.search(search)
+        if indexed is not None:
+            players = indexed["players"]
+            return {
+                "players": players,
+                "player_count": len(players),
+                "season_count": indexed["season_count"],
+                "search_scope": "all_leagues",
+                "message": (
+                    f'No players matched "{search}". '
+                    "Check spelling (e.g. Elliot vs Elliott) and try the full name."
+                )
+                if not players
+                else None,
+            }
 
     iteration_ids = _catalog_iteration_ids(body.competition_name, search or None)
     if not iteration_ids:
