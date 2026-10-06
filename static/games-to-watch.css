@@ -491,7 +491,7 @@ a:hover { text-decoration: underline; }
 }
 
 .gw-team tr.is-u27 td { background: rgba(34, 197, 94, 0.06); }
-.gw-team tr.is-picked td { background: rgba(61, 139, 253, 0.1); }
+.gw-team tr.is-picked td { background: rgba(245, 197, 24, 0.1); }
 
 .gw-name {
   display: flex;

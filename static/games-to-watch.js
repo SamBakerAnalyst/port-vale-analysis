@@ -415,12 +415,13 @@
   function teamColumn(side, team) {
     const players = team?.players || [];
     const u27 = players.filter((row) => row.u27).length;
+    const upcoming = team?.lineup_status === "upcoming";
     const rows = players.length
       ? players.map((player) => playerRow(player, side)).join("")
       : `<tr><td colspan="5" class="gw-assign__note">No profile scores for this club yet.</td></tr>`;
     return `
       <section class="gw-team">
-        <h3>${escapeHtml(team?.name || (side === "home" ? "Home" : "Away"))} · ${players.length} · ${u27} U27</h3>
+        <h3>${escapeHtml(team?.name || (side === "home" ? "Home" : "Away"))} · ${upcoming ? "Top rated · " : ""}${players.length} · ${u27} U27</h3>
         <div class="gw-team__scroll">
           <table>
             <thead>

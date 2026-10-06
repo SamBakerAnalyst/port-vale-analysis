@@ -5218,6 +5218,13 @@ def _player_match_stats(
                     bucket["positions"].add(str(match_row["position"]))
                 bucket["goals"] += int(match_row.get("goals") or 0)
                 bucket["assists"] += int(match_row.get("assists") or 0)
+                bucket.setdefault("log", []).append({
+                    "m": match_id,
+                    "min": int(round(float(match_row["minutes"] or 0))),
+                    "s": match_row["match_share"] >= 0.5,
+                    "g": int(match_row.get("goals") or 0),
+                    "a": int(match_row.get("assists") or 0),
+                })
 
         # Matchday sitters (0 minutes) still belong on the squad list.
         for row in squad_block.get("players") or []:
@@ -5226,6 +5233,22 @@ def _player_match_stats(
             player_id = int(row.get("id") or 0)
             if not player_id:
                 continue
+            existing = totals.get(player_id)
+            if existing is not None and not any(
+                int(entry["m"]) == match_id for entry in existing.get("log") or []
+            ):
+                existing.setdefault("log", []).append({"m": match_id, "min": 0, "s": False, "g": 0, "a": 0})
+            elif existing is None:
+                totals[player_id] = {
+                    "appearances": 0,
+                    "starts": 0,
+                    "minutes": 0.0,
+                    "goals": 0,
+                    "assists": 0,
+                    "positions": set(),
+                    "on_squad_list": True,
+                    "log": [{"m": match_id, "min": 0, "s": False, "g": 0, "a": 0}],
+                }
             bucket = totals.setdefault(
                 player_id,
                 {
@@ -5375,6 +5398,7 @@ def _build_fixture_squad_rows(
                 "assists": int(stats.get("assists") or 0),
                 "shirt_number": shirt,
                 "current": int(player.get("currentSquadId") or -1) == squad_id if player else False,
+                "match_log": list(stats.get("log") or []),
             }
         )
     squad_rows.sort(

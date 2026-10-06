@@ -71,6 +71,27 @@ APP_GROUPS: list[dict[str, Any]] = [
 # api_prefixes: path prefixes the role may hit (page + /api/...).
 APPS: list[dict[str, Any]] = [
     {
+        "id": "opposition-hub",
+        "group": "reports",
+        "title": "Opposition Hub",
+        "description": (
+            "Everything on the next opponent in one place — game plan, matchup vs Port Vale, "
+            "squad and minutes, ball progression, attacking threat, chance quality, duels "
+            "and interventions, set plays, results and head to head."
+        ),
+        "href": "/opposition-hub",
+        "icon": "🧠",
+        "accent": "#f5c518",
+        "tags": ["Opponent", "Prep", "Game plan"],
+        "roles": ("analysis", "admin"),
+        "api_prefixes": (
+            "/opposition-hub",
+            "/api/opposition-hub",
+            "/api/pre-match/player-photo",
+        ),
+        "router": "opposition_hub",
+    },
+    {
         "id": "pre-match",
         "group": "reports",
         "title": "Pre-Match Report",
@@ -1083,6 +1104,7 @@ APPS: list[dict[str, Any]] = [
 LIVE_ESSENTIAL_IDS = frozenset(
     {
         # Analysis
+        "opposition-hub",
         "pre-match",
         "opposition-reports",
         "set-piece-pre-match",

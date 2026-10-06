@@ -616,8 +616,8 @@ a:hover { text-decoration: underline; }
 .st-scout-score:focus,
 .st-scout-comment:focus {
   outline: none;
-  border-color: rgba(61, 139, 253, 0.55);
-  background: rgba(61, 139, 253, 0.08);
+  border-color: rgba(245, 197, 24, 0.55);
+  background: rgba(245, 197, 24, 0.08);
 }
 
 .st-scout-comment {

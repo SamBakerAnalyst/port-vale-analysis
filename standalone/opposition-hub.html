@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Opposition Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/attacking-threat.css?v=15" />
+  <link rel="stylesheet" href="/static/opposition-hub.css?v=9" />
+</head>
+<body>
+  <div class="at-glow" aria-hidden="true"></div>
+  <div class="at-app">
+    <div class="oh-strip" aria-label="Port Vale fixtures">
+      <button type="button" class="oh-strip__nav" data-strip="-1" aria-label="Earlier fixtures">‹</button>
+      <div class="oh-strip__track" id="fixtureStrip" role="list"></div>
+      <button type="button" class="oh-strip__nav" data-strip="1" aria-label="Later fixtures">›</button>
+    </div>
+    <header class="at-toolbar">
+      <div>
+        <p class="at-toolbar__eyebrow">Reports · <a href="/">← All apps</a></p>
+        <h1 class="at-toolbar__title">Opposition <span>Hub</span></h1>
+        <p class="at-toolbar__subtitle">Everything on an opponent in one place — how to beat them, the matchup with Port Vale, their squad and minutes, how they progress the ball, where their threat comes from, duels, set plays and results.</p>
+      </div>
+      <div class="at-controls">
+        <div class="at-controls__group">
+          <span class="at-controls__label">Opponent</span>
+          <select id="teamSelect" class="at-select" aria-label="Opponent"></select>
+        </div>
+        <div class="at-controls__group">
+          <span class="at-controls__label">Season</span>
+          <div id="seasonToggle" class="at-toggle" role="group" aria-label="Season"></div>
+        </div>
+        <div class="at-controls__group">
+          <span class="at-controls__label">Window</span>
+          <div class="at-toggle" role="group" aria-label="Window">
+            <button type="button" class="at-toggle__btn at-toggle__btn--active" data-window="season">Season</button>
+            <button type="button" class="at-toggle__btn" data-window="last6">Last 6</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <nav class="at-nav" id="sectionNav" aria-label="Sections">
+      <a href="#overview" class="is-active">Overview</a>
+      <a href="#plan">Game plan</a>
+      <a href="#matchup">Matchup</a>
+      <a href="#squad">Squad &amp; minutes</a>
+      <a href="#progression">Ball progression</a>
+      <a href="#attack">Attacking threat</a>
+      <a href="#defence">Defending</a>
+      <a href="#duels">Duels &amp; interventions</a>
+      <a href="#setplays">Set plays</a>
+      <a href="#results">Results</a>
+    </nav>
+
+    <section id="overview" class="at-section">
+      <div id="hero" class="oh-hero card" aria-live="polite"></div>
+    </section>
+
+    <section id="plan" class="at-section">
+      <header class="at-section__head">
+        <p class="at-kicker">How we win this game</p>
+        <h2>Game plan</h2>
+        <p class="at-section__lede">Built from where they rank in League Two on every measure below. Their strengths are in the top quarter of the league; the weaknesses are in the bottom quarter.</p>
+      </header>
+      <div class="at-grid at-grid--2">
+        <article class="card oh-plan oh-plan--bad" id="strengthPanel"></article>
+        <article class="card oh-plan oh-plan--good" id="weaknessPanel"></article>
+      </div>
+      <div id="notes" class="at-insights"></div>
+    </section>
+
+    <section id="matchup" class="at-section">
+      <header class="at-section__head">
+        <p class="at-kicker">Port Vale vs them</p>
+        <h2>Matchup</h2>
+        <p class="at-section__lede">Their attack against our defence, our attack against their defence, and the duels. Ranks are out of the whole league (1st is best for that club). The edge goes to whichever side ranks higher.</p>
+      </header>
+      <div class="oh-matchup" id="matchupPanel"></div>
+    </section>
+
+    <section id="squad" class="at-section">
+      <header class="at-section__head">
+        <p class="at-kicker">Who plays</p>
+        <h2>Squad &amp; minutes</h2>
+        <p class="at-section__lede">Every player used this season — minutes, starts, goals and threat — with their last games so you can see who is first choice, who is rotating and who has dropped out.</p>
+      </header>
+      <article class="card" id="squadPanel"></article>
+      <div class="at-grid oh-grid--xi">
+        <article class="card" id="xiPanel"></article>
+        <article class="card" id="shapePanel"></article>
+      </div>
+    </section>
+
+    <section id="progression" class="at-section">
+      <header class="at-section__head">
+        <p class="at-kicker">In possession</p>
+        <h2>Ball progression</h2>
+        <p class="at-section__lede">How they move the ball up the pitch — style, direct or through the thirds, which flank, and which phases and actions create their threat.</p>
+      </header>
+      <div class="at-grid at-grid--2">
+        <article class="card" id="stylePanel"></article>
+        <article class="card" id="routePanel"></article>
+      </div>
+      <div class="at-grid at-grid--map">
+        <article class="card" id="startZonePanel"></article>
+        <article class="card" id="phasePanel"></article>
+      </div>
+      <article class="card oh-mt" id="actionPanel"></article>
+    </section>
+
+    <section id="attack" class="at-section">
+      <header class="at-section__head">
+        <p class="at-kicker">Their threat</p>
+        <h2>Attacking threat</h2>
+        <p class="at-section__lede">Their most threatening actions on the pitch, the players behind them and the quality of the chances they create. They attack left to right.</p>
+      </header>
+      <div class="at-grid at-grid--map">
+        <article class="card" id="mapPanel"></article>
+        <article class="card" id="dangerPanel"></article>
+      </div>
+      <div class="at-grid at-grid--2">
+        <article class="card" id="chanceForPanel"></article>
+        <article class="card" id="xgTrendPanel"></article>
+      </div>
+    </section>
+
+    <section id="defence" class="at-section">
+      <header class="at-section__head">
+        <p class="at-kicker">Out of possession</p>
+        <h2>Defending — how teams hurt them</h2>
+        <p class="at-section__lede">The threat their opponents created against them: where it arrives, which actions and which phases. The opponent attacks left to right on these pitches.</p>
+      </header>
+      <div class="at-grid at-grid--map">
+        <article class="card" id="concededMapPanel"></article>
+        <article class="card" id="concededPanel"></article>
+      </div>
+      <div class="at-grid at-grid--2">
+        <article class="card" id="chanceAgainstPanel"></article>
+        <article class="card" id="concededZonePanel"></article>
+      </div>
+    </section>
+
+    <section id="duels" class="at-section">
+      <header class="at-section__head">
+        <p class="at-kicker">Ball wins and battles</p>
+        <h2>Duels &amp; interventions</h2>
+        <p class="at-section__lede">How often and where they win the ball, how they do in the air and on the floor, and which battles decide their results.</p>
+      </header>
+      <article class="card" id="ivTilesPanel"></article>
+      <div class="at-grid at-grid--2">
+        <article class="card" id="battlePanel"></article>
+        <article class="card" id="ivTrendPanel"></article>
+      </div>
+    </section>
+
+    <section id="setplays" class="at-section">
+      <header class="at-section__head">
+        <p class="at-kicker">Dead balls</p>
+        <h2>Set plays</h2>
+        <p class="at-section__lede">Their corners, free kicks and long throws at both ends — who takes them, who attacks them, where they go and how they defend them. For the full set-play deck use Set Piece Pre-Match.</p>
+      </header>
+      <article class="card" id="spHeadPanel"></article>
+      <div class="card oh-spfilters" id="spFilterPanel"></div>
+      <div class="at-grid at-grid--2">
+        <article class="card" id="spAttackMapPanel"></article>
+        <article class="card" id="spDefenceMapPanel"></article>
+      </div>
+      <div class="at-grid at-grid--2">
+        <article class="card" id="spPeoplePanel"></article>
+        <article class="card" id="spDefPeoplePanel"></article>
+      </div>
+      <article class="card oh-mt" id="spGoalsPanel"></article>
+    </section>
+
+    <section id="results" class="at-section">
+      <header class="at-section__head">
+        <p class="at-kicker">Form</p>
+        <h2>Results &amp; head to head</h2>
+      </header>
+      <div class="at-grid oh-grid--results">
+        <article class="card" id="formPanel"></article>
+        <article class="card" id="tablePanel"></article>
+      </div>
+      <div class="at-grid at-grid--2">
+        <article class="card" id="venuePanel"></article>
+        <article class="card" id="h2hPanel"></article>
+      </div>
+    </section>
+
+    <footer id="statusBar" class="at-footer">Reading the data lake…</footer>
+  </div>
+  <div id="tip" class="oh-tip" hidden></div>
+  <script defer src="/static/opposition-hub.js?v=9"></script>
+  <script defer src="/static/hub-feedback.js?v=1"></script>
+</body>
+</html>

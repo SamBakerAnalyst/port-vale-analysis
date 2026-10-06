@@ -617,7 +617,48 @@ def test_match_sheet_is_only_starters_and_players_who_came_on():
     assert next(row for row in players if row["player_id"] == 3)["match_minute"] == 54
 
 
-def test_upcoming_fixture_sheet_does_not_dump_a_club_squad(monkeypatch):
+def test_upcoming_fixture_sheet_lists_top_rated_squad(monkeypatch):
+    from app import games_to_watch as gtw
+
+    squad = [
+        {"playerId": n, "name": f"Player {n}", "age": 22, "overall": 40 + n, "minutes": 500, "club": "Exeter City"}
+        for n in range(1, 21)
+    ]
+    squad.append({"playerId": 99, "name": "No Score", "age": 20, "minutes": 900, "club": "Exeter City"})
+    index = gtw._index_players_by_club(squad)
+
+    monkeypatch.setattr(
+        gtw,
+        "_watchable_fixtures",
+        lambda season: [
+            {
+                "fixture_id": "future",
+                "date": "2099-10-01",
+                "status": "scheduled",
+                "league": "League Two",
+                "home": {"name": "Exeter City", "id": 1},
+                "away": {"name": "Port Vale", "id": 2},
+            }
+        ],
+    )
+    monkeypatch.setattr(gtw, "_load_player_index", lambda: (index, {"building": False}))
+    monkeypatch.setattr(gtw, "get_fixture_assignments", lambda: {"assignments": {}})
+    monkeypatch.setattr(gtw, "build_fixture_planner_payload", lambda season: {"fixtures": []})
+
+    def boom(*_args, **_kwargs):
+        raise AssertionError("must not fetch a match XI before kickoff")
+
+    monkeypatch.setattr(gtw, "_sheet_players", boom)
+    sheet = gtw.build_fixture_sheet(season="26/27", fixture_id="future")
+    home = sheet["home"]["players"]
+    assert len(home) == gtw.UPCOMING_TOP_RATED
+    assert home[0]["name"] == "Player 20"
+    assert [row["overall"] for row in home] == sorted((row["overall"] for row in home), reverse=True)
+    assert all(row["name"] != "No Score" for row in home)
+    assert sheet["home"]["lineup_status"] == "upcoming"
+
+
+def test_upcoming_fixture_sheet_empty_without_profiles(monkeypatch):
     from app import games_to_watch as gtw
 
     monkeypatch.setattr(

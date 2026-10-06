@@ -3001,6 +3001,9 @@
 
     window.addEventListener("hub:overview", (event) => {
       const data = event.detail || {};
+      try {
+        localStorage.setItem("pvHub.overview", JSON.stringify({ savedAt: Date.now(), data }));
+      } catch (_) { /* tool pages fall back to /api/home/fixtures */ }
       const league = document.getElementById("mastheadLeague");
       const pos = Number(data.position);
       if (league) {

@@ -120,7 +120,7 @@ a:hover { text-decoration: underline; }
   white-space: nowrap;
 }
 
-.btn:hover { border-color: rgba(61, 139, 253, 0.45); color: #fff; text-decoration: none; }
+.btn:hover { border-color: rgba(245, 197, 24, 0.45); color: #fff; text-decoration: none; }
 
 .btn--export {
   background: rgba(52, 211, 153, 0.12);
@@ -199,9 +199,9 @@ a:hover { text-decoration: underline; }
 }
 
 .filter__btn.is-active {
-  background: rgba(61, 139, 253, 0.18);
-  border-color: rgba(61, 139, 253, 0.5);
-  color: #cfe2ff;
+  background: rgba(245, 197, 24, 0.18);
+  border-color: rgba(245, 197, 24, 0.5);
+  color: #fde68a;
 }
 
 .filter select,
@@ -251,7 +251,7 @@ a:hover { text-decoration: underline; }
 
 .filter--month select {
   min-width: 9.5rem;
-  border-color: rgba(61, 139, 253, 0.45);
+  border-color: rgba(245, 197, 24, 0.45);
 }
 
 .weights {
@@ -303,7 +303,7 @@ a:hover { text-decoration: underline; }
   border-radius: 8px;
 }
 
-.weight-card--active { border-color: rgba(61, 139, 253, 0.45); }
+.weight-card--active { border-color: rgba(245, 197, 24, 0.45); }
 .weight-card--muted { opacity: 0.55; }
 
 .weight-card__name {
@@ -354,7 +354,7 @@ a:hover { text-decoration: underline; }
 }
 
 .status-banner--loading {
-  border-color: rgba(61, 139, 253, 0.35);
+  border-color: rgba(245, 197, 24, 0.35);
   color: var(--accent);
 }
 
@@ -661,8 +661,8 @@ a:hover { text-decoration: underline; }
 }
 
 .league-card__edit-weights:hover {
-  border-color: rgba(61, 139, 253, 0.45);
-  color: #cfe2ff;
+  border-color: rgba(245, 197, 24, 0.45);
+  color: #fde68a;
 }
 
 .league-card__empty {
@@ -778,7 +778,7 @@ a:hover { text-decoration: underline; }
 }
 
 .scout-table tbody tr:hover td {
-  background: rgba(61, 139, 253, 0.08);
+  background: rgba(245, 197, 24, 0.08);
 }
 
 .scout-table .col-rank {

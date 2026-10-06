@@ -45,6 +45,7 @@ _games_refreshing: set[str] = set()
 
 U27_MAX_AGE = 26
 LIKELY_SQUAD_SIZE = 14
+UPCOMING_TOP_RATED = 15
 HEADLINE_COUNT = 3
 LOOKAHEAD_DAYS = 45
 
@@ -1015,13 +1016,30 @@ def players_from_match_squad(
     return players, formation
 
 
+def top_rated_squad(
+    club: str,
+    index: dict[str, list[dict[str, Any]]],
+    *,
+    limit: int = UPCOMING_TOP_RATED,
+) -> list[dict[str, Any]]:
+    """Highest profile scores still at the club — no lineup exists before kickoff."""
+    rows = _annotate_side_players([dict(row) for row in players_for_club(club, index)], club)
+    scored = [
+        row for row in rows if row.get("overall") is not None and not _left_listed_club(row)
+    ]
+    scored.sort(
+        key=lambda row: (-float(row.get("overall") or 0), str(row.get("name") or ""))
+    )
+    return scored[:limit]
+
+
 def _lineup_from_match(
     fixture: dict[str, Any],
     side_key: str,
     index: dict[str, list[dict[str, Any]]],
 ) -> tuple[list[dict[str, Any]], str | None, str]:
     if not _fixture_is_played(fixture):
-        return [], None, "upcoming"
+        return top_rated_squad(_side_name(fixture.get(side_key)), index), None, "upcoming"
     match_id = fixture.get("match_id")
     iteration_id = fixture.get("iteration_id")
     side = fixture.get(side_key) or {}
@@ -1101,7 +1119,11 @@ def build_fixture_sheet(*, season: str, fixture_id: str) -> dict[str, Any]:
     home_players, home_formation, home_lineup = _lineup_from_match(fixture, "home", index)
     away_players, away_formation, away_lineup = _lineup_from_match(fixture, "away", index)
     league = str(fixture.get("league") or "").strip()
-    ranked = score_fixture_players(home_players, away_players, league=league)
+    ranked = (
+        score_fixture_players(home_players, away_players, league=league)
+        if _fixture_is_played(fixture)
+        else None
+    )
     assignments = get_fixture_assignments().get("assignments") or {}
     list_rows = [
         _rank_row(row, index=index, assignments=assignments)

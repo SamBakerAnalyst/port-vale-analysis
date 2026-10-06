@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 
 from app.auth import register_auth
 from app.brand import apply_brand_html, current_brand
+from app.hub_chrome import register_hub_chrome
 from app.label_utils import humanize_metric_label, humanize_profile_name
 from app.logging_config import configure_logging
 from app.profile_resolve import (
@@ -240,6 +241,7 @@ async def pre_match_asset_no_cache(request: Request, call_next):
     return response
 
 
+register_hub_chrome(app)
 BASE_DIR = Path(__file__).resolve().parent.parent
 register_auth(app, BASE_DIR / "standalone" / "login.html")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")

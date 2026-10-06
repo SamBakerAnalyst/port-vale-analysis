@@ -234,7 +234,7 @@ a:hover { text-decoration: underline; }
 }
 
 .pp-result:last-child { border-bottom: 0; }
-.pp-result:hover { background: rgba(61, 139, 253, 0.12); }
+.pp-result:hover { background: rgba(245, 197, 24, 0.12); }
 
 .pp-result__name { font-weight: 650; }
 .pp-result__meta { display: block; color: var(--muted); font-size: 0.75rem; }
@@ -467,7 +467,7 @@ a:hover { text-decoration: underline; }
   gap: 0.45rem;
 }
 
-.pp-col__list.is-over { background: rgba(61, 139, 253, 0.08); }
+.pp-col__list.is-over { background: rgba(245, 197, 24, 0.08); }
 
 .pp-card {
   display: grid;
