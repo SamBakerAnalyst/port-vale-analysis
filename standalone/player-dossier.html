@@ -8,10 +8,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;1,600;1,700;1,800&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="/static/player-dossier.css?v=26" />
+  <link rel="stylesheet" href="/static/player-dossier.css?v=28" />
 </head>
 <body>
   <div class="pd">
@@ -30,70 +30,117 @@
     <div id="pdError" class="pd-error" hidden></div>
 
     <div class="pd-shell" id="pdShell" hidden>
-      <aside class="pd-identity" id="pdHero">
-        <div class="pd-hero__photo-wrap">
-          <img class="pd-hero__photo" id="pdPhoto" alt="" />
-          <div class="pd-hero__photo-fallback" id="pdPhotoFallback" hidden></div>
-          <div class="pd-score" id="pdScore" hidden>
-            <span class="pd-score__num" id="pdScoreNum"></span>
-            <span class="pd-score__label">Overall</span>
+      <div class="pd-overview" id="pdGrid">
+        <section class="pd-q pd-q--tech">
+          <div class="pd-card__head">
+            <div class="pd-q__title">
+              <h2>Technical data</h2>
+              <span class="pd-card__sub" id="pdRadarSub">Port Vale profile scores</span>
+            </div>
+            <span class="pd-q__tag">Impect</span>
           </div>
-        </div>
-        <p class="pd-hero__eyebrow" id="pdClubSeason"></p>
-        <h1 class="pd-hero__name" id="pdName"></h1>
-        <p class="pd-hero__meta" id="pdMeta"></p>
-        <div class="pd-hero__tags" id="pdTags"></div>
-        <div class="pd-facts" id="pdBioStats"></div>
-        <div class="pd-positions" id="pdPositions"></div>
-        <div class="pd-ability" id="pdAbility" hidden></div>
-        <div class="pd-file-block pd-file-block--identity">
+          <div class="pd-tech">
+            <div id="pdRadar" class="pd-radar"></div>
+            <div class="pd-tech__side">
+              <div id="pdProfileBars" class="pd-bars"></div>
+              <div class="pd-factors-head">
+                <h3 id="pdFactorHeading">Impect stats</h3>
+                <span class="pd-card__sub" id="pdFactorSub">Top factors in this profile</span>
+              </div>
+              <div id="pdFactorStats" class="pd-factors"><p class="pd-empty">Select a profile.</p></div>
+              <div id="pdProfiles" class="pd-profile-legend" hidden></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="pd-centre" id="pdHero">
+          <div class="pd-centre__art" aria-hidden="true">
+            <span class="pd-centre__slash"></span>
+            <span class="pd-centre__kit"></span>
+          </div>
+          <div class="pd-avatar">
+            <div class="pd-avatar__ring">
+              <img class="pd-hero__photo" id="pdPhoto" alt="" />
+              <div class="pd-hero__photo-fallback" id="pdPhotoFallback" hidden></div>
+            </div>
+            <div class="pd-score" id="pdScore" hidden>
+              <span class="pd-score__num" id="pdScoreNum"></span>
+              <span class="pd-score__label">Overall</span>
+            </div>
+          </div>
+          <p class="pd-hero__eyebrow" id="pdClubSeason"></p>
+          <h1 class="pd-hero__name" id="pdName"></h1>
+          <p class="pd-hero__meta" id="pdMeta"></p>
+          <div class="pd-hero__tags" id="pdTags"></div>
+
+          <div class="pd-bio">
+            <h3 class="pd-bio__head">Biographical details</h3>
+            <div class="pd-facts" id="pdBioStats"></div>
+          </div>
+          <div class="pd-bio">
+            <h3 class="pd-bio__head">Positions &amp; minutes</h3>
+            <div class="pd-positions" id="pdPositions"></div>
+          </div>
+          <div class="pd-bio">
+            <h3 class="pd-bio__head">Clubs &amp; seasons</h3>
+            <div id="pdSeasons" class="pd-clubs"><p class="pd-empty">No seasons listed.</p></div>
+          </div>
+          <div class="pd-ability" id="pdAbility" hidden></div>
+        </section>
+
+        <section class="pd-q pd-q--phys">
+          <div class="pd-card__head">
+            <div class="pd-q__title">
+              <h2>Physical data</h2>
+              <span class="pd-card__sub">Running &amp; athletic output</span>
+            </div>
+            <span class="pd-q__tag pd-q__tag--soon">Coming soon</span>
+          </div>
+          <div class="pd-soon">
+            <div class="pd-soon__grid" aria-hidden="true">
+              <div class="pd-soon__tile"><span>Top speed</span><strong>— km/h</strong></div>
+              <div class="pd-soon__tile"><span>Distance / 90</span><strong>— km</strong></div>
+              <div class="pd-soon__tile"><span>Sprints / 90</span><strong>—</strong></div>
+              <div class="pd-soon__tile"><span>HI runs / 90</span><strong>—</strong></div>
+              <div class="pd-soon__tile"><span>Accelerations</span><strong>—</strong></div>
+              <div class="pd-soon__tile"><span>Decelerations</span><strong>—</strong></div>
+            </div>
+            <p class="pd-soon__note">Physical data is on the way. It will appear here once the feed is connected.</p>
+          </div>
+        </section>
+
+        <section class="pd-q pd-q--reports">
           <div class="pd-card__head pd-card__head--actions">
-            <div>
+            <div class="pd-q__title">
+              <h2>Reports</h2>
+              <span class="pd-card__sub" id="pdReportsSub">Scout reports on this player</span>
+            </div>
+            <div class="pd-q__actions">
+              <button type="button" class="pd-btn pd-btn--small pd-btn--ghost" id="pdAddReportBtn">Quick report</button>
+              <a class="pd-btn pd-btn--small" id="pdAddReportLink" href="/match-scouting?new=search">Add report</a>
+            </div>
+          </div>
+          <div id="pdReportSummary" class="pd-summary"><p class="pd-empty">Loading reports…</p></div>
+          <div id="pdReports" class="pd-report-list"></div>
+        </section>
+
+        <section class="pd-q pd-q--notes">
+          <div class="pd-card__head pd-card__head--actions">
+            <div class="pd-q__title">
               <h2>Notes</h2>
               <span class="pd-card__sub">Chasing · agent · work</span>
             </div>
-            <button type="button" class="pd-btn pd-btn--small pd-btn--ghost" id="pdAddNoteBtn">Add notes</button>
+            <button type="button" class="pd-btn pd-btn--small" id="pdAddNoteBtn">Add notes</button>
           </div>
-          <div id="pdNotes"><p class="pd-empty">No notes yet.</p></div>
-        </div>
-      </aside>
-
-      <main class="pd-analytics" id="pdGrid">
-        <section class="pd-keystats" id="pdKeyStatsCard" hidden>
-          <div class="pd-card__head">
-            <h2>Season snapshot</h2>
-            <span class="pd-card__sub">Local database</span>
-          </div>
-          <div class="pd-keystats__grid" id="pdKeyStats"></div>
+          <div id="pdNotes" class="pd-notes-list"><p class="pd-empty">No notes yet.</p></div>
         </section>
+      </div>
 
-        <section class="pd-charts">
-          <article class="pd-card pd-card--radar">
-            <div class="pd-card__head">
-              <h2>PV profiles</h2>
-              <span class="pd-card__sub">Port Vale profile scores</span>
-            </div>
-            <div id="pdRadar" class="pd-radar"></div>
-          </article>
-          <article class="pd-card pd-card--bars">
-            <div class="pd-card__head">
-              <h2>Profiles</h2>
-              <span class="pd-card__sub">Click a profile to see its Impect stats</span>
-            </div>
-            <div id="pdProfileBars" class="pd-bars"></div>
-            <div class="pd-factors-head">
-              <h3 id="pdFactorHeading">Impect stats</h3>
-              <span class="pd-card__sub" id="pdFactorSub">Top factors in this profile</span>
-            </div>
-            <div id="pdFactorStats" class="pd-factors"><p class="pd-empty">Select a profile.</p></div>
-            <div id="pdProfiles" class="pd-profile-legend" hidden></div>
-          </article>
-        </section>
-
-        <section class="pd-fbref" id="pdFotmobCard" hidden>
+      <div class="pd-more">
+        <section class="pd-card" id="pdFotmobCard" hidden>
           <div class="pd-card__head">
             <h2>FotMob snapshot</h2>
-            <a class="pd-card__sub" id="pdFotmobLink" href="#" target="_blank" rel="noopener">Open on FotMob →</a>
+            <a class="pd-card__sub pd-link" id="pdFotmobLink" href="#" target="_blank" rel="noopener">Open on FotMob →</a>
           </div>
           <p class="pd-card__sub" id="pdFotmobSub"></p>
           <div class="pd-keystats__grid" id="pdFotmobStats"></div>
@@ -114,26 +161,7 @@
           </div>
           <div id="pdGames" class="pd-games-wrap"></div>
         </article>
-
-        <article class="pd-card pd-card--file">
-          <div class="pd-card__head pd-card__head--actions">
-            <div>
-              <h2>Scout reports</h2>
-              <span class="pd-card__sub">Full looks · CA / PA</span>
-            </div>
-            <button type="button" class="pd-btn pd-btn--small" id="pdAddReportBtn">Add report</button>
-          </div>
-          <div id="pdReports"><p class="pd-empty">No scout reports yet.</p></div>
-        </article>
-
-        <article class="pd-card">
-          <div class="pd-card__head">
-            <h2>Season history</h2>
-            <span class="pd-card__sub">Leagues &amp; clubs in the database</span>
-          </div>
-          <div id="pdSeasons"><p class="pd-empty">No seasons listed.</p></div>
-        </article>
-      </main>
+      </div>
     </div>
   </div>
 
@@ -183,7 +211,7 @@
     </div>
   </div>
 
-  <script defer src="/static/player-dossier.js?v=27"></script>
+  <script defer src="/static/player-dossier.js?v=29"></script>
   <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>

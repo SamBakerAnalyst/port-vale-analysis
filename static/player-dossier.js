@@ -5,8 +5,6 @@
   const gridEl = document.getElementById("pdGrid");
   const shellEl = document.getElementById("pdShell");
   const actionsEl = document.getElementById("pdActions");
-  const keyStatsCard = document.getElementById("pdKeyStatsCard");
-
   function playerIdFromPath() {
     const match = window.location.pathname.match(/\/player\/(\d+)/);
     return match ? Number(match[1]) : null;
@@ -129,10 +127,10 @@
   }
 
   function setProfileSubtitle(label) {
-    const card = document.querySelector(".pd-card--radar .pd-card__sub");
+    const card = document.getElementById("pdRadarSub");
     if (!card) return;
     card.textContent = label
-      ? `PV profiles · ${label}`
+      ? `PV profile radar · ${label}`
       : "Port Vale profile scores";
   }
 
@@ -286,19 +284,8 @@
       }
     }
 
-    document.getElementById("pdBioStats").innerHTML = [
-      { label: "Age", value: player.age != null ? String(player.age) : "" },
-      { label: "Height", value: player.height && player.height !== "—" ? player.height : "" },
-      { label: "Foot", value: player.foot && player.foot !== "—" ? player.foot : "" },
-    ]
-      .filter((stat) => stat.value)
-      .map(
-        (stat) => `<div class="pd-stat">
-          <span class="pd-stat__label">${stat.label}</span>
-          <span class="pd-stat__value">${escapeHtml(stat.value)}</span>
-        </div>`
-      )
-      .join("");
+    bioState.player = { ...player };
+    renderBioFacts();
 
     chartState.selectedPosition = player.primary_position || positionsFirstCode(player);
     renderPositions(player);
@@ -311,29 +298,39 @@
     return (player.positions || [])[0]?.code || null;
   }
 
-  function renderKeyStats(stats) {
-    if (!stats?.length) {
-      keyStatsCard.hidden = true;
-      return;
-    }
-    const visible = stats.filter((stat) => {
-      if (stat.value == null || stat.value === "") return false;
-      if (stat.source === "FBRef" && Number(stat.value) === 0) return false;
-      return true;
-    });
-    if (!visible.length) {
-      keyStatsCard.hidden = true;
-      return;
-    }
-    document.getElementById("pdKeyStats").innerHTML = visible
+  const bioState = { player: {}, contract: "" };
+
+  function cleanBio(value) {
+    if (value == null) return "";
+    const text = String(value).trim();
+    return text === "—" ? "" : text;
+  }
+
+  function renderBioFacts() {
+    const root = document.getElementById("pdBioStats");
+    if (!root) return;
+    const player = bioState.player || {};
+    const dob = cleanBio(player.birthdate).replace(/\s*\(\d+\)\s*$/, "");
+    const facts = [
+      { label: "Age", value: player.age != null ? String(player.age) : "" },
+      { label: "Born", value: dob },
+      { label: "Height", value: cleanBio(player.height) },
+      { label: "Foot", value: cleanBio(player.foot) },
+      { label: "Nationality", value: cleanBio(player.citizenship) },
+      { label: "Minutes", value: player.minutes != null ? fmt(player.minutes) : "" },
+      { label: "Matches", value: player.matches != null ? fmt(player.matches) : "" },
+      { label: "Market value", value: cleanBio(player.market_value) },
+      { label: "Contract", value: cleanBio(bioState.contract) },
+      { label: "On loan from", value: cleanBio(player.on_loan_from) },
+    ].filter((stat) => stat.value);
+    root.innerHTML = facts
       .map(
-        (stat) => `<div class="pd-keystat">
-          <span class="pd-keystat__label">${stat.label}${stat.source ? ` · ${stat.source}` : ""}</span>
-          <span class="pd-keystat__value">${formatStat(stat)}</span>
+        (stat) => `<div class="pd-stat">
+          <span class="pd-stat__label">${stat.label}</span>
+          <span class="pd-stat__value">${escapeHtml(stat.value)}</span>
         </div>`
       )
       .join("");
-    keyStatsCard.hidden = false;
   }
 
   function renderFotmob(fotmob, link) {
@@ -410,7 +407,7 @@
     const dots = profiles
       .map((row, i) => {
         const [x, y] = xy(i, Math.max(0, Math.min(100, Number(row.pct) || 0)) / 100);
-        return `<circle cx="${x}" cy="${y}" r="4.5" fill="#34d399"/>`;
+        return `<circle cx="${x}" cy="${y}" r="4.5" fill="#f5c518" stroke="#0c0f14" stroke-width="1.5"/>`;
       })
       .join("");
     const labels = profiles
@@ -429,7 +426,7 @@
         </g>`;
       })
       .join("");
-    el.innerHTML = `<svg class="pd-radar-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="PV profile radar">${rings}${axes}<polygon points="${poly}" fill="rgba(61,139,253,0.22)" stroke="#3d8bfd" stroke-width="2.5" stroke-linejoin="round"/>${dots}${labels}</svg>`;
+    el.innerHTML = `<svg class="pd-radar-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="PV profile radar">${rings}${axes}<polygon points="${poly}" fill="rgba(245,197,24,0.2)" stroke="#f5c518" stroke-width="2.5" stroke-linejoin="round"/>${dots}${labels}</svg>`;
   }
 
   function renderProfiles(profiles) {
@@ -633,18 +630,121 @@
     );
   }
 
-  function renderReports(reports) {
-    renderEntryList(
-      "pdReports",
-      reports,
-      "No scout reports yet. Use <strong>Add report</strong> for a full look with CA / PA."
-    );
+  const LEVEL_TITLES = { A: "Starter", B: "Challenger", C: "Emerging talent", D: "Not to standard" };
+
+  function bulletList(items, cls) {
+    if (!items?.length) return "";
+    return `<ul class="pd-summary__list ${cls}">${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
+  }
+
+  function renderReportSummary(data) {
+    const root = document.getElementById("pdReportSummary");
+    const listEl = document.getElementById("pdReports");
+    const sub = document.getElementById("pdReportsSub");
+    if (!root || !listEl) return;
+    const count = Number(data?.count || 0);
+    if (!count) {
+      if (sub) sub.textContent = "No reports filed yet";
+      root.innerHTML = `<div class="pd-empty-cta">
+        <p class="pd-empty-cta__title">No reports on this player yet</p>
+        <p class="pd-empty-cta__text">Once scouts file reports, an AI summary of them will appear here.</p>
+        <a class="pd-btn" href="${escapeHtml(reportLinkHref())}">+ Add report</a>
+      </div>`;
+      listEl.innerHTML = "";
+      return;
+    }
+    const stats = data.stats || {};
+    const summary = data.summary || {};
+    if (sub) {
+      sub.textContent = [
+        `${count} report${count === 1 ? "" : "s"}`,
+        stats.scouts?.length ? `${stats.scouts.length} scout${stats.scouts.length === 1 ? "" : "s"}` : "",
+        stats.last_date ? `latest ${shortDate(stats.last_date)}` : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    }
+    const kpis = [
+      stats.pvfc_level
+        ? { label: "Level", value: `${stats.pvfc_level} · ${stats.pvfc_level_title || LEVEL_TITLES[stats.pvfc_level] || ""}` }
+        : null,
+      stats.avg_match_rating != null ? { label: "Avg rating", value: `${stats.avg_match_rating}/10` } : null,
+      stats.avg_current_ability != null ? { label: "CA", value: `${stats.avg_current_ability}/5` } : null,
+      stats.avg_potential_ability != null ? { label: "PA", value: `${stats.avg_potential_ability}/5` } : null,
+      stats.next_action_title ? { label: "Next", value: stats.next_action_title } : null,
+    ].filter(Boolean);
+    const engineLabel = summary.engine === "ai" ? "AI summary" : "Summary";
+    root.innerHTML = `<div class="pd-summary__card">
+      <div class="pd-summary__top">
+        <span class="pd-summary__badge${summary.engine === "ai" ? " is-ai" : ""}">${engineLabel}</span>
+        ${kpis.length ? `<div class="pd-summary__kpis">${kpis
+          .map((k) => `<span class="pd-summary__kpi"><em>${k.label}</em>${escapeHtml(k.value)}</span>`)
+          .join("")}</div>` : ""}
+      </div>
+      ${summary.headline ? `<p class="pd-summary__headline">${escapeHtml(summary.headline)}</p>` : ""}
+      ${summary.strengths?.length ? `<p class="pd-summary__label">Strengths</p>${bulletList(summary.strengths, "is-good")}` : ""}
+      ${summary.concerns?.length ? `<p class="pd-summary__label">Concerns</p>${bulletList(summary.concerns, "is-bad")}` : ""}
+      ${summary.points?.length ? bulletList(summary.points, "") : ""}
+      ${summary.recommendation && summary.engine === "ai" ? `<p class="pd-summary__rec"><em>Recommendation</em>${escapeHtml(summary.recommendation)}</p>` : ""}
+    </div>`;
+    const reports = data.reports || [];
+    listEl.innerHTML = reports.length
+      ? `<p class="pd-summary__label">Latest reports</p>${reports
+          .slice(0, 4)
+          .map((row) => {
+            const tag = row.href ? "a" : "div";
+            const href = row.href ? ` href="${escapeHtml(row.href)}"` : "";
+            const meta = [
+              row.scout,
+              row.position,
+              row.match_rating != null ? `${row.match_rating}/10` : "",
+              row.pvfc_level ? `Level ${row.pvfc_level}` : "",
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            const del = row.id
+              ? `<button type="button" class="pd-report__delete" data-delete-note="${escapeHtml(row.id)}">Delete</button>`
+              : "";
+            return `<${tag} class="pd-report-row"${href}>
+              <span class="pd-report-row__date">${shortDate(row.date)}</span>
+              <span class="pd-report-row__main">
+                <strong>${escapeHtml(row.fixture || "Report")}</strong>
+                ${meta ? `<span>${escapeHtml(meta)}</span>` : ""}
+              </span>
+              ${del}
+            </${tag}>`;
+          })
+          .join("")}`
+      : "";
+  }
+
+  function reportLinkHref() {
+    return noteState.playerId
+      ? `/match-scouting?manual=1&player=${encodeURIComponent(noteState.playerId)}`
+      : "/match-scouting?new=search";
+  }
+
+  async function loadReportSummary() {
+    if (!noteState.playerId) return;
+    try {
+      const res = await fetch(`/api/player/${noteState.playerId}/reports-summary`, {
+        cache: "no-store",
+        credentials: "same-origin",
+        signal: AbortSignal.timeout(60000),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      renderReportSummary(data);
+    } catch (err) {
+      const root = document.getElementById("pdReportSummary");
+      if (root) root.innerHTML = `<p class="pd-empty">Could not load reports (${escapeHtml(err.message || err)}).</p>`;
+    }
   }
 
   function applyActivityPayload(data) {
     renderNotes(data.notes || []);
-    renderReports(data.reports || []);
     renderAbility(data.ability);
+    loadReportSummary();
   }
 
   const noteState = {
@@ -1005,14 +1105,11 @@
       if (!res.ok) return;
       const data = await res.json();
       const player = data.player || {};
-      document.querySelectorAll("#pdBioStats .pd-stat").forEach((stat) => {
-        const label = stat.querySelector(".pd-stat__label")?.textContent;
-        const valueEl = stat.querySelector(".pd-stat__value");
-        if (!valueEl) return;
-        if (label === "Height" && player.height) valueEl.textContent = player.height;
-        if (label === "Foot" && player.foot) valueEl.textContent = player.foot;
-      });
-      if (data.hero_stats?.length) renderKeyStats(data.hero_stats);
+      for (const key of ["height", "foot", "citizenship", "market_value", "on_loan_from", "birthdate"]) {
+        if (cleanBio(player[key])) bioState.player[key] = player[key];
+      }
+      bioState.contract = data.web?.transfermarkt?.contract_expires || bioState.contract;
+      renderBioFacts();
       renderFotmob(data.web?.fotmob, data.links?.fotmob);
       const tags = [];
       if (player.citizenship) tags.push({ text: player.citizenship, gold: false });
@@ -1035,17 +1132,19 @@
       root.innerHTML = `<p class="pd-empty">No seasons listed.</p>`;
       return;
     }
-    root.innerHTML = seasons
-      .map((season) => {
-        const label = season.label || `${season.competition_name || ""} ${season.season || ""}`.trim();
-        const club = season.club ? ` · ${season.club}` : "";
+    const current = seasonFromQuery();
+    const sorted = [...seasons].sort((a, b) => String(b.season || "").localeCompare(String(a.season || "")));
+    root.innerHTML = sorted
+      .map((season, idx) => {
         const href = season.iteration_id
           ? `/player/${playerId}?iteration=${season.iteration_id}`
           : `/player/${playerId}`;
-        return `<div class="pd-season-row">
-          <a href="${href}">${label}</a>
-          <span class="pd-season-row__meta">${club}${season.chartable ? "" : " · limited data"}</span>
-        </div>`;
+        const active = current ? Number(season.iteration_id) === current : idx === 0;
+        return `<a class="pd-club${active ? " is-current" : ""}" href="${href}">
+          <span class="pd-club__season">${escapeHtml(season.season || "—")}</span>
+          <span class="pd-club__name">${escapeHtml(season.club || "Unknown club")}</span>
+          <span class="pd-club__league">${escapeHtml(season.competition_name || "")}${season.chartable ? "" : " · limited data"}</span>
+        </a>`;
       })
       .join("");
   }
@@ -1078,12 +1177,13 @@
         chartState.profilesByPosition[chartState.selectedPosition] = data.profiles;
       }
       renderHero(data.player, data.hero_stats, data.ability);
-      renderKeyStats(data.hero_stats?.length ? data.hero_stats : data.key_stats);
       renderFotmob(data.web?.fotmob, data.links?.fotmob);
       renderProfiles(data.profiles);
       renderNotes(data.notes);
-      renderReports(data.reports);
       renderSeasons(data.seasons, data.player.id);
+      const addReportLink = document.getElementById("pdAddReportLink");
+      if (addReportLink) addReportLink.href = reportLinkHref();
+      loadReportSummary();
 
       const charts = document.getElementById("pdChartsLink");
       const compare = document.getElementById("pdCompareLink");

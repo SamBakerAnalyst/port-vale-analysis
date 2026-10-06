@@ -2449,6 +2449,16 @@ def register_player_dossier_routes(app: FastAPI) -> None:
         name = _cached_player_name(player_id)
         return {"ok": True, **_activity_payload(player_id, name or str(player_id))}
 
+    @app.get("/api/player/{player_id}/reports-summary")
+    def player_reports_summary_api(
+        player_id: int,
+        refresh: bool = Query(False),
+    ) -> dict[str, Any]:
+        from app.player_overview import build_reports_summary
+
+        name = _cached_player_name(player_id)
+        return build_reports_summary(player_id, name or str(player_id), refresh=refresh)
+
     @app.get("/player/{player_id}", response_class=HTMLResponse)
     def player_dossier_page(player_id: int) -> HTMLResponse:
         html_path = STANDALONE_DIR / "player-dossier.html"

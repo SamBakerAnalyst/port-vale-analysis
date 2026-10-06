@@ -86,15 +86,20 @@ def test_missing_player_is_404(monkeypatch):
     assert "local player database" in str(exc.value.detail)
 
 
-def test_page_uses_identity_and_analytics_layout():
+def test_page_uses_overview_layout():
     html = (dossier.STANDALONE_DIR / "player-dossier.html").read_text(encoding="utf-8")
     css = (dossier.STANDALONE_DIR.parent / "static" / "player-dossier.css").read_text(encoding="utf-8")
     js = (dossier.STANDALONE_DIR.parent / "static" / "player-dossier.js").read_text(encoding="utf-8")
     assert 'class="pd-shell"' in html
-    assert 'class="pd-identity"' in html
-    assert 'class="pd-analytics"' in html
+    assert 'class="pd-overview"' in html
+    for quadrant in ("pd-q--tech", "pd-q--phys", "pd-q--reports", "pd-q--notes"):
+        assert quadrant in html
+    assert 'class="pd-centre"' in html
+    assert "Coming soon" in html
+    assert 'id="pdReportSummary"' in html
+    assert "loadReportSummary" in js
     assert 'id="pdProfileBars"' in html
-    assert "grid-template-columns: minmax(280px, 340px)" in css
+    assert '"tech centre phys"' in css
     assert "plotly" not in html.lower()
     assert "Loading player dossier from Impect" not in js
     assert "Loading recent games" not in js
