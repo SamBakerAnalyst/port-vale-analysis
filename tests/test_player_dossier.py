@@ -217,3 +217,20 @@ def test_profile_factors_come_from_impect_without_blocking_cache(monkeypatch):
     assert any("Hold" in label for label in labels)
     assert hold["factors"][0]["weight"] >= hold["factors"][-1]["weight"]
     assert hold["factors"][0]["valueLabel"] == "2.41"
+
+
+def test_migrated_scout_reports_leave_the_notes_log(monkeypatch):
+    rows = [
+        {"kind": "note", "fixture": "Agent call", "summary": "Agent says open to a move in January."},
+        {
+            "kind": "note",
+            "fixture": "Gemini scout report — Sam Baker",
+            "summary": "[Migrated from Gemini Sports] Original scout (Gemini): Sam Baker — created Aug 17",
+        },
+        {"kind": "report", "fixture": "Live look", "summary": "Strong in the air."},
+    ]
+    monkeypatch.setattr(dossier, "_reports_for_player", lambda pid, name: rows)
+    notes, reports = dossier._split_player_activity(1, "Player")
+    assert [row["fixture"] for row in notes] == ["Agent call"]
+    assert len(reports) == 2
+    assert all(row["kind"] == "report" for row in reports)

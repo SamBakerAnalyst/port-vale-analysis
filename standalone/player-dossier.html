@@ -11,7 +11,7 @@
     href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;1,600;1,700;1,800&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="/static/player-dossier.css?v=28" />
+  <link rel="stylesheet" href="/static/player-dossier.css?v=29" />
 </head>
 <body>
   <div class="pd">
@@ -128,10 +128,34 @@
           <div class="pd-card__head pd-card__head--actions">
             <div class="pd-q__title">
               <h2>Notes</h2>
-              <span class="pd-card__sub">Chasing · agent · work</span>
+              <span class="pd-card__sub" id="pdCmsSub">Player file · agent · contract · chasing</span>
             </div>
-            <button type="button" class="pd-btn pd-btn--small" id="pdAddNoteBtn">Add notes</button>
+            <div class="pd-q__actions">
+              <button type="button" class="pd-btn pd-btn--small pd-btn--ghost" id="pdCmsEditBtn">Edit file</button>
+              <button type="button" class="pd-btn pd-btn--small" id="pdAddNoteBtn">Add note</button>
+            </div>
           </div>
+
+          <div class="pd-cms" id="pdCms">
+            <div class="pd-cms__view" id="pdCmsView"><p class="pd-empty">Loading player file…</p></div>
+            <form class="pd-cms__form" id="pdCmsForm" hidden>
+              <div class="pd-note-form__row">
+                <label class="pd-note-form__field"><span>Agent</span><input type="text" name="agent_name" maxlength="80" placeholder="Agent / agency" /></label>
+                <label class="pd-note-form__field"><span>Contract expires</span><input type="text" name="contract_expires" maxlength="80" placeholder="e.g. 30/06/2027" /></label>
+              </div>
+              <label class="pd-note-form__field"><span>Agent notes</span><textarea name="agent_notes" rows="2" placeholder="Contact, relationship, last conversation…"></textarea></label>
+              <label class="pd-note-form__field"><span>Contract notes</span><textarea name="contract_notes" rows="2" placeholder="Options, clauses, release fee…"></textarea></label>
+              <label class="pd-note-form__field"><span>Wages</span><textarea name="wages_notes" rows="2" placeholder="Current / expected wages"></textarea></label>
+              <label class="pd-note-form__field"><span>Other</span><textarea name="other_notes" rows="3" placeholder="Character, family, availability, anything else"></textarea></label>
+              <p class="pd-note-form__error" id="pdCmsError" hidden></p>
+              <div class="pd-note-form__actions">
+                <button type="button" class="pd-btn pd-btn--ghost pd-btn--small" id="pdCmsCancel">Cancel</button>
+                <button type="submit" class="pd-btn pd-btn--small" id="pdCmsSave">Save file</button>
+              </div>
+            </form>
+          </div>
+
+          <p class="pd-summary__label">Notes log</p>
           <div id="pdNotes" class="pd-notes-list"><p class="pd-empty">No notes yet.</p></div>
         </section>
       </div>
@@ -211,7 +235,7 @@
     </div>
   </div>
 
-  <script defer src="/static/player-dossier.js?v=29"></script>
+  <script defer src="/static/player-dossier.js?v=31"></script>
   <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>

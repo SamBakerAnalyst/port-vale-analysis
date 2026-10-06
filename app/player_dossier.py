@@ -12,7 +12,7 @@ import uuid
 from typing import Any
 from urllib.parse import quote
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
@@ -88,6 +88,15 @@ class PlayerNoteCreate(BaseModel):
     current_ability: float | None = None
     potential_ability: float | None = None
     date: str = ""
+
+
+class PlayerCmsUpdate(BaseModel):
+    agent_name: str = ""
+    agent_notes: str = ""
+    contract_expires: str = ""
+    contract_notes: str = ""
+    wages_notes: str = ""
+    other_notes: str = ""
 
 
 class PlayerNoteUpdate(BaseModel):
@@ -655,10 +664,31 @@ def _example_reports_for_player(player_id: int, name: str) -> list[dict[str, Any
     return out
 
 
+_SCOUT_REPORT_NOTE_RE = re.compile(
+    r"migrated from gemini|original scout \(gemini\)|gemini verdict|scout comments\s*:",
+    re.I,
+)
+
+
+def _is_scout_report_note(row: dict[str, Any]) -> bool:
+    """Scout write-ups that were filed (or migrated) into the notes store."""
+    title = str(row.get("fixture") or "").casefold()
+    if "scout report" in title:
+        return True
+    return bool(_SCOUT_REPORT_NOTE_RE.search(str(row.get("summary") or "")))
+
+
 def _split_player_activity(player_id: int, name: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     rows = _reports_for_player(player_id, name)
-    notes = [row for row in rows if _normalize_entry_kind(row.get("kind")) == "note"]
-    scout_reports = [row for row in rows if _normalize_entry_kind(row.get("kind")) != "note"]
+    notes: list[dict[str, Any]] = []
+    scout_reports: list[dict[str, Any]] = []
+    for row in rows:
+        if _normalize_entry_kind(row.get("kind")) != "note":
+            scout_reports.append(row)
+        elif _is_scout_report_note(row):
+            scout_reports.append({**row, "kind": "report"})
+        else:
+            notes.append(row)
     return notes, scout_reports
 
 
@@ -2448,6 +2478,43 @@ def register_player_dossier_routes(app: FastAPI) -> None:
         delete_player_note(player_id, note_id)
         name = _cached_player_name(player_id)
         return {"ok": True, **_activity_payload(player_id, name or str(player_id))}
+
+    def _cms_identity(player_id: int) -> tuple[str, str]:
+        rows = _cached_rows_for_player(player_id)
+        pipeline = _pipeline_row_for_player(player_id) or {}
+        first = rows[0] if rows else {}
+        name = str(first.get("name") or pipeline.get("name") or "").strip()
+        club = str(first.get("club") or pipeline.get("club") or "").strip()
+        return name, club
+
+    @app.get("/api/player/{player_id}/cms")
+    def player_cms_api(player_id: int) -> dict[str, Any]:
+        from app.player_reports import cms_for_player
+
+        name, club = _cms_identity(player_id)
+        return {"player_id": player_id, "cms": cms_for_player(player_id, name=name, club=club)}
+
+    @app.put("/api/player/{player_id}/cms")
+    def player_cms_save_api(player_id: int, body: PlayerCmsUpdate, request: Request) -> dict[str, Any]:
+        from app.auth import current_user_payload
+        from app.player_reports import save_cms
+
+        user = current_user_payload(request)
+        staff = str(user.get("display_name") or user.get("username") or "Staff").strip() or "Staff"
+        name, club = _cms_identity(player_id)
+        cms = save_cms(
+            player_id=player_id,
+            agent_name=body.agent_name,
+            agent_notes=body.agent_notes,
+            contract_expires=body.contract_expires,
+            contract_notes=body.contract_notes,
+            wages_notes=body.wages_notes,
+            other_notes=body.other_notes,
+            staff=staff,
+            name=name,
+            club=club,
+        )
+        return {"ok": True, "player_id": player_id, "cms": cms}
 
     @app.get("/api/player/{player_id}/reports-summary")
     def player_reports_summary_api(

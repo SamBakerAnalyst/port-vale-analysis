@@ -16,7 +16,7 @@ def _report(**overrides):
         "next_action": "high_priority",
         "current_ability": None,
         "potential_ability": None,
-        "text": "Strong in the air. Holds the ball up well under pressure.",
+        "text": "Strong in the air and a good size. Good first touch and carried the ball well.",
         "next_steps": "",
         "href": "/reports-library",
     }
@@ -47,4 +47,20 @@ def test_reports_build_consensus_summary(monkeypatch):
     assert stats["scouts"] == ["Dave", "Martin"]
     assert stats["next_action"] == "high_priority"
     assert data["summary"]["engine"] == "built-in"
-    assert "3 reports from 2 scouts" in data["summary"]["headline"]
+    summary = data["summary"]
+    assert "Watched 3 times by 2 scouts" in summary["headline"]
+    assert "centre-forward" in summary["headline"]
+    assert any(item.startswith("Crosses & aerial play") or item.startswith("Technique") or "Physique" in item for item in summary["strengths"])
+    assert summary["recommendation"].startswith("High priority")
+
+
+def test_clean_text_strips_migration_headers():
+    text = (
+        "Original scout (Gemini): Tom Fry — created Oct 30 - 2:19pm 2025\n"
+        "Match (Gemini): A vs B · Position in match: LW · Context: vs B on 18/10/2025\n"
+        "Scout comments: •\tGood first touch and carried the ball well.\n"
+        "Gemini verdict: No (from Tom Fry)."
+    )
+    sentences = overview._clean_report_text(text)
+    assert sentences == ["Good first touch and carried the ball well"]
+    assert overview._date_from_text(text) == "2025-10-18"

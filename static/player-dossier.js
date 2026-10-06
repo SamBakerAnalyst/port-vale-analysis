@@ -626,7 +626,7 @@
     renderEntryList(
       "pdNotes",
       notes,
-      "No notes yet. Log agent chats, chasing, and work updates here."
+      "No notes yet. Use <strong>Add note</strong> for agent calls, chasing and work updates."
     );
   }
 
@@ -685,7 +685,7 @@
       ${summary.strengths?.length ? `<p class="pd-summary__label">Strengths</p>${bulletList(summary.strengths, "is-good")}` : ""}
       ${summary.concerns?.length ? `<p class="pd-summary__label">Concerns</p>${bulletList(summary.concerns, "is-bad")}` : ""}
       ${summary.points?.length ? bulletList(summary.points, "") : ""}
-      ${summary.recommendation && summary.engine === "ai" ? `<p class="pd-summary__rec"><em>Recommendation</em>${escapeHtml(summary.recommendation)}</p>` : ""}
+      ${summary.recommendation ? `<p class="pd-summary__rec"><em>Recommendation</em>${escapeHtml(summary.recommendation)}</p>` : ""}
     </div>`;
     const reports = data.reports || [];
     listEl.innerHTML = reports.length
@@ -696,7 +696,7 @@
             const href = row.href ? ` href="${escapeHtml(row.href)}"` : "";
             const meta = [
               row.scout,
-              row.position,
+              row.position_label || row.position,
               row.match_rating != null ? `${row.match_rating}/10` : "",
               row.pvfc_level ? `Level ${row.pvfc_level}` : "",
             ]
@@ -739,6 +739,127 @@
       const root = document.getElementById("pdReportSummary");
       if (root) root.innerHTML = `<p class="pd-empty">Could not load reports (${escapeHtml(err.message || err)}).</p>`;
     }
+  }
+
+  const CMS_FIELDS = [
+    { key: "agent_name", label: "Agent" },
+    { key: "contract_expires", label: "Contract expires" },
+    { key: "agent_notes", label: "Agent notes", long: true },
+    { key: "contract_notes", label: "Contract notes", long: true },
+    { key: "wages_notes", label: "Wages", long: true },
+    { key: "other_notes", label: "Other", long: true },
+  ];
+  const cmsState = { data: null };
+
+  function renderCms() {
+    const view = document.getElementById("pdCmsView");
+    const sub = document.getElementById("pdCmsSub");
+    if (!view) return;
+    const cms = cmsState.data || {};
+    const filled = CMS_FIELDS.filter((f) => String(cms[f.key] || "").trim());
+    if (sub) {
+      sub.textContent = cms.updated_at
+        ? `Player file · updated ${shortDate(cms.updated_at)}${cms.updated_by ? ` by ${cms.updated_by}` : ""}`
+        : "Player file · agent · contract · chasing";
+    }
+    if (!filled.length) {
+      view.innerHTML = `<button type="button" class="pd-cms__empty" data-cms-edit>
+        <strong>Start his player file</strong>
+        <span>Agent, contract, wages and anything else worth knowing.</span>
+      </button>`;
+      return;
+    }
+    const short = filled.filter((f) => !f.long);
+    const long = filled.filter((f) => f.long);
+    view.innerHTML = `${short.length ? `<div class="pd-cms__facts">${short
+      .map(
+        (f) => `<div class="pd-stat"><span class="pd-stat__label">${f.label}${
+          f.key === "contract_expires" && cms.contract_expires_source && cms.contract_expires === cms.contract_expires_source
+            ? " · TM"
+            : ""
+        }</span><span class="pd-stat__value">${escapeHtml(cms[f.key])}</span></div>`
+      )
+      .join("")}</div>` : ""}${long
+      .map(
+        (f) => `<div class="pd-cms__block"><span class="pd-cms__label">${f.label}</span><p>${escapeHtml(cms[f.key])}</p></div>`
+      )
+      .join("")}`;
+  }
+
+  function openCmsEditor(open) {
+    const form = document.getElementById("pdCmsForm");
+    const view = document.getElementById("pdCmsView");
+    if (!form || !view) return;
+    form.hidden = !open;
+    view.hidden = open;
+    if (open) {
+      const cms = cmsState.data || {};
+      CMS_FIELDS.forEach((f) => {
+        const input = form.elements.namedItem(f.key);
+        if (input) input.value = cms[f.key] || "";
+      });
+      document.getElementById("pdCmsError").hidden = true;
+      form.elements.namedItem("agent_name")?.focus();
+    }
+  }
+
+  async function loadCms() {
+    if (!noteState.playerId) return;
+    try {
+      const res = await fetch(`/api/player/${noteState.playerId}/cms`, { cache: "no-store", credentials: "same-origin" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      cmsState.data = data.cms || {};
+      renderCms();
+    } catch (err) {
+      const view = document.getElementById("pdCmsView");
+      if (view) view.innerHTML = `<p class="pd-empty">Could not load player file (${escapeHtml(err.message || err)}).</p>`;
+    }
+  }
+
+  async function saveCms(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const btn = document.getElementById("pdCmsSave");
+    const errEl = document.getElementById("pdCmsError");
+    const body = {};
+    CMS_FIELDS.forEach((f) => {
+      body[f.key] = String(form.elements.namedItem(f.key)?.value || "").trim();
+    });
+    btn.disabled = true;
+    btn.textContent = "Saving…";
+    try {
+      const res = await fetch(`/api/player/${noteState.playerId}/cms`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      cmsState.data = data.cms || body;
+      if (cmsState.data.contract_expires) {
+        bioState.contract = cmsState.data.contract_expires;
+        renderBioFacts();
+      }
+      renderCms();
+      openCmsEditor(false);
+    } catch (err) {
+      errEl.textContent = err.message || String(err);
+      errEl.hidden = false;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Save file";
+    }
+  }
+
+  function wireCmsUi() {
+    document.getElementById("pdCmsEditBtn")?.addEventListener("click", () => openCmsEditor(true));
+    document.getElementById("pdCmsCancel")?.addEventListener("click", () => openCmsEditor(false));
+    document.getElementById("pdCmsForm")?.addEventListener("submit", saveCms);
+    document.getElementById("pdCmsView")?.addEventListener("click", (event) => {
+      if (event.target.closest("[data-cms-edit]")) openCmsEditor(true);
+    });
   }
 
   function applyActivityPayload(data) {
@@ -1184,6 +1305,7 @@
       const addReportLink = document.getElementById("pdAddReportLink");
       if (addReportLink) addReportLink.href = reportLinkHref();
       loadReportSummary();
+      loadCms();
 
       const charts = document.getElementById("pdChartsLink");
       const compare = document.getElementById("pdCompareLink");
@@ -1218,6 +1340,7 @@
   }
 
   wireNotesUi();
+  wireCmsUi();
   wirePositionButtons();
   wireProfileFilters();
   load();
