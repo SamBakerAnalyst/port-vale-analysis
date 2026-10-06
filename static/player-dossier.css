@@ -1485,6 +1485,62 @@ body {
   color: var(--muted);
 }
 
+.pd-club--impect {
+  grid-template-columns: 3.4rem minmax(0, 1fr) auto;
+  grid-template-areas:
+    "season name impect"
+    "season league impect";
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pd-club--history { opacity: 0.72; }
+
+.pd-club__name {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.pd-club__club {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pd-club__badge {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  object-fit: contain;
+}
+
+.pd-club__loan {
+  flex: none;
+  padding: 0 0.3rem;
+  border: 1px solid rgba(245, 197, 24, 0.45);
+  border-radius: 3px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.pd-club__impect {
+  grid-area: impect;
+  align-self: center;
+  height: 22px;
+  width: auto;
+  margin-left: 0.4rem;
+  opacity: 0.85;
+}
+
+.pd-club--impect:hover .pd-club__impect,
+.pd-club--impect.is-current .pd-club__impect { opacity: 1; }
+
 .pd-centre .pd-ability { width: 100%; text-align: left; }
 
 /* Physical — coming soon */

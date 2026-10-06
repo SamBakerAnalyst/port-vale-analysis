@@ -112,6 +112,9 @@
   const chartState = {
     playerId: null,
     iterationId: null,
+    squadId: null,
+    seasonLabel: "",
+    positionLabel: "",
     selectedPosition: null,
     selectedProfile: null,
     profilesByPosition: {},
@@ -129,9 +132,11 @@
   function setProfileSubtitle(label) {
     const card = document.getElementById("pdRadarSub");
     if (!card) return;
+    chartState.positionLabel = label || "";
+    const season = chartState.seasonLabel ? ` · ${chartState.seasonLabel}` : "";
     card.textContent = label
-      ? `PV profile radar · ${label}`
-      : "Port Vale profile scores";
+      ? `PV profile radar · ${label}${season}`
+      : `Port Vale profile scores${season}`;
   }
 
   function renderPositions(player) {
@@ -188,17 +193,21 @@
     }
     if (bars) bars.innerHTML = `<p class="pd-empty">Loading profiles…</p>`;
     radarEl.innerHTML = "";
+    const token = chartState.seasonToken;
     try {
-      const url =
-        `/api/player/${chartState.playerId}/profiles?position=${encodeURIComponent(positionCode)}` +
-        (chartState.iterationId ? `&iteration=${chartState.iterationId}` : "");
+      const url = chartState.squadId
+        ? seasonProfilesUrl(positionCode)
+        : `/api/player/${chartState.playerId}/profiles?position=${encodeURIComponent(positionCode)}` +
+          (chartState.iterationId ? `&iteration=${chartState.iterationId}` : "");
       const res = await fetch(url, { cache: "no-store", credentials: "same-origin", signal: AbortSignal.timeout(60000) });
       const data = await res.json().catch(() => ({}));
+      if (token !== chartState.seasonToken) return;
       if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
       setProfileSubtitle(data.position_label || positionCode);
       chartState.profilesByPosition[positionCode] = data.profiles || [];
       renderProfiles(data.profiles || []);
     } catch (err) {
+      if (token !== chartState.seasonToken) return;
       if (legend) {
         legend.hidden = false;
         legend.innerHTML = `<p class="pd-empty">Could not load profiles (${err.message || err}).</p>`;
@@ -550,14 +559,18 @@
     renderFactorStats();
     const url =
       `/api/player/${chartState.playerId}/factors?position=${encodeURIComponent(positionCode)}` +
-      (chartState.iterationId ? `&iteration=${chartState.iterationId}` : "");
+      (chartState.iterationId ? `&iteration=${chartState.iterationId}` : "") +
+      (chartState.squadId ? `&squad=${chartState.squadId}` : "");
+    const token = chartState.seasonToken;
     try {
       const res = await fetch(url, { cache: "no-store", credentials: "same-origin", signal: AbortSignal.timeout(45000) });
       const data = await res.json().catch(() => ({}));
+      if (token !== chartState.seasonToken) return;
       if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
       chartState.factorsByPosition[positionCode] = data.profiles || [];
       if (positionCode === chartState.selectedPosition) renderFactorStats();
     } catch (_err) {
+      if (token !== chartState.seasonToken) return;
       if (chartState.factorsByPosition[positionCode] == null) {
         chartState.factorsByPosition[positionCode] = [];
       }
@@ -1247,30 +1260,142 @@
     }
   }
 
-  function renderSeasons(seasons, playerId) {
+  const careerState = { rows: [] };
+
+  function seasonProfilesUrl(positionCode) {
+    return (
+      `/api/player/${chartState.playerId}/season-profiles?iteration=${chartState.iterationId}` +
+      `&squad=${chartState.squadId}` +
+      (positionCode ? `&position=${encodeURIComponent(positionCode)}` : "")
+    );
+  }
+
+  function careerRowsFromImpect(seasons) {
+    return [...(seasons || [])]
+      .sort((a, b) => String(b.season || "").localeCompare(String(a.season || "")))
+      .map((season) => ({
+        season: season.season,
+        club: season.club,
+        league: season.competition_name,
+        logo: "",
+        impect:
+          season.impect_iteration_id && season.impect_squad_id
+            ? {
+                iteration_id: Number(season.impect_iteration_id),
+                squad_id: Number(season.impect_squad_id),
+                minutes: season.minutes,
+              }
+            : null,
+      }));
+  }
+
+  function isSelectedSeason(row) {
+    return (
+      row.impect &&
+      Number(row.impect.iteration_id) === Number(chartState.iterationId) &&
+      (!chartState.squadId || Number(row.impect.squad_id) === Number(chartState.squadId))
+    );
+  }
+
+  function renderSeasons(rows) {
     const root = document.getElementById("pdSeasons");
-    if (!seasons?.length) {
+    careerState.rows = rows || [];
+    if (!careerState.rows.length) {
       root.innerHTML = `<p class="pd-empty">No seasons listed.</p>`;
       return;
     }
-    const current = seasonFromQuery();
-    const sorted = [...seasons].sort((a, b) => String(b.season || "").localeCompare(String(a.season || "")));
-    root.innerHTML = sorted
-      .map((season, idx) => {
-        const href = season.iteration_id
-          ? `/player/${playerId}?iteration=${season.iteration_id}`
-          : `/player/${playerId}`;
-        const active = current ? Number(season.iteration_id) === current : idx === 0;
-        const mins = Number(season.minutes) > 0 ? ` · ${Math.round(season.minutes).toLocaleString("en-GB")} mins` : "";
-        const league = `${escapeHtml(season.competition_name || "")}${mins}${season.chartable || season.history ? "" : " · limited data"}`;
+    let marked = false;
+    root.innerHTML = careerState.rows
+      .map((row, idx) => {
+        const stats = [
+          row.league,
+          row.apps != null ? `${row.apps} apps` : "",
+          row.goals ? `${row.goals} ${row.goals === 1 ? "goal" : "goals"}` : "",
+          !row.apps && Number(row.impect?.minutes) > 0
+            ? `${Math.round(row.impect.minutes).toLocaleString("en-GB")} mins`
+            : "",
+        ].filter(Boolean);
+        const badge = row.logo
+          ? `<img class="pd-club__badge" src="${escapeHtml(row.logo)}" alt="" loading="lazy" onerror="this.remove()" />`
+          : "";
+        const loan = row.on_loan ? `<span class="pd-club__loan">Loan</span>` : "";
         const body = `
-          <span class="pd-club__season">${escapeHtml(season.season || "—")}</span>
-          <span class="pd-club__name">${escapeHtml(season.club || "Unknown club")}</span>
-          <span class="pd-club__league">${league}</span>`;
-        if (season.history) return `<div class="pd-club pd-club--history">${body}</div>`;
-        return `<a class="pd-club${active ? " is-current" : ""}" href="${href}">${body}</a>`;
+          <span class="pd-club__season">${escapeHtml(row.season || "—")}</span>
+          <span class="pd-club__name">${badge}<span class="pd-club__club">${escapeHtml(row.club || "Unknown club")}</span>${loan}</span>
+          <span class="pd-club__league">${escapeHtml(stats.join(" · "))}</span>`;
+        if (!row.impect) return `<div class="pd-club pd-club--history">${body}</div>`;
+        const active = !marked && isSelectedSeason(row);
+        if (active) marked = true;
+        return `<button type="button" class="pd-club pd-club--impect${active ? " is-current" : ""}" data-season-idx="${idx}" aria-pressed="${active}" title="Show ${escapeHtml(row.season)} Impect data">
+          ${body}
+          <img class="pd-club__impect" src="/static/impect-mark.png" alt="Impect data" />
+        </button>`;
       })
       .join("");
+  }
+
+  async function selectSeason(row) {
+    if (!row?.impect) return;
+    chartState.iterationId = row.impect.iteration_id;
+    chartState.squadId = row.impect.squad_id;
+    chartState.seasonLabel = [row.club, row.season].filter(Boolean).join(" · ");
+    chartState.seasonToken = (chartState.seasonToken || 0) + 1;
+    const token = chartState.seasonToken;
+    chartState.profilesByPosition = {};
+    chartState.factorsByPosition = {};
+    renderSeasons(careerState.rows);
+    setProfileSubtitle(chartState.positionLabel);
+    const bars = document.getElementById("pdProfileBars");
+    if (bars) bars.innerHTML = `<p class="pd-empty">Loading ${escapeHtml(row.season)} profiles…</p>`;
+    document.getElementById("pdRadar").innerHTML = "";
+    try {
+      const res = await fetch(seasonProfilesUrl(""), {
+        cache: "no-store",
+        credentials: "same-origin",
+        signal: AbortSignal.timeout(90000),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (token !== chartState.seasonToken) return;
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      if (data.position) {
+        chartState.selectedPosition = data.position;
+        chartState.profilesByPosition[data.position] = data.profiles || [];
+      }
+      if (data.positions?.length) renderPositions({ positions: data.positions, primary_position: data.position });
+      setProfileSubtitle(data.position_label || "");
+      renderProfiles(data.profiles || []);
+    } catch (err) {
+      if (token !== chartState.seasonToken) return;
+      renderProfiles([]);
+    }
+  }
+
+  async function loadCareer(playerId, fallbackRows) {
+    try {
+      const res = await fetch(`/api/player/${playerId}/career`, {
+        cache: "no-store",
+        credentials: "same-origin",
+        signal: AbortSignal.timeout(30000),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.seasons?.length) renderSeasons(data.seasons);
+    } catch (_err) {
+      // FotMob is extra; the Impect seasons already painted.
+    }
+    if (!currentProfiles().length && !chartState.squadId) {
+      const latest = careerState.rows.find((row) => row.impect) || (fallbackRows || []).find((row) => row.impect);
+      if (latest) selectSeason(latest);
+    }
+  }
+
+  function wireSeasons() {
+    document.getElementById("pdSeasons")?.addEventListener("click", (event) => {
+      const btn = event.target.closest("[data-season-idx]");
+      if (!btn) return;
+      const row = careerState.rows[Number(btn.getAttribute("data-season-idx"))];
+      if (!row || isSelectedSeason(row)) return;
+      selectSeason(row);
+    });
   }
 
   async function load() {
@@ -1304,7 +1429,9 @@
       renderFotmob(data.web?.fotmob, data.links?.fotmob);
       renderProfiles(data.profiles);
       renderNotes(data.notes);
-      renderSeasons(data.seasons, data.player.id);
+      const impectRows = careerRowsFromImpect(data.seasons);
+      renderSeasons(impectRows);
+      loadCareer(data.player.id, impectRows);
       const addReportLink = document.getElementById("pdAddReportLink");
       if (addReportLink) addReportLink.href = reportLinkHref();
       loadReportSummary();
@@ -1346,5 +1473,6 @@
   wireCmsUi();
   wirePositionButtons();
   wireProfileFilters();
+  wireSeasons();
   load();
 })();

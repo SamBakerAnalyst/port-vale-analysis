@@ -1604,6 +1604,8 @@ def _seasons_from_cached_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]
                 "club": club,
                 "label": " · ".join(part for part in (league, season) if part),
                 "iteration_id": row.get("iterationId") or row.get("iteration_id"),
+                "impect_iteration_id": row.get("iterationId") or row.get("iteration_id"),
+                "impect_squad_id": row.get("squadId") or row.get("squad_id"),
                 "chartable": True,
             }
         )
@@ -1666,6 +1668,8 @@ def _with_career_history(player_id: int, seasons: list[dict[str, Any]]) -> list[
         )
         if same is not None:
             same.setdefault("minutes", minutes)
+            same["impect_iteration_id"] = same.get("impect_iteration_id") or int(iteration_id)
+            same["impect_squad_id"] = same.get("impect_squad_id") or int(squad_id)
             continue
         merged.append(
             {
@@ -1674,6 +1678,8 @@ def _with_career_history(player_id: int, seasons: list[dict[str, Any]]) -> list[
                 "club": club,
                 "label": " · ".join(part for part in (competition, season) if part),
                 "iteration_id": None,
+                "impect_iteration_id": int(iteration_id),
+                "impect_squad_id": int(squad_id),
                 "minutes": minutes,
                 "chartable": False,
                 "history": True,
@@ -2170,11 +2176,129 @@ def _factor_rows_for_profile(
     return top
 
 
+_SEASON_PROFILES_CACHE: dict[tuple[int, int, int, str], tuple[float, dict[str, Any]]] = {}
+
+
+def build_season_profiles(
+    player_id: int,
+    iteration_id: int,
+    squad_id: int,
+    position: str | None = None,
+) -> dict[str, Any]:
+    """PV profiles for one Impect season/squad — the standouts cache when it has it, else Impect."""
+    wanted = str(position or "").strip().upper()
+    base = {"player_id": player_id, "iteration_id": int(iteration_id), "squad_id": int(squad_id)}
+    rows = [
+        row
+        for row in _cached_rows_for_player(player_id)
+        if int(row.get("iterationId") or row.get("iteration_id") or 0) == int(iteration_id)
+        and int(row.get("squadId") or row.get("squad_id") or squad_id) == int(squad_id)
+    ]
+    by_position = {
+        str(row.get("position") or "").strip().upper(): _profiles_from_score_map(row.get("profileScores"))
+        for row in rows
+        if row.get("position")
+    }
+    by_position = {code: profiles for code, profiles in by_position.items() if profiles}
+    if by_position:
+        positions = _positions_from_cached_rows(rows)
+        code = wanted if wanted in by_position else next(
+            (pos["code"] for pos in positions if pos["code"] in by_position), next(iter(by_position))
+        )
+        return {
+            **base,
+            "position": code,
+            "position_label": _position_label(code),
+            "positions": [pos for pos in positions if pos["code"] in by_position],
+            "profiles": by_position[code],
+        }
+
+    key = (int(player_id), int(iteration_id), int(squad_id))
+    hit = _SEASON_PROFILES_CACHE.get(key)
+    if hit and time.time() - hit[0] < _FACTORS_CACHE_TTL:
+        season = hit[1]
+    else:
+        season = _live_season_profiles(int(player_id), int(iteration_id), int(squad_id))
+        if season["complete"]:
+            _SEASON_PROFILES_CACHE[key] = (time.time(), season)
+    positions = season["positions"]
+    if not positions:
+        return {**base, "position": None, "position_label": None, "positions": [], "profiles": []}
+    chosen = next((pos for pos in positions if pos["code"] == wanted), positions[0])
+    return {
+        **base,
+        "position": chosen["code"],
+        "position_label": chosen["label"],
+        "positions": positions,
+        "profiles": season["by_position"][chosen["code"]],
+    }
+
+
+_SEASON_POSITIONS = (
+    "GOALKEEPER",
+    "CENTRAL_DEFENDER",
+    "LEFT_WINGBACK_DEFENDER",
+    "RIGHT_WINGBACK_DEFENDER",
+    "DEFENSE_MIDFIELD",
+    "CENTRAL_MIDFIELD",
+    "ATTACKING_MIDFIELD",
+    "LEFT_WINGER",
+    "RIGHT_WINGER",
+    "CENTER_FORWARD",
+)
+
+
+def _live_season_profiles(player_id: int, iteration_id: int, squad_id: int) -> dict[str, Any]:
+    """Every position he has Impect profile scores at that season, most minutes first."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    impect = _impect()
+
+    def fetch(code: str) -> list[dict[str, Any]] | None:
+        try:
+            return impect._fetch_profile_scores(iteration_id, squad_id, [code], 0)[0]
+        except Exception:
+            return None
+
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        fetched = dict(zip(_SEASON_POSITIONS, pool.map(fetch, _SEASON_POSITIONS)))
+    for code in [code for code, rows in fetched.items() if rows is None]:
+        fetched[code] = fetch(code)
+    complete = all(rows is not None for rows in fetched.values())
+    by_position: dict[str, list[dict[str, Any]]] = {}
+    positions: list[dict[str, Any]] = []
+    for code, score_rows in fetched.items():
+        score_rows = score_rows or []
+        row = next((r for r in score_rows if int(r.get("playerId") or 0) == player_id), None)
+        if row is None:
+            continue
+        scores = {
+            str(score.get("profileName") or "").strip(): score.get("value")
+            for score in row.get("profileScores") or []
+            if isinstance(score, dict) and impect._is_pv_profile(str(score.get("profileName") or ""))
+        }
+        profiles = _profiles_from_score_map({name: value for name, value in scores.items() if name and value is not None})
+        if not profiles:
+            continue
+        by_position[code] = profiles
+        positions.append(
+            {
+                "code": code,
+                "label": _position_label(code),
+                "abbrev": _position_abbrev(code),
+                "minutes": impect._play_duration_minutes(row),
+            }
+        )
+    positions.sort(key=lambda pos: float(pos.get("minutes") or 0), reverse=True)
+    return {"positions": positions, "by_position": by_position, "complete": complete}
+
+
 def build_player_profile_factors(
     player_id: int,
     *,
     position: str | None = None,
     iteration_id: int | None = None,
+    squad_id: int | None = None,
 ) -> dict[str, Any]:
     """Impect factors that feed each PV profile — loaded after the page paints."""
     cached = build_player_dossier_from_cache(player_id, iteration_id=iteration_id)
@@ -2188,6 +2312,9 @@ def build_player_profile_factors(
         if int(player.get("iteration_id") or 0) != int(iteration_id):
             player["squad_id"] = None
         player["iteration_id"] = iteration_id
+    season_squad = squad_id if iteration_id is not None else None
+    if season_squad is not None:
+        player["squad_id"] = season_squad
     position_code = str(position or player.get("primary_position") or "").strip().upper()
     iter_id, squad_id = _resolve_impect_context(player_id, player)
     empty = {
@@ -2201,12 +2328,16 @@ def build_player_profile_factors(
     if not position_code or not iter_id or not squad_id:
         return empty
 
-    cache_key = (int(player_id), int(iter_id), position_code)
+    cache_key = (int(player_id), int(iter_id), position_code, int(squad_id))
     cached_hit = _FACTORS_CACHE.get(cache_key)
     if cached_hit and time.time() - cached_hit[0] < _FACTORS_CACHE_TTL:
         return cached_hit[1]
 
     profiles = (cached.get("profiles_by_position") or {}).get(position_code) or cached.get("profiles") or []
+    if season_squad is not None:
+        season = build_season_profiles(player_id, int(iter_id), int(squad_id), position_code)
+        if season.get("position") == position_code and season.get("profiles"):
+            profiles = season["profiles"]
     try:
         impect = _impect()
         score_rows, _ = impect._fetch_player_scores(int(iter_id), int(squad_id), [position_code], 0)
@@ -2492,11 +2623,38 @@ def register_player_dossier_routes(app: FastAPI) -> None:
         player_id: int,
         position: str | None = Query(None),
         iteration: int | None = Query(None),
+        squad: int | None = Query(None),
     ) -> dict[str, Any]:
         return build_player_profile_factors(
             player_id,
             position=position,
             iteration_id=iteration,
+            squad_id=squad,
+        )
+
+    @app.get("/api/player/{player_id}/season-profiles")
+    def player_season_profiles_api(
+        player_id: int,
+        iteration: int = Query(...),
+        squad: int = Query(...),
+        position: str | None = Query(None),
+    ) -> dict[str, Any]:
+        return build_season_profiles(player_id, iteration, squad, position)
+
+    @app.get("/api/player/{player_id}/career")
+    def player_career_api(player_id: int, refresh: bool = Query(False)) -> dict[str, Any]:
+        from app.player_career import build_player_career
+
+        cached = build_player_dossier_from_cache(player_id)
+        if cached is None:
+            raise HTTPException(status_code=404, detail=f"Player {player_id} is not in the local player database.")
+        player = cached.get("player") or {}
+        return build_player_career(
+            player_id,
+            str(player.get("name") or ""),
+            list(cached.get("seasons") or []),
+            current_club=str(player.get("club") or ""),
+            refresh=refresh,
         )
 
     @app.get("/api/player/{player_id}/profiles")
