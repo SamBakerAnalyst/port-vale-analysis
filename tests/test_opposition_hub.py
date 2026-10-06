@@ -205,3 +205,19 @@ def test_empty_lake_says_so(tmp_path, monkeypatch):
     oh.clear_memo()
     assert oh.read_meta()["ready"] is False
     assert oh.build_report("26/27", OPP)["ready"] is False
+
+
+def test_progressive_action_rules():
+    from app.opposition_hub import _prog_method
+
+    def step(at, x1, x2, y1=0.0, y2=0.0, a="LOW_PASS", res="SUCCESS"):
+        return {"at": at, "a": a, "res": res, "x1": x1, "y1": y1, "x2": x2, "y2": y2}
+
+    assert _prog_method(step("PASS", -10, 5)) == "short"
+    assert _prog_method(step("PASS", -40, -5, a="DIAGONAL_PASS")) == "long"
+    assert _prog_method(step("PASS", -45, -36)) is None
+    assert _prog_method(step("PASS", -40, -20)) is None
+    assert _prog_method(step("PASS", -10, 5, res="FAIL")) is None
+    assert _prog_method(step("DRIBBLE", 0, 9)) == "carry"
+    assert _prog_method(step("DRIBBLE", 0, 5)) is None
+    assert _prog_method(step("PASS", 30, 45, a="HIGH_CROSS")) == "cross"

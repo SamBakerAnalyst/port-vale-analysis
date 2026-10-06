@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/attacking-threat.css?v=15" />
-  <link rel="stylesheet" href="/static/opposition-hub.css?v=12" />
+  <link rel="stylesheet" href="/static/opposition-hub.css?v=13" />
 </head>
 <body>
   <div class="at-glow" aria-hidden="true"></div>
@@ -99,7 +99,7 @@
       <header class="at-section__head">
         <p class="at-kicker">In possession</p>
         <h2>Ball progression</h2>
-        <p class="at-section__lede">How they move the ball up the pitch — style, direct or through the thirds, which flank, and which phases and actions create their threat.</p>
+        <p class="at-section__lede">How they move the ball up the pitch — style, direct or through the thirds, which flank, the move patterns that hurt teams, and the players who carry it forward.</p>
       </header>
       <div class="at-grid at-grid--2">
         <article class="card" id="stylePanel"></article>
@@ -109,6 +109,11 @@
         <article class="card" id="startZonePanel"></article>
         <article class="card" id="phasePanel"></article>
       </div>
+      <div class="at-grid oh-grid--chains">
+        <article class="card" id="chainPanel"></article>
+        <article class="card" id="patternPanel"></article>
+      </div>
+      <article class="card oh-mt" id="progPlayersPanel"></article>
       <article class="card oh-mt" id="actionPanel"></article>
     </section>
 
@@ -194,7 +199,7 @@
     <footer id="statusBar" class="at-footer">Reading the data lake…</footer>
   </div>
   <div id="tip" class="oh-tip" hidden></div>
-  <script defer src="/static/opposition-hub.js?v=12"></script>
+  <script defer src="/static/opposition-hub.js?v=13"></script>
   <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>

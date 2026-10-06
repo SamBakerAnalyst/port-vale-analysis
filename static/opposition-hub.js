@@ -5,7 +5,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   meta: null, season: null, window: "season", squadId: null, report: null,
   mapFamily: "all", concededFamily: "all", zoneSide: "start", squadBand: "all", squadSort: "minutes",
-  poll: null, mapView: "start",
+  poll: null, mapView: "start", chainId: null, progSort: "prog90",
   spf: { type: "corner", side: "all", style: "all", swing: "all", outcome: "all", half: "all", taker: "all", lines: true },
 };
 try { if (["start", "end", "arrows"].includes(localStorage.getItem("ohMapView"))) state.mapView = localStorage.getItem("ohMapView"); } catch (_) { /* private mode */ }
@@ -376,7 +376,130 @@ function renderProgression(r) {
   $("phasePanel").innerHTML = `${panelHead("Phases", "Which phase creates their threat")}${main.length ? `<div class="oh-phs">${main.map(phaseRow).join("")}</div>${rare.length ? `<p class="oh-muted oh-ph__rare">Rarely: ${rare.map((row) => `${esc(row.label)} ${row.share}%`).join(" · ")}</p>` : ""}<p class="at-note">Big number is the share of their threat. Bar is threat a game; the white line is the League Two average.</p>` : empty("No phase data saved for this window.")}`;
   const actions = r.threat?.actions || [];
   const maxA = Math.max(...actions.map((row) => row.share), 1);
+  renderChains(r);
+  renderProgressors(r);
   $("actionPanel").innerHTML = `${panelHead("Actions", "How the ball creates their threat")}${actions.length ? `<div class="at-table-wrap"><table><thead><tr><th>Action</th><th>Share of threat</th><th>Per game</th><th>Count</th><th>League rank</th><th>League avg /g</th></tr></thead><tbody>${actions.map((row) => `<tr><td><span class="at-dot" style="background:${row.color}"></span>${esc(row.label)}</td><td><span class="at-cellbar" style="width:${Math.max(3, (row.share / maxA) * 120).toFixed(0)}px;background:${row.color}"></span>${row.share}%</td><td>${fmt(row.perGame, 3)}</td><td>${row.count}</td><td>${row.rank ? rankChip(row.rank, row.of, oppTone(row.rank, row.of)) : "—"}</td><td>${row.leaguePerGame == null ? "—" : fmt(row.leaguePerGame, 3)}</td></tr>`).join("")}</tbody></table></div>` : empty("No action data saved for this window.")}<p class="at-note">Positive packing threat only. A red rank means they are among the most dangerous in League Two with that action.</p>`;
+}
+
+/* ---------- threat chains ---------- */
+function initials(name) {
+  const parts = String(name || "").replace(/[^\p{L}\s'-]/gu, "").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "?";
+  return parts.length === 1 ? parts[0].slice(0, 2).toUpperCase() : (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+function stepPills(steps) {
+  return steps.map((step, i) => `${i ? `<span class="at-step__arrow">→</span>` : ""}<span class="at-step" style="background:${step.color || FAMILY_COLORS[step.family] || FAMILY_COLORS.other}">${esc(step.label)}${step.times > 1 ? ` ×${step.times}` : ""}</span>`).join("");
+}
+function chainSvg(chain) {
+  const steps = chain.steps || [];
+  const defs = steps.map((step, i) => `<marker id="{id}c${i}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="${step.color}"/></marker>`).join("");
+  let delay = 0;
+  const parts = steps.map((step, i) => {
+    if (step.x1 == null) return "";
+    const a = toSvg(step.x1, step.y1);
+    const hasEnd = step.x2 != null;
+    const b = hasEnd ? toSvg(step.x2, step.y2) : a;
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    const d = delay; delay += 260;
+    const width = 3 + Math.min(7, Number(step.pxt) * 30);
+    const carry = step.family === "dribble";
+    const tip = `${i + 1}. ${step.player || ""} — ${step.label}${Number(step.pxt) > 0 ? ` (+${fmt(step.pxt, 3)})` : ""}`;
+    const line = hasEnd && len > 4 ? `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke="${step.color}" stroke-width="${width.toFixed(1)}" stroke-linecap="round" marker-end="url(#{id}c${i})" class="${carry ? "at-pop" : "at-draw"}" style="--len:${len.toFixed(0)};animation-delay:${d}ms"${carry ? ` stroke-dasharray="7 6"` : ""}/>` : "";
+    const node = `<g class="at-pop" style="animation-delay:${d}ms" data-tip="${esc(tip)}"><circle cx="${a.x.toFixed(1)}" cy="${a.y.toFixed(1)}" r="15" fill="${step.color}" stroke="#0b0f15" stroke-width="2.5"/><text x="${a.x.toFixed(1)}" y="${(a.y + 4.5).toFixed(1)}" text-anchor="middle" font-size="12.5" font-weight="800" fill="#0b0f15" font-family="Manrope">${esc(initials(step.player))}</text></g>`;
+    const goal = step.goal ? `<g class="at-pop" style="animation-delay:${d + 400}ms"><circle cx="${b.x.toFixed(1)}" cy="${b.y.toFixed(1)}" r="20" fill="none" stroke="#f5c518" stroke-width="4"/><text x="${(b.x - 26).toFixed(1)}" y="${(b.y - 26).toFixed(1)}" text-anchor="end" fill="#f5c518" font-size="22" font-weight="800" font-family="Barlow Condensed">GOAL</text></g>` : "";
+    return line + node + goal;
+  }).join("");
+  return pitch(parts, "Move replay, attacking to the right", defs);
+}
+function chainKey(chain) {
+  const used = new Set((chain.steps || []).map((step) => step.family));
+  const items = ["pass", "cross", "dribble", "shot", "setPiece", "regain", "other"].filter((f) => used.has(f))
+    .map((f) => `<span><i style="background:${FAMILY_COLORS[f]}"></i>${esc(f === "dribble" ? "Carry / dribble (dashed)" : FAMILY_LABELS[f])}</span>`).join("");
+  return `<div class="oh-mapkey">${items}<span>Thicker = more threat</span>${chain.goal ? "<span>Gold ring = goal</span>" : ""}</div>`;
+}
+function renderChains(r) {
+  const prog = r.progression || {};
+  const chains = prog.chains;
+  const top = chains?.top || [];
+  if (!top.length) {
+    const msg = prog.ready === false ? "Move patterns need the saved match events for this club. They fill in on the next hub refresh." : "No dangerous moves saved for this window.";
+    $("chainPanel").innerHTML = `${panelHead("Replay their best moves", "Move explorer")}${empty(msg)}`;
+    $("patternPanel").innerHTML = `${panelHead("Patterns", "The sequences that hurt teams")}${empty(msg)}`;
+    return;
+  }
+  let index = top.findIndex((c) => c.id === state.chainId);
+  if (index < 0) index = 0;
+  const chain = top[index];
+  state.chainId = chain.id;
+  const outcome = { goal: "Goal", shot: "Shot", threat: "Dangerous", none: "No shot" }[chain.outcome] || "Dangerous";
+  const vs = chain.opponent ? `${chain.home ? "vs" : "at"} ${esc(chain.opponent)}` : "";
+  const stepRows = (chain.steps || []).map((step, i) => `<div class="at-chain-step" style="animation-delay:${i * 260}ms"><span class="at-chain-step__n" style="background:${step.color}">${esc(initials(step.player))}</span><span><b>${esc(step.player || "—")}</b> · ${esc(step.label)}${step.goal ? " ⚽" : ""}</span><span class="at-chain-step__v">${Number(step.pxt) > 0 ? `+${fmt(step.pxt, 3)}` : "·"}${step.xg ? ` · xG ${fmt(step.xg)}` : ""}</span></div>`).join("");
+  const chips = top.map((item, i) => `<button type="button" class="at-chain-chip${i === index ? " is-active" : ""}" data-chain="${esc(item.id)}"><b>${fmt(item.threat, 2)}</b>${esc(item.opponent || "")} ${item.minute}'${item.goal ? " ⚽" : ""}</button>`).join("");
+  $("chainPanel").innerHTML = `
+    <div class="at-explorer__head">
+      <div>${panelHead("Replay their best moves", "Move explorer")}<p class="at-explorer__meta"><span class="at-badge at-badge--${esc(chain.outcome)}">${outcome}</span> &nbsp;${vs} · ${chain.minute}' · ${esc(chain.origin)} · ${chain.passes} passes · <b style="color:#f5c518">${fmt(chain.threat, 3)}</b> threat${chain.xg ? ` · xG ${fmt(chain.xg)}` : ""}</p></div>
+      <div class="at-explorer__controls"><button type="button" class="at-icon-btn" data-nav="-1">‹ Prev</button><button type="button" class="at-icon-btn at-icon-btn--gold" data-nav="0">▶ Replay</button><button type="button" class="at-icon-btn" data-nav="1">Next ›</button></div>
+    </div>
+    ${chainSvg(chain)}${chainKey(chain)}
+    <div class="at-chain-steps">${stepRows}</div>
+    <div class="at-chain-list">${chips}</div>`;
+  $("chainPanel").querySelectorAll("[data-nav]").forEach((btn) => btn.addEventListener("click", () => {
+    state.chainId = top[(index + Number(btn.dataset.nav) + top.length) % top.length].id;
+    renderChains(r);
+  }));
+  $("chainPanel").querySelectorAll("[data-chain]").forEach((btn) => btn.addEventListener("click", () => { state.chainId = btn.dataset.chain; renderChains(r); }));
+
+  const rows = chains.patterns || [];
+  const max = Math.max(...rows.map((row) => row.threat), 0.01);
+  const s = chains.summary || {};
+  $("patternPanel").innerHTML = `${panelHead("Patterns", "The sequences that hurt teams")}
+    <div class="oh-chainsum"><div><b>${fmt(s.threateningPerGame, 1)}</b><span>dangerous moves a game</span></div><div><b>${fmt(s.avgPassesThreatening, 1)}</b><span>passes in a dangerous move</span></div><div><b>${s.goals ?? 0}</b><span>open-play goals from moves</span></div></div>
+    ${rows.length ? `<div class="at-patterns">${rows.slice(0, 8).map((row, i) => `
+      <button type="button" class="at-pattern${top.some((c) => c.id === row.exampleId) ? "" : " is-noreplay"}" data-example="${esc(row.exampleId)}">
+        <div class="at-pattern__top"><span class="at-pattern__rank">${i + 1}</span><div class="at-steps">${stepPills(row.steps)}</div></div>
+        <div class="at-pattern__stats"><span><b>${row.count}</b> times</span><span><b>${row.share}%</b> of threat</span><span><b>${row.shots}</b> shots</span><span><b>${row.goals}</b> goals</span></div>
+        <div class="at-bar"><span style="width:${(row.threat / max) * 100}%;background:linear-gradient(90deg,#f59e0b,#f5c518)"></span></div>
+      </button>`).join("")}</div>` : empty("No repeated patterns in this window yet.")}
+    <p class="at-note">The last three threat-adding actions of each dangerous move. Click one to replay their best example on the pitch.</p>`;
+  $("patternPanel").querySelectorAll("[data-example]").forEach((btn) => btn.addEventListener("click", () => {
+    if (!top.some((c) => c.id === btn.dataset.example)) { setStatus("That pattern's best example isn't one of the saved replays — showing the top move instead."); return; }
+    state.chainId = btn.dataset.example;
+    renderChains(r);
+    $("chainPanel").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }));
+}
+
+/* ---------- who progresses it ---------- */
+const PROG_COLORS = { short: "#34d399", long: "#60a5fa", carry: "#f97316", cross: "#38bdf8" };
+const LANE_LABEL = { left: "left", centre: "through the middle", right: "right" };
+function methodBar(methods) {
+  return `<div class="oh-method">${methods.filter((m) => m.share > 0).map((m) => `<i style="flex:${m.share};background:${PROG_COLORS[m.id]}" data-tip="${esc(`${m.label} ${m.share}%`)}"></i>`).join("")}</div>`;
+}
+function renderProgressors(r) {
+  const prog = r.progression || {};
+  const team = prog.team;
+  const players = [...(prog.players || [])].sort((a, b) => (b[state.progSort] || 0) - (a[state.progSort] || 0));
+  if (!team || !players.length) {
+    $("progPlayersPanel").innerHTML = `${panelHead("Who moves it forward", "Their most progressive players")}${empty("Progressive actions appear once the saved match events are in for this club.")}`;
+    return;
+  }
+  const max = Math.max(...players.map((p) => p[state.progSort] || 0), 0.01);
+  const cols = [["prog90", "Prog. actions /90"], ["passes90", "Prog. passes /90"], ["carries90", "Carries /90"], ["finalThird90", "Into final third /90"], ["box90", "Into box /90"], ["threat90", "Threat /90"]];
+  const how = (p) => {
+    const main = p.methods[0];
+    const bits = [main ? `${main.share}% ${main.label.toLowerCase()}` : "", p.lane && p.laneShare >= 45 ? `mostly ${LANE_LABEL[p.lane]}` : "", p.targets.length ? `to ${p.targets.map((t) => esc(t.name.split(" ").slice(-1)[0])).join(", ")}` : ""].filter(Boolean);
+    return `${methodBar(p.methods)}<small>${bits.join(" · ")}</small>`;
+  };
+  const teamMix = team.methods.map((m) => `<div><i style="background:${PROG_COLORS[m.id]}"></i><b>${m.share}%</b><span>${esc(m.label)}</span><em>${fmt(m.perGame, 1)} a game</em></div>`).join("");
+  $("progPlayersPanel").innerHTML = `${panelHead("Who moves it forward", "Their most progressive players")}
+    <div class="oh-progteam">
+      <div class="oh-progteam__nums"><div><b>${fmt(team.progPerGame, 1)}</b><span>progressive actions a game</span></div><div><b>${fmt(team.finalThirdPerGame, 1)}</b><span>entries into the final third</span></div><div><b>${fmt(team.boxPerGame, 1)}</b><span>entries into the box</span></div></div>
+      <div class="oh-progteam__mix"><p class="oh-sub">How they move it forward</p>${methodBar(team.methods)}<div class="oh-progteam__legend">${teamMix}</div><p class="oh-muted">Starts from the ${team.lanes.left}% left · ${team.lanes.centre}% centre · ${team.lanes.right}% right</p></div>
+    </div>
+    <div class="at-table-wrap"><table class="oh-squad oh-progtable"><thead><tr><th>Player</th><th>Mins</th>${cols.map(([key, label]) => `<th data-progsort="${key}" class="${state.progSort === key ? "is-sorted" : ""}">${label}</th>`).join("")}<th>How they do it</th></tr></thead>
+    <tbody>${players.map((p) => `<tr><td class="oh-name"><b>${esc(p.name)}</b><small>${esc(p.position || "")}</small></td><td>${p.minutes}</td>${cols.map(([key]) => `<td>${key === state.progSort ? `<span class="at-cellbar" style="width:${Math.max(3, ((p[key] || 0) / max) * 70).toFixed(0)}px;background:var(--gold)"></span>` : ""}${fmt(p[key], key === "threat90" ? 3 : 1)}</td>`).join("")}<td class="oh-how">${how(p)}</td></tr>`).join("")}</tbody></table></div>
+    <p class="at-note">Season, players with ${270}+ minutes. Progressive = a completed pass that moves the ball 10m+ towards goal (not into their own third), a carry of 8m+, or a cross. Bar colours: <span style="color:${PROG_COLORS.short}">short passes</span>, <span style="color:${PROG_COLORS.long}">long balls</span>, <span style="color:${PROG_COLORS.carry}">carries</span>, <span style="color:${PROG_COLORS.cross}">crosses</span>.</p>`;
+  $("progPlayersPanel").querySelectorAll("[data-progsort]").forEach((btn) => btn.addEventListener("click", () => { state.progSort = btn.dataset.progsort; renderProgressors(r); }));
 }
 
 /* ---------- attack ---------- */

@@ -9,6 +9,7 @@ Plays, xG Chance Analysis and Pre-Match already fill during the hub refresh:
 * ``xg-league-match``  per-match shot quality for both squads
 * ``sp-pack``          per-match set-play records
 * ``pre-match``        squad, minutes, line-ups and style radar (one report per opponent)
+* ``xg-events``        raw match events, for threat chains and progressive actions
 
 Opening the page never calls Impect. The only Impect path is the "Rebuild
 squad data" button, which queues the existing Pre-Match background build.
@@ -622,6 +623,174 @@ def threat_window(league: dict, fixtures: list[dict], squad_id: int, players: di
     }
 
 
+# ---------------------------------------------------------------- progression
+
+PROG_PASS_METRES = 10.0
+PROG_CARRY_METRES = 8.0
+FINAL_THIRD_X = 17.5
+WIDE_Y = 13.84
+PROG_METHODS = (("short", "Short passes"), ("long", "Long balls"), ("carry", "Carries"), ("cross", "Crosses"))
+PROG_MIN_MINUTES = 270
+
+
+def _match_pack(match_id: int, summary: dict | None) -> list[dict]:
+    """Compact events for one match from the saved xG events, threat from the saved at-match summary."""
+    from app.analysis_cache import click_list
+    from app.attacking_threat_chains import SHOT_XG_KPI_ID, compact_events
+
+    events = click_list("xg-events", str(int(match_id))) or []
+    if not events:
+        return []
+    kpis = []
+    for squad in ((summary or {}).get("squads") or {}).values():
+        for row in squad.get("passes") or []:
+            if row.get("id"):
+                kpis.append({"eventId": row["id"], "kpiId": 1404, "value": row.get("pxt")})
+    for event_id, xg in (_read("xg-ekpi", str(int(match_id))) or {}).items():
+        kpis.append({"eventId": event_id, "kpiId": SHOT_XG_KPI_ID, "value": xg})
+    return compact_events([e for e in events if isinstance(e, dict)], kpis)
+
+
+def _prog_method(step: dict) -> str | None:
+    """Short pass / long ball / carry / cross if this step moved the ball forward enough, else None."""
+    if step.get("res") != "SUCCESS" or "x1" not in step or "x2" not in step:
+        return None
+    dx = _num(step["x2"]) - _num(step["x1"])
+    if step.get("at") == "DRIBBLE":
+        return "carry" if dx >= PROG_CARRY_METRES else None
+    if step.get("at") != "PASS":
+        return None
+    action = str(step.get("a") or "")
+    if "CROSS" in action:
+        return "cross" if _num(step["x1"]) >= FINAL_THIRD_X - 5 else None
+    if dx < PROG_PASS_METRES or _num(step["x2"]) <= -FINAL_THIRD_X:
+        return None
+    length = ((_num(step["x2"]) - _num(step["x1"])) ** 2 + (_num(step["y2"]) - _num(step["y1"])) ** 2) ** 0.5
+    return "long" if length >= 30 or action in LONG_ACTIONS else "short"
+
+
+def _lane(y: Any) -> str:
+    value = _num(y)
+    return "left" if value > WIDE_Y else "right" if value < -WIDE_Y else "centre"
+
+
+def progression_view(
+    league: dict,
+    window_fixtures: list[dict],
+    season_fixtures: list[dict],
+    squad_id: int,
+    names: dict[str, str],
+    squad_players: list[dict],
+) -> dict[str, Any]:
+    """Threat chains (window) and who moves the ball forward (season), from saved events only."""
+    from app.attacking_threat import FAMILY_COLORS, action_family, action_label
+    from app.attacking_threat_chains import analyse_chains, chain_record, possessions, receiver_of
+
+    summaries = league["threat"]["summaries"]
+    window_ids = {int(f["matchId"]) for f in window_fixtures}
+    int_names = {int(k): v for k, v in names.items() if str(k).isdigit()}
+    chains, window_games, season_games = [], 0, 0
+    players: dict[int, dict] = {}
+    team = {"prog": 0, "finalThird": 0, "box": 0, "methods": defaultdict(int), "lanes": defaultdict(int)}
+
+    for fixture in season_fixtures:
+        match_id = int(fixture["matchId"])
+        pack = _match_pack(match_id, summaries.get(match_id))
+        if not pack:
+            continue
+        season_games += 1
+        squad_possessions = possessions(pack, int(squad_id), match_id)
+        if match_id in window_ids:
+            window_games += 1
+            chains.extend(chain_record(item, action_label, action_family) for item in squad_possessions)
+        for possession in squad_possessions:
+            steps = possession["steps"]
+            for index, step in enumerate(steps):
+                method = _prog_method(step)
+                if not method or not step.get("pl"):
+                    continue
+                row = players.setdefault(int(step["pl"]), {
+                    "prog": 0, "passes": 0, "carries": 0, "finalThird": 0, "box": 0, "threat": 0.0,
+                    "methods": defaultdict(int), "lanes": defaultdict(int), "to": defaultdict(int),
+                })
+                into_final = _num(step["x1"]) < FINAL_THIRD_X <= _num(step["x2"])
+                into_box = _num(step["x2"]) >= 36 and abs(_num(step["y2"])) <= 20.16
+                row["prog"] += 1
+                row["carries" if method == "carry" else "passes"] += 1
+                row["finalThird"] += 1 if into_final else 0
+                row["box"] += 1 if into_box else 0
+                row["threat"] += _num(step.get("v"))
+                row["methods"][method] += 1
+                row["lanes"][_lane(step["y1"])] += 1
+                receiver = receiver_of(steps, index) if method != "carry" else 0
+                if receiver:
+                    row["to"][receiver] += 1
+                team["prog"] += 1
+                team["finalThird"] += 1 if into_final else 0
+                team["box"] += 1 if into_box else 0
+                team["methods"][method] += 1
+                team["lanes"][_lane(step["y1"])] += 1
+
+    if not season_games:
+        return {"ready": False}
+
+    fixtures_by_id = {int(f["matchId"]): f for f in season_fixtures}
+    chain_view = analyse_chains(chains, window_games, int_names, fixtures_by_id,
+                                labeler=action_label, familier=action_family, colors=FAMILY_COLORS) if chains else None
+    for chain in (chain_view or {}).get("top") or []:
+        for step in chain.get("steps") or []:
+            if step.get("family") == "shot" and not step.get("shot"):
+                step["family"], step["color"] = "pass", FAMILY_COLORS["pass"]
+
+    minutes = {int(p["id"]): _num(p.get("minutes")) for p in squad_players if p.get("id")}
+    meta = {int(p["id"]): p for p in squad_players if p.get("id")}
+    method_labels = dict(PROG_METHODS)
+    rows = []
+    for player_id, row in players.items():
+        mins = minutes.get(player_id, 0.0)
+        if mins < PROG_MIN_MINUTES or row["prog"] < 5 or (meta.get(player_id) or {}).get("band") == "gk":
+            continue
+        p90 = 90.0 / mins
+        methods = sorted(row["methods"].items(), key=lambda item: item[1], reverse=True)
+        lanes = sorted(row["lanes"].items(), key=lambda item: item[1], reverse=True)
+        targets = sorted(row["to"].items(), key=lambda item: item[1], reverse=True)[:2]
+        rows.append({
+            "id": player_id,
+            "name": int_names.get(player_id) or (meta.get(player_id) or {}).get("name") or f"Player {player_id}",
+            "position": (meta.get(player_id) or {}).get("position"),
+            "shirt": (meta.get(player_id) or {}).get("shirt"),
+            "minutes": int(mins),
+            "prog90": round(row["prog"] * p90, 2),
+            "passes90": round(row["passes"] * p90, 2),
+            "carries90": round(row["carries"] * p90, 2),
+            "finalThird90": round(row["finalThird"] * p90, 2),
+            "box90": round(row["box"] * p90, 2),
+            "threat90": round(row["threat"] * p90, 3),
+            "methods": [{"id": key, "label": method_labels[key], "share": round(100 * count / row["prog"])} for key, count in methods],
+            "lane": lanes[0][0] if lanes else None,
+            "laneShare": round(100 * lanes[0][1] / row["prog"]) if lanes else None,
+            "targets": [{"name": int_names.get(pid) or f"Player {pid}", "count": count} for pid, count in targets],
+        })
+    rows.sort(key=lambda item: item["prog90"], reverse=True)
+
+    total = team["prog"] or 1
+    return {
+        "ready": True,
+        "games": season_games,
+        "windowGames": window_games,
+        "chains": chain_view,
+        "team": {
+            "progPerGame": round(team["prog"] / season_games, 1),
+            "finalThirdPerGame": round(team["finalThird"] / season_games, 1),
+            "boxPerGame": round(team["box"] / season_games, 1),
+            "methods": [{"id": key, "label": label, "share": round(100 * team["methods"].get(key, 0) / total),
+                         "perGame": round(team["methods"].get(key, 0) / season_games, 1)} for key, label in PROG_METHODS],
+            "lanes": {lane: round(100 * team["lanes"].get(lane, 0) / total) for lane in ("left", "centre", "right")},
+        },
+        "players": rows[:14],
+    }
+
+
 # ---------------------------------------------------------------- set plays
 
 
@@ -1228,6 +1397,10 @@ def build_report(season: str | None, squad_id: int, window: str | None = "season
         for p in season_threat.get("players") or []
     }
     squad = squad_view(base, squad_id, all_fixtures, threat_players, season_set_play)
+    progression = _memoized(
+        ("prog", base.get("season"), squad_id, normalized, len(base["matches"])),
+        lambda: progression_view(league, selected, all_fixtures, squad_id, players, squad.get("players") or []),
+    )
     battles = iv_battles(league["iv"], selected, squad_id)
     xg = xg_window(league["xg"], selected, squad_id)
 
@@ -1273,6 +1446,7 @@ def build_report(season: str | None, squad_id: int, window: str | None = "season
         "interventions": battles,
         "setPlays": set_play,
         "squad": squad,
+        "progression": progression,
     }
 
 
