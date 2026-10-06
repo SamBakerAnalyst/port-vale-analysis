@@ -7,6 +7,7 @@ import json
 import os
 import re
 import threading
+import unicodedata
 from collections import Counter
 from datetime import UTC, datetime
 from typing import Any
@@ -53,7 +54,26 @@ def _date_from_text(text: str) -> str:
     return f"{year:04d}-{month:02d}-{day:02d}"
 
 
-def _library_reports_for_player(player_id: int) -> list[dict[str, Any]]:
+def _name_key(name: str) -> str:
+    folded = unicodedata.normalize("NFKD", _text(name)).encode("ascii", "ignore").decode("ascii")
+    return " ".join(re.sub(r"[^a-z ]+", " ", folded.casefold()).split())
+
+
+def _matching_stub_ids(store: dict[str, Any], player_id: int, name: str) -> list[int]:
+    """Hub-only stubs with the same name — reports filed before the player was found in Impect."""
+    from app.player_reports import is_stub_player
+
+    key = _name_key(name)
+    if not key or is_stub_player(player_id):
+        return []
+    out: list[int] = []
+    for stub_id, row in (store.get("players") or {}).items():
+        if isinstance(row, dict) and str(stub_id).isdigit() and _name_key(row.get("name") or "") == key:
+            out.append(int(stub_id))
+    return out
+
+
+def _library_reports_for_player(player_id: int, name: str = "") -> list[dict[str, Any]]:
     """General + detailed Match Scouting reports (Reports Library) merged per fixture."""
     try:
         from app.player_reports import all_report_rows, report_scout
@@ -63,11 +83,14 @@ def _library_reports_for_player(player_id: int) -> list[dict[str, Any]]:
         store = all_report_rows()
     except Exception:
         return []
-    prefix = f"{int(player_id)}:"
+    prefixes = tuple(f"{pid}:" for pid in (int(player_id), *_matching_stub_ids(store, player_id, name)))
     merged: dict[str, dict[str, Any]] = {}
     for section in ("general_reports", "detailed_reports"):
         for key, row in (store.get(section) or {}).items():
-            if not str(key).startswith(prefix) or not isinstance(row, dict):
+            if not isinstance(row, dict):
+                continue
+            prefix = next((p for p in prefixes if str(key).startswith(p)), None)
+            if prefix is None:
                 continue
             slot = merged.setdefault(str(key), {"fixture_id": str(key)[len(prefix):]})
             slot[section] = row
@@ -173,7 +196,7 @@ def _is_duplicate_of_library(row: dict[str, Any], library: list[dict[str, Any]])
 
 
 def collect_player_reports(player_id: int, name: str) -> list[dict[str, Any]]:
-    library = _library_reports_for_player(player_id)
+    library = _library_reports_for_player(player_id, name)
     hub = [row for row in _hub_reports_for_player(player_id, name) if not _is_duplicate_of_library(row, library)]
     rows = library + hub
     for row in hub:

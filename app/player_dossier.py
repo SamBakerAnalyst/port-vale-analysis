@@ -2618,6 +2618,12 @@ def register_player_dossier_routes(app: FastAPI) -> None:
         from app.player_overview import build_reports_summary
 
         name = _cached_player_name(player_id)
+        if not name:
+            try:
+                cached = build_player_dossier_from_cache(player_id) or {}
+                name = str((cached.get("player") or {}).get("name") or "").strip()
+            except Exception:
+                name = ""
         return build_reports_summary(player_id, name or str(player_id), refresh=refresh)
 
     @app.get("/player/{player_id}", response_class=HTMLResponse)

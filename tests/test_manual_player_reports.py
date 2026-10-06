@@ -279,3 +279,17 @@ def test_stub_reports_list_with_their_details(isolated):
     row = library.list_reports()["reports"][0]
     assert row["name"] == "Trialist Keeper" and row["club"] == "Hednesford"
     assert row["is_stub"] is True and row["scout"] == "Tommy Johnson"
+
+
+def test_player_page_picks_up_reports_filed_on_a_same_name_stub(isolated):
+    from app import player_overview
+
+    stub = reports.create_player_stub(name="Francis Okoronkwo", club="FC Everton U21")
+    reports.save_general_report(
+        player_id=stub["player_id"], fixture_id=reports.new_manual_fixture_id(), notes="Played LCF in a 4-4-2.",
+        meta={"source": "manual", "scout": "Lee Darnbrough"},
+    )
+    reports.save_general_report(player_id=503, fixture_id="f1", notes="Commanding.", staff="Sam")
+    rows = player_overview._library_reports_for_player(501, "Francis  OKORONKWO")
+    assert [row["text"] for row in rows] == ["Played LCF in a 4-4-2."]
+    assert player_overview._library_reports_for_player(501, "Jamie Ndlovu") == []
