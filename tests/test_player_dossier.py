@@ -234,3 +234,21 @@ def test_migrated_scout_reports_leave_the_notes_log(monkeypatch):
     assert [row["fixture"] for row in notes] == ["Agent call"]
     assert len(reports) == 2
     assert all(row["kind"] == "report" for row in reports)
+
+
+def test_career_history_adds_past_clubs(monkeypatch):
+    careers = {
+        "seasons": {"2120": ["26/27", "League Two"], "1021": ["24/25", "League Two"], "729": ["23/24", "League One"]},
+        "clubs": {"2120-1509": "Tranmere Rovers", "1021-1": "FC Port Vale", "729-1": "FC Port Vale"},
+        "players": {"25170": [[2120, 1509, 661], [1021, 1, 2071], [729, 1, 3994]]},
+    }
+    monkeypatch.setattr(dossier, "_player_careers", lambda: careers)
+    current = [{"season": "26/27", "competition_name": "League Two", "club": "Tranmere Rovers", "iteration_id": None, "chartable": True}]
+    seasons = dossier._with_career_history(25170, current)
+    assert [(s["season"], s["club"]) for s in seasons] == [
+        ("26/27", "Tranmere Rovers"),
+        ("24/25", "Port Vale"),
+        ("23/24", "Port Vale"),
+    ]
+    assert seasons[0]["chartable"] and seasons[0]["minutes"] == 661
+    assert seasons[1]["history"] and not seasons[1]["chartable"]

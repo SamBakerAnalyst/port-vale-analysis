@@ -1261,11 +1261,14 @@
           ? `/player/${playerId}?iteration=${season.iteration_id}`
           : `/player/${playerId}`;
         const active = current ? Number(season.iteration_id) === current : idx === 0;
-        return `<a class="pd-club${active ? " is-current" : ""}" href="${href}">
+        const mins = Number(season.minutes) > 0 ? ` · ${Math.round(season.minutes).toLocaleString("en-GB")} mins` : "";
+        const league = `${escapeHtml(season.competition_name || "")}${mins}${season.chartable || season.history ? "" : " · limited data"}`;
+        const body = `
           <span class="pd-club__season">${escapeHtml(season.season || "—")}</span>
           <span class="pd-club__name">${escapeHtml(season.club || "Unknown club")}</span>
-          <span class="pd-club__league">${escapeHtml(season.competition_name || "")}${season.chartable ? "" : " · limited data"}</span>
-        </a>`;
+          <span class="pd-club__league">${league}</span>`;
+        if (season.history) return `<div class="pd-club pd-club--history">${body}</div>`;
+        return `<a class="pd-club${active ? " is-current" : ""}" href="${href}">${body}</a>`;
       })
       .join("");
   }

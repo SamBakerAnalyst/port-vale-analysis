@@ -237,12 +237,36 @@ function renderMatchup(r) {
 }
 
 /* ---------- squad ---------- */
+function spWeight(p) {
+  const sp = p.setPlays || {};
+  return (sp.taker?.deliveries || 0) + (sp.target?.fcWon || 0) * 3 + (sp.defending?.won || 0);
+}
+function setPlayCell(p) {
+  const sp = p.setPlays || {};
+  const out = [];
+  if (sp.taker) {
+    const t = sp.taker;
+    const swing = t.inswing || t.outswing ? (t.inswing >= t.outswing ? "inswing" : "outswing") : "";
+    out.push(`<span class="oh-sp oh-sp--taker" data-tip="${esc(`Takes ${t.deliveries}: ${t.corners} corners, ${t.freeKicks} free kicks${t.foot ? ` · ${t.foot === "L" ? "left" : "right"} foot` : ""}${swing ? ` · mostly ${swing}` : ""}${t.topZone ? ` · aims at ${t.topZone.toLowerCase()}` : ""}${t.goals ? ` · ${t.goals} goals from his deliveries` : ""}`)}">Takes ${t.deliveries}</span>`);
+  }
+  if (sp.target) {
+    const t = sp.target;
+    out.push(`<span class="oh-sp oh-sp--target" data-tip="${esc(`Attacking set plays: ${t.fcWon} first contacts won · ${t.shots} shots · ${t.goals} goals · ${fmt(t.xg)} xG`)}">Wins ${t.fcWon}${t.goals ? ` · ${t.goals}G` : ""}</span>`);
+  }
+  if (sp.defending) {
+    const d = sp.defending;
+    const weak = d.lostOnGoal > 0 || (d.lost >= 3 && (d.winPct ?? 100) < 60);
+    out.push(`<span class="oh-sp oh-sp--def${weak ? " oh-sp--weak" : ""}" data-tip="${esc(`Defending set plays: won ${d.won}, lost ${d.lost}${d.winPct != null ? ` (${d.winPct}% won)` : ""} · lost duels leading to ${d.lostOnShot} shots and ${d.lostOnGoal} goals${weak ? " — one to attack" : ""}`)}">Def ${d.won}–${d.lost}</span>`);
+  }
+  return out.join("");
+}
 function squadSorted(players) {
   const key = state.squadSort;
   const rows = players.filter((p) => state.squadBand === "all" || p.band === state.squadBand);
   const dir = key === "name" || key === "shirt" ? 1 : -1;
+  const value = (p) => (key === "setPlays" ? spWeight(p) || null : p[key]);
   return rows.sort((a, b) => {
-    const va = a[key] ?? (dir > 0 ? Infinity : -Infinity); const vb = b[key] ?? (dir > 0 ? Infinity : -Infinity);
+    const va = value(a) ?? (dir > 0 ? Infinity : -Infinity); const vb = value(b) ?? (dir > 0 ? Infinity : -Infinity);
     if (typeof va === "string") return va.localeCompare(vb);
     return dir * (va - vb) || (b.minutes - a.minutes);
   });
@@ -268,23 +292,25 @@ function renderSquad(r) {
   }
   const players = squadSorted(sq.players || []);
   const logHead = (sq.logFixtures || []).map((f) => `<th class="oh-log__h" title="${esc(`${f.home ? "H" : "A"} ${f.opponent} ${f.score} · ${shortDate(f.date)}`)}">${badge(f.badge, f.opponent, 18)}<small class="oh-res--${esc(f.result)}">${esc(f.result)}</small></th>`).join("");
-  const cols = [["shirt", "#"], ["name", "Player"], ["position", "Pos"], ["age", "Age"], ["foot", "Foot"], ["apps", "Apps"], ["starts", "Starts"], ["minutes", "Mins"], ["minutesShare", "% mins"], ["goals", "G"], ["assists", "A"], ["threat90", "Threat /90"]];
+  const cols = [["shirt", "#"], ["name", "Player"], ["position", "Pos"], ["age", "Age"], ["foot", "Foot"], ["apps", "Apps"], ["starts", "Starts"], ["minutes", "Mins"], ["minutesShare", "% mins"], ["goals", "G"], ["assists", "A"], ["ga90", "G+A /90"], ["threat90", "Threat /90"], ["threatShare", "Threat %"], ["setPlays", "Set plays"]];
   const head = cols.map(([key, label]) => `<th data-sort="${key}" class="${state.squadSort === key ? "is-sorted" : ""}">${label}</th>`).join("");
   const stale = sq.gamesSince > 0 ? `<span class="oh-warn">${sq.gamesSince} game${sq.gamesSince > 1 ? "s" : ""} played since this squad data was built</span>` : "";
   const building = (sq.build || {}).status === "running";
   const tools = `<div class="oh-tools">${toggle(BANDS, state.squadBand, "band")}<span class="oh-muted">Covers ${sq.gamesAvailable} league games${sq.builtAt ? ` · built ${shortDate(sq.builtAt)}` : ""}</span>${stale}${building ? `<span class="oh-building">Rebuilding…</span>` : `<button type="button" class="oh-btn oh-btn--ghost" id="buildSquad">Rebuild squad data</button>`}</div>`;
   const rows = players.map((p) => `<tr class="${p.minutes ? "" : "oh-dim"}">
       <td class="oh-num">${p.shirt ?? ""}</td>
-      <td class="oh-name"><b>${esc(p.name)}</b>${(p.tags || []).map((tag) => `<span class="oh-tag oh-tag--${tag.toLowerCase().replace(/[^a-z]+/g, "-")}">${esc(tag)}</span>`).join("")}</td>
+      <td class="oh-name"><b>${esc(p.name)}</b>${(p.tags || []).map((tag) => `<span class="oh-tag oh-tag--${tag.toLowerCase().replace(/[^a-z]+/g, "-")}">${esc(tag)}</span>`).join("")}${(p.leaders || []).map((l) => `<span class="oh-tag oh-tag--leader oh-tag--${l.side === "in_possession" ? "lead-in" : "lead-out"}" data-tip="${esc(`Best in the squad for ${l.label.toLowerCase()} (${l.value}${/\/90/.test(l.label) || /%$/.test(String(l.value)) ? "" : " per 90"}, min. 450 mins)`)}">★ ${esc(l.label)}</span>`).join("")}</td>
       <td>${esc(p.position || "")}</td><td>${p.age ?? ""}</td><td>${esc(p.foot || "")}</td>
       <td>${p.apps}</td><td>${p.starts}</td><td><b>${p.minutes}</b></td>
       <td><div class="oh-share"><span style="width:${Math.min(100, p.minutesShare || 0)}%"></span><em>${p.minutesShare == null ? "—" : `${p.minutesShare}%`}</em></div></td>
-      <td>${p.goals || ""}</td><td>${p.assists || ""}</td><td>${p.threat90 == null ? "" : fmt(p.threat90, 3)}</td>
+      <td>${p.goals || ""}</td><td>${p.assists || ""}</td><td>${p.ga90 ? fmt(p.ga90) : ""}</td><td>${p.threat90 == null ? "" : fmt(p.threat90, 3)}</td>
+      <td>${p.threatShare == null ? "" : `${fmt(p.threatShare, 1)}%`}</td>
+      <td class="oh-spcell">${setPlayCell(p)}</td>
       ${sq.hasLog ? (p.log || (sq.logFixtures || []).map(() => undefined)).map(logCell).join("") : ""}
     </tr>`).join("");
   panel.innerHTML = `${panelHead("Squad", `${(sq.players || []).filter((p) => p.minutes).length} players used`)}${tools}
     <div class="at-table-wrap oh-squad-wrap"><table class="oh-squad"><thead><tr>${head}${sq.hasLog ? logHead : ""}</tr></thead><tbody>${rows}</tbody></table></div>
-    <p class="at-note">${sq.hasLog ? "Last games, oldest to newest: green started (bright = full game), amber came on, B unused sub, · not in the squad. Gold dot = goal, blue dot = assist. " : "Game-by-game minutes appear after the next squad rebuild. "}Threat /90 is Impect attacking threat per 90 minutes this season.</p>`;
+    <p class="at-note">${sq.hasLog ? "Last games, oldest to newest: green started (bright = full game), amber came on, B unused sub, · not in the squad. Gold dot = goal, blue dot = assist. " : "Game-by-game minutes appear after the next squad rebuild. "}Threat /90 is Impect attacking threat per 90 minutes; Threat % is his share of the team's. Set plays: purple = deliveries he takes, orange = first contacts he wins attacking, Def = first contacts won–lost defending (red = loses ones that lead to shots or goals). Hover any tag for detail.</p>`;
   panel.querySelectorAll("[data-sort]").forEach((th) => th.addEventListener("click", () => { state.squadSort = th.dataset.sort; renderSquad(state.report); }));
   panel.querySelectorAll("[data-band]").forEach((btn) => btn.addEventListener("click", () => { state.squadBand = btn.dataset.band; renderSquad(state.report); }));
   $("buildSquad")?.addEventListener("click", buildSquad);
@@ -682,7 +708,7 @@ function renderStrip({ scroll = true } = {}) {
     const label = `${f.home ? `Port Vale vs ${f.name}` : `${f.name} vs Port Vale`} · ${day}${f.score ? ` · ${homeAway}` : f.played ? " · result not saved yet" : ""}`;
     return `<button type="button" role="listitem" class="oh-chip${active && f.matchId === active.matchId ? " is-active" : ""}${f.played ? " is-played" : ""}${f.matchId === nextId ? " is-next" : ""}" data-match="${f.matchId}" data-squad="${f.squadId}" title="${esc(label)}">
       <span class="oh-chip__top"><span>${esc(day)}</span><b>${f.home ? "H" : "A"}</b></span>
-      <span class="oh-chip__mid">${badge(f.badge, f.name, 30)}${right}</span>
+      <span class="oh-chip__mid">${badge(f.badge, f.name, 46)}${right}</span>
       <span class="oh-chip__name">${esc(f.name)}</span>
       ${f.matchId === nextId ? `<span class="oh-chip__flag">Next</span>` : ""}
     </button>`;

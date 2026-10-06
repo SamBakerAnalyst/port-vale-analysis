@@ -35,6 +35,7 @@ COPY templates ./templates
 COPY strategy-reports ./strategy-reports
 COPY data/efl-transfer-report-2026.json ./data/efl-transfer-report-2026.json
 COPY data/shadow-teams.json ./data/shadow-teams.json
+COPY data/player-careers.json ./data/player-careers.json
 COPY data/transfermarkt-loans-2026.json ./data/transfermarkt-loans-2026.json
 COPY data/efl-transfer-badges.json ./data/efl-transfer-badges.json
 COPY data/transfer-centre-positions.json ./data/transfer-centre-positions.json

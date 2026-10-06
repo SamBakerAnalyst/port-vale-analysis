@@ -1433,7 +1433,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  max-height: 14rem;
+  max-height: 28rem;
   overflow-y: auto;
 }
 
@@ -1453,6 +1453,8 @@ body {
 }
 
 .pd-club:hover { border-color: rgba(245, 197, 24, 0.5); }
+.pd-club--history:hover { border-color: var(--border); }
+.pd-club--history .pd-club__season { color: rgba(245, 197, 24, 0.7); }
 
 .pd-club.is-current {
   border-color: rgba(245, 197, 24, 0.5);

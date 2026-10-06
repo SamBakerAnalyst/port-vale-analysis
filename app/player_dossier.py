@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from app.label_utils import humanize_metric_label, humanize_profile_name, strip_pv_prefix
 from app.profile_resolve import resolve_factor_inverted, resolve_factor_label
-from app.paths import DATA_ROOT, STANDALONE_DIR
+from app.paths import DATA_ROOT, HUB_ROOT, STANDALONE_DIR
 from app.opponent_photos import _normalize_name_key
 
 try:
@@ -1589,6 +1589,79 @@ def _seasons_from_cached_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]
     return seasons
 
 
+PLAYER_CAREERS_PATH = HUB_ROOT / "data" / "player-careers.json"
+_careers_cache: dict[str, Any] = {"mtime": None, "data": {}}
+_careers_lock = threading.Lock()
+_AFC_KEEP = {"AFC Wimbledon", "AFC Bournemouth", "AFC Fylde", "AFC Telford United", "AFC Hornchurch", "AFC Totton"}
+
+
+def _career_club_name(name: str) -> str:
+    text = str(name or "").strip()
+    if text.startswith("FC "):
+        return text[3:]
+    if text.startswith("AFC ") and text not in _AFC_KEEP:
+        return text[4:]
+    return text
+
+
+def _player_careers() -> dict[str, Any]:
+    """Built offline by scripts/build_player_careers.py — never calls Impect."""
+    try:
+        mtime = PLAYER_CAREERS_PATH.stat().st_mtime
+    except OSError:
+        return {}
+    with _careers_lock:
+        if _careers_cache["mtime"] != mtime:
+            try:
+                _careers_cache["data"] = json.loads(PLAYER_CAREERS_PATH.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                _careers_cache["data"] = {}
+            _careers_cache["mtime"] = mtime
+        return _careers_cache["data"]
+
+
+def _with_career_history(player_id: int, seasons: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    careers = _player_careers()
+    spells = (careers.get("players") or {}).get(str(int(player_id))) or []
+    if not spells:
+        return seasons
+    meta = careers.get("seasons") or {}
+    clubs = careers.get("clubs") or {}
+    merged = list(seasons)
+    for iteration_id, squad_id, minutes in spells:
+        season, competition = (meta.get(str(iteration_id)) or ["", ""])[:2]
+        club = _career_club_name(clubs.get(f"{iteration_id}-{squad_id}", ""))
+        if not season or not club:
+            continue
+        same = next(
+            (
+                row
+                for row in merged
+                if row.get("season") == season
+                and row.get("competition_name") == competition
+                and _normalize_name_key(_career_club_name(row.get("club") or "")) == _normalize_name_key(club)
+            ),
+            None,
+        )
+        if same is not None:
+            same.setdefault("minutes", minutes)
+            continue
+        merged.append(
+            {
+                "season": season,
+                "competition_name": competition,
+                "club": club,
+                "label": " · ".join(part for part in (competition, season) if part),
+                "iteration_id": None,
+                "minutes": minutes,
+                "chartable": False,
+                "history": True,
+            }
+        )
+    merged.sort(key=lambda row: (str(row.get("season") or ""), float(row.get("minutes") or 0)), reverse=True)
+    return merged
+
+
 def _cache_hero_stats(
     *,
     row: dict[str, Any],
@@ -1795,7 +1868,7 @@ def build_player_dossier_from_cache(
             "fotmob": fotmob,
             "fbref": None,
         },
-        "seasons": _seasons_from_cached_rows(rows),
+        "seasons": _with_career_history(player_id, _seasons_from_cached_rows(rows)),
         "profiles": profiles,
         "profiles_by_position": profiles_by_position,
         "reports": scout_reports,

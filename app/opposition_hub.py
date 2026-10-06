@@ -112,8 +112,12 @@ def _ordinal(n: int | None) -> str:
     return f"{n}{suffix}"
 
 
-def _badge(squad_id: int) -> str:
-    return f"/api/team-badge/{int(squad_id)}"
+def _badge(squad_id: int, name: str = "") -> str:
+    """Saved crest on this server if there is one, else the FotMob crest (same as other reports)."""
+    from app.handout_badges import hydrate_team_badge
+
+    url = hydrate_team_badge({"id": int(squad_id), "name": name}).get("badge_url")
+    return url or f"/api/team-badge/{int(squad_id)}"
 
 
 def _club(base: dict, squad_id: int) -> str:
@@ -138,7 +142,7 @@ def team_fixtures(base: dict, squad_id: int) -> list[dict[str, Any]]:
             "date": str(match.get("date") or ""),
             "opponentId": opponent,
             "opponent": _club(base, opponent),
-            "badge": _badge(opponent),
+            "badge": _badge(opponent, _club(base, opponent)),
             "home": home,
             "gf": gf,
             "ga": ga,
@@ -189,7 +193,7 @@ def league_table(base: dict) -> list[dict[str, Any]]:
     for squad_id, fixtures in clubs.items():
         rec = record(fixtures)
         rows.append({
-            "squadId": squad_id, "club": _club(base, squad_id), "badge": _badge(squad_id),
+            "squadId": squad_id, "club": _club(base, squad_id), "badge": _badge(squad_id, _club(base, squad_id)),
             **{key: rec[key] for key in ("played", "w", "d", "l", "gf", "ga", "gd", "pts", "ppg", "form")},
         })
     rows.sort(key=lambda row: (-row["pts"], -row["gd"], -row["gf"], row["club"]))
@@ -712,6 +716,17 @@ def _build_state(cache_key: str) -> dict | None:
         return dict(state) if state else None
 
 
+LEADER_LABELS = {
+    "pxt": "Threat /90",
+    "ball_progression": "Progression",
+    "bypassed_defenders": "Line-breaker",
+    "regains_vs_defenders": "Wins it high",
+    "offensive_interventions": "Interventions",
+    "presses": "Presser",
+    "duel_rate": "Duels",
+}
+
+
 def squad_view(
     base: dict,
     squad_id: int,
@@ -747,6 +762,22 @@ def squad_view(
     target_rows = [row for row in sp_attack.get("targets") or [] if int(row.get("fcWon") or 0) >= 3 or int(row.get("goals") or 0)]
     target_rows.sort(key=lambda row: (-int(row.get("goals") or 0), -_num(row.get("xg")), -int(row.get("fcWon") or 0)))
     targets = {int(row["id"]): row for row in target_rows[:4]}
+    all_takers = {int(row["id"]): row for row in sp_attack.get("takers") or [] if row.get("id")}
+    all_targets = {int(row["id"]): row for row in sp_attack.get("targets") or [] if row.get("id")}
+    defenders = {int(row["id"]): row for row in ((set_play or {}).get("defence") or {}).get("defenders") or [] if row.get("id")}
+    danger = [pid for pid, _ in sorted(threat_players.items(), key=lambda kv: -_num(kv[1].get("pxt")))[:3]]
+    leaders: dict[int, list[dict]] = {}
+    rankings_raw = report.get("player_rankings") or {}
+    for side in ("in_possession", "out_of_possession"):
+        for group in rankings_raw.get(side) or []:
+            label = LEADER_LABELS.get(str(group.get("key")))
+            if not label:
+                continue
+            for rank, entry in enumerate(group.get("players") or [], start=1):
+                if entry.get("id") is not None and rank == 1:
+                    leaders.setdefault(int(entry["id"]), []).append({
+                        "label": label, "rank": rank, "value": entry.get("value_label"), "side": side,
+                    })
     players = []
     for row in report.get("squad") or []:
         player_id = int(row.get("id") or 0)
@@ -762,10 +793,35 @@ def squad_view(
             tags.append("Not played lately")
         if log and len([e for e in recent[-3:] if e and e.get("s")]) == 3 and row.get("starts", 0) <= 4:
             tags.append("Recently in the XI")
+        if str(player_id) in danger:
+            tags.append("Danger man")
         if player_id in takers:
             tags.append("Set-piece taker")
         if player_id in targets:
             tags.append("Set-piece target")
+        taker = all_takers.get(player_id)
+        target = all_targets.get(player_id)
+        defender = defenders.get(player_id)
+        set_plays = {}
+        if taker and int(taker.get("deliveries") or 0) >= 3:
+            set_plays["taker"] = {
+                "deliveries": int(taker.get("deliveries") or 0), "corners": int(taker.get("corners") or 0),
+                "freeKicks": int(taker.get("freeKicks") or 0), "foot": taker.get("foot"),
+                "inswing": int(taker.get("inswing") or 0), "outswing": int(taker.get("outswing") or 0),
+                "topZone": taker.get("topZone"), "goals": int(taker.get("goals") or 0),
+            }
+        if target and (int(target.get("fcWon") or 0) >= 2 or int(target.get("goals") or 0)):
+            set_plays["target"] = {
+                "fcWon": int(target.get("fcWon") or 0), "shots": int(target.get("shots") or 0),
+                "goals": int(target.get("goals") or 0), "xg": round(_num(target.get("xg")), 2),
+            }
+        if defender and int(defender.get("involvements") or 0) >= 3:
+            set_plays["defending"] = {
+                "won": int(defender.get("won") or 0), "lost": int(defender.get("lostDuels") or 0),
+                "lostOnShot": int(defender.get("lostOnShot") or 0), "lostOnGoal": int(defender.get("lostOnGoal") or 0),
+                "winPct": defender.get("winPct"),
+            }
+        goal_inv = int(row.get("goals") or 0) + int(row.get("assists") or 0)
         players.append({
             "id": player_id,
             "name": row.get("name"),
@@ -784,6 +840,10 @@ def squad_view(
             "current": bool(row.get("current")),
             "threat": round(_num(threat.get("pxt")), 3) if threat else None,
             "threat90": round(_num(threat.get("pxt")) * 90.0 / minutes, 3) if threat and minutes >= 90 else None,
+            "threatShare": round(_num(threat.get("share")), 1) if threat and threat.get("share") is not None else None,
+            "ga90": round(goal_inv * 90.0 / minutes, 2) if minutes >= 270 else None,
+            "setPlays": set_plays,
+            "leaders": leaders.get(player_id, []),
             "recentMinutes": recent_minutes if log else None,
             "log": [
                 {"min": int(entry["min"]), "start": bool(entry.get("s")), "g": int(entry.get("g") or 0), "a": int(entry.get("a") or 0)}
@@ -1096,7 +1156,7 @@ def vale_fixture_strip(base: dict, *, now: datetime | None = None) -> list[dict[
             "matchId": match_id,
             "squadId": squad_id,
             "name": opponent.get("name") or _club(base, squad_id),
-            "badge": _badge(squad_id),
+            "badge": _badge(squad_id, _club(base, squad_id) or opponent.get("name") or ""),
             "date": row.get("scheduled_date"),
             "home": bool(row.get("is_home")),
             "played": bool(result) or bool(row.get("played")) or bool(when and when < now - timedelta(hours=3)),
@@ -1120,7 +1180,7 @@ def read_meta() -> dict[str, Any]:
         vale_id = int(base["valeId"])
         squad_ids = {int(m["home"]) for m in base["matches"]} | {int(m["away"]) for m in base["matches"]}
         teams = sorted(
-            ({"id": sid, "name": _club(base, sid), "badge": _badge(sid)} for sid in squad_ids if sid != vale_id),
+            ({"id": sid, "name": _club(base, sid), "badge": _badge(sid, _club(base, sid))} for sid in squad_ids if sid != vale_id),
             key=lambda row: row["name"].casefold(),
         )
         upcoming = next_opponent(int(base["iterationId"]))
@@ -1163,7 +1223,10 @@ def build_report(season: str | None, squad_id: int, window: str | None = "season
 
     threat = threat_window(league["threat"], selected, squad_id, players)
     season_threat = threat if normalized == "season" else threat_window(league["threat"], all_fixtures, squad_id, players)
-    threat_players = {str(p["id"]): {"pxt": p["total"]} for p in season_threat.get("players") or []}
+    threat_players = {
+        str(p["id"]): {"pxt": p["total"], "share": p.get("share"), "count": p.get("count")}
+        for p in season_threat.get("players") or []
+    }
     squad = squad_view(base, squad_id, all_fixtures, threat_players, season_set_play)
     battles = iv_battles(league["iv"], selected, squad_id)
     xg = xg_window(league["xg"], selected, squad_id)
@@ -1183,7 +1246,7 @@ def build_report(season: str | None, squad_id: int, window: str | None = "season
         "generatedAt": datetime.now(UTC).isoformat(),
         "season": base.get("season"),
         "window": normalized,
-        "club": {"id": squad_id, "name": club, "badge": _badge(squad_id)},
+        "club": {"id": squad_id, "name": club, "badge": _badge(squad_id, club)},
         "vale": {"id": vale_id, "name": _club(base, vale_id), "badge": "/standalone/port-vale-badge.png?v=2"},
         "fixture": {
             "matchId": upcoming.get("match_id"),

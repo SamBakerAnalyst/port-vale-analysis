@@ -194,7 +194,7 @@ def test_meta_fixture_strip_has_badges_and_vale_results(tmp_path, monkeypatch):
     strip = oh.read_meta()["fixtures"]
     assert [row["matchId"] for row in strip] == [5, 99]
     played, upcoming = strip
-    assert played["badge"] == f"/api/team-badge/{OPP}" and played["played"] is True
+    assert played["badge"] and played["played"] is True
     vale_row = next(row for row in oh.team_fixtures(oh.season_base("26/27"), VALE) if row["matchId"] == 5)
     assert played["score"] == vale_row["score"] and played["result"] == vale_row["result"]
     assert upcoming["played"] is False and upcoming["score"] is None and upcoming["home"] is True
