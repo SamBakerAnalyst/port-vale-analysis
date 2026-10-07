@@ -6,6 +6,7 @@ const state = {
   payload: null,
   filters: {},
   reportTabs: {},
+  wallShapes: {},
   viewBlockId: null,
   scrollToTop: false,
   loading: false,
@@ -181,7 +182,7 @@ function posterHtml(block) {
   const aimSection = cups
     ? `
         <div class="ba-cups-note">
-          <p class="ba-cups-note__lead">League block targets do not apply here — pick a cup game below for the full staff report and PDF.</p>
+          <p class="ba-cups-note__lead">League block points targets do not apply here — pick a cup game below for the full staff report. Unit Req uses the same fixed League Two top-7 targets as the league, and Wall targets prints them for 4-4-2, 3-5-2 or 3-4-3.</p>
           <p class="ba-cups-note__meta">${escapeHtml(block.pointsLabel || "")}${Number(totals.cleanSheets) ? ` · ${escapeHtml(fmtNum(totals.cleanSheets))} clean sheet${Number(totals.cleanSheets) === 1 ? "" : "s"}` : ""}</p>
         </div>
       `
@@ -956,15 +957,77 @@ function playerExportSlideHtml(slide, { stats, single, fixture, page, totalPages
   `;
 }
 
-function playerTargetsDeckHtml(block, { reqOnly = false } = {}) {
-  const { stats, single, fixture } = selectedStats(block);
-  if (!single) {
-    const hint = reqOnly
-      ? "Select one game above to open the wall targets — each slide shows the Req line only (League Two top-7, scaled to this XI)."
-      : "Select one game above to open the player export — each unit target shows a tick or cross vs the League Two top-7 Req line.";
+const WALL_SHAPES = ["4-4-2", "3-5-2", "3-4-3"];
+
+function wallShapeChoices() {
+  const pinned = state.payload?.benchmarks?.fixedUnitTargets?.shapes;
+  const shapes = Array.isArray(pinned) && pinned.length ? pinned : WALL_SHAPES;
+  return shapes.filter((shape) => state.payload?.benchmarks?.unitsByFormation?.[shape]);
+}
+
+function wallShapeFor(block) {
+  const choices = wallShapeChoices();
+  const picked = state.wallShapes[block.id];
+  if (picked && choices.includes(picked)) return picked;
+  const { stats, single } = selectedStats(block);
+  const played = single ? formationLabel(stats?.formation) : "";
+  if (choices.includes(played)) return played;
+  return choices.includes("3-5-2") ? "3-5-2" : (choices[0] || "");
+}
+
+function wallShapePickerHtml(block) {
+  const choices = wallShapeChoices();
+  if (!choices.length) return "";
+  const current = wallShapeFor(block);
+  const frozen = state.payload?.benchmarks?.fixedUnitTargets?.frozenAt;
+  const buttons = choices.map((shape) => {
+    const active = shape === current;
+    return `<button type="button" class="ba-filter__btn ${active ? "is-active" : ""}" data-wall-shape="${escapeHtml(shape)}" data-block="${block.id}" aria-pressed="${active}">${escapeHtml(shape)}</button>`;
+  }).join("");
+  const note = `Fixed League Two top-7 Req for the shape${frozen ? ` · pinned ${frozen}` : ""} · same targets for league and cup games.`;
+  return `
+    <div class="ba-formation" role="group" aria-label="Wall target shape">
+      <span class="ba-formation__label">Shape</span>
+      <div class="ba-filter">${buttons}</div>
+      <span class="ba-formation__note">${escapeHtml(note)}</span>
+    </div>
+  `;
+}
+
+function wallTargetsDeckHtml(block) {
+  const shape = wallShapeFor(block);
+  if (!shape) {
     return `
       <section class="ba-pe ba-pe--empty">
-        <p class="ba-pe__hint">${hint}</p>
+        <p class="ba-pe__hint">Top-7 targets per shape are still loading — refresh in a minute.</p>
+      </section>
+    `;
+  }
+  const stats = { formation: shape, units: {}, played: 1 };
+  const slides = UNIT_SLIDES.map((slide, index) => playerExportSlideHtml(slide, {
+    stats,
+    single: true,
+    fixture: null,
+    page: index + 1,
+    totalPages: UNIT_SLIDES.length,
+    reqOnly: true,
+  })).join("");
+  const scope = isCupsBlock(block) ? "Cups" : `Block ${block.id}`;
+  return `
+    <section class="ba-pe ba-pe--req-only">
+      <p class="ba-pe__lead ba-export-hide">3 wall target slides · ${escapeHtml(shape)} · ${escapeHtml(scope)} · Req only · Print or export PNGs for the dressing room</p>
+      ${slides}
+    </section>
+  `;
+}
+
+function playerTargetsDeckHtml(block, { reqOnly = false } = {}) {
+  if (reqOnly) return wallTargetsDeckHtml(block);
+  const { stats, single, fixture } = selectedStats(block);
+  if (!single) {
+    return `
+      <section class="ba-pe ba-pe--empty">
+        <p class="ba-pe__hint">Select one game above to open the player export — each unit target shows a tick or cross vs the League Two top-7 Req line.</p>
       </section>
     `;
   }
@@ -974,15 +1037,11 @@ function playerTargetsDeckHtml(block, { reqOnly = false } = {}) {
     fixture,
     page: index + 1,
     totalPages: UNIT_SLIDES.length,
-    reqOnly,
   })).join("");
   const opp = fixture?.opponentName ? shortOpponent(fixture.opponentName) : "match";
-  const lead = reqOnly
-    ? `3 wall target slides · Req only · ${escapeHtml(opp)} · Print or export PNGs for the dressing room`
-    : `3 unit target slides · ${escapeHtml(opp)} · Export PNGs for WhatsApp (zip + Desktop folder)`;
   return `
-    <section class="ba-pe ${reqOnly ? "ba-pe--req-only" : ""}">
-      <p class="ba-pe__lead ba-export-hide">${lead}</p>
+    <section class="ba-pe">
+      <p class="ba-pe__lead ba-export-hide">3 unit target slides · ${escapeHtml(opp)} · Export PNGs for WhatsApp (zip + Desktop folder)</p>
       ${slides}
     </section>
   `;
@@ -1992,6 +2051,7 @@ function dashHtml(block) {
   const playerExport = tab === "player-export";
   const wallTargets = tab === "wall-targets";
   const playerDeck = isPlayerDeckTab(tab);
+  const deckReady = wallTargets ? wallShapeChoices().length > 0 : playedInBlock > 0;
   const reportChrome = `
       <div class="ba-report__chrome ba-export-hide">
         <div class="ba-report__heading">
@@ -2006,18 +2066,27 @@ function dashHtml(block) {
           <div class="ba-filter" role="group" aria-label="Filter block ${block.id} to one game">${pills}</div>
           <div class="ba-report__actions">
             ${playerDeck ? `
-              <button type="button" class="ba-btn" data-print-player="${block.id}" ${playedInBlock ? "" : "disabled"}>Print</button>
-              <button type="button" class="ba-btn ba-btn--print" data-png-player="${block.id}" ${playedInBlock ? "" : "disabled"}>Export PNGs</button>
-              <button type="button" class="ba-btn ba-btn--print" data-pdf-player="${block.id}" ${playedInBlock ? "" : "disabled"}>Export PDF</button>
+              <button type="button" class="ba-btn" data-print-player="${block.id}" ${deckReady ? "" : "disabled"}>Print</button>
+              <button type="button" class="ba-btn ba-btn--print" data-png-player="${block.id}" ${deckReady ? "" : "disabled"}>Export PNGs</button>
+              <button type="button" class="ba-btn ba-btn--print" data-pdf-player="${block.id}" ${deckReady ? "" : "disabled"}>Export PDF</button>
             ` : `
               <button type="button" class="ba-btn" data-print-report="${block.id}" ${playedInBlock ? "" : "disabled"}>Print</button>
               <button type="button" class="ba-btn ba-btn--print" data-pdf-report="${block.id}" ${playedInBlock ? "" : "disabled"}>Export PDF</button>
             `}
           </div>
         </div>
-        ${formationPickerHtml(block)}
+        ${wallTargets ? wallShapePickerHtml(block) : formationPickerHtml(block)}
       </div>
   `;
+
+  if (wallTargets) {
+    return `
+      <section class="ba-report">
+        ${reportChrome}
+        ${wallTargetsDeckHtml(block)}
+      </section>
+    `;
+  }
 
   if (!playedInBlock) {
     const leagueBlocks = (state.payload?.blocks || []).filter((row) => !isCupsBlock(row));
@@ -2329,10 +2398,16 @@ function playerSlidePngName(slide, index, reqOnly = false) {
   return `${String(index + 1).padStart(2, "0")}-${labels[unit] || unit}${suffix}.png`;
 }
 
+function wallTargetsFileStem(block) {
+  const scope = block && isCupsBlock(block) ? "Cups" : `Block-${block?.id ?? ""}`;
+  return `Port-Vale-${scope}-wall-targets-${wallShapeFor(block || { id: 0 })}`;
+}
+
 function playerPdfName(blockId) {
   const block = (state.payload?.blocks || []).find((row) => row.id === Number(blockId));
   const reqOnly = reportTab(blockId) === "wall-targets";
-  const suffix = reqOnly ? "-req-targets" : "-unit-targets";
+  if (reqOnly) return `${wallTargetsFileStem(block)}.pdf`;
+  const suffix = "-unit-targets";
   if (!block) return `port-vale${suffix}.pdf`;
   const { single, fixture } = selectedStats(block);
   if (single && fixture?.opponentName) {
@@ -2344,7 +2419,8 @@ function playerPdfName(blockId) {
 function playerPngZipName(blockId) {
   const block = (state.payload?.blocks || []).find((row) => row.id === Number(blockId));
   const reqOnly = reportTab(blockId) === "wall-targets";
-  const suffix = reqOnly ? "-req-targets" : "-unit-targets";
+  if (reqOnly) return `${wallTargetsFileStem(block)}.zip`;
+  const suffix = "-unit-targets";
   if (!block) return `port-vale${suffix}.zip`;
   const { single, fixture } = selectedStats(block);
   if (single && fixture?.opponentName) {
@@ -2459,14 +2535,15 @@ async function exportPlayerPngs(blockId) {
     onProgress: (done, total) => setStatus(`Capturing PNGs… ${done}/${total}`, "loading"),
   });
   const filename = playerPngZipName(blockId);
+  const reqOnly = reportTab(blockId) === "wall-targets";
   const response = await fetch("/api/blocks-analysis/export-pngs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       pages,
       filename,
-      document_title: "Port Vale Unit Targets",
-      opponent_name: fixture?.opponentName || "match",
+      document_title: reqOnly ? "Port Vale Wall Targets" : "Port Vale Unit Targets",
+      opponent_name: reqOnly ? `wall-targets-${wallShapeFor(block || { id: 0 })}` : (fixture?.opponentName || "match"),
     }),
   });
   if (!response.ok) {
@@ -2677,6 +2754,12 @@ els.blocksRoot.addEventListener("click", async (event) => {
       points: defaults.points,
       cleanSheets: defaults.cleanSheets,
     });
+    return;
+  }
+  const wallShapeBtn = event.target.closest("[data-wall-shape]");
+  if (wallShapeBtn) {
+    state.wallShapes[Number(wallShapeBtn.dataset.block)] = wallShapeBtn.dataset.wallShape;
+    render();
     return;
   }
   const formationBtn = event.target.closest("[data-formation]");

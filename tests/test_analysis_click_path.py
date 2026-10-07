@@ -7,7 +7,11 @@ import time
 
 import app.analysis_cache as analysis_cache
 from app.analysis_cache import write_json
-from app.blocks_analysis import MATCH_STATS_CACHE_VERSION, build_blocks_analysis_payload
+from app.blocks_analysis import (
+    MATCH_STATS_CACHE_VERSION,
+    _load_match_kpis,
+    build_blocks_analysis_payload,
+)
 from app.home_dashboard import build_port_vale_fixtures
 from app.player_cards import build_player_cards_squad
 from app.pre_match import (
@@ -324,6 +328,50 @@ def test_blocks_ignores_hollow_cache_and_uses_saved_kpis(tmp_path, monkeypatch):
     payload = build_blocks_analysis_payload(force_refresh=False)
     assert payload["blocks"][0]["fixtures"][0]["stats"]["xg"] == 1.4
     assert payload["blocks"][0]["fixtures"][0]["stats"]["xgRace"]["points"] == [0.1]
+
+
+def test_blocks_retries_played_match_cached_without_players(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.blocks_analysis.KPI_CACHE_PATH", tmp_path / "match-kpis.json"
+    )
+    (tmp_path / "match-kpis.json").write_text(
+        json.dumps(
+            {
+                "101": {
+                    "v": MATCH_STATS_CACHE_VERSION,
+                    "fingerprint": "2:0:1",
+                    "fetchedAt": 1,
+                    "stats": {"xg": 0.4, "units": {"ATT": {"shots": 3}}, "players": []},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    match = {
+        "matchId": 101,
+        "outcome": "win",
+        "available": True,
+        "home": {"score": 2},
+        "away": {"score": 0},
+    }
+    monkeypatch.setattr("app.blocks_analysis._merged_player_names", lambda: {})
+    monkeypatch.setattr("app.blocks_analysis._hydrate_lineup_units", lambda *a, **k: False)
+    monkeypatch.setattr("app.blocks_analysis._hydrate_open_play_shots", lambda *a, **k: False)
+    monkeypatch.setattr("app.blocks_analysis._cross_pxt_stale", lambda *a: False)
+
+    monkeypatch.setattr("app.blocks_analysis._fetch_match_stats", _boom)
+    kept = _load_match_kpis([match], fetch_missing=True, allow_stale=True)
+    assert kept[101]["xg"] == 0.4
+
+    monkeypatch.setattr(
+        "app.blocks_analysis._fetch_match_stats",
+        lambda *a, **k: {"xg": 0.4, "units": {}, "players": [{"name": "Ben Waine"}]},
+    )
+    cached = json.loads((tmp_path / "match-kpis.json").read_text(encoding="utf-8"))
+    cached["101"]["fetchedAt"] = 1
+    (tmp_path / "match-kpis.json").write_text(json.dumps(cached), encoding="utf-8")
+    fresh = _load_match_kpis([match], fetch_missing=True, allow_stale=True)
+    assert fresh[101]["players"][0]["name"] == "Ben Waine"
 
 
 def test_countdown_fixtures_click_serves_stale_disk(tmp_path, monkeypatch):

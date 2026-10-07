@@ -196,3 +196,34 @@ def test_apply_overrides_retags_units_and_attaches_targets(tmp_path, monkeypatch
     assert out["benchmarks"]["unitsByFormation"] == {"3-5-2": {"DEF": {}}}
     # Cached payload untouched.
     assert payload["blocks"][0]["fixtures"][0]["stats"]["formation"] == "5-2-3"
+
+
+def test_fixed_wall_shapes_ship_with_every_unit():
+    fixed = ba.load_fixed_unit_targets()
+    assert list(fixed["shapes"]) == list(ba.FIXED_UNIT_TARGET_SHAPES)
+    for shape in ba.FIXED_UNIT_TARGET_SHAPES:
+        for unit in ba.UNITS:
+            assert fixed["shapes"][shape][unit]["duelRate"] is not None
+
+
+def test_fixed_wall_shapes_override_daily_top7(monkeypatch):
+    monkeypatch.setattr(
+        ba,
+        "_load_unit_top7_disk",
+        lambda: {
+            "v": ba.UNIT_TOP7_VERSION,
+            "iterationId": ba.BLOCKS_ITERATION_ID,
+            "fetchedAt": 9e12,
+            "byFormation": {"3-5-2": {"DEF": {"duelRate": 1.0}}, "4-3-3": {"DEF": {"duelRate": 2.0}}},
+        },
+    )
+    targets = ba.formation_unit_targets(start_build=False)
+    fixed = ba.load_fixed_unit_targets()["shapes"]
+    assert targets["3-5-2"] == fixed["3-5-2"]
+    assert targets["4-3-3"] == {"DEF": {"duelRate": 2.0}}
+
+
+def test_fixed_wall_shapes_serve_before_daily_build(monkeypatch):
+    monkeypatch.setattr(ba, "_load_unit_top7_disk", lambda: {})
+    targets = ba.formation_unit_targets(start_build=False)
+    assert set(targets) == set(ba.FIXED_UNIT_TARGET_SHAPES)

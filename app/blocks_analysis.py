@@ -10,6 +10,7 @@ import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -85,6 +86,9 @@ KPI_ASSISTS = 77
 KPI_PXT_SHOT = 1408
 KPI_PXT_DRIBBLE = 1405
 MATCH_KPI_CACHE_TTL = 6 * 3600
+# A played match cached with no players means the player-kpis call failed
+# (usually an Impect 429) — retry it instead of trusting the empty list.
+PLAYERS_RETRY_SECONDS = 10 * 60
 MATCH_STATS_CACHE_VERSION = 26
 # Bump when cross PXT logic changes — does not invalidate full match KPI cache.
 CROSS_PXT_VERSION = 2
@@ -133,6 +137,10 @@ FORMATION_SLOTS: dict[str, dict[str, tuple[str, ...]]] = {
     "5-3-2": {"DEF": ("CB", "CB", "CB", "WB", "WB"), "MID": ("DM", "DM", "AM"), "ATT": ("CF", "CF")},
     "5-2-3": {"DEF": ("CB", "CB", "CB", "WB", "WB"), "MID": ("DM", "DM"), "ATT": ("AM", "AM", "CF")},
 }
+# Frozen League Two top-7 Req for the wall shapes — the same numbers for league
+# and cup games. Re-freeze with scripts/freeze_unit_targets.py.
+FIXED_UNIT_TARGETS_PATH = Path(__file__).with_name("blocks_fixed_unit_targets.json")
+FIXED_UNIT_TARGET_SHAPES: tuple[str, ...] = ("4-4-2", "3-5-2", "3-4-3")
 SLOT_FALLBACKS: dict[str, tuple[str, ...]] = {
     "CB": ("FB", "WB"),
     "FB": ("WB", "CB"),
@@ -225,6 +233,7 @@ FORMATIONS_PATH = DATA_DIR / "formations.json"
 
 _store_lock = threading.Lock()
 _payload_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+_players_retry_at = 0.0
 _benchmark_cache: tuple[float, dict[str, Any]] | None = None
 _player_names_cache: dict[int, tuple[float, dict[int, str]]] = {}
 
@@ -2673,6 +2682,7 @@ def _fetch_match_stats(
         _apply_lineup_roles(stats["players"], _lineup_roles(match_id, squad_id))
         stats["units"] = _units_from_report(stats["players"])
     except Exception:  # noqa: BLE001
+        logger.exception("Blocks player-kpis failed for match %s", match_id)
         stats["units"] = _empty_units()
         stats["players"] = []
     race, facts = _match_story(
@@ -2798,6 +2808,12 @@ def _load_match_kpis(
             now - float((cached or {}).get("fetchedAt") or 0) < MATCH_KPI_CACHE_TTL
         )
         fingerprint_ok = bool(cached) and cached.get("fingerprint") == fingerprint
+        players_missing = (
+            bool(cached)
+            and match.get("available")
+            and not (cached.get("stats") or {}).get("players")
+            and now - float((cached or {}).get("fetchedAt") or 0) >= PLAYERS_RETRY_SECONDS
+        )
         if cache_ok and ttl_ok and (fingerprint_ok or allow_stale):
             stats = cached["stats"]
             before = int(((stats.get("units") or {}).get("ATT") or {}).get("shots") or 0)
@@ -2820,6 +2836,8 @@ def _load_match_kpis(
                 cached["stats"] = stats
                 dirty = True
             result[match_id] = stats
+            if players_missing and fetch_missing:
+                to_fetch.append(match)
             continue
         if fetch_missing:
             to_fetch.append(match)
@@ -2876,6 +2894,13 @@ def _load_match_kpis(
                     stats = future.result()
                 except Exception:  # noqa: BLE001 — keep the poster live if one match fails
                     stats = _empty_kpi_stats()
+                previous = result.get(match_id)
+                if previous and not stats.get("players"):
+                    # Player retry failed again — keep the cached team stats, try later.
+                    cached = disk.get(str(match_id))
+                    if isinstance(cached, dict):
+                        cached["fetchedAt"] = now
+                    continue
                 result[match_id] = stats
                 disk[str(match_id)] = {
                     "v": MATCH_STATS_CACHE_VERSION,
@@ -3173,6 +3198,39 @@ def _formation_targets_background() -> None:
             _formation_targets_building = False
 
 
+def load_fixed_unit_targets() -> dict[str, Any]:
+    try:
+        payload = json.loads(FIXED_UNIT_TARGETS_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    shapes = payload.get("shapes") if isinstance(payload, dict) else None
+    if not isinstance(shapes, dict):
+        return {}
+    payload["shapes"] = {
+        shape: shapes[shape]
+        for shape in FIXED_UNIT_TARGET_SHAPES
+        if isinstance(shapes.get(shape), dict)
+    }
+    return payload
+
+
+def freeze_fixed_unit_targets() -> dict[str, Any]:
+    """Rebuild top-7 per-shape Req from Impect and pin the wall shapes to disk."""
+    _top7, _pv, by_formation = _build_unit_top7_from_sample(BLOCKS_ITERATION_ID)
+    shapes = {shape: by_formation[shape] for shape in FIXED_UNIT_TARGET_SHAPES if by_formation.get(shape)}
+    if len(shapes) != len(FIXED_UNIT_TARGET_SHAPES):
+        raise RuntimeError("Top-7 sample did not cover every wall shape — keeping the old targets")
+    payload = {
+        "frozenAt": datetime.now(UTC).strftime("%Y-%m-%d"),
+        "iterationId": BLOCKS_ITERATION_ID,
+        "top7SquadIds": _iteration_table_top7_ids(BLOCKS_ITERATION_ID),
+        "source": "League Two top-7 per-position averages (last 8 games each), summed per unit",
+        "shapes": shapes,
+    }
+    FIXED_UNIT_TARGETS_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return payload
+
+
 def formation_unit_targets(*, start_build: bool = True) -> dict[str, Any] | None:
     """Per-shape top-7 Req from disk. Kicks a background build when missing or stale."""
     global _formation_targets_building
@@ -3193,7 +3251,9 @@ def formation_unit_targets(*, start_build: bool = True) -> dict[str, Any] | None
                     name="blocks-formation-top7",
                     daemon=True,
                 ).start()
-    return by_formation if current else None
+    merged = dict(by_formation) if current else {}
+    merged.update(load_fixed_unit_targets().get("shapes") or {})
+    return merged or None
 
 
 def build_unit_benchmarks(
@@ -3748,6 +3808,27 @@ def _payload_has_kpis(payload: dict[str, Any] | None) -> bool:
     return False
 
 
+def _payload_missing_players(node: Any) -> bool:
+    if isinstance(node, list):
+        return any(_payload_missing_players(item) for item in node)
+    if not isinstance(node, dict):
+        return False
+    stats = node.get("stats")
+    if (
+        node.get("matchId")
+        and node.get("played")
+        and node.get("available")
+        and isinstance(stats, dict)
+        and not stats.get("players")
+    ):
+        return True
+    return any(
+        _payload_missing_players(value)
+        for key, value in node.items()
+        if key != "stats" and isinstance(value, (dict, list))
+    )
+
+
 def _season_matches_missing_results(matches: list[dict[str, Any]]) -> bool:
     from app.analysis_cache import rows_missing_finished_results
 
@@ -3908,11 +3989,17 @@ def apply_formation_overrides(payload: dict[str, Any]) -> dict[str, Any]:
         ]
     benchmarks = out.setdefault("benchmarks", {})
     benchmarks["unitsByFormation"] = formation_unit_targets() or {}
+    fixed = load_fixed_unit_targets()
+    benchmarks["fixedUnitTargets"] = {
+        "shapes": list((fixed.get("shapes") or {}).keys()),
+        "frozenAt": fixed.get("frozenAt"),
+    }
     out["formationOptions"] = list(FORMATION_OPTIONS)
     return out
 
 
 def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, Any]:
+    global _players_retry_at
     cache_key = "default"
     now = time.time()
     if not force_refresh:
@@ -3928,17 +4015,24 @@ def build_blocks_analysis_payload(*, force_refresh: bool = False) -> dict[str, A
             _payload_cache[cache_key] = (now, disk)
 
         matches = _load_season_matches_disk()
-        if _season_matches_missing_results(matches):
-            try:
-                matches = _fetch_season_matches()
-                if matches:
-                    _save_season_matches_disk(matches)
-            except Exception:
-                logger.exception("Blocks score refresh from Impect failed")
-                if payload:
-                    if _retouch_payload_lineups(payload):
+        needs_scores = _season_matches_missing_results(matches)
+        needs_players = False
+        if payload and _payload_missing_players(payload.get("blocks")):
+            if now - _players_retry_at >= PLAYERS_RETRY_SECONDS:
+                _players_retry_at = now
+                needs_players = True
+        if needs_scores or needs_players:
+            if needs_scores:
+                try:
+                    matches = _fetch_season_matches()
+                    if matches:
+                        _save_season_matches_disk(matches)
+                except Exception:
+                    logger.exception("Blocks score refresh from Impect failed")
+                    if payload:
+                        if _retouch_payload_lineups(payload):
+                            return _finalize_blocks_payload(payload)
                         return _finalize_blocks_payload(payload)
-                    return _finalize_blocks_payload(payload)
             if matches:
                 cup_matches = _fetch_cup_matches()
                 kpi_by_match = _load_match_kpis(
