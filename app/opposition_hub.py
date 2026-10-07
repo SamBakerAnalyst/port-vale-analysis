@@ -1721,7 +1721,10 @@ def read_report(season: str | None, squad_id: int, window: str | None = "season"
 def register_opposition_hub_routes(app: FastAPI) -> None:
     @app.get("/opposition-hub")
     def opposition_hub_page() -> FileResponse:
-        return FileResponse(STANDALONE_DIR / "opposition-hub.html")
+        return FileResponse(
+            STANDALONE_DIR / "opposition-hub.html",
+            headers={"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"},
+        )
 
     @app.get("/api/opposition-hub/meta")
     def opposition_hub_meta() -> JSONResponse:
