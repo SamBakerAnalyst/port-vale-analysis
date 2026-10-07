@@ -578,6 +578,8 @@ def _public_target(row: dict[str, Any]) -> dict[str, Any]:
         "dossier_href": f"/player/{player_id_int}" if player_id_int else "",
         "overall_score": row.get("overall_score"),
         "minutes": row.get("minutes"),
+        "total_minutes": row.get("total_minutes"),
+        "stats_club_missing": bool(row.get("stats_club_missing")),
         "minutes_by_position": [
             {
                 "position": item.get("position") or "",
