@@ -348,21 +348,33 @@ function chainSvg(chain) {
   const steps = chain.steps || [];
   const defs = arrowDefs(steps.map((step) => step.color || "#94a3b8"));
   let delay = 0;
+  const nextStart = (i) => steps.slice(i + 1).find((later) => later.x1 != null);
   const parts = steps.map((step, i) => {
     if (step.x1 == null) return "";
     const a = toSvg(step.x1, step.y1);
-    const hasEnd = step.x2 != null;
-    const b = hasEnd ? toSvg(step.x2, step.y2) : a;
+    const after = nextStart(i);
+    const endX = step.x2 != null ? step.x2 : (after && !step.shot ? after.x1 : null);
+    const endY = step.x2 != null ? step.y2 : (after && !step.shot ? after.y1 : null);
+    const hasEnd = endX != null;
+    const b = hasEnd ? toSvg(endX, endY) : a;
     const len = Math.hypot(b.x - a.x, b.y - a.y);
     const d = delay; delay += 260;
+    let link = "";
+    if (after && step.x2 != null && !step.shot) {
+      const n = toSvg(after.x1, after.y1);
+      const gap = Math.hypot(n.x - b.x, n.y - b.y);
+      if (gap > 20) link = `<line x1="${b.x.toFixed(1)}" y1="${b.y.toFixed(1)}" x2="${n.x.toFixed(1)}" y2="${n.y.toFixed(1)}" stroke="rgba(226,245,233,0.45)" stroke-width="2" stroke-dasharray="2 6" stroke-linecap="round" class="at-pop" style="animation-delay:${d + 200}ms"/>`;
+    }
     const width = 3 + Math.min(7, Number(step.pxt) * 30);
     const dash = step.family === "dribble" ? ` stroke-dasharray="7 6"` : "";
-    const line = hasEnd && len > 4 ? `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke="${step.color}" stroke-width="${width.toFixed(1)}" stroke-linecap="round" marker-end="url(#{id}a${i})" class="${dash ? "at-pop" : "at-draw"}" style="--len:${len.toFixed(0)};animation-delay:${d}ms"${dash}><title>${escapeHtml(`${i + 1}. ${step.player} — ${step.label} (${fmt(step.pxt, 3)})`)}</title></line>` : "";
+    const trim = len > 40 ? 18 / len : 0;
+    const tip = { x: b.x - (b.x - a.x) * trim, y: b.y - (b.y - a.y) * trim };
+    const line = hasEnd && len > 4 ? `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${tip.x.toFixed(1)}" y2="${tip.y.toFixed(1)}" stroke="${step.color}" stroke-width="${width.toFixed(1)}" stroke-linecap="round" marker-end="url(#{id}a${i})" class="${dash ? "at-pop" : "at-draw"}" style="--len:${len.toFixed(0)};animation-delay:${d}ms"${dash}><title>${escapeHtml(`${i + 1}. ${step.player} — ${step.label} (${fmt(step.pxt, 3)})`)}</title></line>` : "";
     const node = `<g class="at-pop" style="animation-delay:${d}ms"><circle cx="${a.x.toFixed(1)}" cy="${a.y.toFixed(1)}" r="15" fill="${step.color}" stroke="#0b0f15" stroke-width="2.5"/><text x="${a.x.toFixed(1)}" y="${(a.y + 4.5).toFixed(1)}" text-anchor="middle" font-size="12.5" font-weight="800" fill="#0b0f15" font-family="Manrope" letter-spacing="-0.3">${escapeHtml(playerInitials(step.player))}</text><title>${escapeHtml(`${i + 1}. ${step.player} — ${step.label}`)}</title></g>`;
     const goal = step.goal ? `<g class="at-pop" style="animation-delay:${d + 400}ms"><circle cx="${b.x.toFixed(1)}" cy="${b.y.toFixed(1)}" r="20" fill="none" stroke="#f5c518" stroke-width="4"/><text x="${(b.x - 26).toFixed(1)}" y="${(b.y - 26).toFixed(1)}" text-anchor="end" fill="#f5c518" font-size="22" font-weight="800" font-family="Barlow Condensed">GOAL</text></g>` : "";
-    return line + node + goal;
-  }).join("");
-  return pitch(parts, "Chain replay, attacking to the right", defs);
+    return { lines: link + line, top: node + goal };
+  }).filter(Boolean);
+  return pitch(parts.map((p) => p.lines).join("") + parts.map((p) => p.top).join(""), "Chain replay, attacking to the right", defs);
 }
 function chainKey(chain) {
   const order = ["pass", "cross", "dribble", "shot", "setPiece", "regain", "other"];

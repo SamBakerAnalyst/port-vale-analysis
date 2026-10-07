@@ -132,6 +132,7 @@
   function setProfileSubtitle(label) {
     const card = document.getElementById("pdRadarSub");
     if (!card) return;
+    if (label === "—") label = "";
     chartState.positionLabel = label || "";
     const season = chartState.seasonLabel ? ` · ${chartState.seasonLabel}` : "";
     card.textContent = label
@@ -1346,8 +1347,15 @@
     renderSeasons(careerState.rows);
     setProfileSubtitle(chartState.positionLabel);
     const bars = document.getElementById("pdProfileBars");
-    if (bars) bars.innerHTML = `<p class="pd-empty">Loading ${escapeHtml(row.season)} profiles…</p>`;
+    if (bars) bars.innerHTML = `<p class="pd-empty">Loading ${escapeHtml(row.season)} Impect profiles…</p>`;
     document.getElementById("pdRadar").innerHTML = "";
+    const legend = document.getElementById("pdProfiles");
+    if (legend) {
+      legend.hidden = true;
+      legend.innerHTML = "";
+    }
+    const factors = document.getElementById("pdFactorStats");
+    if (factors) factors.innerHTML = "";
     try {
       const res = await fetch(seasonProfilesUrl(""), {
         cache: "no-store",
@@ -1371,6 +1379,10 @@
   }
 
   async function loadCareer(playerId, fallbackRows) {
+    if (!currentProfiles().length && !chartState.squadId) {
+      const latest = (fallbackRows || []).find((row) => row.impect);
+      if (latest) selectSeason(latest);
+    }
     try {
       const res = await fetch(`/api/player/${playerId}/career`, {
         cache: "no-store",
@@ -1383,7 +1395,7 @@
       // FotMob is extra; the Impect seasons already painted.
     }
     if (!currentProfiles().length && !chartState.squadId) {
-      const latest = careerState.rows.find((row) => row.impect) || (fallbackRows || []).find((row) => row.impect);
+      const latest = careerState.rows.find((row) => row.impect);
       if (latest) selectSeason(latest);
     }
   }

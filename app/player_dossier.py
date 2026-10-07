@@ -2176,7 +2176,93 @@ def _factor_rows_for_profile(
     return top
 
 
-_SEASON_PROFILES_CACHE: dict[tuple[int, int, int, str], tuple[float, dict[str, Any]]] = {}
+SEASON_PROFILES_PATH = DATA_ROOT / "player-season-profiles.json"
+_SEASON_PROFILES_TTL = 7 * 24 * 60 * 60
+_SEASON_PROFILES_CACHE: dict[tuple[int, int, int], tuple[float, dict[str, Any]]] = {}
+_season_cache_lock = threading.Lock()
+_season_key_locks: dict[tuple[int, int, int], threading.Lock] = {}
+_season_disk_loaded = False
+
+
+def _season_cache_key_text(key: tuple[int, int, int]) -> str:
+    return "-".join(str(part) for part in key)
+
+
+def _season_cache_get(key: tuple[int, int, int]) -> dict[str, Any] | None:
+    global _season_disk_loaded
+    with _season_cache_lock:
+        if not _season_disk_loaded:
+            _season_disk_loaded = True
+            try:
+                stored = json.loads(SEASON_PROFILES_PATH.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                stored = {}
+            for text, entry in (stored if isinstance(stored, dict) else {}).items():
+                try:
+                    parts = tuple(int(part) for part in text.split("-"))
+                    _SEASON_PROFILES_CACHE[parts] = (float(entry["ts"]), entry["season"])  # type: ignore[index]
+                except (KeyError, TypeError, ValueError):
+                    continue
+        hit = _SEASON_PROFILES_CACHE.get(key)
+    if hit and time.time() - hit[0] < _SEASON_PROFILES_TTL:
+        return hit[1]
+    return None
+
+
+def _season_cache_put(key: tuple[int, int, int], season: dict[str, Any]) -> None:
+    with _season_cache_lock:
+        _SEASON_PROFILES_CACHE[key] = (time.time(), season)
+        payload = {
+            _season_cache_key_text(k): {"ts": ts, "season": value}
+            for k, (ts, value) in _SEASON_PROFILES_CACHE.items()
+            if time.time() - ts < _SEASON_PROFILES_TTL
+        }
+        try:
+            DATA_ROOT.mkdir(parents=True, exist_ok=True)
+            temp = SEASON_PROFILES_PATH.with_suffix(".json.tmp")
+            temp.write_text(json.dumps(payload), encoding="utf-8")
+            temp.replace(SEASON_PROFILES_PATH)
+        except OSError:
+            pass
+
+
+def _cached_live_season(player_id: int, iteration_id: int, squad_id: int) -> dict[str, Any]:
+    key = (int(player_id), int(iteration_id), int(squad_id))
+    season = _season_cache_get(key)
+    if season is not None:
+        return season
+    with _season_cache_lock:
+        key_lock = _season_key_locks.setdefault(key, threading.Lock())
+    with key_lock:
+        season = _season_cache_get(key)
+        if season is not None:
+            return season
+        season = _live_season_profiles(*key)
+        if season["complete"]:
+            _season_cache_put(key, season)
+        return season
+
+
+def warm_season_profiles(player_id: int, links: list[dict[str, Any]]) -> None:
+    """Fetch every Impect season on his career in the background so clicks are instant."""
+    cached_iterations = {
+        int(row.get("iterationId") or row.get("iteration_id") or 0) for row in _cached_rows_for_player(player_id)
+    }
+    todo = [
+        (int(link["iteration_id"]), int(link["squad_id"]))
+        for link in links
+        if link and int(link.get("iteration_id") or 0) not in cached_iterations
+    ]
+
+    def run() -> None:
+        for iteration_id, squad_id in todo:
+            try:
+                _cached_live_season(player_id, iteration_id, squad_id)
+            except Exception:
+                continue
+
+    if todo:
+        threading.Thread(target=run, daemon=True, name=f"season-profiles-{player_id}").start()
 
 
 def build_season_profiles(
@@ -2213,14 +2299,7 @@ def build_season_profiles(
             "profiles": by_position[code],
         }
 
-    key = (int(player_id), int(iteration_id), int(squad_id))
-    hit = _SEASON_PROFILES_CACHE.get(key)
-    if hit and time.time() - hit[0] < _FACTORS_CACHE_TTL:
-        season = hit[1]
-    else:
-        season = _live_season_profiles(int(player_id), int(iteration_id), int(squad_id))
-        if season["complete"]:
-            _SEASON_PROFILES_CACHE[key] = (time.time(), season)
+    season = _cached_live_season(int(player_id), int(iteration_id), int(squad_id))
     positions = season["positions"]
     if not positions:
         return {**base, "position": None, "position_label": None, "positions": [], "profiles": []}
@@ -2649,13 +2728,15 @@ def register_player_dossier_routes(app: FastAPI) -> None:
         if cached is None:
             raise HTTPException(status_code=404, detail=f"Player {player_id} is not in the local player database.")
         player = cached.get("player") or {}
-        return build_player_career(
+        career = build_player_career(
             player_id,
             str(player.get("name") or ""),
             list(cached.get("seasons") or []),
             current_club=str(player.get("club") or ""),
             refresh=refresh,
         )
+        warm_season_profiles(player_id, [row.get("impect") for row in career.get("seasons") or []])
+        return career
 
     @app.get("/api/player/{player_id}/profiles")
     def player_profiles_api(
