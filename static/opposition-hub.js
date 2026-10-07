@@ -318,25 +318,30 @@ function renderSquad(r) {
   renderXis(sq);
   renderShape(sq);
 }
-function miniPitch(xi) {
+function xiPitch(xi, photos) {
   const players = (xi.players || []).map((p) => {
-    const x = 10 + (Number(p.x) || 50) * 1.8; const y = 12 + (Number(p.y) || 50) * 2.36;
-    return `<g><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="11" fill="#f5c518" stroke="#0b0f15" stroke-width="1.5"/><text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="800" fill="#1a1403" font-family="JetBrains Mono">${esc(p.shirt ?? "")}</text><text x="${x.toFixed(1)}" y="${(y + 23).toFixed(1)}" text-anchor="middle" font-size="9.5" font-weight="700" fill="#eef2f7" font-family="Manrope">${esc(p.short || p.name || "")}</text></g>`;
+    const left = 8 + (Number(p.x) || 50) * 0.84;
+    const top = 3 + (Number(p.y) || 50) * 0.84;
+    const photo = photos[p.name];
+    const img = photo ? `<img src="${esc(photo)}" alt="" onerror="this.closest('.oh-xp').classList.add('is-nophoto');this.remove()">` : "";
+    const shirt = p.shirt != null ? `<em>${esc(p.shirt)}</em>` : "";
+    return `<div class="oh-xp${photo ? "" : " is-nophoto"}" style="left:${left.toFixed(1)}%;top:${top.toFixed(1)}%" data-tip="${esc(`${p.shirt ?? ""} ${p.name}`)}"><span class="oh-xp__face"><b>${esc(p.shirt ?? "")}</b>${img}${shirt}</span><span class="oh-xp__name">${esc(p.short || p.name || "")}</span></div>`;
   }).join("");
-  return `<svg class="oh-mini" viewBox="0 0 200 260"><rect width="200" height="260" rx="8" fill="#123222"/><g fill="none" stroke="rgba(226,245,233,.4)" stroke-width="1.5"><rect x="6" y="6" width="188" height="248" rx="3"/><line x1="6" y1="130" x2="194" y2="130"/><circle cx="100" cy="130" r="22"/><rect x="50" y="6" width="100" height="36"/><rect x="50" y="218" width="100" height="36"/></g>${players}</svg>`;
+  return `<div class="oh-xpitch"><i class="oh-xpitch__half"></i><i class="oh-xpitch__circle"></i><i class="oh-xpitch__box oh-xpitch__box--top"></i><i class="oh-xpitch__box oh-xpitch__box--bottom"></i>${players}</div>`;
 }
 function renderXis(sq) {
   const xis = sq.xis || [];
-  $("xiPanel").innerHTML = `${panelHead("Line-ups", "Last starting XIs")}${xis.length ? `<div class="oh-xis">${xis.map((xi) => `<figure class="oh-xi"><figcaption>${resPill(xi.result)} <b>${esc(xi.venue)} ${esc(xi.opponent)}</b> ${esc(xi.score)}<span>${esc(xi.formation || "")} · ${shortDate(xi.date)}</span></figcaption>${miniPitch(xi)}</figure>`).join("")}</div>` : empty("No line-ups saved.")}`;
+  const photos = Object.fromEntries((sq.players || []).filter((p) => p.photo).map((p) => [p.name, p.photo]));
+  $("xiPanel").innerHTML = `${panelHead("Line-ups", "Last starting XIs")}${xis.length ? `<div class="oh-xis">${xis.map((xi) => `<figure class="oh-xi"><figcaption>${resPill(xi.result)} <b>${esc(xi.venue)} ${esc(xi.opponent)}</b> <span class="oh-xi__score">${esc(xi.score)}</span><span>${esc(xi.formation || "")} · ${shortDate(xi.date)}</span></figcaption>${xiPitch(xi, photos)}</figure>`).join("")}</div>` : empty("No line-ups saved.")}`;
 }
 function renderShape(sq) {
   const usage = sq.formationUsage || [];
   const results = sq.resultsByShape || [];
   const vs = sq.vsShapes || [];
-  $("shapePanel").innerHTML = `${panelHead("Shape", "Formations")}
-    ${usage.length ? usage.slice(0, 5).map((row) => `<div class="at-row"><span class="at-row__label">${esc(row.formation)}</span>${bar(row.time_pct)}<span class="at-row__meta">${fmt(row.time_pct, 0)}% of mins · ${row.matches_started} starts</span></div>`).join("") : empty("No formation data.")}
-    ${results.length ? `<h3 class="oh-sub">Results by their shape</h3><table class="oh-mini-table"><thead><tr><th>Shape</th><th>P</th><th>W-D-L</th><th>PPG</th><th>GF/g</th><th>GA/g</th></tr></thead><tbody>${results.map((row) => `<tr><td>${esc(row.formation)}</td><td>${row.played}</td><td>${row.won}-${row.drawn}-${row.lost}</td><td>${fmt(row.ppg)}</td><td>${fmt(row.goals_for_pg)}</td><td>${fmt(row.goals_against_pg)}</td></tr>`).join("")}</tbody></table>` : ""}
-    ${vs.length ? `<h3 class="oh-sub">Against opponent shapes</h3><table class="oh-mini-table"><thead><tr><th>Opponent shape</th><th>P</th><th>W-D-L</th><th>PPG</th></tr></thead><tbody>${vs.map((row) => `<tr class="${row.matches_vale_shape ? "oh-hl" : ""}"><td>${esc(row.opponent_formation)}${row.matches_vale_shape ? ' <span class="oh-tag">Our shape</span>' : ""}</td><td>${row.played}</td><td>${row.won}-${row.drawn}-${row.lost}</td><td>${fmt(row.ppg)}</td></tr>`).join("")}</tbody></table>` : ""}`;
+  $("shapePanel").innerHTML = `${panelHead("Shape", "Formations")}<div class="oh-shapes">
+    <div><h3 class="oh-sub">Time in each shape</h3>${usage.length ? usage.slice(0, 5).map((row) => `<div class="at-row"><span class="at-row__label">${esc(row.formation)}</span>${bar(row.time_pct)}<span class="at-row__meta">${fmt(row.time_pct, 0)}% of mins · ${row.matches_started} starts</span></div>`).join("") : empty("No formation data.")}</div>
+    <div>${results.length ? `<h3 class="oh-sub">Results by their shape</h3><table class="oh-mini-table"><thead><tr><th>Shape</th><th>P</th><th>W-D-L</th><th>PPG</th><th>GF/g</th><th>GA/g</th></tr></thead><tbody>${results.map((row) => `<tr><td>${esc(row.formation)}</td><td>${row.played}</td><td>${row.won}-${row.drawn}-${row.lost}</td><td>${fmt(row.ppg)}</td><td>${fmt(row.goals_for_pg)}</td><td>${fmt(row.goals_against_pg)}</td></tr>`).join("")}</tbody></table>` : ""}</div>
+    <div>${vs.length ? `<h3 class="oh-sub">Against opponent shapes</h3><table class="oh-mini-table"><thead><tr><th>Opponent shape</th><th>P</th><th>W-D-L</th><th>PPG</th></tr></thead><tbody>${vs.map((row) => `<tr class="${row.matches_vale_shape ? "oh-hl" : ""}"><td>${esc(row.opponent_formation)}${row.matches_vale_shape ? ' <span class="oh-tag">Our shape</span>' : ""}</td><td>${row.played}</td><td>${row.won}-${row.drawn}-${row.lost}</td><td>${fmt(row.ppg)}</td></tr>`).join("")}</tbody></table>` : ""}</div></div>`;
 }
 
 /* ---------- ball progression ---------- */
