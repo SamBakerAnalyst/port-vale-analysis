@@ -221,3 +221,29 @@ def test_progressive_action_rules():
     assert _prog_method(step("DRIBBLE", 0, 9)) == "carry"
     assert _prog_method(step("DRIBBLE", 0, 5)) is None
     assert _prog_method(step("PASS", 30, 45, a="HIGH_CROSS")) == "cross"
+
+
+def test_match_goals_times_own_goals_and_game_state(monkeypatch):
+    from app import analysis_cache
+    from app import opposition_hub as oh
+
+    def ev(action_type, squad, period, clock, result=None, action=None, player=1):
+        return {"actionType": action_type, "action": action or action_type, "result": result, "squadId": squad,
+                "periodId": period, "gameTime": {"gameTime": clock}, "player": {"id": player}}
+
+    events = [
+        ev("OWN_GOAL", 946, 1, "05:29.6"),
+        ev("SHOT", 953, 1, "37:00.5", "SUCCESS", player=7),
+        ev("GOAL", 953, 1, "37:01.2"),
+        ev("SHOT", 946, 1, "45:00.0 (+06:22.0)", "SUCCESS", "PENALTY_KICK"),
+        ev("SHOT", 946, 2, "59:19.2", "SUCCESS"),
+        ev("SHOT", 953, 2, "88:10.0", "FAIL"),
+    ]
+    monkeypatch.setattr(analysis_cache, "click_list", lambda kind, key: events)
+    match = {"matchId": 1, "home": 946, "away": 953, "hg": 2, "ag": 2}
+    goals = oh.match_goals(match, {"7": "Kieran Green"})
+    assert [(g["squad"], g["label"], g["band"]) for g in goals] == [(953, "6", 0), (953, "38", 2), (946, "45+7", 2), (946, "60", 3)]
+    assert goals[0]["own"] and goals[2]["pen"] and goals[1]["player"] == "Kieran Green"
+    state = oh._game_state({"result": "D"}, goals, 953)
+    assert state == {"first": "us", "ht": (2, 1), "led": True, "trailed": False, "points": 1}
+    assert oh.match_goals(dict(match, hg=3), {}) is None

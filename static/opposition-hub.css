@@ -337,7 +337,45 @@ small.oh-res--W { color: #34d399; background: none; } small.oh-res--D { color: #
 .oh-progtable td.oh-how { font-family: var(--font); white-space: normal; min-width: 230px; }
 .oh-progtable td.oh-how small { display: block; margin-top: .3rem; color: var(--muted); font-size: .76rem; }
 
+/* trends & timings */
+.oh-tiles--7 { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.oh-mirror { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 18px repeat(3, minmax(0, 1fr)); gap: .45rem; align-items: stretch; margin-top: .4rem; }
+.oh-mirror__col { display: grid; grid-template-rows: 120px auto 120px; }
+.oh-mirror__up, .oh-mirror__down { display: flex; flex-direction: column; align-items: center; }
+.oh-mirror__up { justify-content: flex-end; }
+.oh-mirror__down { justify-content: flex-start; }
+.oh-mirror__up i, .oh-mirror__down i { display: block; width: 72%; min-height: 2px; animation: oh-in .5s both; }
+.oh-mirror__up i { border-radius: 6px 6px 0 0; }
+.oh-mirror__down i { border-radius: 0 0 6px 6px; opacity: .85; }
+.oh-mirror b { font: 800 1.05rem var(--display); color: var(--muted); padding: .15rem 0; }
+.oh-mirror b.is-peak { color: var(--text); font-size: 1.3rem; }
+.oh-mirror__label { text-align: center; padding: .3rem 0; border-top: 1px solid var(--border-strong); border-bottom: 1px solid var(--border-strong); font: 700 .74rem var(--mono); color: var(--muted); }
+.oh-mirror__ht { display: flex; align-items: center; justify-content: center; border-left: 1px dashed var(--border-strong); }
+.oh-mirror__ht span { font: 700 .62rem var(--mono); color: var(--muted); writing-mode: vertical-rl; }
+.oh-grid--states { grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); align-items: start; }
+.oh-states { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+.oh-states div { padding: .65rem .75rem; border: 1px solid var(--border); border-radius: 10px; background: rgba(10,13,18,.55); display: flex; flex-direction: column; gap: .1rem; }
+.oh-states div:last-child { grid-column: span 2; }
+.oh-states b { font: 800 1.8rem var(--display); color: var(--gold); line-height: 1; }
+.oh-states b small { font-size: 1rem; color: var(--muted); }
+.oh-states span { font-weight: 700; font-size: .84rem; }
+.oh-states em { font-style: normal; color: var(--muted); font-size: .76rem; }
+.oh-tl { display: flex; flex-direction: column; gap: .3rem; max-height: 640px; overflow-y: auto; }
+.oh-tl__scale { display: flex; justify-content: space-between; padding: 0 .4rem .2rem calc(330px + 1.2rem); font: 700 .66rem var(--mono); color: var(--muted); }
+.oh-tl__row { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: .8rem; align-items: center; padding: .3rem .4rem; border-radius: 8px; background: rgba(10,13,18,.45); }
+.oh-tl__fx { display: flex; align-items: center; gap: .45rem; font-size: .82rem; min-width: 0; }
+.oh-tl__fx b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oh-tl__score { margin-left: auto; font: 700 .9rem var(--mono); text-align: right; white-space: nowrap; }
+.oh-tl__score small { display: block; font-size: .64rem; color: var(--muted); }
+.oh-tl__track { position: relative; height: 30px; border-radius: 6px; background: linear-gradient(90deg, rgba(148,163,184,.08) 0 48%, transparent 48% 52%, rgba(148,163,184,.08) 52% 100%); }
+.oh-tl__half { position: absolute; left: 50%; top: 2px; bottom: 2px; border-left: 1px dashed var(--border-strong); }
+.oh-tl__goal { position: absolute; top: 50%; transform: translate(-50%, -50%); min-width: 26px; padding: .1rem .3rem; border-radius: 999px; font: 800 .66rem var(--mono); text-align: center; color: #0b0f15; cursor: help; box-shadow: 0 0 0 2px rgba(10,13,18,.9); }
+.oh-tl__goal.is-us { background: #f87171; }
+.oh-tl__goal.is-them { background: #34d399; }
+
 @media (max-width: 1250px) {
+  .oh-tiles--7 { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .oh-grid--states { grid-template-columns: 1fr; }
   .oh-hero { grid-template-columns: 1fr; }
   .oh-matchup { grid-template-columns: 1fr; }
   .oh-grid--xi, .oh-grid--results, .oh-grid--chains, .oh-progteam { grid-template-columns: 1fr; }

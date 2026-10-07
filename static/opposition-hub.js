@@ -711,6 +711,77 @@ function renderSetPlays(r) {
   const goalCol = (rows, attacking, title) => `<div><h3 class="oh-sub">${title} <span class="oh-goal__count">${rows.length}</span></h3>${rows.length ? `<p class="oh-muted oh-goal__tally">${goalTally(rows)}</p><div class="oh-goals">${rows.map((g) => goalCard(g, attacking)).join("")}</div>` : empty("None in this window.")}</div>`;
   $("spGoalsPanel").innerHTML = `${panelHead("Every set-play goal", "Scored and conceded")}<div class="at-grid at-grid--2 oh-mt0">${goalCol(sp.attack?.goals || [], true, "Scored")}${goalCol(sp.defence?.goals || [], false, "Conceded")}</div>`;
 }
+/* ---------- trends & timings ---------- */
+function mirrorChart(rows, { forKey, againstKey, forLabel, againstLabel, digits = 0, forColor = "#f87171", againstColor = "#34d399" }) {
+  const max = Math.max(...rows.flatMap((row) => [row[forKey] || 0, row[againstKey] || 0]), digits ? 0.01 : 1);
+  const peakFor = Math.max(...rows.map((row) => row[forKey] || 0));
+  const peakAgainst = Math.max(...rows.map((row) => row[againstKey] || 0));
+  const col = (row) => {
+    const f = row[forKey] || 0; const a = row[againstKey] || 0;
+    return `<div class="oh-mirror__col">
+      <div class="oh-mirror__up"><b class="${f && f === peakFor ? "is-peak" : ""}">${f ? fmt(f, digits) : ""}</b><i style="height:${((f / max) * 100).toFixed(1)}%;background:${forColor}" data-tip="${esc(`${forLabel} ${row.label}: ${fmt(f, digits)}`)}"></i></div>
+      <span class="oh-mirror__label">${esc(row.label)}</span>
+      <div class="oh-mirror__down"><i style="height:${((a / max) * 100).toFixed(1)}%;background:${againstColor}" data-tip="${esc(`${againstLabel} ${row.label}: ${fmt(a, digits)}`)}"></i><b class="${a && a === peakAgainst ? "is-peak" : ""}">${a ? fmt(a, digits) : ""}</b></div>
+    </div>`;
+  };
+  return `<div class="oh-mirror">${rows.slice(0, 3).map(col).join("")}<div class="oh-mirror__ht"><span>HT</span></div>${rows.slice(3).map(col).join("")}</div>
+    <div class="oh-mapkey"><span><i style="background:${forColor}"></i>${esc(forLabel)}</span><span><i style="background:${againstColor}"></i>${esc(againstLabel)}</span></div>`;
+}
+function timelineRow(game) {
+  const pos = (g) => {
+    const m = Number(g.minute) || 0;
+    return g.period === 1 ? Math.min(m, 45.9) / 45 * 48 : 52 + (Math.min(Math.max(m, 45), 90.9) - 45) / 45 * 48;
+  };
+  const dots = game.goals.map((g) => `<span class="oh-tl__goal ${g.us ? "is-us" : "is-them"}" style="left:${pos(g).toFixed(1)}%" data-tip="${esc(`${g.label}' ${g.player || ""}${g.pen ? " (pen)" : ""}${g.own ? " (own goal)" : ""} — ${g.us ? "scored" : "conceded"}`)}">${esc(g.label)}</span>`).join("");
+  return `<div class="oh-tl__row">
+    <div class="oh-tl__fx">${resPill(game.result)}<span class="oh-fixture__date">${shortDate(game.date)}</span><span>${game.home ? "H" : "A"}</span>${badge(game.badge, game.opponent, 20)}<b>${esc(game.opponent)}</b><span class="oh-tl__score">${esc(game.score)}<small>HT ${esc(game.ht)}</small></span></div>
+    <div class="oh-tl__track"><i class="oh-tl__half"></i>${dots}</div>
+  </div>`;
+}
+function renderTrends(r) {
+  const t = r.trends || {};
+  const ids = ["trendTilesPanel", "goalTimingPanel", "threatTimingPanel", "gameStatePanel", "timelinePanel"];
+  if (!t.ready) {
+    ids.forEach((id, i) => { $(id).innerHTML = i ? "" : `${panelHead("Trends", "When it happens")}${empty("Goal times need the saved match events for this club. They fill in on the next hub refresh.")}`; });
+    return;
+  }
+  const club = r.club?.name || "They";
+  const m = t.metrics || {};
+  const coverage = t.missing ? `<p class="oh-warn">${t.missing} game${t.missing === 1 ? "" : "s"} without saved events — timings cover ${t.games}.</p>` : "";
+  $("trendTilesPanel").innerHTML = `${panelHead("Ranked against League Two", "Timing and game-state numbers")}${coverage}
+    <div class="oh-tiles oh-tiles--7">${tile(m.lateFor, "Goals 76'+ / game")}${tile(m.lateAgainst, "Conceded 76'+ / game")}${tile(m.earlyAgainst, "Conceded in first 15' / game")}${tile(m.secondHalfFor, "2nd-half goals / game")}${tile(m.scoredFirst, "Score first")}${tile(m.fromBehind, "Points from losing positions")}${tile(m.dropped, "Points dropped from winning positions")}</div>
+    <p class="at-note">Red rank = one of their strengths (top quarter of the league). Green = a weakness we can target.</p>`;
+
+  const bands = t.bands || [];
+  const peakFor = bands.reduce((best, row) => (row.for > (best?.for ?? -1) ? row : best), null);
+  const peakAgainst = bands.reduce((best, row) => (row.against > (best?.against ?? -1) ? row : best), null);
+  const half = (key, from, to) => bands.slice(from, to).reduce((sum, row) => sum + row[key], 0);
+  $("goalTimingPanel").innerHTML = `${panelHead("Goal times", "When they score and concede")}
+    ${mirrorChart(bands, { forKey: "for", againstKey: "against", forLabel: `${club} scored`, againstLabel: `${club} conceded` })}
+    <p class="at-note">${peakFor?.for ? `Most goals scored ${esc(peakFor.label)}' (${peakFor.for}). ` : ""}${peakAgainst?.against ? `Most conceded ${esc(peakAgainst.label)}' (${peakAgainst.against}). ` : ""}First half ${half("for", 0, 3)}–${half("against", 0, 3)}, second half ${half("for", 3, 6)}–${half("against", 3, 6)}.</p>`;
+
+  const tb = t.threatBands;
+  $("threatTimingPanel").innerHTML = `${panelHead("Threat by time", "When they are dangerous")}${tb ? `${mirrorChart(bands.map((row, i) => ({ label: row.label, for: tb.for[i], against: tb.against[i] })), { forKey: "for", againstKey: "against", forLabel: "Threat created a game", againstLabel: "Threat conceded a game", digits: 2, forColor: "#f5c518", againstColor: "#38bdf8" })}<p class="at-note">Average attacking threat in each 15-minute spell, per game (${tb.games} games). Shows when they push and when they get pinned back — even in games without goals.</p>` : empty("No threat timings saved.")}`;
+
+  const s = t.states || {};
+  const rec = (arr) => `${arr[0]}W ${arr[1]}D ${arr[2]}L`;
+  $("gameStatePanel").innerHTML = `${panelHead("Game states", "Ahead, behind, half-time")}
+    <div class="oh-states">
+      <div><b>${s.scoredFirst}<small>/${t.games}</small></b><span>Scored first</span><em>${rec(s.recordScoringFirst)} · ${s.ptsAfterScoringFirst} pts</em></div>
+      <div><b>${s.concededFirst}<small>/${t.games}</small></b><span>Conceded first</span><em>${rec(s.recordConcedingFirst)} · ${s.ptsAfterConcedingFirst} pts</em></div>
+      <div><b>${s.ptsFromBehind}</b><span>Points won after going behind</span><em>in ${s.gamesBehind} game${s.gamesBehind === 1 ? "" : "s"} they trailed</em></div>
+      <div><b>${s.ptsDropped}</b><span>Points dropped after leading</span><em>in ${s.gamesAhead} game${s.gamesAhead === 1 ? "" : "s"} they led</em></div>
+      <div><b>${s.avgFirstGoal ? `${s.avgFirstGoal}'` : "—"}</b><span>Average time of their first goal</span><em>${s.goalless ? `${s.goalless} goalless` : "&nbsp;"}</em></div>
+    </div>
+    <h3 class="oh-sub">Half-time → full-time</h3>
+    <table class="oh-mini-table"><thead><tr><th>At half-time</th><th>P</th><th>W</th><th>D</th><th>L</th></tr></thead><tbody>${(t.htft || []).map((row) => `<tr><td>${esc(row.label)}</td><td>${row.games}</td><td>${row.w}</td><td>${row.d}</td><td>${row.l}</td></tr>`).join("")}</tbody></table>`;
+
+  $("timelinePanel").innerHTML = `${panelHead("Every game", "Goal timeline")}
+    <div class="oh-tl__scale"><span>0'</span><span>HT</span><span>90'</span></div>
+    <div class="oh-tl">${(t.timeline || []).map(timelineRow).join("")}</div>
+    <div class="oh-mapkey"><span><i style="background:#f87171"></i>${esc(club)} scored</span><span><i style="background:#34d399"></i>${esc(club)} conceded</span><span>Hover a goal for the scorer</span></div>`;
+}
+
 /* ---------- results ---------- */
 function venueBlock(label, rec) {
   return `<div class="oh-venue"><h3>${esc(label)}</h3><div class="oh-venue__big">${rec.w}<small>W</small> ${rec.d}<small>D</small> ${rec.l}<small>L</small></div><p>${fmt(rec.ppg)} pts a game · ${rec.gf} scored · ${rec.ga} conceded · ${rec.cleanSheets} clean sheets · failed to score ${rec.failedToScore}</p><div class="oh-form">${(rec.form || []).map(resPill).join("")}</div></div>`;
@@ -780,7 +851,7 @@ function syncUrl() {
   history.replaceState(null, "", `${location.pathname}${params.toString() ? `?${params}` : ""}${location.hash}`);
 }
 function renderAll(r) {
-  const parts = [renderHero, renderPlan, renderMatchup, renderSquad, renderProgression, renderAttack, renderDefence, renderDuels, renderSetPlays, renderResults];
+  const parts = [renderHero, renderPlan, renderMatchup, renderSquad, renderProgression, renderAttack, renderDefence, renderDuels, renderSetPlays, renderTrends, renderResults];
   parts.forEach((fn) => {
     try { fn(r); } catch (err) { console.error(fn.name, err); }
   });

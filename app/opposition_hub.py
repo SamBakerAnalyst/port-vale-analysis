@@ -77,6 +77,12 @@ def _memoized(key: tuple, build):
     return value
 
 
+def _memo_peek(key: tuple):
+    with _memo_lock:
+        hit = _memo.get(key)
+    return hit[1] if hit and time.time() - hit[0] < MEMO_TTL_SECONDS else None
+
+
 def clear_memo() -> None:
     with _memo_lock:
         _memo.clear()
@@ -674,8 +680,13 @@ def _lane(y: Any) -> str:
     return "left" if value > WIDE_Y else "right" if value < -WIDE_Y else "centre"
 
 
+def season_packs(league: dict, fixtures: list[dict]) -> dict[int, list[dict]]:
+    summaries = league["threat"]["summaries"]
+    return {int(f["matchId"]): _match_pack(int(f["matchId"]), summaries.get(int(f["matchId"]))) for f in fixtures}
+
+
 def progression_view(
-    league: dict,
+    packs: dict[int, list[dict]],
     window_fixtures: list[dict],
     season_fixtures: list[dict],
     squad_id: int,
@@ -686,7 +697,6 @@ def progression_view(
     from app.attacking_threat import FAMILY_COLORS, action_family, action_label
     from app.attacking_threat_chains import analyse_chains, chain_record, possessions, receiver_of
 
-    summaries = league["threat"]["summaries"]
     window_ids = {int(f["matchId"]) for f in window_fixtures}
     int_names = {int(k): v for k, v in names.items() if str(k).isdigit()}
     chains, window_games, season_games = [], 0, 0
@@ -695,7 +705,7 @@ def progression_view(
 
     for fixture in season_fixtures:
         match_id = int(fixture["matchId"])
-        pack = _match_pack(match_id, summaries.get(match_id))
+        pack = packs.get(match_id)
         if not pack:
             continue
         season_games += 1
@@ -788,6 +798,238 @@ def progression_view(
             "lanes": {lane: round(100 * team["lanes"].get(lane, 0) / total) for lane in ("left", "centre", "right")},
         },
         "players": rows[:14],
+    }
+
+
+# ---------------------------------------------------------------- trends & timings
+
+BANDS = ("1–15", "16–30", "31–45+", "46–60", "61–75", "76–90+")
+
+
+def _clock(event: dict) -> tuple[int, int, str]:
+    """(minute, stoppage, label) from Impect's "MM:SS.f (+MM:SS.f)" game clock."""
+    text = str((event.get("gameTime") or {}).get("gameTime") or "")
+    main, _, extra = text.partition("(+")
+    try:
+        minute = int(main.strip().split(":")[0])
+    except ValueError:
+        return 0, 0, ""
+    if extra:
+        try:
+            added = int(extra.split(":")[0]) + 1
+        except ValueError:
+            added = 1
+        return minute, added, f"{minute}+{added}"
+    return minute, 0, str(minute + 1)
+
+
+def _band(period: int, minute: int, stoppage: int) -> int | None:
+    if period == 1:
+        return 2 if stoppage else min(2, minute // 15)
+    if period == 2:
+        return 5 if stoppage else max(3, min(5, minute // 15))
+    return None
+
+
+def match_goals(match: dict, names: dict[str, str]) -> list[dict] | None:
+    """Goals in time order from saved events. None if the events don't add up to the final score."""
+    from app.analysis_cache import click_list
+
+    events = click_list("xg-events", str(int(match["matchId"]))) or []
+    if not events:
+        return None
+    home, away = int(match["home"]), int(match["away"])
+    goals = []
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        action_type = event.get("actionType")
+        own = action_type == "OWN_GOAL"
+        if not own and not (action_type == "SHOT" and event.get("result") == "SUCCESS"):
+            continue
+        squad = int(event.get("squadId") or 0)
+        if own:
+            squad = away if squad == home else home
+        period = int(event.get("periodId") or 0)
+        minute, stoppage, label = _clock(event)
+        band = _band(period, minute, stoppage)
+        if band is None:
+            continue
+        player_id = str((event.get("player") or {}).get("id") or "")
+        goals.append({
+            "squad": squad, "period": period, "minute": minute + stoppage / 100, "label": label, "band": band,
+            "player": names.get(player_id) or "", "own": own, "pen": str(event.get("action") or "") == "PENALTY_KICK",
+        })
+    goals.sort(key=lambda g: (g["period"], g["minute"]))
+    if sum(1 for g in goals if g["squad"] == home) != int(match["hg"]) or sum(1 for g in goals if g["squad"] == away) != int(match["ag"]):
+        return None
+    return goals
+
+
+def _league_goals(base: dict) -> dict[int, list[dict]]:
+    names = {str(k): v for k, v in (base.get("players") or {}).items()}
+
+    def build() -> dict[int, list[dict]]:
+        out = {}
+        for match in base.get("matches") or []:
+            goals = match_goals(match, names)
+            if goals is not None:
+                out[int(match["matchId"])] = goals
+        return out
+
+    return _memoized(("goals", base.get("season"), len(base.get("matches") or [])), build)
+
+
+def _game_state(fixture: dict, goals: list[dict], squad_id: int) -> dict:
+    us = them = 0
+    led = trailed = False
+    first = None
+    ht = (0, 0)
+    for goal in goals:
+        mine = goal["squad"] == squad_id
+        if first is None:
+            first = "us" if mine else "them"
+        if goal["period"] == 1:
+            ht = (ht[0] + (1 if mine else 0), ht[1] + (0 if mine else 1))
+        us += 1 if mine else 0
+        them += 0 if mine else 1
+        led = led or us > them
+        trailed = trailed or them > us
+    return {"first": first, "ht": ht, "led": led, "trailed": trailed, "points": _points(fixture["result"])}
+
+
+def _timing_stats(fixtures: list[dict], goals_by_match: dict[int, list[dict]], squad_id: int) -> dict | None:
+    rows = [(f, goals_by_match[f["matchId"]]) for f in fixtures if f["matchId"] in goals_by_match]
+    if not rows:
+        return None
+    games = len(rows)
+    bands_for, bands_against = [0] * 6, [0] * 6
+    states = []
+    first_minutes = []
+    for fixture, goals in rows:
+        for goal in goals:
+            (bands_for if goal["squad"] == squad_id else bands_against)[goal["band"]] += 1
+        mine = [g for g in goals if g["squad"] == squad_id]
+        if mine:
+            first_minutes.append(int(mine[0]["minute"]) + 1)
+        states.append((fixture, _game_state(fixture, goals, squad_id)))
+    scored_first = [s for _, s in states if s["first"] == "us"]
+    conceded_first = [s for _, s in states if s["first"] == "them"]
+    trailed = [s for _, s in states if s["trailed"]]
+    led = [s for _, s in states if s["led"]]
+    return {
+        "games": games,
+        "bandsFor": bands_for,
+        "bandsAgainst": bands_against,
+        "scoredFirst": len(scored_first),
+        "concededFirst": len(conceded_first),
+        "goalless": games - len(scored_first) - len(conceded_first),
+        "scoredFirstPct": round(100 * len(scored_first) / games),
+        "ptsAfterScoringFirst": sum(s["points"] for s in scored_first),
+        "ptsAfterConcedingFirst": sum(s["points"] for s in conceded_first),
+        "recordScoringFirst": [sum(1 for s in scored_first if s["points"] == p) for p in (3, 1, 0)],
+        "recordConcedingFirst": [sum(1 for s in conceded_first if s["points"] == p) for p in (3, 1, 0)],
+        "ptsFromBehind": sum(s["points"] for s in trailed),
+        "gamesBehind": len(trailed),
+        "ptsDropped": sum(3 - s["points"] for s in led),
+        "gamesAhead": len(led),
+        "avgFirstGoal": round(sum(first_minutes) / len(first_minutes)) if first_minutes else None,
+        "states": states,
+    }
+
+
+def _ht_ft(states: list[tuple[dict, dict]]) -> list[dict]:
+    out = []
+    for key, label in (("ahead", "Leading at half-time"), ("level", "Level at half-time"), ("behind", "Behind at half-time")):
+        picked = [
+            s for _, s in states
+            if (s["ht"][0] > s["ht"][1] and key == "ahead") or (s["ht"][0] == s["ht"][1] and key == "level") or (s["ht"][0] < s["ht"][1] and key == "behind")
+        ]
+        out.append({"key": key, "label": label, "games": len(picked),
+                    "w": sum(1 for s in picked if s["points"] == 3), "d": sum(1 for s in picked if s["points"] == 1),
+                    "l": sum(1 for s in picked if s["points"] == 0)})
+    return out
+
+
+def _threat_bands(packs: dict[int, list[dict]], fixtures: list[dict], squad_id: int) -> dict | None:
+    created, conceded = [0.0] * 6, [0.0] * 6
+    games = 0
+    for fixture in fixtures:
+        pack = packs.get(int(fixture["matchId"]))
+        if not pack:
+            continue
+        games += 1
+        for event in pack:
+            value = _num(event.get("v"))
+            if value <= 0:
+                continue
+            seconds = _num(event.get("t"))
+            period = int(event.get("p") or 0)
+            if period == 1:
+                minute = (seconds % 10000) / 60
+                band = min(2, int(minute // 15))
+            elif period == 2:
+                minute = (seconds - 10000) / 60 if seconds >= 10000 else seconds / 60 - 45
+                band = 3 + min(2, max(0, int(minute // 15)))
+            else:
+                continue
+            (created if event.get("sq") == squad_id else conceded)[band] += value
+    if not games:
+        return None
+    return {"games": games, "for": [round(v / games, 3) for v in created], "against": [round(v / games, 3) for v in conceded]}
+
+
+def trends_view(base: dict, packs: dict[int, list[dict]], season_fixtures: list[dict], squad_id: int) -> dict[str, Any]:
+    """When goals and threat happen, game states and the game-by-game goal timeline. Season only."""
+    goals_by_match = _league_goals(base)
+    mine = _timing_stats(season_fixtures, goals_by_match, squad_id)
+    if not mine:
+        return {"ready": False}
+
+    league_rows: dict[int, dict] = {}
+    for match in base.get("matches") or []:
+        for sid in (int(match["home"]), int(match["away"])):
+            if sid not in league_rows:
+                stats = _timing_stats(team_fixtures(base, sid), goals_by_match, sid)
+                if stats:
+                    league_rows[sid] = stats
+
+    def per_game(fn) -> dict[int, float]:
+        return {sid: fn(s) / s["games"] for sid, s in league_rows.items() if s["games"]}
+
+    metrics = [
+        metric_row("lateFor", "Goals scored 76'+ a game", per_game(lambda s: s["bandsFor"][5]), squad_id),
+        metric_row("lateAgainst", "Goals conceded 76'+ a game", per_game(lambda s: s["bandsAgainst"][5]), squad_id, higher=False),
+        metric_row("earlyAgainst", "Goals conceded in the first 15' a game", per_game(lambda s: s["bandsAgainst"][0]), squad_id, higher=False),
+        metric_row("secondHalfFor", "Second-half goals a game", per_game(lambda s: sum(s["bandsFor"][3:])), squad_id),
+        metric_row("scoredFirst", "Score first", {sid: s["scoredFirstPct"] for sid, s in league_rows.items()}, squad_id, digits=0, pct=True),
+        metric_row("fromBehind", "Points won from losing positions", {sid: s["ptsFromBehind"] for sid, s in league_rows.items()}, squad_id, digits=0),
+        metric_row("dropped", "Points dropped from winning positions", {sid: s["ptsDropped"] for sid, s in league_rows.items()}, squad_id, higher=False, digits=0),
+    ]
+    timeline = []
+    for fixture, state in reversed(mine["states"]):
+        goals = goals_by_match.get(fixture["matchId"]) or []
+        timeline.append({
+            "matchId": fixture["matchId"], "date": fixture["date"], "opponent": fixture["opponent"], "badge": fixture["badge"],
+            "home": fixture["home"], "score": fixture["score"], "result": fixture["result"],
+            "ht": f"{state['ht'][0]}-{state['ht'][1]}",
+            "goals": [{"us": g["squad"] == squad_id, "label": g["label"], "period": g["period"], "minute": g["minute"],
+                       "player": g["player"], "own": g["own"], "pen": g["pen"]} for g in goals],
+        })
+    missing = len(season_fixtures) - mine["games"]
+    return {
+        "ready": True,
+        "games": mine["games"],
+        "missing": missing,
+        "bands": [{"label": label, "for": mine["bandsFor"][i], "against": mine["bandsAgainst"][i]} for i, label in enumerate(BANDS)],
+        "threatBands": _threat_bands(packs, season_fixtures, squad_id),
+        "metrics": {row["id"]: row for row in metrics},
+        "states": {key: mine[key] for key in (
+            "scoredFirst", "concededFirst", "goalless", "scoredFirstPct", "ptsAfterScoringFirst", "ptsAfterConcedingFirst",
+            "recordScoringFirst", "recordConcedingFirst", "ptsFromBehind", "gamesBehind", "ptsDropped", "gamesAhead", "avgFirstGoal",
+        )},
+        "htft": _ht_ft(mine["states"]),
+        "timeline": timeline,
     }
 
 
@@ -1397,10 +1639,16 @@ def build_report(season: str | None, squad_id: int, window: str | None = "season
         for p in season_threat.get("players") or []
     }
     squad = squad_view(base, squad_id, all_fixtures, threat_players, season_set_play)
-    progression = _memoized(
-        ("prog", base.get("season"), squad_id, normalized, len(base["matches"])),
-        lambda: progression_view(league, selected, all_fixtures, squad_id, players, squad.get("players") or []),
-    )
+    events_key = (base.get("season"), squad_id, len(base["matches"]))
+    progression = _memo_peek(("prog", *events_key, normalized))
+    trends = _memo_peek(("trends", *events_key))
+    if progression is None or trends is None:
+        packs = season_packs(league, all_fixtures)
+        progression = _memoized(
+            ("prog", *events_key, normalized),
+            lambda: progression_view(packs, selected, all_fixtures, squad_id, players, squad.get("players") or []),
+        )
+        trends = _memoized(("trends", *events_key), lambda: trends_view(base, packs, all_fixtures, squad_id))
     battles = iv_battles(league["iv"], selected, squad_id)
     xg = xg_window(league["xg"], selected, squad_id)
 
@@ -1447,6 +1695,7 @@ def build_report(season: str | None, squad_id: int, window: str | None = "season
         "setPlays": set_play,
         "squad": squad,
         "progression": progression,
+        "trends": trends,
     }
 
 

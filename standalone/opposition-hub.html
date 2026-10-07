@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/attacking-threat.css?v=15" />
-  <link rel="stylesheet" href="/static/opposition-hub.css?v=13" />
+  <link rel="stylesheet" href="/static/opposition-hub.css?v=14" />
 </head>
 <body>
   <div class="at-glow" aria-hidden="true"></div>
@@ -53,6 +53,7 @@
       <a href="#defence">Defending</a>
       <a href="#duels">Duels &amp; interventions</a>
       <a href="#setplays">Set plays</a>
+      <a href="#trends">Trends &amp; timings</a>
       <a href="#results">Results</a>
     </nav>
 
@@ -181,6 +182,23 @@
       <article class="card oh-mt" id="spGoalsPanel"></article>
     </section>
 
+    <section id="trends" class="at-section">
+      <header class="at-section__head">
+        <p class="at-kicker">When it happens</p>
+        <h2>Trends &amp; timings</h2>
+        <p class="at-section__lede">When they score and concede, when they are most dangerous, how they handle going ahead or behind, and every game's goals on a timeline. Whole season, ranked against League Two.</p>
+      </header>
+      <article class="card" id="trendTilesPanel"></article>
+      <div class="at-grid at-grid--2">
+        <article class="card" id="goalTimingPanel"></article>
+        <article class="card" id="threatTimingPanel"></article>
+      </div>
+      <div class="at-grid oh-grid--states">
+        <article class="card" id="gameStatePanel"></article>
+        <article class="card" id="timelinePanel"></article>
+      </div>
+    </section>
+
     <section id="results" class="at-section">
       <header class="at-section__head">
         <p class="at-kicker">Form</p>
@@ -199,7 +217,7 @@
     <footer id="statusBar" class="at-footer">Reading the data lake…</footer>
   </div>
   <div id="tip" class="oh-tip" hidden></div>
-  <script defer src="/static/opposition-hub.js?v=13"></script>
+  <script defer src="/static/opposition-hub.js?v=14"></script>
   <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>
