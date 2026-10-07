@@ -117,10 +117,10 @@ def _no_impect(monkeypatch):
     monkeypatch.setattr(impect_main, "_impect_get", boom)
 
 
-def test_opposition_hub_is_a_reports_tool():
+def test_opposition_hub_is_an_analysis_tool():
     row = next(app for app in APPS if app["id"] == "opposition-hub")
     assert row["href"] == "/opposition-hub"
-    assert row["group"] == "reports"
+    assert row["group"] == "analysis"
     assert row["router"] == "opposition_hub"
     assert "/api/opposition-hub" in row["api_prefixes"]
     assert "Opposition Hub" in required_sidebar_titles()

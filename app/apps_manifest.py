@@ -72,7 +72,7 @@ APP_GROUPS: list[dict[str, Any]] = [
 APPS: list[dict[str, Any]] = [
     {
         "id": "opposition-hub",
-        "group": "reports",
+        "group": "analysis",
         "title": "Opposition Hub",
         "description": (
             "Everything on the next opponent in one place — game plan, matchup vs Port Vale, "
