@@ -155,3 +155,18 @@ def test_partial_event_feed_is_not_saved(monkeypatch):
     monkeypatch.setattr(impect, "fetch_events", lambda match_id: [_ev(i, VALE, "PASS") for i in range(sp.MIN_COMPLETE_EVENTS)])
     sp.match_pack(2)
     assert saved == ["2"]
+
+
+def test_attack_targets_only_count_balls_into_the_box():
+    from app.set_plays import _attack_targets
+
+    def record(zone, contact):
+        return {"type": "free_kick", "zone": zone, "del": 9, "fc": {"team": "att", "pl": contact, "head": True}, "shots": []}
+
+    rows = _attack_targets(
+        [record("goalmouth", 5), record("far_post", 5), record("outside", 6), record("outside", 6), record("outside", 6)],
+        {},
+    )
+    by_id = {row["id"]: row for row in rows}
+    assert by_id[5]["fcWon"] == 2
+    assert 6 not in by_id

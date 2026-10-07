@@ -385,7 +385,8 @@ def _attack_targets(records: list[dict], players: dict) -> list[dict]:
         if record.get("type") == "penalty":
             continue
         fc = record.get("fc") or {}
-        if fc.get("team") == "att" and fc.get("pl") and fc.get("pl") != record.get("del"):
+        into_box = record.get("zone") not in (None, "outside")
+        if into_box and fc.get("team") == "att" and fc.get("pl") and fc.get("pl") != record.get("del"):
             item = row(int(fc["pl"]))
             item["fcWon"] += 1
             item["headers"] += int(bool(fc.get("head")))
