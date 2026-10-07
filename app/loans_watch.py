@@ -17,6 +17,7 @@ from fastapi.responses import HTMLResponse
 from app.efl_transfer_report import badge_url, load_report
 from app.paths import STANDALONE_DIR
 from app import transfer_status
+from app.player_identity import canonical_name_key
 
 logger = logging.getLogger(__name__)
 
@@ -334,8 +335,8 @@ def _player_index(players: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not name:
             continue
         indexed.append(row)
-        row.setdefault("_name_keys", set(transfer_status.name_keys(name)))
-        row.setdefault("_club_key", transfer_status.club_key(club))
+        row["_name_keys"] = set(transfer_status.identity_keys(name))
+        row["_club_key"] = transfer_status.club_key(club)
     return indexed
 
 
@@ -344,14 +345,14 @@ def _match_impect_player(
     club: str,
     players: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
-    keys = set(transfer_status.name_keys(name))
+    keys = set(transfer_status.identity_keys(name))
     if not keys:
         return None
     last = transfer_status.name_key(name).split()[-1] if transfer_status.name_key(name) else ""
     club_hits: list[dict[str, Any]] = []
     last_hits: list[dict[str, Any]] = []
     for row in players:
-        row_keys = row.get("_name_keys") or set(transfer_status.name_keys(row.get("name")))
+        row_keys = row.get("_name_keys") or set(transfer_status.identity_keys(row.get("name")))
         same_club = transfer_status._clubs_match(club, row.get("club"))
         if not (row_keys & keys):
             if same_club and last:
@@ -398,13 +399,13 @@ def _related_impect_rows(
         hits = [row for row in players if _player_id(row) == player_id]
         if hits:
             return hits
-    keys = primary.get("_name_keys") or set(transfer_status.name_keys(primary.get("name")))
+    keys = primary.get("_name_keys") or set(transfer_status.identity_keys(primary.get("name")))
     if not keys:
         return [primary]
     hits = [
         row
         for row in players
-        if (row.get("_name_keys") or set(transfer_status.name_keys(row.get("name")))) & keys
+        if (row.get("_name_keys") or set(transfer_status.identity_keys(row.get("name")))) & keys
     ]
     return hits or [primary]
 
@@ -460,7 +461,7 @@ def _loans_for_club(
         if not transfer_status._clubs_match(name, club_name) and name != club_name:
             continue
         for entry in transfer_status._loan_entries(payload):
-            key = transfer_status.name_key(entry.get("name"))
+            key = canonical_name_key(entry.get("name")) or transfer_status.name_key(entry.get("name"))
             if not key or key in seen:
                 continue
             seen.add(key)
@@ -483,7 +484,7 @@ def _report_loans(team: dict[str, Any]) -> list[dict[str, str]]:
         if kind != "loan":
             continue
         name = _clean_text(item.get("player"))
-        key = transfer_status.name_key(name)
+        key = canonical_name_key(name) or transfer_status.name_key(name)
         if not name or key in seen:
             continue
         seen.add(key)
@@ -496,7 +497,7 @@ def _merge_loan_lists(*groups: list[dict[str, str]]) -> list[dict[str, str]]:
     seen: set[str] = set()
     for group in groups:
         for row in group:
-            key = transfer_status.name_key(row.get("name"))
+            key = canonical_name_key(row.get("name")) or transfer_status.name_key(row.get("name"))
             if not key or key in seen:
                 continue
             seen.add(key)
