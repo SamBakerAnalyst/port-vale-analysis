@@ -107,3 +107,25 @@ def test_season_profiles_are_fetched_once_and_kept_on_disk(tmp_path, monkeypatch
     monkeypatch.setattr(dossier, "_season_disk_loaded", False)
     assert dossier.build_season_profiles(7, 1465, 930)["profiles"][0]["label"] == "Creator"
     assert calls == [(7, 1465, 930)]
+
+
+def test_current_season_without_impect_ids_is_kept_and_marked():
+    seasons = IMPECT + [{"season": "2026", "competition_name": "Irish Prem", "club": "FC Waterford", "chartable": True}]
+    rows = career.link_impect_seasons(career.parse_fotmob_career(FOTMOB), seasons)
+    waterford = next(row for row in rows if row["club"] == "FC Waterford")
+    assert waterford["current"] is True and waterford["impect"] is None
+    assert rows[0]["club"] == "FC Waterford"
+
+
+def test_fotmob_search_falls_back_to_surname_and_club(monkeypatch):
+    def fake_get(url, params):
+        if params["term"] == "Tommy Lonergan":
+            return [{"suggestions": []}]
+        return [{"suggestions": [
+            {"type": "player", "id": "1748126", "name": "Riley Lonergan", "teamName": "Newport County"},
+            {"type": "player", "id": "1263510", "name": "Tom Lonergan", "teamName": "Waterford FC"},
+        ]}]
+
+    monkeypatch.setattr(career, "_get_json", fake_get)
+    assert career.find_fotmob_player_id("Tommy Lonergan", ["FC Waterford", "Fleetwood Town"]) == 1263510
+    assert career.find_fotmob_player_id("Tommy Lonergan", ["Some Other Club"]) is None

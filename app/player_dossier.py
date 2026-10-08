@@ -2243,6 +2243,30 @@ def _cached_live_season(player_id: int, iteration_id: int, squad_id: int) -> dic
         return season
 
 
+_SEASON_CONTEXT_CACHE: dict[tuple[int, str, str], tuple[int | None, int | None]] = {}
+
+
+def _with_resolved_impect_ids(player_id: int, seasons: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Standouts rows for some leagues (Irish Prem) carry no iteration / squad id — look them up."""
+    out: list[dict[str, Any]] = []
+    for season in seasons:
+        row = dict(season)
+        if row.get("chartable") and not (row.get("impect_iteration_id") and row.get("impect_squad_id")):
+            key = (int(player_id), str(row.get("competition_name") or ""), str(row.get("season") or ""))
+            if key not in _SEASON_CONTEXT_CACHE:
+                try:
+                    _SEASON_CONTEXT_CACHE[key] = _resolve_impect_context(
+                        player_id, {"league": key[1], "season": key[2]}
+                    )
+                except Exception:
+                    _SEASON_CONTEXT_CACHE[key] = (None, None)
+            iteration_id, squad_id = _SEASON_CONTEXT_CACHE[key]
+            if iteration_id and squad_id:
+                row["impect_iteration_id"], row["impect_squad_id"] = iteration_id, squad_id
+        out.append(row)
+    return out
+
+
 def warm_season_profiles(player_id: int, links: list[dict[str, Any]]) -> None:
     """Fetch every Impect season on his career in the background so clicks are instant."""
     cached_iterations = {
@@ -2731,7 +2755,7 @@ def register_player_dossier_routes(app: FastAPI) -> None:
         career = build_player_career(
             player_id,
             str(player.get("name") or ""),
-            list(cached.get("seasons") or []),
+            _with_resolved_impect_ids(player_id, list(cached.get("seasons") or [])),
             current_club=str(player.get("club") or ""),
             refresh=refresh,
         )

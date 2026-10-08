@@ -84,8 +84,18 @@ def find_fotmob_player_id(name: str, clubs: list[str]) -> int | None:
     target = _fold(name)
     if not target:
         return None
+    surname = target.split()[-1]
+    for term in dict.fromkeys((name, surname)):
+        found = _best_search_hit(term, target, clubs)
+        if found:
+            return found
+    return None
+
+
+def _best_search_hit(term: str, target: str, clubs: list[str]) -> int | None:
+    """Exact name, or same surname + first initial at one of his clubs (Tom / Tommy)."""
     try:
-        payload = _get_json(FOTMOB_SEARCH_URL, {"term": name, "lang": "en"})
+        payload = _get_json(FOTMOB_SEARCH_URL, {"term": term, "lang": "en"})
     except Exception:
         return None
     club_bases = {_club_parts(club)[0] for club in clubs if club}
@@ -186,20 +196,22 @@ def _match_score(row: dict[str, Any], season: dict[str, Any]) -> int:
 
 def link_impect_seasons(rows: list[dict[str, Any]], impect_seasons: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Attach each Impect season to its FotMob row; keep Impect seasons FotMob does not list."""
-    linked = [dict(row, source="fotmob", impect=None) for row in rows]
-    candidates = [season for season in impect_seasons if _impect_link(season)]
+    linked = [dict(row, source="fotmob", impect=None, current=False) for row in rows]
+    candidates = list(impect_seasons)
     used: set[int] = set()
     for row in linked:
         best: tuple[int, int] | None = None
         for idx, season in enumerate(candidates):
             if idx in used:
                 continue
-            score = _match_score(row, season)
-            if score >= 2 and (best is None or score > best[0]):
+            match = _match_score(row, season)
+            score = match * 2 + (1 if _impect_link(season) else 0)
+            if match >= 2 and (best is None or score > best[0]):
                 best = (score, idx)
         if best is not None:
             used.add(best[1])
             row["impect"] = _impect_link(candidates[best[1]])
+            row["current"] = bool(candidates[best[1]].get("chartable"))
     for idx, season in enumerate(candidates):
         if idx in used:
             continue
@@ -217,6 +229,7 @@ def link_impect_seasons(rows: list[dict[str, Any]], impect_seasons: list[dict[st
                 "logo": "",
                 "source": "impect",
                 "impect": _impect_link(season),
+                "current": bool(season.get("chartable")),
             }
         )
     linked.sort(key=lambda row: (_season_sort_key(row["season"]), not row["youth"], row["apps"] or 0), reverse=True)

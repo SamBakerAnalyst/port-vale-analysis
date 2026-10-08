@@ -1272,13 +1272,18 @@
   }
 
   function careerRowsFromImpect(seasons) {
+    const startYear = (season) => {
+      const year = Number((String(season || "").match(/\d{2,4}/) || ["0"])[0]);
+      return year < 100 ? year + 2000 : year;
+    };
     return [...(seasons || [])]
-      .sort((a, b) => String(b.season || "").localeCompare(String(a.season || "")))
+      .sort((a, b) => startYear(b.season) - startYear(a.season))
       .map((season) => ({
         season: season.season,
         club: season.club,
         league: season.competition_name,
         logo: "",
+        current: Boolean(season.chartable),
         impect:
           season.impect_iteration_id && season.impect_squad_id
             ? {
@@ -1291,6 +1296,7 @@
   }
 
   function isSelectedSeason(row) {
+    if (!chartState.squadId && row.current) return true;
     return (
       row.impect &&
       Number(row.impect.iteration_id) === Number(chartState.iterationId) &&
@@ -1324,8 +1330,11 @@
           <span class="pd-club__season">${escapeHtml(row.season || "—")}</span>
           <span class="pd-club__name">${badge}<span class="pd-club__club">${escapeHtml(row.club || "Unknown club")}</span>${loan}</span>
           <span class="pd-club__league">${escapeHtml(stats.join(" · "))}</span>`;
-        if (!row.impect) return `<div class="pd-club pd-club--history">${body}</div>`;
         const active = !marked && isSelectedSeason(row);
+        if (!row.impect) {
+          if (active) marked = true;
+          return `<div class="pd-club pd-club--history${active ? " is-current" : ""}">${body}</div>`;
+        }
         if (active) marked = true;
         return `<button type="button" class="pd-club pd-club--impect${active ? " is-current" : ""}" data-season-idx="${idx}" aria-pressed="${active}" title="Show ${escapeHtml(row.season)} Impect data">
           ${body}
