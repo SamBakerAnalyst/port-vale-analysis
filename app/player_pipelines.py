@@ -465,10 +465,14 @@ def _enrich_target_stats(
             if top_api and scores.get(top_api) is not None
             else None
         )
+        row["profile_scores"] = {
+            str(k): round(float(v), 1) for k, v in scores.items() if v is not None
+        }
     else:
         row["overall_score"] = None
         row["top_profile"] = ""
         row["top_profile_score"] = None
+        row["profile_scores"] = {}
 
     minutes = payload.get("minutes")
     # Squad planner combines the last 2 seasons for profiles — that double-counts
@@ -589,8 +593,11 @@ def _public_target(row: dict[str, Any]) -> dict[str, Any]:
         ],
         "foot": row.get("foot") or "",
         "height": row.get("height") or "",
-        "top_profile": row.get("top_profile") or "",
+        "top_profile": humanize_profile_name(row.get("top_profile") or "")
+        if row.get("top_profile")
+        else "",
         "top_profile_score": row.get("top_profile_score"),
+        "profile_scores": row.get("profile_scores") or {},
         "stats_updated_at": row.get("stats_updated_at") or "",
     }
 
@@ -881,6 +888,9 @@ def register_player_pipelines_routes(app: FastAPI) -> None:
         from app.who_to_scout import namesake_roster
 
         transfer_status.annotate_all(watch_targets, roster=namesake_roster())
+        from app.pv_archetypes import annotate_best_archetypes
+
+        annotate_best_archetypes(watch_targets)
         missing = sum(
             1
             for row in watch_targets

@@ -1307,6 +1307,95 @@ def rank_archetype(
     return sorted(best.values(), key=lambda row: -row["fit"])[:limit]
 
 
+def best_archetype(
+    position: str,
+    scores: dict[str, float],
+    *,
+    foot: str = "",
+    roles: list[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
+    """The archetype a player fits best from his own position's profiles.
+
+    A footed archetype (Left-Footed Builder, …) is skipped when the player is
+    known to be the other foot — that is the job description, not a preference.
+    """
+    if not position or not scores:
+        return None
+    foot = str(foot or "").strip().upper()[:1]
+    best: dict[str, Any] | None = None
+    for role in roles if roles is not None else current_roles():
+        for arch in role.get("archetypes") or []:
+            if position not in (arch.get("sources") or []):
+                continue
+            arch_foot = arch.get("foot")
+            if arch_foot and foot in {"L", "R"} and foot != arch_foot:
+                continue
+            fit = archetype_fit(scores, arch.get("weights") or {})
+            if fit is None:
+                continue
+            if best is None or fit > best["fit"]:
+                best = {
+                    "id": arch["id"],
+                    "name": arch["name"],
+                    "tagline": arch.get("tagline") or "",
+                    "role": role.get("short") or "",
+                    "role_name": role.get("name") or "",
+                    "fit": fit,
+                }
+    return best
+
+
+_score_index: tuple[Any, dict[tuple[int, str], dict[str, Any]]] | None = None
+
+
+def _pool_score_index() -> dict[tuple[int, str], dict[str, Any]]:
+    """(playerId, position) -> season profile scores + foot, from the standouts pool."""
+    global _score_index
+    from app.who_to_scout import _load_standouts_raw_payload
+
+    raw = _load_standouts_raw_payload(period="season")
+    if raw.get("building"):
+        return _score_index[1] if _score_index else {}
+    stamp = raw.get("generated_at") or id(raw)
+    if _score_index and _score_index[0] == stamp:
+        return _score_index[1]
+    index: dict[tuple[int, str], dict[str, Any]] = {}
+    for row in raw.get("players") or []:
+        try:
+            pid = int(row.get("playerId") or 0)
+        except (TypeError, ValueError):
+            continue
+        position = str(row.get("position") or "")
+        if not pid or not position:
+            continue
+        index[(pid, position)] = {
+            "scores": row.get("profileScores") or {},
+            "foot": row.get("foot") or "",
+        }
+    _score_index = (stamp, index)
+    return index
+
+
+def annotate_best_archetypes(rows: list[dict[str, Any]]) -> None:
+    """Set ``best_archetype`` on watch-list / pipeline rows in place."""
+    try:
+        index = _pool_score_index()
+    except Exception:  # noqa: BLE001 - the column is a bonus, never a blocker
+        logger.warning("Standouts pool unavailable for archetype fit")
+        index = {}
+    roles = current_roles()
+    for row in rows:
+        position = str(row.get("position") or "")
+        try:
+            pid = int(row.get("player_id") or 0)
+        except (TypeError, ValueError):
+            pid = 0
+        hit = index.get((pid, position)) if pid else None
+        scores = (hit or {}).get("scores") or row.get("profile_scores") or {}
+        foot = row.get("foot") or (hit or {}).get("foot") or ""
+        row["best_archetype"] = best_archetype(position, scores, foot=foot, roles=roles)
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------

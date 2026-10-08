@@ -159,20 +159,33 @@ a { color: var(--accent); }
   border-bottom: 1px solid var(--border);
 }
 
+.wl-legend__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.85rem;
+}
+
 .wl-legend__lead {
   margin: 0;
-  font-size: 0.92rem;
-  font-weight: 650;
+  font-size: 0.95rem;
+  font-weight: 700;
 }
 
 .wl-legend__keys {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
-  margin: 0.55rem 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
+
+.wl-legend__notes {
+  margin-top: 0.45rem;
+}
+
+.wl-legend__notes p:first-child { margin-top: 0; }
 
 .wl-legend__chip {
   display: inline-flex;
@@ -259,7 +272,7 @@ a { color: var(--accent); }
 .wl-filters {
   display: flex;
   flex-direction: column;
-  gap: 0.7rem;
+  gap: 0.55rem;
   padding: 0.8rem 1rem 0.9rem;
 }
 
@@ -271,9 +284,10 @@ a { color: var(--accent); }
 }
 
 .wl-filter {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
+  display: grid;
+  grid-template-columns: 5.5rem 1fr;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .wl-filter--grow {
@@ -396,19 +410,55 @@ a { color: var(--accent); }
 
 .wl-section__table { overflow-x: auto; }
 
+/* Fixed layout so every position section lines its columns up the same. */
 .wl-table {
   width: 100%;
+  min-width: 1080px;
+  table-layout: fixed;
   border-collapse: collapse;
-  font-size: 0.875rem;
+  font-size: 0.85rem;
 }
+
+.wl-table col.w-player { width: 16%; }
+.wl-table col.w-club { width: 15%; }
+.wl-table col.w-mins { width: 10%; }
+.wl-table col.w-overall { width: 6.5%; }
+.wl-table col.w-arch { width: 18%; }
+.wl-table col.w-profile { width: 15%; }
+.wl-table col.w-added { width: 8.5%; }
+.wl-table col.w-actions { width: 15rem; }
+.wl-table col.w-actions--slim { width: 6.5rem; }
 
 .wl-table th,
 .wl-table td {
-  padding: 0.7rem 0.9rem;
+  padding: 0.6rem 0.75rem;
   text-align: left;
   border-bottom: 1px solid var(--border);
   vertical-align: middle;
+  overflow: hidden;
 }
+
+.wl-table .col-center { text-align: center; }
+
+.wl-sub-line {
+  display: block;
+  margin-top: 0.12rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wl-table .col-added {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.wl-dash { color: var(--text-muted); }
 
 .wl-table th {
   font-size: 0.6875rem;
@@ -422,10 +472,14 @@ a { color: var(--accent); }
 .wl-table tbody tr:last-child td { border-bottom: 0; }
 .wl-table tbody tr:hover td { background: rgba(56, 189, 248, 0.04); }
 
-.wl-table .col-player { font-weight: 650; min-width: 10rem; }
+.wl-table .col-player { font-weight: 650; }
 .wl-table .col-player a {
+  display: block;
   color: inherit;
   text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .wl-table .col-player a:hover { color: var(--accent); }
 
@@ -455,12 +509,24 @@ a { color: var(--accent); }
    club on this row, and that decides who the call is with. */
 .wl-table tbody tr.is-loan td.col-player a { color: #60a5fa; font-weight: 700; }
 
+.wl-table .club-was,
+.wl-table .club-held {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .wl-table .club-now,
 .wl-table .club-loan {
   display: block;
+  margin-top: 0.12rem;
   font-weight: 700;
-  font-size: 0.86em;
+  font-size: 0.75rem;
   line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .wl-table .club-now { color: #f87171; }
@@ -476,6 +542,7 @@ a { color: var(--accent); }
 }
 
 .wl-mins {
+  max-width: 100%;
   display: inline-flex;
   flex-direction: column;
   align-items: flex-start;
@@ -495,22 +562,33 @@ a { color: var(--accent); }
 }
 
 .wl-mins__rest {
+  max-width: 100%;
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 500;
-  white-space: normal;
-  max-width: 11rem;
-}
-.wl-table .col-actions {
-  text-align: right;
   white-space: nowrap;
-  min-width: 15rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.wl-table .col-actions .btn { margin-left: 0.35rem; }
+.wl-table .col-actions { text-align: right; }
+
+.wl-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.btn--sm {
+  padding: 0.36rem 0.6rem;
+  font-size: 0.75rem;
+}
 
 .wl-stage {
-  max-width: 11.5rem;
-  padding: 0.4rem 0.55rem;
+  flex: 1;
+  min-width: 0;
+  max-width: 9.5rem;
+  padding: 0.36rem 0.5rem;
   border-radius: 8px;
   border: 1px solid rgba(61, 139, 253, 0.45);
   background: rgba(61, 139, 253, 0.12);
@@ -550,20 +628,45 @@ a { color: var(--accent); }
   color: #fca5a5;
 }
 
-.wl-profile {
-  display: inline-flex;
+/* Name + score on one line; long names truncate rather than wrap. */
+.wl-chip {
+  display: flex;
   align-items: center;
   gap: 0.45rem;
-  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--text);
+  text-decoration: none;
 }
 
-.wl-profile__name {
-  color: var(--text);
-  font-weight: 550;
+.wl-chip__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+
+.wl-chip .wl-score { flex-shrink: 0; }
+
+.wl-chip__role {
+  flex-shrink: 0;
+  padding: 0.1rem 0.35rem;
+  border-radius: 5px;
+  border: 1px solid rgba(250, 204, 21, 0.35);
+  background: rgba(250, 204, 21, 0.1);
+  color: #fde68a;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+a.wl-chip--arch:hover .wl-chip__name { color: var(--accent); }
 
 @media (max-width: 900px) {
   .wl { padding: 1rem; }
   .wl-table th,
-  .wl-table td { padding: 0.55rem 0.65rem; }
+  .wl-table td { padding: 0.5rem 0.6rem; }
 }

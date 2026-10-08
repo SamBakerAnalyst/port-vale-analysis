@@ -127,15 +127,30 @@
     return `<span class="wl-score wl-score--${tier}" title="Impect overall (same scale as Who To Scout)">${Math.round(Number(score))}</span>`;
   }
 
+  function scoreLabel(value) {
+    const score = Number(value);
+    return Number.isInteger(score) ? String(Math.round(score)) : score.toFixed(1);
+  }
+
   function formatBestProfile(row) {
-    if (!row.top_profile || row.top_profile_score == null) return "—";
+    if (!row.top_profile || row.top_profile_score == null) return `<span class="wl-dash">—</span>`;
     const tier = scoreTier(row.top_profile_score);
-    const score = Number(row.top_profile_score);
-    const label = Number.isInteger(score) ? String(Math.round(score)) : score.toFixed(1);
-    return `<span class="wl-profile">
-      <span class="wl-profile__name">${esc(row.top_profile)}</span>
-      <span class="wl-score wl-score--${tier}" title="Impect profile score (0–100)">${esc(label)}</span>
+    return `<span class="wl-chip" title="Best Impect profile: ${esc(row.top_profile)}">
+      <span class="wl-chip__name">${esc(row.top_profile)}</span>
+      <span class="wl-score wl-score--${tier}" title="Impect profile score (0–100)">${esc(scoreLabel(row.top_profile_score))}</span>
     </span>`;
+  }
+
+  function formatArchetype(row) {
+    const arch = row.best_archetype;
+    if (!arch || arch.fit == null) return `<span class="wl-dash">—</span>`;
+    const tier = scoreTier(arch.fit);
+    const title = `${arch.name} — ${arch.role_name}${arch.tagline ? `. ${arch.tagline}` : ""}. Fit from the PV Archetypes position book.`;
+    return `<a class="wl-chip wl-chip--arch" href="/pv-archetypes" title="${esc(title)}">
+      <span class="wl-chip__role">${esc(arch.role)}</span>
+      <span class="wl-chip__name">${esc(arch.name)}</span>
+      <span class="wl-score wl-score--${tier}">${esc(scoreLabel(arch.fit))}</span>
+    </a>`;
   }
 
   function pipelineStages() {
@@ -160,15 +175,24 @@
   }
 
   function tableHeader() {
-    return `<thead>
+    return `<colgroup>
+      <col class="w-player" />
+      <col class="w-club" />
+      <col class="w-mins" />
+      <col class="w-overall" />
+      <col class="w-arch" />
+      <col class="w-profile" />
+      <col class="w-added" />
+      <col class="w-actions${state.pipelinesLive ? "" : " w-actions--slim"}" />
+    </colgroup>
+    <thead>
       <tr>
         <th>Player</th>
         <th>Club</th>
-        <th>Age</th>
-        <th>League</th>
-        <th class="col-num">Pos mins</th>
-        <th class="col-num">Overall</th>
-        <th>Best profile</th>
+        <th>Pos mins</th>
+        <th class="col-center">Overall</th>
+        <th title="Best fit from the PV Archetypes position book">PV archetype</th>
+        <th title="Highest-scoring Impect profile">Best profile</th>
         <th>Added by</th>
         <th class="col-actions">${state.pipelinesLive ? "Pipeline" : ""}</th>
       </tr>
@@ -301,11 +325,15 @@
         ? `<p class="wl-legend__meta">${state.statsMissing} still need a data refresh — click Refresh data.</p>`
         : "";
       els.legend.innerHTML = `
-        <p class="wl-legend__lead">${total} player${total === 1 ? "" : "s"} on the watch list</p>
-        ${chips.length ? `<ul class="wl-legend__keys">${chips.join("")}</ul>` : ""}
-        <p class="wl-legend__hint">${esc(hint)}</p>
-        ${meta}
-        ${missing}
+        <div class="wl-legend__top">
+          <p class="wl-legend__lead">${total} player${total === 1 ? "" : "s"} on the watch list</p>
+          ${chips.length ? `<ul class="wl-legend__keys">${chips.join("")}</ul>` : ""}
+        </div>
+        <div class="wl-legend__notes">
+          <p class="wl-legend__hint">${esc(hint)}</p>
+          ${meta}
+          ${missing}
+        </div>
       `;
     }
 
@@ -436,20 +464,27 @@
           : move.status === "gone"
             ? " is-moved"
             : " is-move-check";
+      const meta = [t.age != null && t.age !== "" ? `Age ${t.age}` : "", t.league || ""]
+        .filter(Boolean)
+        .join(" · ");
       return `<tr data-id="${esc(t.id)}" class="${moveClass.trim()}">
-        <td class="col-player"><a href="${esc(href)}">${esc(t.name || "—")}</a></td>
+        <td class="col-player">
+          <a href="${esc(href)}">${esc(t.name || "—")}</a>
+          <span class="wl-sub-line">${esc(meta)}</span>
+        </td>
         ${clubCell(t)}
-      <td>${t.age ?? "—"}</td>
-      <td>${esc(t.league || "—")}</td>
-      <td class="col-num">${formatMinutesBreakdown(t)}</td>
-      <td class="col-num">${formatOverall(t.overall_score)}</td>
-      <td>${formatBestProfile(t)}</td>
-      <td>${esc(t.added_by || "—")}</td>
-      <td class="col-actions">
-        ${stageSelect(t.id)}
-        <button type="button" class="btn btn--danger" data-remove="${esc(t.id)}">Remove</button>
-      </td>
-    </tr>`;
+        <td class="col-num">${formatMinutesBreakdown(t)}</td>
+        <td class="col-center">${formatOverall(t.overall_score)}</td>
+        <td>${formatArchetype(t)}</td>
+        <td>${formatBestProfile(t)}</td>
+        <td class="col-added" title="${esc(t.added_by || "")}">${esc(t.added_by || "—")}</td>
+        <td class="col-actions">
+          <div class="wl-actions">
+            ${stageSelect(t.id)}
+            <button type="button" class="btn btn--danger btn--sm" data-remove="${esc(t.id)}">Remove</button>
+          </div>
+        </td>
+      </tr>`;
   }
 
   function groupTargets(targets) {

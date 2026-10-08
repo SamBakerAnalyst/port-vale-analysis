@@ -39,6 +39,7 @@ PLAYER_STAT_KEYS = (
     "minutes",
     "top_profile",
     "top_profile_score",
+    "profile_scores",
     "minutes_by_position",
     "club",
     "league",
