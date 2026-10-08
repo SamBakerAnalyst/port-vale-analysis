@@ -327,14 +327,28 @@ a { color: var(--accent); }
   color: #e0f2fe;
 }
 
-#wlAgeGroup {
+.wl-ages {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.6rem;
+  margin-bottom: 1rem;
 }
 
-#wlAgeGroup .wl-filter__btn {
-  padding: 0.65rem 1.35rem;
-  font-size: 1.05rem;
+.wl-ages[hidden] { display: none; }
+
+.wl-ages .wl-filter__btn {
+  padding: 1rem 1.2rem;
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 1.15rem;
   font-weight: 700;
+  text-align: center;
+}
+
+.wl-ages .wl-filter__btn:hover { color: var(--text); border-color: #3b4a5e; }
+
+@media (max-width: 640px) {
+  .wl-ages { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 .wl-filter__btn--age-emerging.is-active {
