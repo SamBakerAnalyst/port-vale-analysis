@@ -139,6 +139,7 @@ a:hover { text-decoration: underline; }
   cursor: pointer;
 }
 .chip.is-on { background: rgba(245, 197, 24, 0.16); border-color: rgba(245, 197, 24, 0.55); color: #fde68a; }
+.chip__sub { opacity: 0.65; font-size: 0.85em; }
 
 .status-banner { padding: 0.65rem 0.9rem; border-radius: 10px; margin-bottom: 0.75rem; font-size: 0.82rem; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.4); color: var(--amber); }
 .status-banner.is-error { background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.4); color: #fca5a5; }

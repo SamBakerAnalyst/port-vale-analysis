@@ -23,7 +23,7 @@
     slot: "six",
     slotArch: {},
     tuned: {},
-    filters: { leagues: new Set(), minMinutes: 270, maxAge: null, hideMoved: true, footStrict: false },
+    filters: { leagues: new Set(), ageGroup: "all", minMinutes: 270, maxAge: null, hideMoved: true, footStrict: false },
     watch: new Map(),
     watchBusy: new Set(),
     editing: false,
@@ -99,6 +99,7 @@
         const f = raw.filters;
         state.filters.minMinutes = Number.isFinite(f.minMinutes) ? f.minMinutes : 270;
         state.filters.maxAge = Number.isFinite(f.maxAge) ? f.maxAge : null;
+        state.filters.ageGroup = window.PVAgeGroups?.byId(f.ageGroup) ? f.ageGroup : "all";
         state.filters.hideMoved = f.hideMoved !== false;
         state.filters.footStrict = !!f.footStrict;
         if (Array.isArray(f.leagues)) state.filters.leagues = new Set(f.leagues);
@@ -155,6 +156,7 @@
     const f = state.filters;
     if ((player.minutes || 0) < f.minMinutes) return false;
     if (f.maxAge != null && player.age != null && player.age > f.maxAge) return false;
+    if (window.PVAgeGroups && !window.PVAgeGroups.matches(player.age, f.ageGroup)) return false;
     if (f.leagues.size && !f.leagues.has(player.league)) return false;
     if (f.hideMoved && player.transfer?.status === "gone") return false;
     if (f.footStrict && arch.foot && player.foot !== arch.foot && player.foot !== "Both") return false;
@@ -233,6 +235,22 @@
       state.leagues.map((l) =>
         `<button type="button" class="chip${state.filters.leagues.has(l) ? " is-on" : ""}" data-league="${esc(l)}">${esc(l)}</button>`
       ).join("");
+  }
+
+  function renderAgeGroupChips() {
+    const chips = $("ageGroupChips");
+    if (!chips) return;
+    const current = state.filters.ageGroup || "all";
+    const groups = window.PVAgeGroups?.GROUPS || [];
+    chips.innerHTML =
+      `<button type="button" class="chip${current === "all" ? " is-on" : ""}" data-age-group="all">All</button>` +
+      groups.map((g) =>
+        `<button type="button" class="chip${current === g.id ? " is-on" : ""}" data-age-group="${esc(g.id)}" title="${esc(g.label)} — ${esc(g.range)}">${esc(g.short)} <span class="chip__sub">${esc(g.range)}</span></button>`
+      ).join("");
+  }
+
+  function ageBadge(p) {
+    return window.PVAgeGroups ? window.PVAgeGroups.badgeHtml(p.age, { compact: true }) : "";
   }
 
   function syncFilterInputs() {
@@ -409,6 +427,8 @@
     const top = list.slice(0, 10);
     const f = state.filters;
     const bits = [`${list.length} qualify`, `${f.minMinutes}+ mins`];
+    const ageGroup = window.PVAgeGroups?.byId(f.ageGroup);
+    if (ageGroup) bits.push(`${ageGroup.label} (${ageGroup.range})`);
     if (f.maxAge != null) bits.push(`U${f.maxAge + 1}`);
     if (f.leagues.size) bits.push([...f.leagues].join(", "));
     $("lbMeta").textContent = bits.join(" · ");
@@ -422,7 +442,7 @@
           <div>
             <a class="lb-name" href="/player/${encodeURIComponent(p.playerId)}" target="_blank" rel="noopener">${esc(p.name)}</a>
             ${transferFlag(p)}${footOff ? `<span class="flag flag--foot" title="Preferred foot for this role is ${arch.foot === "L" ? "left" : "right"}">${esc(p.foot)} foot</span>` : ""}
-            <div class="lb-sub">${p.age ?? "—"} yrs · ${esc(p.club)} · ${esc(p.league)} · ${Math.round(p.minutes || 0)} mins</div>
+            <div class="lb-sub">${p.age ?? "—"} yrs ${ageBadge(p)} · ${esc(p.club)} · ${esc(p.league)} · ${Math.round(p.minutes || 0)} mins</div>
           </div>
           <div class="bars">
             ${parts.map((b) => {
@@ -564,7 +584,7 @@
                     <div class="bv-pl">
                       <span class="bv-pl__rank">${i + 1}</span>
                       <span><a href="/player/${encodeURIComponent(p.playerId)}" target="_blank" rel="noopener">${esc(p.name)}</a>${transferFlag(p)}
-                        <span class="bv-pl__club">${p.age ?? "—"} · ${esc(p.club)}</span></span>
+                        <span class="bv-pl__club">${p.age ?? "—"} ${ageBadge(p)} · ${esc(p.club)}</span></span>
                       <span class="bv-pl__fit fit--${fitClass(p.fit)}" style="background:none">${p.fit.toFixed(1)}</span>
                     </div>`).join("") : '<p class="bv-arch__tag">No fits with these filters.</p>'}
                 </div>`;
@@ -1052,6 +1072,7 @@
   function renderAll() {
     renderFormationSeg();
     renderLeagueChips();
+    renderAgeGroupChips();
     $("pitchView").hidden = state.view !== "pitch";
     $("boardView").hidden = state.view !== "board";
     $("squadView").hidden = state.view !== "squad";
@@ -1112,6 +1133,13 @@
     $("maxAge").addEventListener("change", (e) => {
       const v = Number(e.target.value);
       state.filters.maxAge = e.target.value === "" || !Number.isFinite(v) ? null : v;
+      onFiltersChanged();
+    });
+    $("ageGroupChips")?.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-age-group]");
+      if (!btn) return;
+      const id = btn.dataset.ageGroup || "all";
+      state.filters.ageGroup = state.filters.ageGroup === id ? "all" : id;
       onFiltersChanged();
     });
     $("hideMoved").addEventListener("change", (e) => { state.filters.hideMoved = e.target.checked; onFiltersChanged(); });

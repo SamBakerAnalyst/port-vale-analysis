@@ -1055,8 +1055,7 @@
       const mins = Number(player.minutes) || 0;
       if (mins < minMinutes) return false;
     }
-    if (state.ageBand === "u21" && (age == null || !(age < 21))) return false;
-    if (state.ageBand === "u25" && (age == null || !(age < 25))) return false;
+    if (!ageGroupMatches(age, state.ageBand)) return false;
     if (minAge != null && (age == null || age < minAge)) return false;
     if (maxAge != null && (age == null || age > maxAge)) return false;
     if (minHeight != null) {
@@ -1357,19 +1356,26 @@
     return `<td class="col-scout"><span class="scout-pill scout-pill--${kind}">${value}</span></td>`;
   }
 
+  function ageGroupMatches(age, groupId) {
+    if (!groupId || groupId === "all") return true;
+    return window.PVAgeGroups ? window.PVAgeGroups.matches(age, groupId) : true;
+  }
+
+  function ageGroupNote(groupId) {
+    const group = window.PVAgeGroups?.byId(groupId);
+    return group ? ` · ${group.label} (${group.range})` : "";
+  }
+
   function ageBandClass(age) {
-    const n = Number(age);
-    if (!Number.isFinite(n)) return "";
-    if (n < 23) return "is-age-u23";
-    if (n > 30) return "is-age-o30";
-    return "";
+    const group = window.PVAgeGroups?.groupFor(age);
+    return group ? `is-age-${group.id}` : "";
   }
 
   function rowClasses(p, scoutTotal) {
     const parts = [];
     if (scoutTotal) parts.push("has-scout");
     if (loanInfoForPlayer(p)) parts.push("is-loan");
-    if (Number(p.age) > 30) parts.push("row-veteran");
+    if (window.PVAgeGroups?.groupFor(p.age)?.id === "experienced") parts.push("row-veteran");
     const move = p?.transfer;
     if (move?.club) {
       // Loans reuse is-loan rather than inventing a second blue. The pools have
@@ -1862,7 +1868,7 @@
           ? "Ranked by raw Impect profile score (0–100) for each PV profile."
           : "Season overall uses Impect PV profile ratings (0–100).";
     els.pageNote.textContent = `${note} Top ${limit} per ${viewText} · ${leagueLabel} · ${posLabelText}${
-      state.ageBand === "u21" ? " · U21" : state.ageBand === "u25" ? " · U25" : ""
+      ageGroupNote(state.ageBand)
     }${state.loanFilter === "loan" ? " · on loan only" : ""}. Names in blue are on loan. Live / Video / Reports from Fixture Planner — unscouted names are your priority targets.`;
     updateExportButton(grouped);
   }

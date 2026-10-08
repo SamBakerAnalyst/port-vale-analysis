@@ -13,6 +13,7 @@
     legend: document.getElementById("wlLegend"),
     leagueGroup: document.getElementById("wlLeagueGroup"),
     positionGroup: document.getElementById("wlPositionGroup"),
+    ageGroup: document.getElementById("wlAgeGroup"),
     situationGroup: document.getElementById("wlSituationGroup"),
   };
 
@@ -38,6 +39,7 @@
     filters: {
       league: "all",
       position: "all",
+      age: "all",
       situation: "all",
     },
   };
@@ -212,8 +214,9 @@
     }
 
     function matchesFilters(target) {
-      const { league, position, situation } = state.filters;
+      const { league, position, age, situation } = state.filters;
       if (league !== "all" && String(target.league || "") !== league) return false;
+      if (age !== "all" && window.PVAgeGroups && !window.PVAgeGroups.matches(target.age, age)) return false;
       if (position !== "all") {
         const code = String(target.position || "").trim() || "OTHER";
         if (code !== position) return false;
@@ -275,6 +278,7 @@
       return (
         state.filters.league !== "all" ||
         state.filters.position !== "all" ||
+        state.filters.age !== "all" ||
         state.filters.situation !== "all"
       );
     }
@@ -369,6 +373,20 @@
               count: targets.filter((item) => (String(item.position || "").trim() || "OTHER") === row.id)
                 .length,
               title: row.title || "",
+            }),
+          ),
+        ].join("");
+      }
+      if (els.ageGroup) {
+        const groups = window.PVAgeGroups?.GROUPS || [];
+        els.ageGroup.innerHTML = [
+          filterBtn("all", "All", { group: "age" }),
+          ...groups.map((g) =>
+            filterBtn(g.id, g.short, {
+              group: "age",
+              extraClass: `wl-filter__btn--age-${g.id}`,
+              count: targets.filter((row) => window.PVAgeGroups.matches(row.age, g.id)).length,
+              title: `${g.label} — ${g.range}`,
             }),
           ),
         ].join("");
@@ -470,7 +488,9 @@
       return `<tr data-id="${esc(t.id)}" class="${moveClass.trim()}">
         <td class="col-player">
           <a href="${esc(href)}">${esc(t.name || "—")}</a>
-          <span class="wl-sub-line">${esc(meta)}</span>
+          <span class="wl-sub-line">${esc(meta)}${
+            window.PVAgeGroups ? ` ${window.PVAgeGroups.badgeHtml(t.age, { compact: true })}` : ""
+          }</span>
         </td>
         ${clubCell(t)}
         <td class="col-num">${formatMinutesBreakdown(t)}</td>
@@ -525,6 +545,7 @@
     const all = targets || [];
     const visible = all.filter(matchesFilters);
     if (els.panel) els.panel.hidden = !all.length;
+    if (els.ageGroup) els.ageGroup.hidden = !all.length;
     if (all.length) {
       renderLegend(all);
       renderFilterControls(all);
@@ -545,7 +566,7 @@
       return;
     }
     if (!visible.length) {
-      els.list.innerHTML = `<p class="wl-empty">Nobody matches these filters. Clear league, position or situation to see the full list.</p>`;
+      els.list.innerHTML = `<p class="wl-empty">Nobody matches these filters. Clear league, position, age group or situation to see the full list.</p>`;
       return;
     }
 
@@ -728,7 +749,7 @@
   }
 
   function setFilter(group, value) {
-    if (!["league", "position", "situation"].includes(group)) return;
+    if (!["league", "position", "age", "situation"].includes(group)) return;
     const next = String(value || "all");
     if (next !== "all" && state.filters[group] === next) {
       state.filters[group] = "all";
@@ -739,11 +760,11 @@
   }
 
   function clearFilters() {
-    state.filters = { league: "all", position: "all", situation: "all" };
+    state.filters = { league: "all", position: "all", age: "all", situation: "all" };
     render(state.targets);
   }
 
-  els.panel?.addEventListener("click", (event) => {
+  function onFilterClick(event) {
     const clearBtn = event.target.closest("[data-filter-clear]");
     if (clearBtn) {
       clearFilters();
@@ -752,7 +773,10 @@
     const btn = event.target.closest("[data-filter]");
     if (!btn) return;
     setFilter(btn.dataset.filter, btn.dataset.value);
-  });
+  }
+
+  els.panel?.addEventListener("click", onFilterClick);
+  els.ageGroup?.addEventListener("click", onFilterClick);
 
   els.list.addEventListener("change", (event) => {
     const select = event.target.closest("[data-stage-for]");

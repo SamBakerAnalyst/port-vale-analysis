@@ -7,7 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/who-to-scout.css?v=18" />
+  <link rel="stylesheet" href="/static/who-to-scout.css?v=19" />
+  <link rel="stylesheet" href="/static/age-groups.css?v=1" />
 </head>
 <body>
   <div class="app">
@@ -70,11 +71,12 @@
           <input type="number" id="minMinutes" class="filter__input" min="0" step="50" value="0" />
         </div>
         <div class="filter">
-          <span class="filter__label">Age band</span>
-          <div class="filter__control" id="ageBandGroup" role="group" aria-label="Age band">
+          <span class="filter__label">Age group</span>
+          <div class="filter__control" id="ageBandGroup" role="group" aria-label="Age group">
             <button type="button" class="filter__btn is-active" data-age-band="all">All</button>
-            <button type="button" class="filter__btn" data-age-band="u21" title="Under 21">U21</button>
-            <button type="button" class="filter__btn" data-age-band="u25" title="Under 25">U25</button>
+            <button type="button" class="filter__btn" data-age-band="emerging" title="Emerging talent — 23 and under">Emerging talent</button>
+            <button type="button" class="filter__btn" data-age-band="prime" title="Prime players — 24 to 29">Prime</button>
+            <button type="button" class="filter__btn" data-age-band="experienced" title="Experienced players — 30 and over">Experienced</button>
           </div>
         </div>
         <div class="filter filter--num">
@@ -132,7 +134,8 @@
     <div id="exportRoot" class="export-root" aria-hidden="true"></div>
   </div>
 
-  <script defer src="/static/who-to-scout.js?v=28"></script
+  <script defer src="/static/age-groups.js?v=1"></script>
+  <script defer src="/static/who-to-scout.js?v=29"></script>
   <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>

@@ -1,0 +1,21 @@
+.age-group {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  white-space: nowrap;
+  vertical-align: middle;
+  border: 1px solid currentColor;
+}
+
+.age-group--emerging { color: #34d399; background: rgba(52, 211, 153, 0.12); }
+.age-group--prime { color: #f5c518; background: rgba(245, 197, 24, 0.12); }
+.age-group--experienced { color: #f87171; background: rgba(248, 113, 113, 0.12); }
+
+.is-age-emerging { color: #34d399; }
+.is-age-prime { color: #f5c518; }
+.is-age-experienced { color: #f87171; }

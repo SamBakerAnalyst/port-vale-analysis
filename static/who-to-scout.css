@@ -901,8 +901,9 @@ a:hover { text-decoration: underline; }
 
 .scout-table tr.is-scouted td.col-overall { color: var(--text-muted); }
 
-.scout-table .col-age.is-age-u23 { color: #34d399; font-weight: 700; }
-.scout-table .col-age.is-age-o30 { color: #fbbf24; font-weight: 700; }
+.scout-table .col-age.is-age-emerging { color: #34d399; font-weight: 700; }
+.scout-table .col-age.is-age-prime { color: #f5c518; font-weight: 700; }
+.scout-table .col-age.is-age-experienced { color: #f87171; font-weight: 700; }
 
 .scout-table tr.row-veteran td.col-player a { color: #fde68a; }
 
