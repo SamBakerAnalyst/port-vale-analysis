@@ -210,17 +210,17 @@ function renderPlan(r) {
 /* ---------- matchup ---------- */
 function renderMatchup(r) {
   const groups = [
-    ["theirAttack", `${r.club.name} attack vs our defence`],
-    ["ourAttack", `Our attack vs ${r.club.name} defence`],
-    ["battle", "Duels head to head"],
+    ["theirAttack", `${r.club.name} attack vs our defence`, ["Them · created", "Us · conceded"]],
+    ["ourAttack", `Our attack vs ${r.club.name} defence`, ["Them · conceded", "Us · created"]],
+    ["battle", "Duels head to head", ["Them", "Us"]],
   ];
-  const html = groups.map(([side, title]) => {
+  const html = groups.map(([side, title, [themCap, usCap]]) => {
     const rows = (r.matchup || []).filter((row) => row.side === side);
     if (!rows.length) return "";
     const vale = rows.filter((row) => row.edge === "vale").length;
     const them = rows.filter((row) => row.edge === "them").length;
     return `<article class="card oh-mu"><div class="oh-head"><div><p class="at-panel__kicker">${vale > them ? "Port Vale edge" : them > vale ? `${esc(r.club.name)} edge` : "Even"}</p><h2 class="at-panel__title">${esc(title)}</h2></div><div class="oh-mu__score"><b class="oh-mu__them">${them}</b><span>–</span><b class="oh-mu__vale">${vale}</b></div></div>
-      <div class="oh-mu__cols"><span>${badge(r.club.badge, r.club.name, 20)} Them</span><span></span><span>Us ${badge(r.vale.badge, "Port Vale", 20)}</span></div>
+      <div class="oh-mu__cols"><span>${badge(r.club.badge, r.club.name, 20)} ${themCap}</span><span></span><span>${usCap} ${badge(r.vale.badge, "Port Vale", 20)}</span></div>
       ${rows.map((row) => {
         const of = row.them.of || 24;
         const themStrength = 100 * (1 - (row.them.rank - 1) / Math.max(1, of - 1));

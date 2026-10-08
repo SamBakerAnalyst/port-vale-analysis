@@ -86,8 +86,9 @@ small.oh-res--W { color: #34d399; background: none; } small.oh-res--D { color: #
 .oh-matchup { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
 .oh-mu__score { display: flex; gap: .35rem; align-items: baseline; font: 800 1.8rem var(--display); }
 .oh-mu__them { color: #fca5a5; } .oh-mu__vale { color: var(--gold); } .oh-mu__score span { color: var(--muted); }
-.oh-mu__cols { display: grid; grid-template-columns: 1fr 1.4fr 1fr; color: var(--muted); font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; margin-bottom: .3rem; }
-.oh-mu__cols span:last-child { text-align: right; }
+.oh-mu__cols { display: flex; justify-content: space-between; gap: .5rem; color: var(--muted); font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; margin-bottom: .3rem; white-space: nowrap; }
+.oh-mu__cols span { display: inline-flex; align-items: center; gap: .35rem; }
+.oh-mu__cols span:empty { display: none; }
 .oh-mu__row { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: .5rem; align-items: center; padding: .5rem .45rem; border-radius: 10px; border: 1px solid transparent; }
 .oh-mu__row + .oh-mu__row { margin-top: .25rem; }
 .oh-mu__row--vale { background: linear-gradient(90deg, transparent, rgba(245,197,24,.09)); border-color: rgba(245,197,24,.15); }
