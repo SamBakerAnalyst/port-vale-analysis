@@ -327,6 +327,34 @@ a { color: var(--accent); }
   color: #e0f2fe;
 }
 
+#wlAgeGroup {
+  gap: 0.6rem;
+}
+
+#wlAgeGroup .wl-filter__btn {
+  padding: 0.65rem 1.35rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.wl-filter__btn--age-emerging.is-active {
+  background: rgba(52, 211, 153, 0.18);
+  border-color: rgba(52, 211, 153, 0.55);
+  color: #a7f3d0;
+}
+
+.wl-filter__btn--age-prime.is-active {
+  background: rgba(245, 197, 24, 0.18);
+  border-color: rgba(245, 197, 24, 0.55);
+  color: #fde68a;
+}
+
+.wl-filter__btn--age-experienced.is-active {
+  background: rgba(248, 113, 113, 0.2);
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #fecaca;
+}
+
 .wl-filter__btn--loan.is-active {
   background: rgba(96, 165, 250, 0.22);
   border-color: rgba(96, 165, 250, 0.55);
