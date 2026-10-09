@@ -208,15 +208,63 @@ function renderPlan(r) {
 }
 
 /* ---------- matchup ---------- */
+/* Attacking phrase, defending phrase for each matchup row. */
+const CLASH_WORDS = {
+  "Chance creation (npxG)": ["creating chances", "limiting chances"],
+  "Big chances": ["creating big chances", "stopping big chances"],
+  "Attacking threat": ["building threat", "stopping threat"],
+  "Transitions": ["threat on the break", "defending transitions"],
+  "Crosses": ["threat from crosses", "defending crosses"],
+  "Set-play xG": ["set-play xG", "defending set plays"],
+  "Ball wins off defenders": ["winning it high", "keeping it at the back"],
+};
+const CLASH_TAGS = {
+  theirAttack: [[0.35, "bad2", "Big threat"], [0.1, "bad", "Threat"], [-0.1, "even", "Even"], [-0.35, "good", "We cope"], [-2, "good2", "We're on top"]],
+  ourAttack: [[0.35, "good2", "Big chance"], [0.1, "good", "Chance"], [-0.1, "even", "Even"], [-0.35, "bad", "Tough"], [-2, "bad2", "Hard yards"]],
+};
+function standing(m) { return 1 - ((m.rank || 1) - 1) / Math.max(1, (m.of || 24) - 1); }
+
+function clashPanel(r, side, rows) {
+  const ours = side === "ourAttack";
+  const club = r.club.name;
+  const items = rows.map((row) => {
+    const att = ours ? row.us : row.them;
+    const def = ours ? row.them : row.us;
+    const edge = standing(att) - standing(def);
+    const [, tone, tag] = CLASH_TAGS[side].find(([min]) => edge >= min);
+    const [aWord, dWord] = CLASH_WORDS[row.label] || [row.label, row.label];
+    const why = ours
+      ? `We're <b>${ordinal(att.rank)}</b> for ${aWord} (${metricValue(att)}) · ${esc(club)} <b>${ordinal(def.rank)}</b> for ${dWord} (${metricValue(def)})`
+      : `${esc(club)} <b>${ordinal(att.rank)}</b> for ${aWord} (${metricValue(att)}) · we're <b>${ordinal(def.rank)}</b> for ${dWord} (${metricValue(def)})`;
+    const width = Math.min(50, Math.abs(edge) * 50);
+    const fill = `${edge >= 0 ? "left:50%" : `left:${(50 - width).toFixed(1)}%`};width:${width.toFixed(1)}%`;
+    return { edge, html: `<div class="oh-clash oh-clash--${tone}">
+      <div class="oh-clash__top"><b>${esc(row.label)}</b><span class="oh-clash__tag">${tag}</span></div>
+      <p class="oh-clash__why" data-tip="${esc(`${att.label} vs ${def.label}`)}">${why}</p>
+      <div class="oh-clash__meter"><i style="${fill}"></i></div>
+    </div>` };
+  }).sort((a, b) => b.edge - a.edge);
+  const hits = items.filter((item) => item.edge >= 0.1).length;
+  const title = ours ? "Where we can hurt them" : "Where they can hurt us";
+  const kicker = ours ? `Our attack v ${club} defence` : `${club} attack v our defence`;
+  const count = `<div class="oh-clash__count"><b>${hits}</b><span>${ours ? (hits === 1 ? "opening" : "openings") : (hits === 1 ? "danger" : "dangers")}</span></div>`;
+  const ends = ours ? ["They cope", "We hurt them"] : ["We cope", "They hurt us"];
+  return `<article class="card oh-mu oh-clashes oh-clashes--${ours ? "ours" : "theirs"}"><div class="oh-head"><div><p class="at-panel__kicker">${esc(kicker)}</p><h2 class="at-panel__title">${title}</h2></div>${count}</div>
+    <div class="oh-clash__ends"><span>← ${ends[0]}</span><span>${ends[1]} →</span></div>
+    ${items.map((item) => item.html).join("")}
+    <p class="at-note">Sorted by biggest mismatch. Ranks are out of the league — 1st is best at that job.</p></article>`;
+}
+
 function renderMatchup(r) {
   const groups = [
-    ["theirAttack", `${r.club.name} attack vs our defence`, ["Them · created", "Us · conceded"]],
-    ["ourAttack", `Our attack vs ${r.club.name} defence`, ["Them · conceded", "Us · created"]],
+    ["theirAttack", "", ["", ""]],
+    ["ourAttack", "", ["", ""]],
     ["battle", "Duels head to head", ["Them", "Us"]],
   ];
   const html = groups.map(([side, title, [themCap, usCap]]) => {
     const rows = (r.matchup || []).filter((row) => row.side === side);
     if (!rows.length) return "";
+    if (side !== "battle") return clashPanel(r, side, rows);
     const vale = rows.filter((row) => row.edge === "vale").length;
     const them = rows.filter((row) => row.edge === "them").length;
     return `<article class="card oh-mu"><div class="oh-head"><div><p class="at-panel__kicker">${vale > them ? "Port Vale edge" : them > vale ? `${esc(r.club.name)} edge` : "Even"}</p><h2 class="at-panel__title">${esc(title)}</h2></div><div class="oh-mu__score"><b class="oh-mu__them">${them}</b><span>–</span><b class="oh-mu__vale">${vale}</b></div></div>
