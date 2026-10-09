@@ -41,6 +41,14 @@
             <button type="button" class="filter__btn" data-period="month">Monthly</button>
           </div>
         </div>
+        <div class="filter filter--month" id="seasonWrap">
+          <span class="filter__label">Season</span>
+          <select id="seasonSelect" aria-label="Season">
+            <option value="current">26/27</option>
+            <option value="previous">25/26</option>
+            <option value="previous2">24/25</option>
+          </select>
+        </div>
         <div class="filter filter--month" id="monthWrap" hidden>
           <span class="filter__label">Month</span>
           <select id="monthSelect" aria-label="Calendar month"></select>
@@ -135,7 +143,7 @@
   </div>
 
   <script defer src="/static/age-groups.js?v=1"></script>
-  <script defer src="/static/who-to-scout.js?v=29"></script>
+  <script defer src="/static/who-to-scout.js?v=30"></script>
   <script defer src="/static/hub-feedback.js?v=1"></script>
 </body>
 </html>

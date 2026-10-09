@@ -84,6 +84,7 @@
     loading: false,
     building: false,
     period: "season",
+    seasonMode: "current",
     groupBy: "league",
     league: "ALL",
     position: "ALL",
@@ -123,6 +124,8 @@
     periodGroup: document.getElementById("periodGroup"),
     monthWrap: document.getElementById("monthWrap"),
     monthSelect: document.getElementById("monthSelect"),
+    seasonWrap: document.getElementById("seasonWrap"),
+    seasonSelect: document.getElementById("seasonSelect"),
     groupByControl: document.getElementById("groupByControl"),
     leagueFilterWrap: document.getElementById("leagueFilterWrap"),
     leagueGroup: document.getElementById("leagueGroup"),
@@ -887,6 +890,16 @@
       .join("");
     state.year = selectedYear;
     state.month = selectedMonth;
+  }
+
+  function fillSeasons(options) {
+    if (!els.seasonSelect || !options?.length) return;
+    els.seasonSelect.innerHTML = options
+      .map(
+        (opt) =>
+          `<option value="${opt.value}"${opt.value === state.seasonMode ? " selected" : ""}>${opt.label}</option>`,
+      )
+      .join("");
   }
 
   function posLabel(value) {
@@ -1982,7 +1995,7 @@
 
   function exportFileName() {
     const stamp = new Date().toISOString().slice(0, 10);
-    const mode = state.period === "month" ? `month-${state.year || ""}-${state.month || ""}` : "season";
+    const mode = state.period === "month" ? `month-${state.year || ""}-${state.month || ""}` : `season-${slugify(state.seasonLabel || state.seasonMode)}`;
     if (isTeamSheetMode()) {
       const clubs = selectedClubOrder().map((row) => row.name);
       const club = clubs.length ? clubs.map(slugify).join("-vs-") : slugify(clubNeedle() || oppoNeedle());
@@ -2228,10 +2241,13 @@
       if (state.period === "month" && state.year != null && state.month != null) {
         params.set("year", String(state.year));
         params.set("month", String(state.month));
+      } else if (state.period !== "month") {
+        params.set("season", state.seasonMode);
       }
       if (refresh) params.set("refresh", "true");
 
       const data = await fetchJson(`/api/who-to-scout/data?${params}`);
+      if (data.season_options?.length) fillSeasons(data.season_options);
 
       if (data.building) {
         state.building = true;
@@ -2301,6 +2317,13 @@
         el.classList.toggle("is-active", el === btn);
       });
       els.monthWrap.hidden = state.period !== "month";
+      if (els.seasonWrap) els.seasonWrap.hidden = state.period === "month";
+      loadData();
+    });
+
+    els.seasonSelect?.addEventListener("change", () => {
+      state.seasonMode = els.seasonSelect.value || "current";
+      state.loansByClub = {};
       loadData();
     });
 
@@ -2458,6 +2481,7 @@
       state.positions = meta.positions || [];
       fillLeagues(state.leagues);
       fillPositions(state.positions);
+      if (meta.season_options?.length) fillSeasons(meta.season_options);
       syncFilterVisibility();
     } catch {
       /* meta optional — data endpoint includes profiles */

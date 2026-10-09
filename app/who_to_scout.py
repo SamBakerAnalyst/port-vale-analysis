@@ -44,7 +44,7 @@ from app.scouting import (
     _scouting_iteration_rows,
     _scouting_position_label,
 )
-from app.season_defaults import CURRENT_SEASON
+from app.season_defaults import CURRENT_SEASON, PREVIOUS_SEASON
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,31 @@ def _attach_recruitment_notes(players: list[dict[str, Any]]) -> None:
     from app.scoutable_teams import attach_scout_notes_to_players
 
     attach_scout_notes_to_players(players)
+
+
+_SEASON_MODES = ("current", "previous", "previous2")
+
+
+def _normalize_season_mode(season_mode: str | None) -> str:
+    key = str(season_mode or "current").strip().casefold()
+    return key if key in _SEASON_MODES else "current"
+
+
+def _season_options() -> list[dict[str, str]]:
+    from app.scouting import _season_mode_label
+
+    try:
+        return [
+            {"value": mode, "label": _season_mode_label(mode, combine_seasons=False)}
+            for mode in _SEASON_MODES
+        ]
+    except Exception:  # noqa: BLE001
+        logger.exception("Could not read season titles from Impect")
+        return [
+            {"value": "current", "label": CURRENT_SEASON},
+            {"value": "previous", "label": PREVIOUS_SEASON},
+            {"value": "previous2", "label": "Two seasons ago"},
+        ]
 
 _squad_sheet_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 _SQUAD_SHEET_TTL = 6 * 3600
@@ -414,6 +439,7 @@ def _load_standouts_raw_payload(
     period: str,
     year: int | None = None,
     month: int | None = None,
+    season_mode: str = "current",
     force_refresh: bool = False,
     _from_background: bool = False,
 ) -> dict[str, Any]:
@@ -423,13 +449,18 @@ def _load_standouts_raw_payload(
     month_label: str | None = None
     if period_key == "month":
         month_year, month_num, month_label = _normalize_standouts_month(year, month)
+    season_mode = "current" if period_key == "month" else _normalize_season_mode(season_mode)
+    # A finished season's scores no longer move, so its cached pool never needs rebuilding.
+    past_season = season_mode != "current"
 
     now = time.time()
-    cache_key = _standouts_raw_cache_key(period_key, year=month_year, month=month_num)
+    cache_key = _standouts_raw_cache_key(
+        period_key, year=month_year, month=month_num, season_mode=season_mode
+    )
     cached = _standouts_cache.get(cache_key)
 
     raw_payload: dict[str, Any] | None = None
-    if not force_refresh and cached and now - cached[0] < STANDOUTS_CACHE_TTL:
+    if not force_refresh and cached and (past_season or now - cached[0] < STANDOUTS_CACHE_TTL):
         raw_payload = cached[1]
     elif not force_refresh:
         disk = _load_standouts_disk(cache_key)
@@ -446,7 +477,7 @@ def _load_standouts_raw_payload(
             # rebuild — but get a fresh copy building behind them. The scheduler
             # ignores a second call while one is already running.
             age = now - saved_at
-            if age >= STANDOUTS_CACHE_TTL and not _from_background:
+            if age >= STANDOUTS_CACHE_TTL and not _from_background and not past_season:
                 logger.info(
                     "Standouts disk cache for %s is %.1f hours old (limit %.0fh) — "
                     "serving it and refreshing in the background",
@@ -466,7 +497,9 @@ def _load_standouts_raw_payload(
                 "month_options": _standouts_month_options(),
             }
         if not _from_background and not force_refresh:
-            _schedule_standouts_refresh(period_key, year=month_year, month=month_num)
+            _schedule_standouts_refresh(
+                period_key, year=month_year, month=month_num, season_mode=season_mode
+            )
             return _standouts_building_payload(
                 period=period_key,
                 position="ALL",
@@ -476,7 +509,7 @@ def _load_standouts_raw_payload(
         raw_payload = (
             _build_standouts_month_payload(year=month_year, month=month_num)
             if period_key == "month"
-            else _build_standouts_season_payload()
+            else _build_standouts_season_payload(season_mode)
         )
         _standouts_cache[cache_key] = (time.time(), raw_payload)
         from app.home_dashboard import _save_standouts_disk
@@ -491,18 +524,23 @@ def build_who_to_scout_data(
     period: str = "season",
     year: int | None = None,
     month: int | None = None,
+    season_mode: str = "current",
     force_refresh: bool = False,
 ) -> dict[str, Any]:
     period_key = "month" if str(period).strip().casefold() in {"month", "monthly", "m"} else "season"
+    season_mode = _normalize_season_mode(season_mode)
     raw_payload = _load_standouts_raw_payload(
         period=period_key,
         year=year,
         month=month,
+        season_mode=season_mode,
         force_refresh=force_refresh,
     )
+    season_meta = {"season_mode": season_mode, "season_options": _season_options()}
     if raw_payload.get("building"):
         return {
             **raw_payload,
+            **season_meta,
             "leagues": list(STANDOUTS_LEAGUES),
             "profiles_by_position": _profiles_meta_from_disk(),
             "per_league_limit": STANDOUTS_PER_LEAGUE_LIMIT,
@@ -522,6 +560,7 @@ def build_who_to_scout_data(
         **{k: v for k, v in raw_payload.items() if k not in {"players", "player_count", "highest_overall"}},
         "building": False,
         "period": period_key,
+        **season_meta,
         "players": players,
         "player_count": len(players),
         "leagues": list(STANDOUTS_LEAGUES),
@@ -555,6 +594,7 @@ def who_to_scout_meta() -> dict[str, Any]:
             for position in impect.ALLOWED_POSITIONS
         ],
         "leagues": list(STANDOUTS_LEAGUES),
+        "season_options": _season_options(),
         "profiles_by_position": _profiles_meta_from_disk(),
         "per_league_limit": STANDOUTS_PER_LEAGUE_LIMIT,
         "default_min_score": STANDOUTS_DEFAULT_MIN_SCORE,
@@ -580,15 +620,23 @@ def register_who_to_scout_routes(app: FastAPI) -> None:
         period: str = Query("season"),
         year: int | None = Query(None),
         month: int | None = Query(None, ge=1, le=12),
+        season: str = Query("current"),
         refresh: bool = Query(False),
     ) -> dict[str, Any]:
         period_key = "month" if str(period).strip().casefold() in {"month", "monthly", "m"} else "season"
+        season_mode = _normalize_season_mode(season)
         if refresh:
-            _schedule_standouts_refresh(period_key, year=year, month=month)
+            _schedule_standouts_refresh(
+                period_key,
+                year=year,
+                month=month,
+                season_mode=None if period_key == "month" else season_mode,
+            )
         return build_who_to_scout_data(
             period=period_key,
             year=year,
             month=month,
+            season_mode=season_mode,
             force_refresh=False,
         )
 

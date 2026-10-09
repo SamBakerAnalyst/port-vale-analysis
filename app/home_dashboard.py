@@ -1945,10 +1945,13 @@ def _standouts_raw_cache_key(
     *,
     year: int | None = None,
     month: int | None = None,
+    season_mode: str | None = None,
 ) -> str:
     if period == "month":
         y, m, _ = _normalize_standouts_month(year, month)
         return f"standouts:month:{y}:{m}"
+    if season_mode and season_mode != "current":
+        return f"standouts:{period}:{season_mode}"
     return f"standouts:{period}"
 
 
@@ -2249,7 +2252,7 @@ def _load_season_position_players(
 
 
 def _previous_standouts_season_rows(season_mode: str) -> list[dict[str, Any]]:
-    disk = _load_standouts_disk(_standouts_raw_cache_key("season"))
+    disk = _load_standouts_disk(_standouts_raw_cache_key("season", season_mode=season_mode))
     if disk is None:
         return []
     payload = disk[1]
@@ -2281,10 +2284,14 @@ def _carry_over_standouts_rows(
     ]
 
 
-def _build_standouts_season_payload() -> dict[str, Any]:
+def _build_standouts_season_payload(season_mode: str | None = None) -> dict[str, Any]:
     from app import main as impect
+    from app.scouting import _season_mode_label
 
-    season_mode, season_label = _resolve_standouts_season_mode()
+    if season_mode and season_mode != "current":
+        season_label = _season_mode_label(season_mode, combine_seasons=False)
+    else:
+        season_mode, season_label = _resolve_standouts_season_mode()
     warnings: list[str] = []
     players: list[dict[str, Any]] = []
     previous_rows = _previous_standouts_season_rows(season_mode)
@@ -2411,10 +2418,14 @@ def _schedule_standouts_refresh(
     *,
     year: int | None = None,
     month: int | None = None,
+    season_mode: str | None = None,
 ) -> None:
     if is_demo():
         return
-    cache_key = _standouts_raw_cache_key(period, year=year, month=month)
+    past_season = period != "month" and bool(season_mode) and season_mode != "current"
+    cache_key = _standouts_raw_cache_key(
+        period, year=year, month=month, season_mode=season_mode if past_season else None
+    )
     with _standouts_refresh_lock:
         if cache_key in _standouts_refreshing:
             return
@@ -2422,6 +2433,11 @@ def _schedule_standouts_refresh(
 
     def _run() -> None:
         try:
+            if past_season:
+                payload = _build_standouts_season_payload(season_mode)
+                _standouts_cache[cache_key] = (time.time(), payload)
+                _save_standouts_disk(cache_key, payload)
+                return
             build_recruitment_standouts(
                 period=period,
                 year=year,

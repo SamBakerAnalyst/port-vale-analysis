@@ -74,6 +74,7 @@ def _optional_int(value: Any) -> int | None:
 SCOUTING_SEASON_MODES: dict[str, tuple[int, bool]] = {
     "current": (0, False),
     "previous": (1, False),
+    "previous2": (2, False),
     "combined": (0, True),
 }
 
@@ -336,7 +337,7 @@ def _resolve_scouting_season_mode(season_mode: str) -> tuple[int, bool]:
     if key not in SCOUTING_SEASON_MODES:
         raise HTTPException(
             status_code=400,
-            detail=f"Unknown season mode: {season_mode}. Use current, previous, or combined.",
+            detail=f"Unknown season mode: {season_mode}. Use current, previous, previous2, or combined.",
         )
     return SCOUTING_SEASON_MODES[key]
 
@@ -375,6 +376,21 @@ def _scouting_iteration_rows(
 
 def _scouting_season_titles() -> tuple[str, str]:
     """Return (current, previous) season titles from Impect iterations, e.g. ('26/27', '25/26')."""
+    seasons = _scouting_season_title_list()
+    current = seasons[0] if seasons else "Current season"
+    previous = seasons[1] if len(seasons) > 1 else "Previous season"
+    return current, previous
+
+
+def _scouting_season_title(season_offset: int) -> str:
+    """Season title N seasons back from the latest, e.g. 2 -> '24/25'."""
+    seasons = _scouting_season_title_list()
+    if 0 <= season_offset < len(seasons):
+        return seasons[season_offset]
+    return "Current season" if season_offset == 0 else f"{season_offset} seasons ago"
+
+
+def _scouting_season_title_list() -> list[str]:
     impect = _impect()
     seasons: list[str] = []
     seen: set[str] = set()
@@ -389,9 +405,7 @@ def _scouting_season_titles() -> tuple[str, str]:
         seen.add(season)
         seasons.append(season)
     seasons.sort(key=impect._season_sort_key, reverse=True)
-    current = seasons[0] if seasons else "Current season"
-    previous = seasons[1] if len(seasons) > 1 else "Previous season"
-    return current, previous
+    return seasons
 
 
 def _season_mode_label(season_mode: str, *, combine_seasons: bool) -> str:
@@ -400,6 +414,8 @@ def _season_mode_label(season_mode: str, *, combine_seasons: bool) -> str:
         return f"{current} + {previous} (combined minutes)"
     if season_mode == "previous":
         return previous
+    if season_mode == "previous2":
+        return _scouting_season_title(2)
     return current
 
 
@@ -865,8 +881,11 @@ def build_scouting_long_list(body: ScoutingLongListRequest) -> dict[str, Any]:
     )
     if not iteration_rows:
         detail = "No season data for the selected leagues."
-        if season_mode_key == "previous":
-            detail = "No previous-season data for the selected leagues."
+        if season_mode_key in {"previous", "previous2"}:
+            detail = (
+                f"No {_season_mode_label(season_mode_key, combine_seasons=False)} "
+                "data for the selected leagues."
+            )
         raise HTTPException(status_code=404, detail=detail)
 
     load_minutes = 0.0 if combine_seasons else body.min_minutes
@@ -1118,9 +1137,9 @@ def build_scouting_long_list(body: ScoutingLongListRequest) -> dict[str, Any]:
             f"Combined minutes from {current_title} + {previous_title}. Profile scores are "
             "Impect’s exact ratings, minutes-weighted across both seasons (0–100)."
         )
-    elif season_mode_key == "previous":
+    elif season_mode_key in {"previous", "previous2"}:
         scoring_note = (
-            f"{previous_title} only. Scores are Impect’s exact profile ratings (0–100)."
+            f"{season_mode_label} only. Scores are Impect’s exact profile ratings (0–100)."
         )
 
     return {
